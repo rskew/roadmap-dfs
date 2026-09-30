@@ -30,8 +30,10 @@
 # ⚠️ A SESSION MAY END MID-NODE, and the next one picks the work up. A node ends with
 # a commit, not a session: a usage limit or the context checkpoint leaves the node's
 # uncommitted work in the tree, and the briefing tells the next session it is its
-# own. That is only true because sessions run serially — so a chain REFUSES to start
-# on a dirty tree unless the last session anywhere was on this task.
+# own. That is only true because sessions run serially. Uncommitted work that is NOT
+# this task's (another task's last session, or the author's) does not stop a chain:
+# its first session is told to commit or stash it before touching its node, and that
+# first session is always a work session (see `foreign`, below).
 #
 # The author's side spends no session: --review takes a task's open raises, then any
 # corrections to its tree, and appends the author's words itself — a script cannot
@@ -58,7 +60,6 @@
 #         MAX_TURNS  (default: 100)         PROMPT  (default: the SKILL.md line)
 #         CHAT_PROMPT override the opening discussion prompt
 #         MAX_CONTEXT (default: 400000, the chain ceiling)
-#         DFS_ALLOW_DIRTY=1  start on a dirty tree anyway
 #         BASH_DEFAULT_TIMEOUT_MS (default: 3600000, one hour)  the child's Bash tool timeout when a call names none
 #         BASH_MAX_TIMEOUT_MS (default: 21600000, six hours)  the most a child's Bash call may ask for
 set -euo pipefail
@@ -278,7 +279,6 @@ META
 #   done        every live node confirmed, and the implementation reviewed or accepted
 #   cap         the chain ran its full cap with the task still open
 #   idle        the repo did not move: the session changed nothing
-#   dirty       refused to start: uncommitted work that is not this task's
 #   failed      a session exited non-zero, or a critic or reviewer changed the tree
 #               or gave no verdict
 #   overbudget  a session went past the context ceiling
@@ -682,13 +682,11 @@ meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
 trap on_exit EXIT
 trap on_interrupt INT TERM
 
-# ⚠️ SERIAL, SO THE DIRT HAS AN OWNER. A session commits what it finds as its node's
-# work; anything else in the tree would be swept into this task's history.
-if [ -z "${DFS_ALLOW_DIRTY:-}" ] && ! guard="$(python3 "$HERE/dfs_state.py" --may-start "$ITEM")"; then
-  stop_is dirty
-  echo "dfs_run: not starting — $guard" >&2
-  echo "dfs_run: DFS_ALLOW_DIRTY=1 starts anyway." >&2
-  exit 1
+# ⚠️ SERIAL, SO THE DIRT HAS AN OWNER. Work in the tree that is not this task's is
+# committed or stashed by this chain's first session, whose briefing lists it.
+foreign="$(python3 "$HERE/dfs_state.py" --foreign-dirt "$ITEM")"
+if [ -n "$foreign" ]; then
+  echo "dfs_run: $(printf '%s\n' "$foreign" | wc -l) uncommitted path(s) are not $ITEM's; the first session commits or stashes them."
 fi
 
 echo "dfs_run: task $ITEM, cap $CAP, agent $AGENT, logs in $RUNDIR"
@@ -725,6 +723,14 @@ for i in $(seq 1 "$CAP"); do
     stop_is blocked
     echo "dfs_run: BLOCKED before run $i — $sessions work sessions since the author last spoke; raised for review."
     exit 0
+  fi
+  # ⚠️ Foreign dirt goes to a WORK session first: a critic or reviewer may not change
+  # code, and once either had run on this task the dirt would read as its own. The
+  # critic or review stays due, so it is the next run.
+  if [ -n "$foreign" ]; then
+    kind=work
+    why="uncommitted work that is not $ITEM's, to commit or stash first"
+    foreign=""
   fi
 
   echo

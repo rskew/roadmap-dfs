@@ -3,7 +3,7 @@
 
 What it pins is the part no session decides: that the runner records each session in
 the task's Log, runs a critic after every CRITIC_EVERY work sessions, raises after
-SESSION_LIMIT without the author, stops when a session moved nothing, refuses a dirty
+SESSION_LIMIT without the author, stops when a session moved nothing, clears a dirty
 tree that is not this task's, and fails a critic that touched the code.
 
 Run:  python3 roadmap-dfs/scripts/test_dfs_chain.py
@@ -58,6 +58,7 @@ Evidence:
 #   silent     a critic that gives no verdict
 #   limit      die on a 429
 #   lower      `work`, then lower the chain's cap to this run, as the TUI's `w` does
+#   stash      stash app.txt, as a briefing listing it as not this task's says to
 STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
 n=$(( $(cat "$COUNT_FILE") + 1 )); echo "$n" > "$COUNT_FILE"
@@ -90,6 +91,8 @@ case "$recipe" in
   silent)  : ;;
   lower)   python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n"
            echo "$n" > "$LOWER_FILE" ;;
+  stash)   case "$prompt" in *"NOT this task's"*"app.txt"*) ;; *) echo "not told to clear app.txt" >&2; exit 3 ;; esac
+           git stash push -q --include-untracked -m "dfs: set aside" -- app.txt ;;
   limit)   echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":429,"result":"You have hit your session limit · resets 8pm (UTC)"}'; exit 1 ;;
 esac
 echo '{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_turn","total_cost_usd":0.01,"num_turns":3}'
@@ -122,7 +125,6 @@ class Chain(unittest.TestCase):
         e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE=recipe,
                  COUNT_FILE=str(self.count), KINDS_FILE=str(self.kinds),
                  TREE_PY=str(HERE / "dfs_tree.py"), HOME=str(self.aside), **env)
-        e.pop("DFS_ALLOW_DIRTY", None) if "DFS_ALLOW_DIRTY" not in env else None
         # Run from inside a chain, the environment names THAT chain's directory; this
         # chain must make its own (see `export -n RUNDIR` in dfs_run.sh).
         e.pop("RUNDIR", None) if "RUNDIR" not in env else None
@@ -170,13 +172,26 @@ class Chain(unittest.TestCase):
         rc, meta, out = self.run_chain("code,confirm,rok", cap=3)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
 
-    def test_a_dirty_tree_that_is_not_this_tasks_is_refused(self):
+    def test_a_dirty_tree_that_is_not_this_tasks_is_the_first_sessions_to_clear(self):
+        # It used to refuse to start, which stopped the walk until the author came.
         (self.root / "app.txt").write_text("the author's edit\n")
-        rc, meta, out = self.run_chain("work")
-        self.assertEqual((rc, meta.get("stop")), (1, "dirty"), out)
-        self.assertEqual(int(self.count.read_text()), 0, "no session was started")
-        rc, meta, out = self.run_chain("work,confirm,rok", DFS_ALLOW_DIRTY="1")
-        self.assertEqual(meta.get("stop"), "done", out)
+        rc, meta, out = self.run_chain("stash,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        stashes = subprocess.run(["git", "stash", "list"], cwd=self.root,
+                                 capture_output=True, text=True).stdout
+        self.assertIn("dfs: set aside", stashes)
+
+    def test_foreign_dirt_goes_to_a_work_session_before_a_due_critic(self):
+        # A critic may not change code, and after it the dirt would read as W1's.
+        rc, meta, out = self.run_chain("work,work,work,work,work", cap=5)
+        self.assertEqual(meta.get("stop"), "cap", out)
+        # The last session anywhere was another task's, so the edit is not W1's. Its
+        # ts is written out: W1's are bumped past the clock to stay unique.
+        (self.root / ".dfs" / "items" / "W2.md").write_text(
+            TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
+        (self.root / "app.txt").write_text("W2's half-done edit\n")
+        rc, meta, out = self.run_chain("work,work,work,work,work,stash,ok", cap=2)
+        self.assertEqual(self.kinds_run(), ["work"] * 6 + ["critic"], out)
 
     def test_the_chain_s_directory_is_not_handed_to_its_agent(self):
         # ⚠️ 2026-09-27: a session working on this tooling ran a test that started its
@@ -236,7 +251,7 @@ class Chain(unittest.TestCase):
             dfs_tree.dfs_paths.work_root = old
         self.count.write_text("0")
         self.kinds.write_text("")
-        rc, meta, out = self.run_chain("work,confirm,rok", cap=4, DFS_ALLOW_DIRTY="1")
+        rc, meta, out = self.run_chain("work,confirm,rok", cap=4)
         self.assertEqual(meta.get("stop"), "done", out)
 
     def test_a_complete_tree_is_not_done_until_its_implementation_is_reviewed(self):
@@ -262,7 +277,7 @@ class Chain(unittest.TestCase):
             dfs_tree.dfs_paths.work_root = old
         self.count.write_text("0")
         self.kinds.write_text("")
-        rc, meta, out = self.run_chain("fix,rok", cap=3, DFS_ALLOW_DIRTY="1")
+        rc, meta, out = self.run_chain("fix,rok", cap=3)
         self.assertEqual(self.kinds_run(), ["work", "review"], out)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
 

@@ -15,7 +15,7 @@ Usage:
     python3 <scripts>/dfs_state.py --critic-brief <task> # a critic session
     python3 <scripts>/dfs_state.py --review-brief <task> # an implementation review
     python3 <scripts>/dfs_state.py --fingerprint [--outside-dfs]
-    python3 <scripts>/dfs_state.py --may-start <task>
+    python3 <scripts>/dfs_state.py --foreign-dirt <task>
     python3 <scripts>/dfs_state.py --verdicts <task> <critic|review>
 """
 import hashlib
@@ -287,14 +287,14 @@ def continue_last(walked):
 
     ⚠️ This SUBSUMES the uncommitted-work resume it grew out of, rather than sitting
     beside it: uncommitted work outside `.dfs/` belongs to whichever task had the
-    last session (`may_start`), so naming that task here is the same answer on a
+    last session (`foreign_dirt`), so naming that task here is the same answer on a
     dirty tree as on a clean one — one rule, and no second reason for the walk to
     name an item.
 
     When the last run's item CANNOT be worked — finished, blocked by its own raise,
     or held by the tree (an ancestor's raise, a fence) — the order's answer stands.
-    On a dirty tree that leaves the runner's `dirty` refusal to bring the author,
-    which is right: a raise sits on top of half-done work.
+    On a dirty tree the item the order names then starts by committing or stashing
+    that half-done work (`foreign_dirt`), so the walk goes on rather than waiting.
     """
     owner, _ = latest_session()
     row = next((i for i in walked if i["id"] == owner), None)
@@ -382,26 +382,23 @@ def latest_session():
     return best
 
 
-def may_start(task):
-    """(ok, message). A session may start on a dirty tree only when the dirt is this
-    task's own unfinished node: agents work serially, so uncommitted work belongs to
-    whichever task had the last session — and to nobody's node when that was
-    another task, or when no session has run at all (the dirt is the author's)."""
+def foreign_dirt(task):
+    """(paths, owner): the uncommitted paths outside `.dfs/` that are NOT `task`'s
+    own unfinished node, and whose they are. Agents work serially, so uncommitted
+    work belongs to whichever task had the last session — and to nobody's node when
+    that was another task, or when no session has run at all (the dirt is the
+    author's). Empty when the tree is clean or the dirt is this task's.
+
+    ⚠️ A chain STARTS over foreign dirt rather than refusing: its first session
+    commits or stashes it before touching its node (`brief`), and the runner makes
+    that first session a work session (`dfs_run.sh`), since a critic or reviewer may
+    not change code, and once one of those had run on this task the dirt would read
+    as this task's own."""
     dirty = dirty_paths()
-    if not dirty:
-        return True, "clean"
-    last_task, last = latest_session()
-    if last_task == task:
-        return True, "%d uncommitted path%s from %s's last session" % (
-            len(dirty), "" if len(dirty) == 1 else "s", task)
-    who = ("%s's last session" % last_task) if last_task else "no session (the author)"
-    return False, (
-        "the working tree has %d uncommitted path%s outside .dfs/, and the last session "
-        "was %s. A session commits whatever it finds as its own node's work, so this "
-        "would be swept into %s. Commit or set it aside first, or run the task that "
-        "owns it. First few: %s" % (
-            len(dirty), "" if len(dirty) == 1 else "s", who, task,
-            ", ".join(dirty[:8])))
+    owner, _ = latest_session()
+    if not dirty or owner == task:
+        return [], owner
+    return dirty, owner
 
 
 # ── what a session is handed ────────────────────────────────────────────────────
@@ -529,20 +526,33 @@ def brief(task: str) -> str:
         out += ["### Uncommitted work, and the previous session", ""]
         if cut:
             out += ["The session started %s has no `end`: it was killed outright." % cut["ts"]]
-        owner, _ = latest_session()
-        if dirty and owner == task:
+        foreign, owner = foreign_dirt(task)
+        if dirty and not foreign:
             out += ["The working tree holds %d uncommitted path%s outside `.dfs/`. They are "
                     "the unfinished work of the current node: review them, then finish and "
                     "commit the node." % (len(dirty), "" if len(dirty) == 1 else "s"), ""]
-        elif dirty:
-            # Only reachable with DFS_ALLOW_DIRTY: the runner otherwise refuses.
-            out += ["⚠️ The working tree holds %d uncommitted path%s outside `.dfs/` that are "
-                    "NOT this task's (the last session was %s). Do not commit them: stage "
-                    "your node's paths by name." % (len(dirty), "" if len(dirty) == 1 else "s",
-                                                    owner or "nobody's — the author's work"), ""]
-            out += ["    " + p for p in dirty[:30]]
-            if len(dirty) > 30:
-                out += ["    (and %d more)" % (len(dirty) - 30)]
+        elif foreign:
+            n = len(foreign)
+            out += ["⚠️ **Before anything else, clear this.** The working tree holds %d "
+                    "uncommitted path%s outside `.dfs/` that are NOT this task's: the last "
+                    "session was %s. Nothing of them may go into your node's commits." % (
+                        n, "" if n == 1 else "s",
+                        "%s's" % owner if owner else "nobody's, so they are the author's work"),
+                    ""]
+            out += ["    " + p for p in foreign[:30]]
+            if n > 30:
+                out += ["    (and %d more)" % (n - 30)]
+            out += ["", "Read their diff, then either:", "",
+                    "- **commit** them, when they read as a finished change: in a commit of "
+                    "their own, staging exactly these paths, whose subject says what the "
+                    "change is and whose it was (no node id: it is not a node's), or",
+                    "- **stash** them, when they are half-done or you cannot tell what they "
+                    "are for: `git stash push --include-untracked -m \"dfs: set aside before "
+                    "%s — <what it is>\" -- <the paths>`." % task,
+                    "",
+                    "Then note which you did, with the commit's sha or the stash's message, "
+                    "in the Evidence of the node you are on, so the author can find it, and "
+                    "go on with the session as usual."]
         out += [""]
     stale = dfs_tree.unreverted_pruned(t)
     if stale:
@@ -788,10 +798,9 @@ def main() -> int:
     if args and args[0] == "--fingerprint":
         print(fingerprint(outside_dfs="--outside-dfs" in args))
         return 0
-    if args and args[0] == "--may-start":
-        ok, msg = may_start(args[1])
-        print(msg)
-        return 0 if ok else 1
+    if args and args[0] == "--foreign-dirt":
+        print("\n".join(foreign_dirt(args[1])[0]))
+        return 0
     if args and args[0] == "--json" or not args:
         print(json.dumps(full(), indent=2))
         return 0

@@ -120,8 +120,6 @@ WALK_RAISE = {
 # next), and a critic or reviewer that changed code or gave no verdict. Raising on
 # the item for the first would raise on every item in turn.
 WALK_STOP = {
-    "dirty": "the working tree has uncommitted work outside .dfs/, which every next "
-             "chain would refuse too; commit it, then w",
     "interrupt": "interrupted",
     "overbudget": "a session went past the context ceiling; the budget is not holding",
     "overturns": "a session went past the turn ceiling with no context reading",

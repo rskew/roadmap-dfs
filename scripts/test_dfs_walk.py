@@ -55,15 +55,9 @@ class Deciding(unittest.TestCase):
             self.assertEqual(TUI.walk_decide(stop, True, "W7")[0], "raise", stop)
 
     def test_what_no_other_item_would_survive_stops_the_walk(self):
-        for stop in ("dirty", "interrupt", "died", "something-new",
+        for stop in ("interrupt", "died", "something-new",
                      "failed", "overbudget", "overturns"):
             self.assertEqual(TUI.walk_decide(stop, True, "W7")[0], "stop", stop)
-
-    def test_a_dirty_tree_says_what_to_do(self):
-        # 2026-09-27: the walk moved on from W13's raise to W14, W14 refused to
-        # start over uncommitted tooling work, and the badge read `W14: dirty`.
-        why = TUI.walk_decide("dirty", True, "W14")[1]
-        self.assertIn("commit it", why)
 
     def test_a_chain_that_recorded_nothing_stops_rather_than_guesses(self):
         action, why = TUI.walk_decide("", False, "W7")

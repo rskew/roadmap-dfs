@@ -26,7 +26,9 @@ session carries it out.
    backtrack withdraws the node itself as well: redo its step beside it, under its
    parent, with `Corrects: <the backtrack's ts>`.
 4. **Uncommitted work the briefing says is yours** is the current node's, left by a
-   session that stopped mid-node. Review it and carry on with that node.
+   session that stopped mid-node. Review it and carry on with that node. **Uncommitted
+   work it says is not yours** comes before even the author: commit it on its own or
+   stash it, as the briefing says, and note which in your node's Evidence.
 5. **Open nodes the critic or reviewer added** carry only an Approach: what is wrong
    and what would settle it. Take them up like any open node, writing the Hypothesis as
    you start.

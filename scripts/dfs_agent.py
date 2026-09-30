@@ -12,7 +12,8 @@ first would hand that `c` a revision whose claude-code is still downloading, so 
 would sit and wait, which is what the update is in the background to avoid.
 
 ⚠️ IN `.dfs/runs/`, NOT COMMITTED. A background write to a tracked file dirties the
-tree, and a chain refuses to start on a dirty tree (dfs_state.py --may-start). The
+tree, and a chain's first session commits or stashes whatever dirt is not its own
+(dfs_state.py --foreign-dirt), so the pin would end up in some task's history. The
 runs directory is already gitignored in every project that has a roadmap. It is also
 per MACHINE in effect, which is right: what the pin names has to be in this nix store.
 
