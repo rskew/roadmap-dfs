@@ -155,6 +155,14 @@ def walk_decide(stop, moved, next_item):
     nothing, which is the same guarantee one level up and the only thing standing
     between a broken item and an unattended loop. Both end in a raise, which blocks
     the item, rather than in a stop, which would block every other item too.
+
+    ⚠️ A chain that stopped `done` is exempt. `done` means the item is finished (every
+    live node confirmed and the last review found nothing, or the author accepted
+    it), and the review that says so is a verdict, not tree content, so a chain whose
+    last session was that review always moves nothing. No next chain goes to a done
+    item, so there is no loop to guard against. W20 raised on exactly this on
+    2026-09-30: its tree was complete, the review came back ok, and the author was
+    asked to look at an item that had only finished.
     """
     if stop == "limit":
         return ("hold", "a usage limit")
@@ -163,7 +171,7 @@ def walk_decide(stop, moved, next_item):
     if stop not in WALK_CONTINUE:
         return ("stop", WALK_STOP.get(stop) or stop
                 or "the chain ended without recording why")
-    if not moved:
+    if not moved and stop != "done":
         return ("raise", "the chain moved nothing in the task tree")
     if next_item is None:
         return ("stop", "every branch is blocked or finished")

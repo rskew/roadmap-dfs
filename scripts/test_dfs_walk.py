@@ -69,9 +69,18 @@ class Deciding(unittest.TestCase):
         # a chain, and this refuses to start another chain on an item producing
         # nothing. It RAISES rather than stops: the suspicion is about one item, and
         # a raise blocks that item while the walk takes the next branch.
-        action, why = TUI.walk_decide("done", False, "W8")
+        action, why = TUI.walk_decide("cap", False, "W8")
         self.assertEqual(action, "raise")
         self.assertIn("moved nothing", why)
+
+    def test_a_chain_that_finished_its_item_moves_on_though_it_moved_nothing(self):
+        # A finished item's last session is the review that found nothing, and a
+        # verdict is not tree content, so it always moves nothing. W20 raised on
+        # that 2026-09-30; a done item closes, and the walk takes the next branch.
+        self.assertEqual(TUI.walk_decide("done", False, "W8"), ("run", "W8"))
+        action, why = TUI.walk_decide("done", False, None)
+        self.assertEqual(action, "stop")
+        self.assertIn("blocked or finished", why)
 
     def test_an_idle_session_raises_on_its_item(self):
         action, why = TUI.walk_decide("idle", True, "W8")
@@ -262,7 +271,7 @@ class Ticking(unittest.TestCase):
         # A suspect item is put to the author and the walk takes the next branch;
         # it used to turn the whole walk off, holding every other item hostage.
         ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"})
-        self.live(ui, [self.chain(item="W7", stop="done", run="2")])
+        self.live(ui, [self.chain(item="W7", stop="cap", run="2")])
         ui.data["content"] = ["a", "b"]
         # The raise blocks W7, so the re-read after it names the next branch.
         ui.reload = lambda: (ui.data.__setitem__("next_item", "W8")
