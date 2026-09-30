@@ -23,7 +23,10 @@ Four panes over the same selection, all scrollable:
   l  agent  the runs on disk — a live chain's console AND the turns the agent is
             taking inside it, then any finished run's captured result
   v  art    the artefacts this item's raises name, opened in a real browser
-and `?`, every key (`KEYS`), where Enter presses the one under the cursor.
+  h  act    the activity log: what this screen and its walk did (from 150 columns,
+            a column beside the tree, under the live chain's console tail)
+and `?`, every key (`KEYS`), where Enter presses the one under the cursor; `:`, any of
+them by name; `/`, search as you type.
 
 ⚠️ A WORK CHAIN RUNS IN THE BACKGROUND, NOT INSTEAD OF THIS SCREEN. It is minutes to
 hours of non-interactive work whose output already lands in a file, so handing it the
@@ -509,6 +512,13 @@ def follows(growing, following, scroll, bottom):
     return bool(growing) and (bool(following) or scroll >= bottom)
 
 
+def read_text_or_none(path):
+    try:
+        return Path(path).read_text()
+    except OSError:
+        return None
+
+
 def reselect(keys, key, fallback):
     """Where a cursor lands after its list is re-derived: on the SAME THING.
 
@@ -543,57 +553,82 @@ def find_next(texts, needle, cur):
     return None, False
 
 
-# ⚠️ EVERY KEY THE SCREEN ANSWERS TO, for `?` (`lines_keys`). The footer holds a dozen
-# at most and drops them as the terminal narrows, and its own rule is that a key not
-# on it does not exist — which, on a narrow terminal, was most of them. This is the
-# list that does not narrow. `test_dfs_screen.py` checks it against `act`, so a key
-# added there and not here fails a test instead of disappearing.
+def fuzzy(needle, hay):
+    """A match score for `:` (lower is better), or None: the letters of `needle` in
+    order in `hay` — fzf's rule — scored by where the first lands and how far apart
+    the rest are, so a prefix beats a scatter and `rv` still finds `review`."""
+    if not needle:
+        return 0
+    at, gaps, start = -1, 0, None
+    for ch in needle:
+        nxt = hay.find(ch, at + 1)
+        if nxt < 0:
+            return None
+        if start is None:
+            start = nxt
+        else:
+            gaps += nxt - at - 1
+        at = nxt
+    return start * 10 + gaps
+
+
+# ⚠️ EVERY KEY THE SCREEN ANSWERS TO, for `?` (`lines_keys`) and `:` (`command`). The
+# footer holds a dozen at most and drops them as the terminal narrows, and its own
+# rule is that a key not on it does not exist — which, on a narrow terminal, was most
+# of them. This is the list that does not narrow. `test_dfs_screen.py` checks it
+# against `act`, so a key added there and not here fails a test instead of vanishing.
 #
-# (where it applies, key as shown, the code `act` is handed, what it does). Where a
-# key is used decides the pane `?`'s Enter puts back before pressing it (`key_run`).
+# (where it applies, key as shown, the code `act` is handed, NAME, what it does). The
+# name is tig's idea: one word per action, shown beside its key in `?` and typed at
+# `:` — so the list of keys and the command language are the same list. Where a key
+# is used decides the pane `?`'s Enter and `:` put back before pressing it (`key_run`).
 KEY_PLACES = [("items", "on the item list"), ("tree", "in the tree — tab"),
               ("runs", "in agent runs — l"), ("agentlog", "reading a run"),
               ("artefact", "in artefacts — v"), ("panes", "panes"),
               ("any", "anywhere")]
 KEYS = [
-    ("items", "⏎", 10, "work it in the background, or review it — whichever it needs"),
-    ("items", "tab", 9, "into the item's tree, and back out"),
-    ("items", "w", ord("w"), "walk the roadmap depth-first, or stop the walk"),
-    ("items", "n", ord("n"), "pin this item as where the walk goes next (again: unpin)"),
-    ("items", "K", ord("K"), "stop this item's running chain (asks first)"),
-    ("items", "r", ord("r"), "review: open the tree to answer and correct"),
-    ("items", "R", ord("R"), "review in the terminal pass (dfs_run.sh --review)"),
-    ("items", "c", ord("c"), "chat about this item (dfs_run.sh --chat)"),
-    ("items", "C", ord("C"), "chat about something new"),
-    ("items", "o", ord("o"), "open a new task (dfs_run.sh --open)"),
-    ("items", "e", ord("e"), "edit the item's file in $EDITOR"),
-    ("items", "[  -", ord("["), "move up among its siblings"),
-    ("items", "]  = +", ord("]"), "move down among its siblings"),
-    ("items", "{  <", ord("{"), "move out of its branch"),
-    ("items", "}  >", ord("}"), "move into the branch above"),
-    ("items", "b", ord("b"), "put a fence above it, or take the fence away"),
-    ("items", "x", ord("x"), "switch the agent: claude or codex"),
-    ("tree", "⏎", 10, "open or close the node under the cursor"),
-    ("tree", "space", ord(" "), "fold or unfold what is below it"),
-    ("tree", "a", ord("a"), "answer the raise here"),
-    ("tree", "f", ord("f"), "correct this node: it was really confirmed or refuted"),
-    ("tree", "A", ord("A"), "accept a finished tree (asks first)"),
-    ("tree", "tab", 9, "back to the item list"),
-    ("runs", "⏎", 10, "read this run"),
-    ("agentlog", "G", ord("G"), "to the end, and follow it while it grows"),
-    ("artefact", "⏎", 10, "open this artefact in a browser"),
-    ("panes", "3", ord("3"), "the task's log"),
-    ("panes", "l", ord("l"), "agent runs: the live chains and the finished ones"),
-    ("panes", "v", ord("v"), "artefacts: the pictures its raises name"),
-    ("panes", "t", ord("t"), "the epic's todo"),
-    ("any", "↑↓ j k", ord("j"), "move the cursor, or the text where there is none"),
-    ("any", "d  u", ord("d"), "half a page down, up"),
-    ("any", "space  pgdn pgup", curses.KEY_NPAGE, "a page"),
-    ("any", "g  G", ord("g"), "top, bottom"),
-    ("any", "/", ord("/"), "search this pane; ⏎ on an empty search finds the next"),
-    ("any", "esc", 27, "back one level (never quits)"),
-    ("any", "?", ord("?"), "these keys; ⏎ on one presses it"),
-    ("any", "q", ord("q"), "quit"),
+    ("items", "⏎", 10, "work", "work it in the background, or review it — whichever it needs"),
+    ("items", "tab", 9, "tree", "into the item's tree, and back out"),
+    ("items", "w", ord("w"), "walk", "walk the roadmap depth-first, or stop the walk"),
+    ("items", "n", ord("n"), "pin", "pin this item as where the walk goes next (again: unpin)"),
+    ("items", "K", ord("K"), "stop", "stop this item's running chain (asks first)"),
+    ("items", "r", ord("r"), "review", "review: open the tree to answer and correct"),
+    ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (dfs_run.sh --review)"),
+    ("items", "c", ord("c"), "chat", "chat about this item (dfs_run.sh --chat)"),
+    ("items", "C", ord("C"), "chat-new", "chat about something new"),
+    ("items", "o", ord("o"), "open", "open a new task (dfs_run.sh --open)"),
+    ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
+    ("items", "m", ord("m"), "needs-you", "show only what is waiting on you, or everything"),
+    ("items", "[  -", ord("["), "up", "move up among its siblings"),
+    ("items", "]  = +", ord("]"), "down", "move down among its siblings"),
+    ("items", "{  <", ord("{"), "out", "move out of its branch"),
+    ("items", "}  >", ord("}"), "in", "move into the branch above"),
+    ("items", "b", ord("b"), "fence", "put a fence above it, or take the fence away"),
+    ("items", "z", ord("z"), "undo", "undo the last move made from here"),
+    ("items", "x", ord("x"), "agent", "switch the agent: claude or codex"),
+    ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
+    ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
+    ("tree", "a", ord("a"), "answer", "answer the raise here"),
+    ("tree", "f", ord("f"), "correct", "correct this node: it was really confirmed or refuted"),
+    ("tree", "A", ord("A"), "accept", "accept a finished tree (asks first)"),
+    ("tree", "tab", 9, "list", "back to the item list"),
+    ("runs", "⏎", 10, "read", "read this run"),
+    ("agentlog", "G", ord("G"), "follow", "to the end, and follow it while it grows"),
+    ("artefact", "⏎", 10, "browse", "open this artefact in a browser"),
+    ("panes", "3", ord("3"), "log", "the task's log"),
+    ("panes", "l", ord("l"), "runs", "agent runs: the live chains and the finished ones"),
+    ("panes", "v", ord("v"), "art", "artefacts: the pictures its raises name"),
+    ("panes", "t", ord("t"), "todo", "the epic's todo"),
+    ("panes", "h", ord("h"), "activity", "what this screen and its walk did"),
+    ("any", "↑↓ j k", ord("j"), "move", "move the cursor, or the text where there is none"),
+    ("any", "d  u", ord("d"), "half-page", "half a page down, up"),
+    ("any", "space pgdn", curses.KEY_NPAGE, "page", "a page down (pgup: up)"),
+    ("any", "g  G", ord("g"), "top", "top, bottom"),
+    ("any", "/", ord("/"), "search", "search this pane as you type; ⏎ on an empty one finds the next"),
+    ("any", ":", ord(":"), "command", "run any of these by name, with an item: `:work W7 5`"),
+    ("any", "esc", 27, "back", "back one level (never quits)"),
+    ("any", "?", ord("?"), "keys", "these keys; ⏎ on one presses it"),
+    ("any", "q", ord("q"), "quit", "quit"),
 ]
 # Second spellings `act` takes for a key above, for keyboards where the first is a
 # chord: `[ ] { }` are AltGr on German and French layouts, and `- = + < >` are keys of
@@ -1186,6 +1221,128 @@ def review_cell(it):
     return "rev %d" % n if n else ""
 
 
+# ---- the look -----------------------------------------------------------------
+#
+# ⚠️ QUIET CHROME, PLAIN CONTENT, AND NEVER THE TERMINAL'S BACKGROUND. What made the
+# calm tools calm (docs/tui-research.md §0) was not how few colours they used — btop
+# uses 82 — but that every rule, label and hint sits a step below the data, and that
+# no large area is painted. So: rules and labels grey, text the terminal's own colour,
+# ONE accent for keys and the cursor bar, the three status colours softened, and the
+# selection a faint band with a one-cell bar (fzf's) instead of a slab of reverse
+# video. The background is left alone, because this screen lives in somebody's tmux
+# next to their editor; which is why it has to ask whether that background is light.
+# Pair numbers 1–3 are red, green and cyan everywhere in this file, as before.
+PAIRS = {"red": 1, "green": 2, "cyan": 3, "chrome": 4, "accent": 5, "sel": 6,
+         "selbar": 7, "amber": 8, "selred": 9, "selgreen": 10, "selcyan": 11}
+LOOK = {}     # name -> attr, filled by `init_look`; empty (all 0) until then
+LIGHT = False  # the terminal's background, asked once before curses starts
+SIDE_AT = 150  # columns from which the activity column sits beside the tree
+BAR = "▌"      # the cursor's one-cell accent, where the band is drawn
+
+
+def terminal_is_light():
+    """Whether the terminal's background is light: DFS_THEME, then COLORFGBG, then
+    the terminal itself (OSC 11), and dark when none of them says.
+
+    Asked BEFORE curses starts, on /dev/tty, with a tenth of a second to answer: a
+    terminal that ignores the query costs that and nothing else."""
+    theme = os.environ.get("DFS_THEME", "").lower()
+    if theme in ("light", "dark"):
+        return theme == "light"
+    fgbg = os.environ.get("COLORFGBG", "")
+    if fgbg:
+        bg = fgbg.split(";")[-1]
+        if bg.isdigit():
+            return int(bg) in (7, 15)
+    try:
+        import termios
+        import tty as _tty
+        fd = os.open("/dev/tty", os.O_RDWR | os.O_NOCTTY)
+    except (OSError, ImportError):
+        return False
+    try:
+        old = termios.tcgetattr(fd)
+        _tty.setraw(fd)
+        os.write(fd, b"\x1b]11;?\x1b\\")
+        got, end = b"", time.time() + 0.1
+        while time.time() < end and not (got.endswith(b"\x07") or got.endswith(b"\x1b\\")):
+            import select
+            r, _, _ = select.select([fd], [], [], max(0, end - time.time()))
+            if not r:
+                break
+            got += os.read(fd, 64)
+    except OSError:
+        return False
+    finally:
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        except (OSError, UnboundLocalError):
+            pass
+        os.close(fd)
+    m = re.search(rb"rgb:([0-9a-fA-F]+)/([0-9a-fA-F]+)/([0-9a-fA-F]+)", got)
+    if not m:
+        return False
+    r, g, b = (int(x, 16) / float(16 ** len(x) - 1) for x in m.groups())
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5
+
+
+def init_look(light=False, coloured=True):
+    """The palette, from what the terminal can do. `NO_COLOR` gets attributes only:
+    dim chrome, reverse selection, bold keys — ncdu's three, which read fine."""
+    plain = (bool(os.environ.get("NO_COLOR")) or not coloured
+             or not curses.has_colors())
+    n = 0 if plain else curses.COLORS
+    if n >= 256:
+        if light:
+            c = dict(red=124, green=28, cyan=24, chrome=245, accent=25, amber=130,
+                     selbg=254)
+        else:
+            c = dict(red=174, green=108, cyan=110, chrome=243, accent=110, amber=179,
+                     selbg=236)
+        fg = {"red": c["red"], "green": c["green"], "cyan": c["cyan"],
+              "chrome": c["chrome"], "accent": c["accent"], "amber": c["amber"]}
+        for name, col in fg.items():
+            curses.init_pair(PAIRS[name], col, -1)
+        curses.init_pair(PAIRS["sel"], -1, c["selbg"])
+        curses.init_pair(PAIRS["selbar"], c["accent"], c["selbg"])
+        for name in ("red", "green", "cyan"):
+            curses.init_pair(PAIRS["sel" + name], c[name], c["selbg"])
+        LOOK.update(chrome=curses.color_pair(PAIRS["chrome"]),
+                    accent=curses.color_pair(PAIRS["accent"]),
+                    amber=curses.color_pair(PAIRS["amber"]),
+                    sel=curses.color_pair(PAIRS["sel"]),
+                    selbar=curses.color_pair(PAIRS["selbar"]), band=True)
+    elif n >= 8:
+        for name, col in (("red", curses.COLOR_RED), ("green", curses.COLOR_GREEN),
+                          ("cyan", curses.COLOR_CYAN), ("accent", curses.COLOR_CYAN),
+                          ("amber", curses.COLOR_YELLOW)):
+            curses.init_pair(PAIRS[name], col, -1)
+        LOOK.update(chrome=curses.A_DIM, accent=curses.color_pair(PAIRS["accent"]),
+                    amber=curses.color_pair(PAIRS["amber"]), sel=curses.A_REVERSE,
+                    selbar=curses.A_REVERSE, band=False)
+    else:
+        LOOK.update(chrome=curses.A_DIM, accent=curses.A_BOLD, amber=curses.A_BOLD,
+                    sel=curses.A_REVERSE, selbar=curses.A_REVERSE, band=False)
+
+
+def look(name):
+    return LOOK.get(name, 0)
+
+
+def selected(attr):
+    """A row's attr as the SELECTION draws it. Panes still mark their cursor row with
+    A_REVERSE, which is the one flag every line producer already sets and the tests
+    already read; this is where that mark becomes the band, keeping the row's own
+    colour and weight on it."""
+    if not LOOK.get("band"):
+        return attr
+    base = attr & ~curses.A_REVERSE & ~curses.A_COLOR
+    pair = curses.pair_number(attr & curses.A_COLOR) if attr & curses.A_COLOR else 0
+    name = {PAIRS["red"]: "selred", PAIRS["green"]: "selgreen",
+            PAIRS["cyan"]: "selcyan"}.get(pair, "sel")
+    return base | curses.color_pair(PAIRS[name])
+
+
 def start_agent_update():
     """Move the agent pin on to today's nixpkgs, in the background (dfs_agent.py).
 
@@ -1203,7 +1360,44 @@ def start_agent_update():
         return None
 
 
+ACTIVITY_KEEP = 400   # activity lines held, and read back from the file at start
+
+
+def activity_file():
+    """Where the activity log is kept: the run root, `.dfs/runs`, which is gitignored
+    and outside what the file watch reads — so writing it cannot wake the poll."""
+    return os.path.join(dfs_runs.run_root(), "activity.log")
+
+
+def read_activity(path, keep=ACTIVITY_KEEP):
+    """The last `keep` events from the file: `(epoch, kind, text)`."""
+    out = []
+    try:
+        with open(path, errors="replace") as fh:
+            lines = fh.read().splitlines()[-keep:]
+    except OSError:
+        return out
+    for ln in lines:
+        parts = ln.split("\t", 2)
+        if len(parts) == 3:
+            try:
+                out.append((float(parts[0]), parts[1], parts[2]))
+            except ValueError:
+                continue
+    return out
+
+
 class UI:
+    # State a screen built without __init__ (the tests' `object.__new__`) still
+    # needs to draw: nothing being typed, no activity yet, the whole list shown.
+    input = None
+    clip = None
+    events = ()
+    only_mine = False
+    order_undo = ()
+    answers = ()
+    real = False     # only a screen made by __init__ writes the log or rings
+
     def __init__(self, stdscr):
         self.scr = stdscr
         self.sel = 0
@@ -1215,6 +1409,15 @@ class UI:
         self.key_sel = 0            # the `?` pane's cursor, into `key_rows`
         self.keys_from = ("item", "list")   # (pane, focus) `?` was pressed from
         self.last_search = ""       # `/`, repeated by an empty one
+        self.input = None           # what is being typed, while it is — `read_line`
+        self.only_mine = False      # `m`: only the items waiting on the author
+        self.order_undo = []        # `z`: (order.md before, order.md we wrote)
+        self.answers = []           # `:`'s arguments, handed to the prompts it meets
+        # The activity log: what this screen and its walk DID, newest last. Read back
+        # from the file, so a restart does not forget why the walk stopped.
+        self.events = collections.deque(read_activity(activity_file()),
+                                        maxlen=ACTIVITY_KEEP)
+        self.real = True
         # Which half of the item pane the keys drive: the item list at the top, or
         # the item's tree below it. Tab swaps them; see `tree_focused`.
         self.focus = "list"
@@ -1317,7 +1520,10 @@ class UI:
         elif self.tree_focused():
             self.tree_sel = max(0, min(self.tree_sel + step, len(self.tree_rows()) - 1))
         else:
-            self.sel = max(0, min(self.sel + step, len(self.items) - 1))
+            shown = self.visible()
+            if shown:
+                at = shown.index(self.sel) if self.sel in shown else 0
+                self.sel = shown[max(0, min(at + step, len(shown) - 1))]
             self.scroll = 0         # a new item is read from its top
 
     def nodes(self):
@@ -1348,11 +1554,14 @@ class UI:
         is the whole of what a fence has to do from here.
         """
         rows, seg = [], 0
+        shown = set(self.visible())
         for idx, it in enumerate(self.items):
             while seg < it.get("segment", 0):
-                rows.append(("break", it.get("waiting_on")))
+                if not self.only_mine:
+                    rows.append(("break", it.get("waiting_on")))
                 seg += 1
-            rows.append(("item", idx))
+            if idx in shown:
+                rows.append(("item", idx))
         return rows
 
     def reorder(self, step):
@@ -1422,7 +1631,8 @@ class UI:
                           else "now waits on everything above the break")
 
     def said(self, it, did):
-        self.msg = "%s %s — %s is uncommitted" % (
+        self.event("order", "%s %s" % (it["id"], did))
+        self.msg = "%s %s — %s is uncommitted · z undoes" % (
             it["id"], did, dfs_paths.rel(dfs_paths.order()))
 
     def retree(self, after, it, refusal):
@@ -1438,12 +1648,46 @@ class UI:
         if after is None:
             self.msg = "%s %s" % (it["id"], refusal)
             return False
+        if self.only_mine:
+            # The rows around it are hidden, so "up one" would be up past items
+            # nobody can see: a move is made on the whole tree or not at all.
+            self.msg = "the list is filtered to what needs you — m shows it all to move"
+            return False
+        before = read_text_or_none(dfs_paths.order())
         dfs_order.write_order(after)
+        if not isinstance(self.order_undo, list):
+            self.order_undo = []
+        self.order_undo.append((before, read_text_or_none(dfs_paths.order()), it["id"]))
         self.reload()
         self.sel = next((n for n, i in enumerate(self.items) if i["id"] == it["id"]),
                         self.sel)
         self.scroll = 0
         return True
+
+    def undo_order(self):
+        """`z`: put `order.md` back as it was before the last move made from here.
+
+        ⚠️ ONLY IF NOBODY ELSE HAS WRITTEN IT SINCE. The file is the author's plan
+        and several sessions read it; restoring an old copy over somebody's newer
+        edit would be a move nobody made. So the file must still be exactly what
+        this screen wrote, or the undo refuses and says why."""
+        if not self.order_undo:
+            self.msg = "nothing to undo — z undoes the moves made from this screen"
+            return
+        before, wrote, iid = self.order_undo[-1]
+        path = dfs_paths.order()
+        if read_text_or_none(path) != wrote:
+            self.order_undo = []
+            self.msg = "%s has changed since that move — not undone" % dfs_paths.rel(path)
+            return
+        self.order_undo.pop()
+        if before is None:
+            path.unlink()
+        else:
+            path.write_text(before)
+        self.event("order", "undid the last move of %s" % iid)
+        self.reload()
+        self.msg = "undid the last move of %s" % iid
 
     def reload(self, note=""):
         # What each cursor is ON, asked before the lists move under it — `reselect`.
@@ -1473,6 +1717,113 @@ class UI:
                                  self.open_run)
         if note:
             self.msg = note
+
+    # ---- activity ------------------------------------------------------------
+
+    def event(self, kind, text):
+        """Record something this screen or its walk DID, and return the text.
+
+        ⚠️ The message line is not a record: the next poll writes "refreshed" over
+        it, and the walk makes its decisions a tick at a time with nobody looking.
+        Every runner command started, every order written, every walk decision and
+        every chain that ended lands here too, and in `activity.log` beside the run
+        directories, so the answer to "what happened while I was away" is on the
+        screen rather than reconstructed from consoles."""
+        now = time.time()
+        if not isinstance(self.events, collections.deque):
+            self.events = collections.deque(maxlen=ACTIVITY_KEEP)
+        self.events.append((now, kind, text))
+        if self.real:
+            try:
+                path = os.path.join(dfs_runs.ensure_run_root(), "activity.log")
+                with open(path, "a") as fh:
+                    fh.write("%.0f\t%s\t%s\n" % (now, kind, text.replace("\n", " ")))
+            except OSError:
+                pass
+        return text
+
+    def notify(self, text):
+        """Say something happened to somebody not looking: the terminal's bell, which
+        tmux and most terminals turn into a mark on the tab rather than a sound, and
+        with DFS_NOTIFY=desktop a desktop notification too. DFS_NOTIFY=off for none.
+        For the ends the walk exists to bring back — a chain ending, a walk stopping —
+        and nothing else."""
+        how = os.environ.get("DFS_NOTIFY", "bell").lower()
+        if not self.real or how == "off":
+            return
+        try:
+            curses.beep()
+        except curses.error:
+            pass
+        if how == "desktop":
+            msg = printable(text).replace(";", ",")[:200]
+            try:
+                with open("/dev/tty", "w") as tty:
+                    tty.write("\x1b]777;notify;dfs;%s\x07\x1b]9;%s\x07" % (msg, msg))
+            except OSError:
+                pass
+
+    GLYPH = {"run": ("$", "accent"), "walk": ("●", "red"), "stop": ("○", "chrome"),
+             "order": ("↕", "chrome"), "review": ("✎", "accent"),
+             "done": ("■", "green"), "died": ("■", "red"), "raise": ("●", "red"),
+             "trees": ("+", "chrome"), "hold": ("◔", "amber")}
+
+    def activity_lines(self, width):
+        """The log as rows, oldest first: time in grey, a glyph for the kind, the text
+        wrapped under itself. A day boundary gets its date, so `09:14` is not read as
+        this morning when it was yesterday's."""
+        out, day = [], None
+        for when, kind, text in self.events:
+            t = time.localtime(when)
+            d = time.strftime("%a %d %b", t)
+            if d != day:
+                day = d
+                out.append((d, look("chrome") | curses.A_BOLD))
+            glyph, colour = self.GLYPH.get(kind, ("·", "chrome"))
+            if kind == "run" and text.startswith("$ "):
+                text = text[2:]             # the glyph IS the prompt
+            attr = {"red": curses.color_pair(1), "green": curses.color_pair(2)}.get(
+                colour) or look(colour)
+            head = "%s %s " % (time.strftime("%H:%M", t), glyph)
+            lines = textwrap.wrap(text, max(10, width - len(head))) or [""]
+            out.append((head + lines[0], attr if kind in ("raise", "died") else 0))
+            for more in lines[1:]:
+                out.append((" " * len(head) + more, 0))
+        if not out:
+            out.append(("nothing yet — runs, walk decisions and order moves land here",
+                        look("chrome")))
+        return out
+
+    def lines_activity(self, width):
+        out, para = self.wrapper(width)
+        m = self.data.get("metrics") or {}
+        if m:
+            out.append(("counts, over every tree", curses.A_BOLD))
+            para("   ".join((
+                "open raises %d" % m.get("open_raises", 0),
+                "nodes %d" % m.get("nodes", 0),
+                "confirmed %d" % m.get("confirmed", 0),
+                "refuted %d" % m.get("refuted", 0),
+                "parked %d" % m.get("parked", 0), "pruned %d" % m.get("pruned", 0),
+                "critic %d ok %d issues" % (m.get("critic_ok", 0),
+                                            m.get("critic_issues", 0)),
+                "review %d ok %d issues" % (m.get("review_ok", 0),
+                                            m.get("review_issues", 0)),
+                "corrected %d" % m.get("corrections", 0),
+                "sessions %d" % m.get("work_sessions", 0),
+                "~%.0fk tokens" % (m.get("tokens", 0) / 1000.0))), look("chrome"))
+            out.append(("", 0))
+        out.append(("activity — what this screen and its walk did, newest last",
+                    curses.A_BOLD))
+        out.append(("", 0))
+        return out + self.activity_lines(width - 2)
+
+    def chain_ended(self, r):
+        """A chain stopped: say so, record it, and ring for it."""
+        note = self.ended_note(r)
+        self.event("done" if str(r.get("rc")) == "0" else "died", note)
+        self.notify(note)
+        return note
 
     def ended_note(self, r):
         """What to say when a chain you were not watching stops.
@@ -1519,7 +1870,7 @@ class UI:
             ended = [r for r in self.chains if r["dir"] in was_live and not r["live"]]
             if ended:
                 self.reload()
-                self.msg = self.ended_note(ended[0])
+                self.msg = self.chain_ended(ended[0])
             return
         before = self.data["metrics"]["entries"]
         self.reload()
@@ -1527,11 +1878,13 @@ class UI:
         ended = [r for r in self.chains
                  if r["dir"] in was_live and not r["live"]]
         if ended:
-            self.msg = self.ended_note(ended[0])
+            self.msg = self.chain_ended(ended[0])
         elif after > before:
             # Worth saying out loud: in this tree it is usually a peer session, and
             # an entry appearing under you changes what is safe to start.
             self.msg = "the trees moved: +%d" % (after - before)
+            self.event("trees", "the trees moved: +%d entr%s" % (
+                after - before, "y" if after - before == 1 else "ies"))
         else:
             self.msg = "refreshed"
 
@@ -1545,21 +1898,35 @@ class UI:
         stray ESC did to a row.
         """
         h, w = self.scr.getmaxyx()
-        if y < 0 or y >= h or x >= w:
+        # The right edge is the COLUMN's while one is being drawn (`clip`): the
+        # main column must not write into the activity column beside it.
+        edge = min(w - 1, getattr(self, "clip", None) or w - 1)
+        if y < 0 or y >= h or x >= edge:
             return
-        text = printable(text)[: max(0, w - x - 1)]
+        text = printable(text)[: max(0, edge - x)]
         try:
             self.scr.addstr(y, x, text, attr)
         except curses.error:
             pass
 
+    def puts(self, y, x, parts):
+        """Several (text, attr) runs on one row, left to right; returns where it ended."""
+        for text, attr in parts:
+            self.put(y, x, text, attr)
+            x += len(text)
+        return x
+
+    def main_w(self):
+        """The main column's width: the screen, less the activity column when wide."""
+        return getattr(self, "clip", None) or self.scr.getmaxyx()[1]
+
     def status_attr(self, status):
-        return {"blocked": curses.color_pair(1) | curses.A_BOLD,
-                "done": curses.color_pair(2),
-                "open": curses.color_pair(3)}.get(status, 0)
+        # `open` is most of the list, so it is the plain one: colour is for the
+        # states that ask something of you (blocked) or are over (done).
+        return {"blocked": curses.color_pair(1),
+                "done": curses.color_pair(2)}.get(status, 0)
 
     def header(self):
-        m = self.data["metrics"]
         h, w = self.scr.getmaxyx()
         agent = "codex" if self.codex else "claude"
         live = len(self.live())
@@ -1571,10 +1938,6 @@ class UI:
         # unattended right now" is a state, and one nobody should have to remember
         # they left on.
         walk = self.walk_badge()
-        left = " %sroadmap · %d tasks · progress %d · next %s%s " % (
-            ("%s · " % walk) if walk else "",
-            len(self.items), m["entries"], nxt or "—",
-            (" · %d running" % live) if live else "")
         dirty, staged = self.dirty
         warn = ""
         if staged:
@@ -1582,41 +1945,50 @@ class UI:
         elif dirty:
             warn = "%d uncommitted " % dirty
         right = warn + ("%s " % agent)
-        self.put(0, 0, left.ljust(max(0, w - len(right) - 1)) + right,
-                 curses.A_REVERSE | curses.A_BOLD)
+        # ⚠️ Still ONE LINE THAT CHANGES SHAPE when the walk is on: the badge goes
+        # first, in capitals, and red only while it is spending (see `walk_badge`).
+        # The bar under it is gone — a slab of reverse video was the loudest thing
+        # on the screen and said nothing — so the words carry it: the name in bold,
+        # labels grey, the values in the terminal's own colour.
+        x = 1
         if walk:
-            # Painted over the bar it is already part of, the way the item list
-            # overlays a status cell — the bar is drawn in one write, so a segment
-            # of it can only differ by being written again. ⚠️ Red is reserved for a
-            # walk that is SPENDING; the same red on "walk off" would teach the eye
-            # to read the one colour that means "something is running unattended" as
-            # decoration.
-            self.put(0, 1, walk, curses.A_REVERSE | curses.A_BOLD
-                     | (curses.color_pair(1) if self.walk_on else curses.A_DIM))
-        # §0.6 is the experiment, so its counts are on the screen rather than in a
-        # script somebody remembers to run. Cumulative, and labelled as such: the
-        # thing being watched is the TRANSITION, never the level.
-        #
-        # Ordered by what §0.6 says fails first and quietest, because a narrow
-        # terminal drops from the END: raises per pick is the metric that decides
-        # whether this is a roadmap or a fancy inbox, and the STANDING assumption
-        # count is the one that failed silently for 376 entries — nothing closed an
-        # ASSUME, so nobody could see that nothing had been reviewed. Neither may be
-        # the segment that falls off.
-        segs = ["open raises %d" % m["open_raises"],
-                "nodes %d" % m["nodes"],
-                "confirmed %d" % m["confirmed"],
-                "refuted %d" % m["refuted"],
-                "parked %d" % m["parked"],
-                "pruned %d" % m["pruned"],
-                "critic %d ok %d issues" % (m["critic_ok"], m["critic_issues"]),
-                "review %d ok %d issues" % (m["review_ok"], m["review_issues"]),
-                "corrected %d" % m["corrections"],
-                "sessions %d" % m["work_sessions"],
-                "~%.0fk tok" % (m["tokens"] / 1000.0)]
-        while len(segs) > 1 and len(" · ".join(segs)) > w - 3:
-            segs.pop()
-        self.put(1, 1, " · ".join(segs), curses.A_DIM)
+            x = self.puts(0, x, [(walk, (curses.color_pair(1) | curses.A_BOLD)
+                                  if self.walk_on else look("chrome")),
+                                 ("   ", 0)])
+        grey = look("chrome")
+        # ⚠️ ONE LINE, AND ONLY WHAT ASKS SOMETHING OF YOU OR SAYS WHERE THINGS ARE.
+        # There was a second line of cumulative counts — nodes, confirmed, refuted,
+        # parked, pruned, critic, review, sessions, tokens — kept for an experiment
+        # (the old roadmap's §0.6) that ended with it on 2026-09-25. Totals that only
+        # grow are read by nobody at a glance; the one that asked for action (open
+        # raises, standing assumptions) is `need you` here, the same number `m`
+        # filters to. The rest are at the top of `h`, and in dfs_metrics.py.
+        mine = sum(1 for it in self.items if self.needs_you(it))
+        groups = {"tasks": [(str(len(self.items)), 0), (" tasks", grey)],
+                  "next": [("next ", grey), (nxt or "—", look("accent") if nxt else grey)],
+                  "running": [(str(live), curses.color_pair(2)), (" running", grey)],
+                  "mine": [(str(mine), look("amber")), (" need you", grey)]}
+        order = (["tasks", "next"] + (["running"] if live else [])
+                 + (["mine"] if mine else []))
+        # The left yields to the right, a WHOLE segment at a time — `next W` is worse
+        # than no `next` — and the least useful first: "uncommitted" and the agent
+        # change what a key will do, the task count does not.
+        room = w - len(right) - 2 - x
+        for drop in ("tasks", "running", "next", "mine"):
+            width = len("roadmap") + sum(3 + sum(len(t) for t, _ in groups[g])
+                                         for g in order)
+            if width <= room or drop not in order:
+                continue
+            order.remove(drop)
+        parts = [("roadmap", curses.A_BOLD)]
+        for g in order:
+            parts += [("   ", 0)] + groups[g]
+        self.clip = max(x + 8, w - len(right) - 2)
+        self.puts(0, x, parts)
+        self.clip = None
+        if warn:
+            self.put(0, max(0, w - len(right) - 1), warn, look("amber"))
+        self.put(0, max(0, w - len(agent) - 2), agent, look("chrome"))
 
     def draw_list(self, top, height):
         """The item list, windowed so the selection is always on it.
@@ -1665,9 +2037,9 @@ class UI:
                 # is a fence that is no longer in anybody's way.
                 label = ("── break · waiting on %s " % val) if val \
                         else "── break · above is done "
-                w = self.scr.getmaxyx()[1] - 1
+                w = self.main_w() - 1
                 self.put(y, 2, (label + "─" * max(0, w - 2 - len(label)))[:max(0, w - 2)],
-                         curses.A_DIM)
+                         look("chrome"))
                 continue
             idx = val
             it = self.items[idx]
@@ -1685,7 +2057,10 @@ class UI:
             cell = ("  " * it["depth"]) + it["id"]
             line = "%s %s %s %s%s%s" % (marker, cell.ljust(idw), state.ljust(statw),
                                         rev.ljust(revw), tag.ljust(tagw), it["goal"])
-            self.put(y, 0, line.ljust(self.scr.getmaxyx()[1] - 1), attr)
+            band = attr & curses.A_REVERSE
+            self.put(y, 0, line.ljust(self.main_w() - 1), selected(attr) if band else attr)
+            if band and LOOK.get("band"):
+                self.put(y, 0, BAR, look("selbar"))
             if idx != self.sel:
                 # ⚠️ `3 + idw`, not `2 + idw`: the line is marker, space, cell, SPACE,
                 # state, so the colour re-put has to clear the separator too or it
@@ -1693,7 +2068,7 @@ class UI:
                 # the selected row's status sitting one column right of every other
                 # row's, the hand-written offset the id column above is measured to
                 # avoid. The tag is the same distance further on.
-                st_at = (curses.A_DIM if state != it["status"]
+                st_at = (look("chrome") if state != it["status"]
                          else self.status_attr(it["status"]))
                 self.put(y, 3 + idw, state.ljust(statw), st_at)
                 # ⚠️ Every later column is measured off the one before it, never
@@ -1701,7 +2076,7 @@ class UI:
                 # the tag's offset moves with it. A hand-written offset here is what
                 # put the selected row's status one column right of every other row's.
                 if rev:
-                    self.put(y, 3 + idw + statw, rev.ljust(revw), curses.A_DIM)
+                    self.put(y, 3 + idw + statw, rev.ljust(revw), look("amber"))
                 if tag:
                     self.put(y, 4 + idw + statw + revw, tag, tag_attr)
 
@@ -1756,7 +2131,7 @@ class UI:
         out.append(("", 0))
         for done, text in epic_todo():
             para(("[x] " if done else "[ ] ") + text,
-                 curses.A_DIM if done else 0, hang="    ")
+                 look("chrome") if done else 0, hang="    ")
         return out
 
     def lines_reglog(self, width, it):
@@ -1775,12 +2150,12 @@ class UI:
                 head += "   ← open, needs you"
                 attr = curses.color_pair(1) | curses.A_BOLD
             elif e["type"] in ("SESSION", "END"):
-                attr = curses.A_DIM
+                attr = look("chrome")
             out.append((head, attr))
             for line in e["body"].splitlines():
-                para(line, curses.A_DIM, indent="  ", hang="    ")
+                para(line, look("chrome"), indent="  ", hang="    ")
         if len(out) == 2:
-            out.append(("  nothing in this task's log yet", curses.A_DIM))
+            out.append(("  nothing in this task's log yet", look("chrome")))
         return out
 
     def artefacts(self):
@@ -1841,14 +2216,14 @@ class UI:
         up = art_server_up()
         out.append(("artefacts · a picture for one raise, opened in a browser",
                     curses.A_BOLD))
-        out.append(("  enter opens one · ↑↓/jk moves · esc back", curses.A_DIM))
+        out.append(("  enter opens one · ↑↓/jk moves · esc back", look("chrome")))
         out.append((("  served on %d" % ART_PORT) if up else
                     ("  nothing on %d — python3 -m http.server %d --directory %s"
                      % (ART_PORT, ART_PORT, dfs_paths.rel(ART_DIR))),
-                    curses.A_DIM if up else curses.color_pair(3)))
+                    look("chrome") if up else curses.color_pair(3)))
         out.append(("", 0))
         if not arts:
-            out.append(("  no artefact in %s" % dfs_paths.rel(ART_DIR), curses.A_DIM))
+            out.append(("  no artefact in %s" % dfs_paths.rel(ART_DIR), look("chrome")))
             return out
         self._sel_row = None
         group = None
@@ -1858,7 +2233,7 @@ class UI:
             if head != group:
                 group = head
                 out.append(("", 0))
-                out.append(("  " + head, curses.A_DIM))
+                out.append(("  " + head, look("chrome")))
             title = art_title(ART_DIR / a["name"]) if a["exists"] else "MISSING"
             # A uuid plus `.html` is 41, and a name cut mid-extension reads as a
             # different file: it is the one column here that must not be truncated.
@@ -1871,7 +2246,7 @@ class UI:
                 attr = attr | curses.color_pair(1)
             out.append((label, attr))
             if a["entry"] is not None:
-                out.append(("    named in %s" % a["entry"], curses.A_DIM))
+                out.append(("    named in %s" % a["entry"], look("chrome")))
         return out
 
     def lines_runs(self, width):
@@ -1882,13 +2257,13 @@ class UI:
             len(self.runs), "" if len(self.runs) == 1 else "s",
             (", %d chain%s running" % (live, "" if live == 1 else "s")) if live
             else ", newest first"), curses.A_BOLD))
-        out.append(("  enter opens one · ↑↓/jk moves · esc back", curses.A_DIM))
+        out.append(("  enter opens one · ↑↓/jk moves · esc back", look("chrome")))
         out.append(("", 0))
         if not self.runs:
             out.append(("  nothing in " + ", ".join(
                 "%s/dfs_run_*" % r for r in dfs_runs.run_roots()),
-                curses.A_DIM))
-            out.append(("  a console appears here the moment a chain starts", curses.A_DIM))
+                look("chrome")))
+            out.append(("  a console appears here the moment a chain starts", look("chrome")))
             return out
         self._sel_row = None
         for i, r in enumerate(self.runs):
@@ -1942,17 +2317,17 @@ class UI:
         elif chain["rc"]:
             head += " · rc %s" % chain["rc"]
         out.append((head, curses.A_BOLD))
-        out.append((run["path"], curses.A_DIM))
+        out.append((run["path"], look("chrome")))
         if chain["live"]:
             out.append(("the script above, the agent's own turns below · "
                         + ("following · [K] stops the chain" if self.follow
                            else "not following · [G] jumps back to the last line"),
-                        curses.A_DIM))
+                        look("chrome")))
         out.append(("", 0))
         for line in tail_lines(run["path"]):
             out.extend(self.log_wrap(width, line.replace("\t", "    "), 0))
         if len(out) == 4:
-            out.append(("  nothing written yet — the agent is starting", curses.A_DIM))
+            out.append(("  nothing written yet — the agent is starting", look("chrome")))
         out.extend(self.lines_live_agent(width, chain))
         return out
 
@@ -1972,12 +2347,12 @@ class UI:
             if chain["live"]:
                 return [("", 0), ("the running session has not named itself yet — a "
                                   "chain started before this was recorded shows its "
-                                  "turns only when it ends", curses.A_DIM)]
+                                  "turns only when it ends", look("chrome"))]
             return []
         tp = transcript_path(chain["sid"], agent)
         out = [("", 0)]
         if tp is None or not tp.exists():
-            out.append(("no transcript at %s yet" % tp, curses.A_DIM))
+            out.append(("no transcript at %s yet" % tp, look("chrome")))
             return out
         peak, responses = self.measured(tp, agent)
         note = ""
@@ -1986,7 +2361,7 @@ class UI:
         out.append(("agent · session %s · %d responses · peak context %s%s"
                     % (chain["sid"][:8], responses, fmt_tokens(peak), note),
                     curses.color_pair(1) if peak > CHECKPOINT else curses.A_BOLD))
-        out.append((str(tp), curses.A_DIM))
+        out.append((str(tp), look("chrome")))
         out.append(("", 0))
         # Bounded: this is re-read on every draw while the session grows.
         out.extend(self.transcript_lines(tp, agent, tail_bytes=256 * 1024,
@@ -2006,7 +2381,7 @@ class UI:
             return self._cache[key]
         out, para = self.wrapper(width)
         out.append(("%s · %s" % (run["item"] or "run", run["name"]), curses.A_BOLD))
-        out.append((run["path"], curses.A_DIM))
+        out.append((run["path"], look("chrome")))
         out.append(("", 0))
 
         result, events = read_result(run["path"])
@@ -2027,7 +2402,7 @@ class UI:
             ]
             out.append((" · ".join("%s %s" % (k, v) for k, v in fields
                                    if v not in (None, "", "0")), 0))
-            out.append(("session %s" % (sid or "unknown"), curses.A_DIM))
+            out.append(("session %s" % (sid or "unknown"), look("chrome")))
             out.append(("", 0))
             out.append(("result", curses.A_BOLD))
             for line in str(result.get("result", "")).splitlines() or [""]:
@@ -2037,7 +2412,7 @@ class UI:
             # rows the transcript pane draws instead of dumped back as the JSON it
             # arrived in.
             sid = codex_session_id(events)
-            out.append(("session %s" % (sid or "unknown"), curses.A_DIM))
+            out.append(("session %s" % (sid or "unknown"), look("chrome")))
             out.append(("", 0))
             out.extend(self.emit_roles(codex_result_lines(events), width))
 
@@ -2046,9 +2421,9 @@ class UI:
         if not sid:
             out.append(("no session id in this result, so there is no transcript to "
                         "open — which is itself the finding on a run that died before "
-                        "it started", curses.A_DIM))
+                        "it started", look("chrome")))
         elif tp is None or not tp.exists():
-            out.append(("transcript not on this box: %s" % tp, curses.A_DIM))
+            out.append(("transcript not on this box: %s" % tp, look("chrome")))
         else:
             peak, responses = peak_and_turns(str(tp), agent)
             out.append(("transcript · %s" % tp, curses.A_BOLD))
@@ -2119,13 +2494,13 @@ class UI:
         """
         return {"say": 0,
                 "you": curses.color_pair(3),
-                "meta": curses.A_DIM,
-                "think": curses.A_DIM,
+                "meta": look("chrome"),
+                "think": look("chrome"),
                 "run": curses.color_pair(2),
-                "out": curses.A_DIM,
+                "out": look("chrome"),
                 "err": curses.color_pair(1),
                 "head": curses.A_BOLD,
-                "dim": curses.A_DIM}.get(role, 0)
+                "dim": look("chrome")}.get(role, 0)
 
     def emit_roles(self, rows, width):
         """Named rows to drawn ones, wrapping the ones that carry content.
@@ -2186,7 +2561,7 @@ class UI:
                 meta = content.lstrip().startswith("<")
                 emit(you_row(content) if not meta
                      else "     " + re.sub(r"\s+", " ", content),
-                     curses.A_DIM if meta else curses.color_pair(3))
+                     look("chrome") if meta else curses.color_pair(3))
                 continue
             for b in content or []:
                 t = b.get("type")
@@ -2197,7 +2572,7 @@ class UI:
                 elif t == "thinking":
                     n = len(b.get("thinking") or "")
                     if n:
-                        made.append(("  ~ thinking, %d chars" % n, curses.A_DIM))
+                        made.append(("  ~ thinking, %d chars" % n, look("chrome")))
                 elif t == "tool_use":
                     inp = b.get("input") or {}
                     arg = inp.get("command") or inp.get("file_path") or inp.get("pattern") or ""
@@ -2210,7 +2585,7 @@ class UI:
                     first = (s or "").strip().splitlines()
                     made.append(("    ← %s%s" % (
                         (first[0][:200] if first else ""),
-                        "   [%d chars]" % len(s or "")), curses.A_DIM))
+                        "   [%d chars]" % len(s or "")), look("chrome")))
         return made
 
     def detail_lines(self, width):
@@ -2222,6 +2597,10 @@ class UI:
             return self.lines_artefacts(width)
         if self.pane == "keys":
             return self.lines_keys(width)
+        if self.pane == "activity":
+            return self.lines_activity(width)
+        if self.pane == "plan":
+            return self.lines_plan(width)
         if self.pane == "agentlog" and self.open_run:
             try:
                 if self.open_run.get("kind") == "console":
@@ -2273,7 +2652,7 @@ class UI:
         rows = self.tree_rows()
         return rows[self.tree_sel] if rows and self.tree_sel < len(rows) else None
 
-    # ---- ? and / ---------------------------------------------------------------
+    # ---- ? / : and the filter ---------------------------------------------------
 
     def key_place(self):
         """Which part of `KEYS` the screen `?` was pressed from is in."""
@@ -2292,37 +2671,44 @@ class UI:
 
     def lines_keys(self, width):
         out, para = self.wrapper(width)
-        out.append(("keys — ⏎ presses the one under the cursor, esc goes back",
-                    curses.A_BOLD))
+        para("keys — ⏎ presses the one under the cursor, esc goes back; each name "
+             "also works at :", curses.A_BOLD)
         titles = dict(KEY_PLACES)
         here = self.key_place()
         rows = self.key_rows()
         self.key_sel = max(0, min(self.key_sel, len(rows) - 1))
         self._sel_row = None
         place = None
-        for i, (p, label, _, what) in enumerate(rows):
+        for i, (p, label, _, name, what) in enumerate(rows):
             if p != place:
                 place = p
                 out.append(("", 0))
-                out.append(("%s%s" % (titles[p], "  (where you were)" if p == here
-                                      else ""), curses.A_BOLD if p == here else curses.A_DIM))
+                out.append(("%s%s" % (titles[p], "  · where you were" if p == here
+                                      else ""), look("chrome")))
             sel = i == self.key_sel
             if sel:
                 self._sel_row = len(out)
-            out.append(("%s %-18s %s" % (">" if sel else " ", label, what),
-                        curses.A_REVERSE if sel else 0))
+            # The description WRAPS under itself: on a narrow screen it is the part
+            # that would be cut, and it is what this pane is for.
+            lead = "%s %-10s %-16s " % (">" if sel else " ", label, name)
+            lines = textwrap.wrap(what, max(16, width - len(lead) - 2)) or [""]
+            out.append((lead + lines[0], curses.A_REVERSE if sel else 0))
+            for more in lines[1:]:
+                out.append((" " * len(lead) + more, 0))
         return out
 
-    def key_run(self):
-        """⏎ on `?`: put back the pane the key belongs to, then press it.
+    def key_run(self, row=None):
+        """⏎ on `?`, and `:`: put back the pane the key belongs to, then press it.
 
         The pane is the KEY'S, not simply the one `?` came from: a tree key read off
         the item list is pressed in the tree, which is the only place it means
         anything, rather than landing on the list and saying "tab to the tree"."""
-        rows = self.key_rows()
-        if not rows:
-            return True
-        place, _, code, _ = rows[self.key_sel]
+        if row is None:
+            rows = self.key_rows()
+            if not rows:
+                return True
+            row = rows[self.key_sel]
+        place, code = row[0], row[2]
         pane, focus = self.keys_from
         self.pane, self.focus, self.scroll = pane, focus, 0
         if place == "items":
@@ -2333,19 +2719,136 @@ class UI:
             self.pane = place
         elif place == "agentlog" and self.open_run is not None:
             self.pane = "agentlog"
-        if code == ord("?"):
+        if code in (ord("?"), ord(":")):
             return True
         # Drawn first: a key that prompts would otherwise ask its question over the
         # keys pane, about a screen that is no longer the one it acts on.
         self.draw()
         return self.act(code)
 
+    # :
+
+    def command(self):
+        """`:` — any key by its name, and an item to do it to: `:work W7 5`,
+        `:review W12`, `:walk 20`, `:pin W9`, `:go W3`.
+
+        ⚠️ NAMES SCALE WHERE LETTERS DO NOT. k9s ran out of letters and grew a `:`;
+        this screen was already one key short (`n` could not be "next match"). A
+        command is a row of `KEYS` pressed through `key_run`, so there is no second
+        implementation of anything: an item id selects that item first, and what is
+        left over answers the prompts the key meets (`answers`) — `:walk 20` is `w`
+        answered 20, and nothing is ever confirmed on your behalf, since a y/N is
+        only answered by a `y` you typed. As you type, the matches are listed above
+        the line with what each does, helix's way, and Tab takes the picked one."""
+        self.keys_from = (self.pane, self.focus)
+        got = self.read_line(":", menu=self.command_menu,
+                             hint="tab complete   ⏎ run   esc cancel",
+                             complete=self.command_complete)
+        if not got:
+            return True
+        return self.command_run(got)
+
+    def command_run(self, line):
+        words = line.split()
+        name, args = words[0].lower(), words[1:]
+        if name == "go":
+            if not args:
+                self.msg = ":go wants an item — :go W7"
+                return True
+            return self.go(args[0]) or True
+        row = next((k for k in KEYS if k[3] == name), None)
+        if row is None:
+            # ⚠️ ONLY A NAME, OR THE START OF EXACTLY ONE, RUNS. `activ` is
+            # `activity`. A fuzzy match is for the list above the line, where Tab
+            # takes it on sight — run blind, `:reviwe` started `review-terminal`,
+            # whose letters happen to hold r-e-v-i-w-e in order.
+            hits = self.command_matches(name)
+            named = [k for k in KEYS if k[3].startswith(name)]
+            if len(named) == 1:
+                row = named[0]
+            else:
+                self.msg = ":%s — no such command%s" % (
+                    name, "; did you mean %s?" % ", ".join(k[3] for k in hits[:3])
+                    if hits else "; ? lists them")
+                return True
+        if args and self.item_index(args[0]) is not None:
+            self.go(args.pop(0))
+        self.answers = list(args)
+        try:
+            return self.key_run(row)
+        finally:
+            self.answers = []
+
+    def item_index(self, iid):
+        want = iid.upper()
+        return next((n for n, i in enumerate(self.items) if i["id"].upper() == want),
+                    None)
+
+    def go(self, iid):
+        n = self.item_index(iid)
+        if n is None:
+            self.msg = "no item %s" % iid
+            return False
+        if self.only_mine and not self.needs_you(self.items[n]):
+            self.only_mine = False
+        self.sel, self.scroll = n, 0
+        self.pane, self.focus = "item", "list"
+        return True
+
+    def command_matches(self, typed):
+        typed = typed.lower()
+        scored = []
+        for k in KEYS:
+            sc = fuzzy(typed, k[3])
+            if sc is None:
+                sc = fuzzy(typed, k[4].lower())
+                sc = None if sc is None else sc + 1000
+            if sc is not None:
+                scored.append((sc, k))
+        return [k for _, k in sorted(scored, key=lambda e: e[0])]
+
+    def command_menu(self, text):
+        """What `:` shows above the line: commands while the name is being typed,
+        then items once it has one."""
+        grey = look("chrome")
+        words = text.split(" ")
+        if len(words) == 1:
+            hits = [k for k in self.command_matches(words[0])
+                    if k[3] not in ("move", "half-page", "page", "top", "back",
+                                    "command")] if words[0] else \
+                [k for k in KEYS if k[0] == self.key_place()]
+            rows = [("%-16s %-8s %s" % (k[3], k[1].split()[0], k[4]), 0) for k in hits[:8]]
+            return rows, "commands"
+        scored = []
+        for it in self.items:
+            sc = fuzzy(words[1].lower(), ("%s %s" % (it["id"], it["goal"])).lower())
+            if sc is not None or not words[1]:
+                scored.append((sc or 0, it))
+        rows = [("%-6s %-8s %s" % (it["id"], row_state(it), it["goal"]), 0)
+                for _, it in sorted(scored, key=lambda e: e[0])[:8]]
+        return rows or [("no item matches", grey)], "items"
+
+    def command_complete(self, text, row):
+        if row is None:
+            return text
+        head = row[0].split()[0]
+        words = text.split(" ")
+        if len(words) == 1:
+            return head + " "
+        return " ".join(words[:1] + [head] + words[2:]).rstrip() + " "
+
+    # /
+
+    def cursors(self):
+        return dict(sel=self.sel, tree_sel=self.tree_sel, run_sel=self.run_sel,
+                    key_sel=self.key_sel, art_sel=self.art_sel, scroll=self.scroll)
+
     def search_space(self):
         """What `/` looks through here, where the cursor is in it, and how to land on
         a match: the rows a pane's cursor walks, or the text of a pane without one."""
         if self.pane == "keys":
             rows = self.key_rows()
-            return ([" ".join((k[1], k[3])) for k in rows], self.key_sel,
+            return ([" ".join((k[1], k[3], k[4])) for k in rows], self.key_sel,
                     lambda i: setattr(self, "key_sel", i))
         if self.pane == "runs":
             return (["%s %s %s" % (r["item"], r["name"], os.path.basename(r["dir"]))
@@ -2364,28 +2867,150 @@ class UI:
             return ([text(r) for r in self.tree_rows()], self.tree_sel,
                     lambda i: setattr(self, "tree_sel", i))
         if self.pane == "item":
+            shown = self.visible()
+
             def land(i):
-                self.sel, self.scroll = i, 0
-            return (["%s %s %s" % (i["id"], i["goal"], i.get("why", ""))
-                     for i in self.items], self.sel, land)
+                self.sel, self.scroll = shown[i], 0
+            return (["%s %s %s" % (self.items[n]["id"], self.items[n]["goal"],
+                                   self.items[n].get("why", "")) for n in shown],
+                    shown.index(self.sel) if self.sel in shown else 0, land)
         # A pane with no cursor: the match's line goes to the top, and reading
         # somewhere is not following the end.
-        lines = self.detail_lines(self.scr.getmaxyx()[1])
+        lines = self.detail_lines(self.main_w())
 
         def scroll_to(i):
             self.follow = False
             self.scroll = i
         return [ln[0] for ln in lines], self.scroll, scroll_to
 
-    def search(self, needle):
-        self.last_search = needle
+    def search(self, needle, here=False):
+        """Land on the next match; with `here`, the current row may be it — which is
+        what typing does, since the row you are on can already match."""
         texts, cur, land = self.search_space()
-        i, wrapped = find_next(texts, needle, cur)
+        i, wrapped = find_next(texts, needle, cur - 1 if here else cur)
+        n = sum(1 for t in texts if find_next([t], needle, -1)[0] is not None)
         if i is None:
             self.msg = "/%s — not here" % needle
-            return
+            return 0
         land(i)
-        self.msg = "/%s%s" % (needle, " — from the top again" if wrapped else "")
+        self.msg = "/%s — %d match%s%s" % (needle, n, "" if n == 1 else "es",
+                                           ", from the top again" if wrapped else "")
+        return n
+
+    def search_typed(self):
+        """`/`: the cursor moves to the first match AS YOU TYPE, the count is on the
+        line, ⏎ keeps it and Esc puts the cursor back where it was. An empty ⏎ is
+        the next match of the last search."""
+        origin = self.cursors()
+
+        def put_back():
+            for k, v in origin.items():
+                setattr(self, k, v)
+
+        def change(text):
+            put_back()
+            if self.input is None:
+                return
+            if not text:
+                self.input["hint"] = None
+                return
+            n = self.search(text, here=True)
+            self.input["hint"] = ("%d match%s   ⏎ keep   esc back" % (
+                n, "" if n == 1 else "es")) if n else "no match   esc back"
+        hint = ("⏎ next %s   esc back" % self.last_search) if self.last_search else None
+        got = self.read_line("/", on_change=change, hint=hint)
+        if got is None:
+            put_back()
+            self.msg = ""
+        elif got:
+            self.last_search = got
+        elif self.last_search:
+            self.search(self.last_search)
+
+    # m
+
+    def needs_you(self, it):
+        """What `m` keeps: an item with a question for the author — its own raise, a
+        standing assumption to keep or redirect, a correction not yet carried out."""
+        return bool(it["status"] == "blocked" or it.get("open_raises")
+                    or it.get("standing") or it.get("corrections"))
+
+    def visible(self):
+        """Indices of the items the list shows. The selected one always, so turning
+        the filter on, or an answer landing, never leaves the cursor on nothing."""
+        if not self.only_mine:
+            return list(range(len(self.items)))
+        return [n for n, it in enumerate(self.items)
+                if self.needs_you(it) or n == self.sel]
+
+    def toggle_mine(self):
+        self.only_mine = not self.only_mine
+        if self.only_mine:
+            mine = [n for n, it in enumerate(self.items) if self.needs_you(it)]
+            if not mine:
+                self.only_mine = False
+                self.msg = "nothing is waiting on you"
+                return
+            if self.sel not in mine:
+                self.sel = mine[0]
+            self.msg = "%d of %d need you — m shows everything" % (len(mine),
+                                                                    len(self.items))
+        else:
+            self.msg = "all %d items" % len(self.items)
+        self.scroll = 0
+
+    # the walk's plan, shown while `w` asks for its budget
+
+    def lines_plan(self, width):
+        """What a walk would do, before it is asked for money: the order it would
+        take the items in if every chain finishes its item, what is held back and
+        by what, and what the budget means. aptitude shows its pending actions
+        before `g`; a walk is the same kind of commitment.
+
+        ⚠️ A FORECAST, and it says so: a chain that raises hands the walk the next
+        branch instead, and the order can change under it. What is certain is the
+        FIRST item — the pin, else `next_item` — and that is the line in the accent."""
+        out, para = self.wrapper(width)
+        grey = look("chrome")
+        first = self.walk_next or self.data.get("next_item")
+        take, held, blocked, done = [], [], [], 0
+        for it in self.items:
+            state = row_state(it)
+            if it["status"] == "done":
+                done += 1
+            elif it["status"] == "blocked":
+                blocked.append(it)
+            elif state != "open":
+                held.append((it, state))
+            else:
+                take.append(it)
+        take.sort(key=lambda it: it["id"] != first)
+        out.append(("the walk, if each chain finishes its item", curses.A_BOLD))
+        para("a chain that raises hands it the next branch instead, so only the first "
+             "is certain", grey)
+        out.append(("", 0))
+        if not take:
+            out.append(("  nothing it can take — every branch is blocked or finished",
+                        curses.color_pair(1)))
+        for n, it in enumerate(take, 1):
+            pin = "  pinned" if it["id"] == self.walk_next else ""
+            out.append(("  %2d  %-6s %s%s" % (n, it["id"], it["goal"], pin),
+                        look("accent") if n == 1 else 0))
+        if held:
+            out.append(("", 0))
+            out.append(("held back", grey))
+            for it, state in held:
+                why = ("a raise above it, on %s" % state[1:] if state.startswith("↳")
+                       else "a fence, until %s is done" % state[1:])
+                out.append(("      %-6s %s — %s" % (it["id"], it["goal"], why), grey))
+        if blocked:
+            out.append(("", 0))
+            out.append(("waiting on your answer: %s" % ", ".join(i["id"] for i in blocked),
+                        curses.color_pair(1)))
+        out.append(("", 0))
+        para("%d finished. The budget is SESSIONS over the whole walk; each chain is "
+             "given what is left, so it cannot overshoot." % done, grey)
+        return out
 
     def lines_tree(self, width):
         out, para = self.wrapper(width)
@@ -2404,10 +3029,10 @@ class UI:
                         % ", ".join(it["corrections"]), curses.A_BOLD))
         out.append(("sessions %d of %d since the author spoke · critic in %d"
                     % (it.get("sessions", 0), 10, max(5 - it.get("since_critic", 0), 0)),
-                    curses.A_DIM))
+                    look("chrome")))
         out.append(("", 0))
         if not rows:
-            out.append(("no nodes yet", curses.A_DIM))
+            out.append(("no nodes yet", look("chrome")))
             return out
         self._sel_row = None
         red = curses.color_pair(1)
@@ -2444,7 +3069,7 @@ class UI:
             if row["raises_below"]:
                 flag += "  ● %d raise%s below" % (row["raises_below"],
                                                   "" if row["raises_below"] == 1 else "s")
-            attr = (curses.A_DIM if st in TREE_QUIET else 0)
+            attr = (look("chrome") if st in TREE_QUIET else 0)
             if row["raises"] or row["raises_below"]:
                 attr = red | curses.A_BOLD
             if sel:
@@ -2472,11 +3097,11 @@ class UI:
                 for line in r["body"].splitlines():
                     para(line, indent=inner + "  ", hang="  ")
             if row["key"] in self.tree_open:
-                out.append((inner + "status: %s" % st, curses.A_DIM))
+                out.append((inner + "status: %s" % st, look("chrome")))
                 for label, text in node_detail(nd, archived_fields(archive, nd["id"]),
                                                commits.get(nd["id"], ())):
                     para("%s: %s" % (label, text),
-                         curses.A_DIM if label == "Commit" else 0,
+                         look("chrome") if label == "Commit" else 0,
                          indent=inner, hang="    ")
                 out.append(("", 0, BLANK_GUIDES))
             out[first:] = [ln if len(ln) > 2 else ln + (below,) for ln in out[first:]]
@@ -2532,32 +3157,50 @@ class UI:
         elif self.pane == "keys":
             actions, nav = ["⏎ press it", "esc back"], ["↑↓/jk key", "/ search"]
         # `?` is the last thing to go: it is where everything the footer dropped is.
-        segs = actions + nav + ["? keys", "q quit"]
+        segs = actions + nav + [": command", "? keys", "q quit"]
         while len(segs) > 3 and len(" · ".join(segs)) > w - 2:
-            segs.pop(-3)
+            # The pane's own keys go first, then `: command`; `? keys` never.
+            segs.pop(-4 if len(segs) > 4 else -3)
         return " · ".join(segs)
+
+    def side_w(self, w):
+        """The activity column's width: none below `SIDE_AT`, where the main column
+        needs every cell it has; then about a third, and never so wide that the tree
+        is the one squeezed."""
+        return 0 if w < SIDE_AT else min(72, max(44, w * 36 // 100))
+
+    def rule(self, y, x0, x1, title="", tag=""):
+        """A section's rule: grey line, its name in it, a position tag at the right."""
+        self.put(y, x0, "─" * max(0, x1 - x0), look("chrome"))
+        if title:
+            self.put(y, x0 + 2, " %s " % title, look("chrome"))
+        if tag:
+            self.put(y, max(x0, x1 - len(tag) - 2), tag, look("chrome"))
 
     def draw(self):
         self.scr.erase()
         h, w = self.scr.getmaxyx()
         self._list_y = None
+        self.clip = None
         self.header()
-        list_h = min(len(self.list_rows()), max(3, (h - 6) // 3))
-        self.draw_list(3, list_h)
-        sep = 3 + list_h
-        self.put(sep, 0, "─" * max(0, w - 1), curses.A_DIM)
+        side = self.side_w(w)
+        main = w - side - (1 if side else 0)
+        self.clip = main
+        list_h = min(len(self.list_rows()), max(3, (h - 5) // 3))
+        self.draw_list(2, list_h)
+        sep = 2 + list_h
         name = {"item": "item", "reglog": "task log", "runs": "agent runs",
                 "agentlog": "agent log", "todo": "epic todo",
-                "artefact": "artefacts", "keys": "keys"}[self.pane]
+                "artefact": "artefacts", "keys": "keys", "activity": "activity",
+                "plan": "walk plan"}[self.pane]
         if self.pane == "item":
             name = "tree" if self.tree_focused() else "item"
-        self.put(sep, 2, " %s " % name, curses.A_DIM)
 
         body_top = sep + 1
         body_h = max(1, h - body_top - 2)
         self.body_h = body_h
         self._sel_row = None
-        lines = self.detail_lines(w)
+        lines = self.detail_lines(main)
         # ⚠️ Following is DERIVED here, not remembered from the keypress that opened
         # the pane — see `follows`. One place, so the footer, the pane's own header
         # and the scroll cannot disagree about it.
@@ -2577,34 +3220,138 @@ class UI:
             elif self._sel_row >= self.scroll + body_h:
                 self.scroll = self._sel_row - body_h + 1
         self.scroll = max(0, min(self.scroll, max(0, len(lines) - body_h)))
+        tag = ""
+        if len(lines) > body_h:
+            tag = "%d–%d of %d" % (self.scroll + 1,
+                                   min(self.scroll + body_h, len(lines)), len(lines))
+        self.rule(sep, 0, main - 1, name, tag)
         for i, line in enumerate(lines[self.scroll:self.scroll + body_h]):
             text, attr = line[0], line[1]
-            self.put(body_top + i, 1, text, attr)
+            y = body_top + i
+            # ⚠️ A_REVERSE is how every pane MARKS its cursor row; `selected` is how
+            # that mark is drawn — a band across the column and the accent bar where
+            # the `>` was, so the row keeps its own colour instead of inverting.
+            if attr & curses.A_REVERSE and LOOK.get("band"):
+                self.put(y, 1, text.ljust(main - 2), selected(attr))
+                if text.startswith(">"):
+                    self.put(y, 1, BAR, look("selbar"))
+                continue
+            self.put(y, 1, text, attr)
             # A third element is indent-guide columns (see `lines_tree`), drawn only
             # into blank cells so a guide never overwrites text, and never across the
-            # selected row, whose reverse video is the cursor.
+            # selected row, whose band is the cursor.
             if len(line) > 2 and not attr & curses.A_REVERSE:
                 for c in line[2]:
                     if c >= len(text) or text[c] == " ":
-                        self.put(body_top + i, 1 + c, "│", curses.A_DIM)
-        if len(lines) > body_h:
-            tag = " %d-%d of %d " % (self.scroll + 1,
-                                     min(self.scroll + body_h, len(lines)), len(lines))
-            self.put(sep, max(0, w - len(tag) - 3), tag, curses.A_DIM)
+                        self.put(y, 1 + c, "│", look("chrome"))
+        self.clip = None
+        if side:
+            self.draw_side(main, 2, h - 3, w)
 
-        self.put(h - 2, 0, self.msg[: w - 1], curses.A_BOLD)
-        self.put(h - 1, 0, self.footer(w).ljust(max(0, w - 1)), curses.A_REVERSE)
+        self.put(h - 2, 1, self.msg, 0)
+        if self.input is not None:
+            cur = self.draw_input(h, w)
+        else:
+            self.draw_footer(h - 1, w)
+            cur = None
         # ⚠️ The hardware cursor is PARKED where the keys go, although it is hidden.
-        # A screen reader follows it, not the reverse video, and curses leaves it
-        # wherever the last write ended — the end of the footer, on every draw — so
-        # a reader was told the footer once a second and never the row you were on.
-        y = self.cursor_y(body_top, body_h)
+        # A screen reader follows it, not the band, and curses leaves it wherever the
+        # last write ended — the end of the footer, on every draw — so a reader was
+        # told the footer once a second and never the row you were on. While typing
+        # it is where the typing goes, and shown.
+        y = cur if cur is not None else self.cursor_y(body_top, body_h)
         if y is not None:
             try:
-                self.scr.move(y, 0)
+                self.scr.move(*(y if isinstance(y, tuple) else (y, 0)))
             except curses.error:
                 pass
         self.scr.refresh()
+
+    def draw_footer(self, y, w):
+        """The footer's keys: the key in the accent, what it does in grey.
+
+        `footer` still decides WHICH keys fit, as text; this only draws them, so the
+        narrowing rule has one home. A capitalised label is a state that wants
+        seeing (`w STOP WALK`) and is drawn in red."""
+        x = 1
+        for seg in self.footer(w).split(" · "):
+            key, _, label = seg.partition(" ")
+            if seg.startswith("●"):
+                x = self.puts(y, x, [(seg, curses.color_pair(2)), ("   ", 0)])
+                continue
+            loud = label.isupper()
+            x = self.puts(y, x, [(key, look("accent") | curses.A_BOLD), (" ", 0),
+                                 (label, (curses.color_pair(1) | curses.A_BOLD) if loud
+                                  else look("chrome")), ("   ", 0)])
+
+    def draw_input(self, h, w):
+        """The input line, where the footer was (htop's, fzf's): the prompt in the
+        accent, what is typed, and its own keys at the right. A `menu` — `:`'s
+        matches — is drawn above it, over the pane, bottom up. Returns the cursor."""
+        inp = self.input
+        hint = inp.get("hint") or "⏎ ok   esc cancel"
+        self.put(h - 1, max(0, w - len(hint) - 2), hint, look("chrome"))
+        x = self.puts(h - 1, 1, [(inp["label"], look("accent") | curses.A_BOLD),
+                                 (" " if inp["label"] else "", 0)])
+        room = max(1, w - x - len(hint) - 4)
+        start = max(0, inp.get("pos", len(inp["text"])) - room)
+        text = inp["text"][start:start + room]
+        self.put(h - 1, x, text, 0)
+        menu = inp.get("menu") or []
+        for i, (line, attr) in enumerate(reversed(menu[: max(0, h - 6)])):
+            y = h - 2 - i
+            self.put(y, 0, " " * (w - 1), 0)
+            if attr & curses.A_REVERSE and LOOK.get("band"):
+                self.put(y, 0, (" " + line).ljust(w - 2), selected(attr))
+                self.put(y, 0, BAR, look("selbar"))
+            else:
+                self.put(y, 1, line, attr)
+        if menu:
+            self.rule(h - 2 - min(len(menu), h - 6), 0, w - 1, inp.get("title", ""))
+        return (h - 1, x + inp.get("pos", len(inp["text"])) - start)
+
+    def draw_side(self, x0, top, bottom, w):
+        """The activity column: what is running now, then what has happened.
+
+        ⚠️ WATCHING THE WALK WAS THREE KEYS AWAY from the tree you would be watching
+        it from (`l`, pick the run, ⏎), and the tree was gone while you did. From
+        `SIDE_AT` columns both are on the screen: the live chain's console tail at
+        the top, and the activity log under it — the record of what this screen and
+        its walk did, which is the part the message line kept losing."""
+        for y in range(top, bottom):
+            self.put(y, x0, "│", look("chrome"))
+        x = x0 + 2
+        width = w - x - 1
+        live = sorted(self.live(), key=lambda r: r["dir"] != self.walk_dir)
+        y = top
+        if live:
+            r = live[0]
+            self.rule(y, x, w - 1, "live · %s · %s" % (r["item"], self.chain_progress(r)))
+            y += 1
+            share = max(4, (bottom - top) * 55 // 100)
+            tail = []
+            if r.get("console"):
+                try:
+                    tail = [ln for ln in tail_lines(r["console"], 200)
+                            if ln.strip()]
+                except OSError:
+                    tail = []
+            # As tall as the console is, up to a little over half: a chain that has
+            # said four lines should not hold the activity log off half the column.
+            for ln in tail[-(share - 1):]:
+                self.put(y, x, strip_ansi(ln)[:width], look("chrome")
+                         if ln.startswith("dfs_run:") else 0)
+                y += 1
+            y += 1
+        self.rule(y, x, w - 1, "activity")
+        y += 1
+        rows = self.activity_lines(width)
+        for text, attr in rows[-max(0, bottom - y):] if bottom > y else []:
+            if re.match(r"\d\d:\d\d ", text):
+                self.puts(y, x, [(text[:5], look("chrome")), (text[5:], attr)])
+            else:
+                self.put(y, x, text, attr)
+            y += 1
 
     def cursor_y(self, body_top, body_h):
         """The screen row of whatever the keys drive: a pane's cursor row if it has
@@ -2620,6 +3367,7 @@ class UI:
 
     def shell(self, argv, pause=True):
         """Hand the real terminal over. Sessions are interactive and stream output."""
+        self.event("run", "$ " + shlex.join(argv))
         curses.def_prog_mode()
         curses.endwin()
         print("\n$ " + " ".join(argv) + "\n", flush=True)
@@ -2675,6 +3423,7 @@ class UI:
         # The COMMAND, not a paraphrase of it: what this key did is the runner line
         # the console opens with, and saying it here is how the screen teaches the
         # CLI underneath it — the thing that runs without the screen, from a script.
+        self.event("run", "$ %s  (pid %d)" % (shlex.join(argv), proc.pid))
         self.msg = "$ %s  — in the background, pid %d, [l] to watch" % (
             shlex.join(argv), proc.pid)
         # ⚠️ The DIRECTORY, not the pid: the walk has to judge the chain it started
@@ -2711,8 +3460,13 @@ class UI:
         if self.walk_on:
             self.walk_end_chain()
             return
-        raw = self.prompt("walk: how many sessions? (last walk: %d, nothing cancels)"
-                          % self.walk_budget, "")
+        was = (self.pane, self.scroll)
+        self.pane, self.scroll = "plan", 0
+        try:
+            raw = self.prompt("walk: how many sessions? (last walk: %d, nothing cancels)"
+                              % self.walk_budget, "")
+        finally:
+            self.pane, self.scroll = was
         if not raw:
             self.msg = "walk: not started — it wants a number of sessions"
             return
@@ -2731,6 +3485,7 @@ class UI:
         self.walk_dir = None
         self.walk_note = ""
         self.msg = "walk: on, %d sessions — w to stop" % budget
+        self.event("walk", "walk on, %d sessions" % budget)
         self.walk_tick()
 
     def walk_off(self, why):
@@ -2739,6 +3494,9 @@ class UI:
         self.walk_until = 0.0
         self.walk_note = why
         self.msg = "walk: stopped — %s" % why
+        self.event("stop", "walk off — %s" % why)
+        if why != "stopped by hand":
+            self.notify("walk stopped: %s" % why)
 
     def walk_end_chain(self):
         """Turn the walk off by hand, and end its chain after the run it is in.
@@ -2761,6 +3519,7 @@ class UI:
             self.msg = ("walk: stopped, but %s's chain could not be told to end (%s) — "
                         "K stops it" % (run["item"], e))
             return
+        self.event("stop", "%s's chain told to end after run %d" % (run["item"], n))
         self.msg = ("walk: stopped — %s's chain ends after run %d; K stops that run too"
                     % (run["item"], n) if n else
                     "walk: stopped — %s's chain ends before its first run" % run["item"])
@@ -2885,8 +3644,8 @@ class UI:
                 at = dfs_limit.reset_at(run["resets"], now)
                 self.walk_until = at if at is not None else now + WALK_HOLD
                 tail = (" (%s)" % run["resets"]) if run["resets"] else ""
-                self.msg = "walk: %s hit %s — holding %s%s" % (
-                    run["item"], why, walk_held_for(self.walk_until - now), tail)
+                self.msg = self.event("hold", "walk: %s hit %s — holding %s%s" % (
+                    run["item"], why, walk_held_for(self.walk_until - now), tail))
                 return
             if action == "stop":
                 self.walk_off("%s: %s" % (run["item"], why))
@@ -2954,8 +3713,9 @@ class UI:
         self.walk_next = it["id"]
         run = self.walk_run()
         if not (self.walk_on and run and run["live"]) or run["item"] == it["id"]:
-            self.msg = ("walk: its next chain goes to %s" % it["id"] if self.walk_on
-                        else "walk: %s goes first when w starts it" % it["id"])
+            self.msg = self.event("walk", "walk: its next chain goes to %s" % it["id"]
+                                  if self.walk_on else
+                                  "walk: %s goes first when w starts it" % it["id"])
             return
         n = int(run["run"] or 0)
         try:
@@ -2964,8 +3724,8 @@ class UI:
             self.msg = ("walk: %s pinned, but %s's chain could not be told to end (%s)"
                         % (it["id"], run["item"], e))
             return
-        self.msg = "walk: %s's chain ends after run %d, then %s" % (
-            run["item"], n, it["id"])
+        self.msg = self.event("walk", "walk: pinned %s — %s's chain ends after run %d" % (
+            it["id"], run["item"], n))
 
     def walk_raise(self, item, why):
         """Put a suspect item to the author and re-read the trees; True to carry on.
@@ -2986,7 +3746,7 @@ class UI:
         if self.data.get("next_item") == item:
             self.walk_off("%s: %s, and the raise did not block it" % (item, why))
             return False
-        self.msg = "walk: raised on %s — %s; moving on" % (item, why)
+        self.msg = self.event("raise", "walk: raised on %s — %s; moving on" % (item, why))
         return True
 
     def stop_chain(self, item):
@@ -3010,6 +3770,7 @@ class UI:
         except OSError as e:
             self.msg = "could not signal pid %s: %s" % (r["pid"], e)
             return
+        self.event("stop", "interrupted %s's chain (pid %s)" % (item, r["pid"]))
         self.msg = ("interrupted %s's chain — it stops after the run it is in; the "
                     "next session picks up the node's uncommitted work" % item)
         self.reload()
@@ -3054,7 +3815,7 @@ class UI:
             return
         dfs_tree.append_log(item, "answer", [r["ts"]], body)
         self.reload()
-        self.msg = "answered %s%s" % (r["ts"], on)
+        self.msg = self.event("review", "%s: answered %s%s" % (item, r["ts"], on))
 
     def tree_correct(self, item):
         row = self.tree_row()
@@ -3080,7 +3841,7 @@ class UI:
             return
         dfs_tree.append_log(item, "correct", [nid, verdict], body)
         self.reload()
-        self.msg = "corrected %s to %s; %s reopens" % (nid, verdict, item)
+        self.msg = self.event("review", "corrected %s to %s; %s reopens" % (nid, verdict, item))
 
     def tree_accept(self, item):
         it = self.current()
@@ -3092,36 +3853,104 @@ class UI:
             return
         dfs_tree.append_log(item, "accept")
         self.reload()
-        self.msg = "accepted %s" % item
+        self.msg = self.event("review", "accepted %s's tree" % item)
 
     def prompt(self, label, default=""):
-        h, w = self.scr.getmaxyx()
-        self.scr.timeout(-1)            # blocking, or getstr races the poll timeout
-        curses.echo()
-        curses.curs_set(1)
-        self.put(h - 2, 0, " " * max(0, w - 1))
-        self.put(h - 2, 0, label)
-        self.scr.refresh()
-        # ⚠️ Clamped to the window. `getstr` MOVES first, and a move off the right
-        # edge is an ERR — so on a terminal narrower than the label the typing
-        # position is off-screen, curses raises, and the caller is handed the same
-        # empty string a deliberate cancel gives. `put` already clips the label;
-        # this is the other half of that.
-        x = min(len(label) + 1, max(0, w - 2))
-        try:
-            raw = self.scr.getstr(h - 2, x, 40).decode().strip()
-        except Exception:
-            raw = ""
-        curses.noecho()
-        curses.curs_set(0)
-        self.scr.timeout(POLL_MS)
-        # ⚠️ ESC CANCELS, and cancels past the default. `getstr` takes it as a
-        # character, so an Esc then Enter came back as "\x1b" — which the cap
-        # prompt handed to the runner as a cap. Esc means back everywhere else on
-        # this screen; here it is the same, one Enter later.
-        if "\x1b" in raw:
+        """A line typed on the footer: what was typed, `default` for an empty ⏎, and
+        "" for Esc — which cancels past the default, since Esc then ⏎ at `cap [5]:`
+        used to start a chain. A `:` command's arguments answer these first
+        (`answers`), so `:walk 20` is `w` and 20 without the question."""
+        if self.answers:
+            return self.answers.pop(0)
+        got = self.read_line(label)
+        if got is None:
             return ""
-        return raw or default
+        return got or default
+
+    def read_line(self, label, on_change=None, menu=None, hint=None, complete=None):
+        """Read a line where the footer is, a key at a time. None means Esc.
+
+        ⚠️ `getstr` IS GONE, for the three things it could not do: Esc was typed as a
+        character rather than cancelling; nothing could happen WHILE typing, which is
+        what search-as-you-type is (htop's, fzf's); and there was no Tab. This is the
+        one line editor — ←→, ⌫, ^U, ^W, Tab, ↑↓ in a menu — and every prompt,
+        `/` and `:` go through it. The poll waits while you type, as it did before.
+
+        `on_change(text)` runs after each edit; `menu(text)` gives the rows to show
+        above the line and their title; `complete(text, row)` is what Tab makes of
+        the text given the picked row.
+        """
+        inp = self.input = dict(label=label, text="", pos=0, hint=hint, menu=[],
+                                pick=0)
+        self.scr.timeout(-1)
+        try:
+            curses.curs_set(1)
+        except curses.error:
+            pass
+        try:
+            while True:
+                if menu is not None:
+                    rows, inp["title"] = menu(inp["text"])
+                    inp["pick"] = max(0, min(inp["pick"], len(rows) - 1))
+                    inp["menu"] = [(t, a | (curses.A_REVERSE if i == inp["pick"] else 0))
+                                   for i, (t, a) in enumerate(rows)]
+                    inp["rows"] = rows
+                self.draw()
+                try:
+                    ch = self.scr.get_wch()
+                except curses.error:
+                    continue
+                except KeyboardInterrupt:
+                    return None
+                text, pos = inp["text"], inp["pos"]
+                if ch in ("\n", "\r", curses.KEY_ENTER):
+                    return text.strip()
+                if ch == "\x1b":
+                    return None
+                if ch == curses.KEY_RESIZE:
+                    continue
+                if ch in (curses.KEY_UP, curses.KEY_DOWN):
+                    inp["pick"] += -1 if ch == curses.KEY_UP else 1
+                    continue
+                if ch == "\t" and complete is not None:
+                    rows = inp.get("rows") or []
+                    text = complete(text, rows[inp["pick"]] if rows else None)
+                    pos = len(text)
+                elif ch in (curses.KEY_BACKSPACE, "\x7f", "\x08"):
+                    if pos:
+                        text, pos = text[:pos - 1] + text[pos:], pos - 1
+                elif ch == curses.KEY_DC:
+                    text = text[:pos] + text[pos + 1:]
+                elif ch == curses.KEY_LEFT:
+                    pos = max(0, pos - 1)
+                elif ch == curses.KEY_RIGHT:
+                    pos = min(len(text), pos + 1)
+                elif ch in (curses.KEY_HOME, "\x01"):
+                    pos = 0
+                elif ch in (curses.KEY_END, "\x05"):
+                    pos = len(text)
+                elif ch == "\x15":                      # ^U: the whole line
+                    text, pos = "", 0
+                elif ch == "\x17":                      # ^W: the word before
+                    cut = len(text[:pos].rstrip().rpartition(" ")[0])
+                    cut = cut + 1 if cut else 0
+                    text, pos = text[:cut] + text[pos:], cut
+                elif isinstance(ch, str) and ch.isprintable():
+                    text, pos = text[:pos] + ch + text[pos:], pos + 1
+                else:
+                    continue
+                if text != inp["text"]:
+                    inp["pick"] = 0
+                inp["text"], inp["pos"] = text, pos
+                if on_change is not None:
+                    on_change(text)
+        finally:
+            self.input = None
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
+            self.scr.timeout(POLL_MS)
 
     def next_action(self, it):
         """What enter does on this item: the state decides, not the author.
@@ -3198,10 +4027,16 @@ class UI:
                 self.pane, self.key_sel = "keys", 0
             self.scroll = 0
         elif ch == ord("/"):
-            again = (" (⏎ again: %s)" % self.last_search) if self.last_search else ""
-            needle = self.prompt("/%s" % again, self.last_search)
-            if needle:
-                self.search(needle)
+            self.search_typed()
+        elif ch == ord(":"):
+            return self.command()
+        elif ch == ord("h"):
+            self.pane = "item" if self.pane == "activity" else "activity"
+            self.scroll = 10 ** 6            # newest last, so it opens at the end
+        elif ch == ord("m"):
+            self.toggle_mine()
+        elif ch == ord("z"):
+            self.undo_order()
         elif ch == 27:
             # Esc walks BACK one level and never quits. A key that sometimes exits
             # the program and sometimes closes a pane is one you stop pressing;
@@ -3211,7 +4046,7 @@ class UI:
                 self.pane = "runs"       # back to the list you chose the run from
             elif self.tree_focused():
                 self.focus = "list"      # out of the tree, back to the items
-            elif self.pane in ("runs", "reglog", "todo", "artefact"):
+            elif self.pane in ("runs", "reglog", "todo", "artefact", "activity"):
                 self.pane = "item"
             self.scroll = 0
         elif ch in (ord("j"), curses.KEY_DOWN):
@@ -3393,7 +4228,10 @@ class UI:
         return True
 
     def loop(self):
-        curses.curs_set(0)
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass                    # a terminal that cannot hide it (vt100) shows it
         self.scr.timeout(POLL_MS)
         while True:
             self.draw()
@@ -3421,10 +4259,15 @@ def main(stdscr):
     # 25ms is longer than any local terminal takes to deliver the rest of a
     # sequence and short enough to read as instant.
     curses.set_escdelay(25)
-    curses.use_default_colors()
-    for i, fg in enumerate((curses.COLOR_RED, curses.COLOR_GREEN,
-                            curses.COLOR_CYAN), start=1):
-        curses.init_pair(i, fg, -1)
+    # ⚠️ A terminal without colour (vt100, a serial console) has no default colours
+    # to use, and this call RAISING took the whole screen down before it drew. It
+    # gets the attribute-only look instead, which is what NO_COLOR gets.
+    try:
+        curses.use_default_colors()
+        coloured = True
+    except curses.error:
+        coloured = False
+    init_look(LIGHT, coloured)
     ui = UI(stdscr)
     # From here and not UI(): the tests build a UI of their own, and one that went to
     # the network and rewrote a pin every time it was constructed would be a test of nix.
@@ -3435,4 +4278,5 @@ def main(stdscr):
 if __name__ == "__main__":
     if not dfs_paths.has_roadmap():
         raise SystemExit("dfs_tui: " + dfs_paths.missing_message())
+    LIGHT = terminal_is_light()
     curses.wrapper(main)

@@ -212,6 +212,24 @@ class TheLogPaneKeepsUp(unittest.TestCase):
         shown = [l for l in body if l.startswith("line ")]
         return shown[-1] if shown else None
 
+    def test_a_wide_screen_shows_the_live_chain_and_the_activity_beside_the_tree(self):
+        # The column is what makes the walk watchable without leaving the tree.
+        ui = self.ui
+        ui.pane = "item"
+        ui.tree_item, ui.tree_sel, ui.tree_folded, ui.tree_open = None, 0, set(), set()
+        ui._tree_cache = {}
+        ui.events = [(0.0, "run", "$ dfs_run.sh W1 5")]
+        ui.scr = Screen(h=30, w=170)
+        ui.draw()
+        text = "\n".join(ui.scr.rows.values())
+        self.assertIn("live · W1", text)
+        self.assertIn("$ dfs_run.sh W1 5", text, "the console's tail")
+        self.assertIn("activity", text)
+        ui.scr = Screen(h=30, w=100)
+        ui.draw()
+        self.assertNotIn("live · W1", "\n".join(ui.scr.rows.values()),
+                         "below SIDE_AT the main column keeps every cell")
+
     def test_a_pane_opened_on_a_live_chain_keeps_up(self):
         self.open_it()
         self.grow(1, 41)

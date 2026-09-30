@@ -17,7 +17,53 @@ highly regarded set is newer, and wins on **discoverability and density**: a fir
 user can do the common thing without reading anything. Almost no tool manages both,
 and the few that come close (htop, fzf) are worth studying most.
 
-Sources are linked where a claim is someone else's; the rest is from using these tools.
+Sources are linked where a claim is someone else's. Sections 1–8 are otherwise general
+knowledge of these tools. Section 0 is a hands-on pass, run afterwards.
+
+---
+
+## 0. Hands-on (2026-09-30)
+
+Nine of them, built from nixpkgs and run in a pty, 110×32 and smaller, with the screen
+read back through `pyte`. Keys were sent, and each screen was snapshotted along with a
+count of the distinct colour/attribute combinations on it. (pyte doesn't record dim
+text, so the counts slightly understate the plainer tools.) k9s needs a cluster and
+lnav needs a real log corpus, so they were left out.
+
+| Tool | Styles on screen | What was seen |
+|---|---|---|
+| **lazygit** 0.65 | 12 | Rounded boxes with the title and a `[n]` jump key set into the top edge, and `1 of 5` in the bottom edge. The focused box's border is green; nearly all text is plain. Staging a file put `git add -- .` in the command log at once. `?` is a popup that filters as you type and runs the key on ⏎. At 70×22 the unfocused boxes collapse to one row, and the footer ends in `…`. |
+| **tig** 2.6 | 8 | No boxes at all: one split line, and a status bar per view (`[main] Staged changes 100%`). The help lists key, **action name**, description (`m view-main Show main view`), and the names are what its `:` prompt and config take. |
+| **htop** 3.5 | 16 | `/` and `\` (filter) take over the F-key bar with their own keys (`F3Next S-F3Prev EscCancel Search: python`). Both act as you type, and Esc cancels straight away. Between two snapshots a second apart, rows had swapped places under the sort. |
+| **btop** 1.4 | 82 | Truecolor, and it paints its own black background over the terminal's theme. It looks calm anyway because the borders are dark grey (`303030`, `404040`), text is light grey, and colour is kept for data. Box keys are superscript digits in the border (`¹cpu ²mem ³net`). |
+| **helix** 25.07 | 8 (theme) | `space` pops up every continuation with a one-line meaning. At `:`, typing `w` shows the matching commands as a grid, with a box above describing the top one (what it does, aliases, flags) before ⏎. |
+| **fzf** 0.74 | 8 | `tuipy` finds `scripts/dfs_tui.py` (letters in order). The selected row is a dark grey background (`303030`) plus a thin coloured `▌` in the first column rather than reverse video. Matched letters are tinted, the chrome is mid-grey (`5f5f5f`), and a `1/39` count sits on the prompt's rule. |
+| **ncdu** 2.11 | 3 | Plain, reverse and bold reverse, and nothing else. It reads perfectly well, and it parks the cursor on the selected row. |
+| **visidata** 3.4 | 21 | After each key, the bottom-right shows the key and the command it ran (`Shift+F   freq-col`), and the bottom-left shows the stack of sheets as a breadcrumb (`1›t | 2📶t_item_freq`). A first-visit help sidebar opens on its own, which is useful the first time and in the way after that. |
+| **yazi** 26.9 | 19 | Parent · current · preview columns. Long names are cut in the middle so the extension survives (`new….txt`). Its icons need a Nerd Font and show as unknown glyphs without one. |
+| *dfs_tui.py*, for comparison | 5 | Two full-width reverse bars (the selected row and the footer) are the loudest things on screen. The header spends half its width on zeros (`refuted 0 · parked 0 · pruned 0`). |
+
+What this changed from sections 1–8:
+
+- **"Clean" comes from contrast between chrome and content, not from fewer colours.**
+  btop uses 82 styles and still looks calm, because every border and label is a step
+  darker than the data. ncdu uses 3 and looks fine. What looks loud is *large areas*
+  of reverse video or background colour. fzf's selection (a faint background and a
+  one-cell accent bar) is the lightest selection that still reads at a glance.
+- **Painting your own background is a trade.** btop and helix look designed, and they
+  override a light terminal theme to get there. fzf, lazygit, tig, htop and ncdu keep
+  the terminal's background and only colour text, which is what a tool that lives in
+  someone's tmux should do.
+- **Keys are best taught where they're used.** Help screens work (lazygit, tig), but
+  the two moments that teach most are helix's popup *before* the key and visidata's
+  echo *after* it. tig's key → name → description triple is what connects keys to a
+  command line.
+- **Input belongs where the footer was.** htop and fzf put the input on the bottom line,
+  with its own keys, acting as you type, and Esc cancels immediately. A `getstr` on the
+  message line does none of that.
+- **Unfocused panels shrink rather than disappear** (lazygit at 70×22). Each keeps its
+  title row, so the layout's shape survives and only the depth goes.
+- lazygit doesn't park its cursor (it sits in the bottom-right corner); ncdu does.
 
 ---
 
@@ -279,3 +325,30 @@ conventions"; tests in `scripts/test_dfs_screen.py`):
 Found while driving it: **Esc in a prompt was typed as a character**, so Esc then ⏎ at
 `cap [5]:` started a chain with the cap `"\x1b"`. Esc now cancels any prompt (one ⏎
 later, since `getstr` needs it), and the cap must be a positive whole number.
+
+### The second round (2026-09-30, after the hands-on pass)
+
+Built from §0 and the list in the reply that followed it (README, "The screen's
+conventions"):
+
+- **The look**, from §0's finding that calm is chrome-versus-content contrast: grey
+  rules and labels, plain text, one accent, softened status colours, fzf's band-and-bar
+  selection, no painted background, and a light palette chosen by asking the terminal.
+  Checked as rendered screenshots (pyte to PNG), dark at 110 and 170 columns, light, and
+  64×22. The header drops whole segments when narrow instead of cutting `next W2` to
+  `next W`.
+- **An activity column from 150 columns**: the live chain's console tail, then the
+  activity log, persisted in `.dfs/runs/activity.log`. The `h` pane shows it at any width.
+- **`:` with names** (tig), completion listed as you type (helix), Tab to take one.
+  Only an exact name or the start of exactly one runs, after a fuzzy match started
+  `review-terminal` for `:reviwe`.
+- **One line editor for every prompt**, on the footer row (htop, fzf): `/` moves as you
+  type, and Esc cancels at once.
+- **`m`** (needs you), **`z`** (undo an order move, refused over another session's edit),
+  **the walk plan** while `w` asks for a budget, and **the bell** on a chain ending or
+  the walk stopping by itself (`DFS_NOTIFY`).
+- Found on the way: the screen crashed at start on a terminal without colour or cursor
+  control (vt100). pyte, used for the screenshots, lacks `CSI T`/`S` (scroll), which
+  curses uses when rows shift, so its snapshots can show stale rows a real terminal
+  doesn't; `vt100` and a patched pyte agree the screen is right.
+

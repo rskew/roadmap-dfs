@@ -118,15 +118,283 @@ class Searching(unittest.TestCase):
         self.assertEqual(TUI.find_next(["a"], "zz", 0), (None, False))
         self.assertEqual(TUI.find_next([], "a", 0), (None, False))
 
-    def test_slash_lands_on_the_item_and_an_empty_one_finds_the_next(self):
+    def test_slash_moves_as_you_type_and_an_empty_one_finds_the_next(self):
         ui = a_screen([item("W1", "parse it"), item("W2", "draw it"),
                        item("W3", "draw again")])
-        typed = ["draw", ""]
-        ui.prompt = lambda label, default="": typed.pop(0) or default
+        ui.scr = Keys("dr", "\n", "\n")
         ui.act(ord("/"))
+        self.assertEqual(ui.current()["id"], "W2", "landed while typing, kept on ⏎")
+        self.assertEqual(ui.last_search, "dr")
+        ui.act(ord("/"))
+        self.assertEqual(ui.current()["id"], "W3", "an empty / is the next match")
+
+    def test_esc_puts_the_cursor_back(self):
+        ui = a_screen([item("W1", "parse it"), item("W2", "draw it")])
+        ui.scr = Keys("draw", "\x1b")
+        ui.act(ord("/"))
+        self.assertEqual(ui.current()["id"], "W1")
+        self.assertEqual(ui.last_search, "")
+
+
+class Keys:
+    """A screen that types: `get_wch` hands out the keys given, one at a time, each
+    string split into its characters and anything else passed as a key code."""
+
+    def __init__(self, *keys):
+        self.keys = []
+        for k in keys:
+            self.keys += list(k) if isinstance(k, str) and len(k) > 1 else [k]
+
+    def timeout(self, n):
+        pass
+
+    def get_wch(self):
+        if not self.keys:
+            raise AssertionError("read past the keys given")
+        return self.keys.pop(0)
+
+    def getmaxyx(self):
+        return (24, 100)
+
+
+class TheLineEditor(unittest.TestCase):
+    def read(self, *keys, **kw):
+        ui = a_screen([])
+        ui.scr = Keys(*keys)
+        return ui.read_line("x", **kw)
+
+    def test_typing_and_enter(self):
+        self.assertEqual(self.read("abc", "\n"), "abc")
+
+    def test_esc_is_none_at_once(self):
+        # ⚠️ The regression it exists for: getstr took Esc as a character.
+        self.assertIsNone(self.read("ab", "\x1b"))
+
+    def test_editing(self):
+        self.assertEqual(self.read("abc", "\x7f", "d", "\n"), "abd")
+        self.assertEqual(self.read("abc", curses.KEY_LEFT, curses.KEY_LEFT, "X", "\n"),
+                         "aXbc")
+        self.assertEqual(self.read("one two", "\x17", "\n"), "one")
+        self.assertEqual(self.read("gone", "\x15", "ok", "\n"), "ok")
+
+    def test_tab_takes_the_picked_row(self):
+        got = self.read("rv", "\t", "\n",
+                        menu=lambda t: ([("review  r", 0), ("revert  z", 0)], "c"),
+                        complete=lambda t, row: row[0].split()[0] + " ")
+        self.assertEqual(got, "review")
+
+    def test_the_prompt_maps_esc_to_empty_past_its_default(self):
+        ui = a_screen([])
+        ui.scr = Keys("\x1b")
+        self.assertEqual(ui.prompt("cap [5]:", "5"), "")
+        ui.scr = Keys("\n")
+        self.assertEqual(ui.prompt("cap [5]:", "5"), "5")
+
+
+class Commanding(unittest.TestCase):
+    def test_fuzzy_prefers_a_prefix_and_finds_a_scatter(self):
+        self.assertLess(TUI.fuzzy("rev", "review"), TUI.fuzzy("rev", "chat-review"))
+        self.assertIsNotNone(TUI.fuzzy("rv", "review"))
+        self.assertIsNone(TUI.fuzzy("zz", "review"))
+
+    def test_every_name_is_one_command(self):
+        names = [k[3] for k in TUI.KEYS]
+        self.assertEqual(len(names), len(set(names)), "a name means one thing")
+
+    def test_an_item_is_selected_and_the_rest_answers_the_prompt(self):
+        ui = a_screen([item("W1"), item("W2"), item("W3")])
+        ui.next_action = lambda it: "work"
+        started = []
+        ui.start_chain = lambda it, cap: started.append((it, cap))
+        ui.command_run("work w2 7")
+        self.assertEqual(started, [("W2", "7")])
+        self.assertEqual(ui.answers, [], "nothing left over for a later prompt")
+
+    def test_an_unambiguous_prefix_runs_and_a_typo_says_what_it_meant(self):
+        ui = a_screen([item("W1")])
+        ui.command_run("activ")
+        self.assertEqual(ui.pane, "activity")
+        ui.command_run("reviwe")
+        self.assertIn("did you mean", ui.msg)
+
+    def test_go(self):
+        ui = a_screen([item("W1"), item("W2")], pane="runs")
+        ui.command_run("go W2")
+        self.assertEqual((ui.pane, ui.current()["id"]), ("item", "W2"))
+
+    def test_a_confirmation_is_never_answered_for_you(self):
+        # `:stop W1 y`-less: K asks, and with only ⏎ typed it must not stop.
+        ui = a_screen([item("W1")])
+        saved = TUI.dfs_runs.live_for
+        TUI.dfs_runs.live_for = lambda it: dict(pid=4242)
+        killed = []
+        real_kill = TUI.os.killpg
+        TUI.os.killpg = lambda pid, sig: killed.append(pid)
+        try:
+            ui.scr = Keys("\n")
+            ui.command_run("stop W1")
+        finally:
+            TUI.dfs_runs.live_for, TUI.os.killpg = saved, real_kill
+        self.assertEqual((killed, ui.msg), ([], "left it running"))
+
+
+class NeedsYou(unittest.TestCase):
+    def items(self):
+        return [item("W1"), dict(item("W2", status="blocked")), item("W3"),
+                dict(item("W4"), standing=["an assumption"])]
+
+    def test_m_shows_only_what_waits_on_the_author_and_j_walks_it(self):
+        ui = a_screen(self.items())
+        ui.act(ord("m"))
+        self.assertEqual([ui.items[n]["id"] for n in ui.visible()], ["W2", "W4"])
         self.assertEqual(ui.current()["id"], "W2")
-        ui.act(ord("/"))
-        self.assertEqual(ui.current()["id"], "W3")
+        ui.act(ord("j"))
+        self.assertEqual(ui.current()["id"], "W4")
+        ui.act(ord("m"))
+        self.assertEqual(len(ui.visible()), 4)
+
+    def test_nothing_to_show_leaves_it_off(self):
+        ui = a_screen([item("W1")])
+        ui.act(ord("m"))
+        self.assertFalse(ui.only_mine)
+
+    def test_moves_are_refused_while_filtered(self):
+        ui = a_screen(self.items(), only_mine=True, sel=1)
+        self.assertFalse(ui.retree([("W2", 0)], ui.current(), ""))
+        self.assertIn("filtered", ui.msg)
+
+
+class Undoing(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.dir = Path(tempfile.mkdtemp())
+        self.path = self.dir / "order.md"
+        self.real = (TUI.dfs_paths.order, TUI.dfs_order.write_order)
+        TUI.dfs_paths.order = lambda: self.path
+        TUI.dfs_order.write_order = lambda after: self.path.write_text(
+            "\n".join("- " + n for n, _ in after) + "\n")
+
+    def tearDown(self):
+        TUI.dfs_paths.order, TUI.dfs_order.write_order = self.real
+
+    def screen(self):
+        ui = a_screen([item("W1"), item("W2")])
+        ui.reload = lambda note="": None
+        return ui
+
+    def test_z_puts_back_what_was_there(self):
+        self.path.write_text("- W1\n- W2\n")
+        ui = self.screen()
+        ui.retree([("W2", 0), ("W1", 0)], ui.current(), "")
+        self.assertEqual(self.path.read_text(), "- W2\n- W1\n")
+        ui.act(ord("z"))
+        self.assertEqual(self.path.read_text(), "- W1\n- W2\n")
+
+    def test_a_file_that_did_not_exist_is_removed_again(self):
+        ui = self.screen()
+        ui.retree([("W2", 0), ("W1", 0)], ui.current(), "")
+        ui.act(ord("z"))
+        self.assertFalse(self.path.exists())
+
+    def test_it_refuses_over_somebody_elses_edit(self):
+        self.path.write_text("- W1\n- W2\n")
+        ui = self.screen()
+        ui.retree([("W2", 0), ("W1", 0)], ui.current(), "")
+        self.path.write_text("- W2\n- W1\n- W3\n")          # another session
+        ui.act(ord("z"))
+        self.assertEqual(self.path.read_text(), "- W2\n- W1\n- W3\n")
+        self.assertIn("not undone", ui.msg)
+
+
+class TheActivityLog(unittest.TestCase):
+    def test_a_started_chain_and_a_stopped_walk_are_recorded(self):
+        ui = a_screen([item("W1")], walk_on=True, walk_dir=None, walk_until=0.0,
+                      walk_note="")
+        ui.walk_off("W1: failed")
+        kinds = [(k, t) for _, k, t in ui.events]
+        self.assertIn(("stop", "walk off — W1: failed"), kinds)
+
+    def test_a_test_screen_writes_no_file_and_rings_no_bell(self):
+        ui = a_screen([])
+        self.assertFalse(ui.real)
+        ui.event("run", "$ x")
+        ui.notify("x")                       # would raise without initscr if it rang
+
+    def test_lines_carry_the_day_and_the_time(self):
+        ui = a_screen([])
+        ui.events = [(0.0, "run", "$ dfs_run.sh W1 5")]
+        lines = [t for t, _ in ui.activity_lines(60)]
+        self.assertTrue(lines[0][:3].isalpha(), lines)
+        self.assertRegex(lines[1], r"^\d\d:\d\d ")
+        self.assertTrue(lines[1].endswith(" $ dfs_run.sh W1 5"), lines[1])
+
+    def test_the_file_is_read_back(self):
+        import tempfile
+        f = Path(tempfile.mkdtemp()) / "activity.log"
+        f.write_text("100\trun\t$ a\nnot a line\n200\tstop\twalk off — x\n")
+        self.assertEqual(TUI.read_activity(str(f)),
+                         [(100.0, "run", "$ a"), (200.0, "stop", "walk off — x")])
+
+
+class Ringing(unittest.TestCase):
+    """The bell is for the ends the walk exists to bring back, and nothing else."""
+
+    def setUp(self):
+        import os
+        import tempfile
+        self.rang = []
+        self.saved = (TUI.curses.beep, TUI.dfs_runs.ensure_run_root,
+                      os.environ.get("DFS_NOTIFY"))
+        TUI.curses.beep = lambda: self.rang.append(1)
+        tmp = tempfile.mkdtemp()
+        self.log = Path(tmp) / "activity.log"
+        TUI.dfs_runs.ensure_run_root = lambda: tmp
+        os.environ.pop("DFS_NOTIFY", None)
+
+    def tearDown(self):
+        import os
+        TUI.curses.beep, TUI.dfs_runs.ensure_run_root, notify = self.saved
+        if notify is None:
+            os.environ.pop("DFS_NOTIFY", None)
+        else:
+            os.environ["DFS_NOTIFY"] = notify
+
+    def screen(self):
+        return a_screen([item("W1")], real=True, walk_on=True, walk_dir=None,
+                        walk_until=0.0, walk_note="")
+
+    def test_a_walk_that_stopped_itself_rings_and_is_written_down(self):
+        self.screen().walk_off("W1: failed")
+        self.assertEqual(self.rang, [1])
+        self.assertIn("walk off — W1: failed", self.log.read_text())
+
+    def test_a_walk_stopped_by_hand_does_not(self):
+        self.screen().walk_off("stopped by hand")
+        self.assertEqual(self.rang, [])
+
+    def test_a_chain_ending_rings(self):
+        ui = self.screen()
+        ui.chain_ended(dict(item="W1", rc="0"))
+        self.assertEqual(self.rang, [1])
+        self.assertEqual(ui.events[-1][1], "done")
+
+    def test_off_is_off(self):
+        import os
+        os.environ["DFS_NOTIFY"] = "off"
+        self.screen().walk_off("W1: failed")
+        self.assertEqual(self.rang, [])
+
+
+class ThePlan(unittest.TestCase):
+    def test_the_first_is_the_pin_else_next_and_held_items_say_by_what(self):
+        items = [item("W1"), dict(item("W2"), blocked_by="W1"), item("W3"),
+                 dict(item("W4", status="blocked"))]
+        ui = a_screen(items, walk_next="W3")
+        ui.data["next_item"] = "W1"
+        text = "\n".join(t for t, _ in ui.lines_plan(100))
+        self.assertLess(text.index("W3"), text.index("W1"))
+        self.assertIn("a raise above it, on W1", text)
+        self.assertIn("waiting on your answer: W4", text)
 
 
 class TheKeysPane(unittest.TestCase):
@@ -136,7 +404,7 @@ class TheKeysPane(unittest.TestCase):
         src = inspect.getsource(TUI.UI.act)
         handled = set(re.findall(r'ord\("(.)"\)', src))
         listed = set()
-        for _, label, _, _ in TUI.KEYS:
+        for _, label, _, _, _ in TUI.KEYS:
             listed.update(" " if t == "space" else t for t in label.split())
         listed |= {chr(c) for c in TUI.KEY_ALIASES}
         missing = {k for k in handled if k not in listed}
@@ -182,6 +450,7 @@ class TheKeysPane(unittest.TestCase):
         self.assertEqual((ui.pane, [p["id"] for p in pinned]), ("item", ["W1"]))
 
     def test_the_footer_keeps_question_mark_when_it_narrows(self):
+        # and gives up `: command` before it
         ui = a_screen([item("W1")])
         ui.next_action = lambda it: "work"
         ui.live = lambda mode="work": []

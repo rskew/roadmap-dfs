@@ -57,6 +57,11 @@ The rest is configuration, all optional:
   `playwright` for `dfs_artefact_check.sh`, when the project has one whose fonts or
   browsers it wants; otherwise PATH, then `nixpkgs#playwright-test`.
 - `CLAUDE_CONFIG_DIR`: where `dfs_metrics.py` finds transcripts (else `~/.claude`).
+- `DFS_THEME` (`light` or `dark`): the terminal's background, when asking it (OSC 11,
+  then `COLORFGBG`) gets it wrong. `NO_COLOR` draws with bold, dim and reverse only.
+- `DFS_NOTIFY` (`bell`): how the screen tells you a chain ended or the walk stopped
+  on its own. `desktop` adds a desktop notification (OSC 777 and OSC 9); `off` is
+  silent.
 
 `nix flake check` runs the test suite.
 
@@ -487,15 +492,15 @@ It waits on **any** live work chain, not only its own — two agents writing the
 once is how this roadmap's ids collided in the first place. The budget prompt is also
 the confirmation: `K` already asks before stopping one chain because that is an hour
 of somebody's subscription, and this starts chains until the budget or the tree runs
-out. ⚠️ While it is on, the header **changes shape**: `● WALK W7 13/20 · roadmap · 18
-items · …`, at the front, in red over the bar, and the footer's key reads
+out. ⚠️ While it is on, the header **changes shape**: `● WALK W7 13/20   roadmap   18
+tasks …`, at the front and in red, and the footer's key reads
 `w STOP WALK`. Written as one more dot-separated segment in the middle it read
 exactly like `18 items`, which is no use to somebody who left it on an hour ago — so
 the badge leads the line and is capitalised, legible on a monochrome terminal and out
 of the corner of an eye, with the colour as reinforcement rather than the signal. A
 message line would not do: that is the last thing that HAPPENED and scrolls away,
 while "something is spending money unattended" is a state. Both survive a 60-column
-terminal, because the badge is first on the bar and the key is third in the footer.
+terminal, because the badge is first on the line and the key is third in the footer.
 
 ⚠️ **A walk that STOPPED says so in the same place**, dim rather than red:
 `○ walk off · W18: idle`, up until the next walk starts. `walk_off` writes the message
@@ -531,17 +536,51 @@ letter apart by accident rather than design, so the liveness check matches
 `dfs_run.sh` WITH its extension: a pid running the reader must never read as a live
 chain.
 
-## The screen's conventions — `?` and `/`
+## The screen's conventions — `?`, `/`, `:` and the look
 
 **`?` lists every key**, the part for the pane you pressed it from first, and ⏎ on
 one presses it, in the pane it belongs to (a tree key read off the item list is
 pressed in the tree). The footer holds a dozen keys and drops them as the terminal
 narrows; `?` is the list that does not, and it is the one hint the footer keeps to
 the end. `KEYS` in `dfs_tui.py` is that list, and `test_dfs_screen.py` fails when
-`act` takes a key it does not name. **`/` searches the pane you are on**: the items,
-the tree's nodes, the runs, or the text of a pane with no cursor. Lower case matches
-either case, and an empty `/` finds the next match. `-` `=` `<` `>` do what `[` `]`
-`{` `}` do, since those are AltGr chords on German and French keyboards.
+`act` takes a key it does not name.
+
+**Every key has a name, and `:` runs it by name** (tig's idea): `:work W7 5`,
+`:review W12`, `:walk 20`, `:pin W9`, `:go W3`. An item id selects that item first,
+and what is left answers the prompts the key meets, so `:walk 20` is `w` answered
+20. A y/N is never answered for you. The matches are listed above the line as you
+type, with what each does, and Tab takes the picked one. ⚠️ **Only an exact name, or
+the start of exactly one, runs.** A fuzzy match is for the list, where you can see it:
+run blind, `:reviwe` started `review-terminal`, whose letters hold r-e-v-i-w-e in order.
+
+**`/` searches the pane you are on, as you type**: the items, the tree's nodes, the
+runs, or the text of a pane with no cursor. The cursor moves to the first match and
+the line shows how many there are. ⏎ keeps it, Esc puts the cursor back, and an empty
+`/` finds the next match of the last one. Lower case matches either case.
+
+**Every prompt is one line editor on the footer row** (←→, ⌫, ^U, ^W, Tab), replacing
+`getstr`, which took Esc as a character: Esc then ⏎ at `cap [5]:` handed `"\x1b"` to
+the runner as a cap. Esc now cancels at once, and the cap must be a whole number.
+
+Other keys: `m` shows only the items waiting on you (a raise, a standing assumption,
+a correction not carried out), and moves are refused while it is on, since "up one"
+would be up past items you cannot see. `z` undoes the last `[ ] { } b` made from this
+screen, **only if `order.md` is still exactly what that move wrote**; over somebody
+else's edit it refuses. `h` is the activity log. `w` shows the walk's plan while it
+asks for the budget: the order it would take the items if each chain finishes its
+item, what is held back and by what. It is a forecast, and it says only the first is
+certain. `-` `=` `<` `>` do what `[` `]` `{` `}` do, since those are AltGr chords on
+German and French keyboards.
+
+⚠️ **The activity log is the record the message line never was.** Every runner
+command started, every order written, every walk decision (on, hold, raise, pin, off
+and why) and every chain that ended goes to `.dfs/runs/activity.log` and the `h` pane.
+That file sits outside what the file watch reads, so writing it cannot wake the poll.
+**From 150 columns it is always on screen**, in a column beside the tree, under the
+live chain's console tail: watching the walk used to be `l`, pick the run, ⏎, with
+the tree gone while you did. A chain ending, or a walk stopping on its own, also rings
+the terminal's bell (`DFS_NOTIFY`), which tmux and most terminals show as a mark on
+the tab.
 
 ⚠️ **A cursor is an identity, not a row number.** `reload` kept the selection as an
 index, so when another session added an item or rewrote `order.md`, the cursor stayed
@@ -549,12 +588,29 @@ on its row while a different item slid under it, and the next `w`, `n` or `r` ac
 that one. The item, tree and run cursors are re-found by id (`reselect`), and fall
 back to the row only when what they were on is gone. The hardware cursor is parked on
 the same row after every draw, hidden, because a screen reader follows it rather than
-the reverse video.
+the highlight.
+
+**The look** (`init_look`, and `docs/tui-research.md` §0 for where it comes from):
+rules, labels and hints in grey, text in the terminal's own colour, one accent for
+keys and the cursor, and colour kept for states that ask something of you (blocked,
+a raise) or are over (done). The selection is a faint band with a one-cell bar at its
+left edge rather than reverse video, and nothing paints the terminal's background,
+so the screen sits quietly in somebody's tmux. Light terminals get their own palette;
+a terminal with no colour at all (vt100) gets bold, dim and reverse. Those used to
+crash the screen at start, in `use_default_colors` and then `curs_set`. Panes still
+mark their cursor row with `A_REVERSE`, which `selected` turns into the band, so no
+line producer knows about the palette.
+
+**The header is one line**: `roadmap   18 tasks   next W7   3 need you`, plus what is
+uncommitted and which agent. A second line of cumulative counts (nodes, confirmed,
+refuted, parked, pruned, critic and review verdicts, sessions, tokens) and a
+"progress" number (nodes, their fields and evidence, counted together) were kept for
+the old roadmap's §0.6 experiment, which ended with it. Totals that only grow are read
+by nobody at a glance. The number that asks something of you is `need you`, the same
+one `m` filters to, and the counts are at the top of the `h` pane.
 
 A background chain's message is its runner line (`$ scripts/dfs_run.sh W7 5 — in the
-background…`), the same line its console opens with. Esc in a prompt cancels, one
-Enter later, since `getstr` takes it as a character: the cap prompt used to hand
-`"\x1b"` to the runner as a cap. The cap must now be a whole number of sessions.
+background…`), the same line its console opens with.
 
 ## Branches
 
