@@ -123,6 +123,9 @@ class Screen:
     def addstr(self, y, x, text, attr=0):
         self.rows[y] = self.rows.get(y, "") + text
 
+    def move(self, y, x):
+        self.cursor = (y, x)
+
     def refresh(self):
         pass
 

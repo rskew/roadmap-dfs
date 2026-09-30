@@ -23,6 +23,7 @@ Four panes over the same selection, all scrollable:
   l  agent  the runs on disk — a live chain's console AND the turns the agent is
             taking inside it, then any finished run's captured result
   v  art    the artefacts this item's raises name, opened in a real browser
+and `?`, every key (`KEYS`), where Enter presses the one under the cursor.
 
 ⚠️ A WORK CHAIN RUNS IN THE BACKGROUND, NOT INSTEAD OF THIS SCREEN. It is minutes to
 hours of non-interactive work whose output already lands in a file, so handing it the
@@ -506,6 +507,99 @@ def follows(growing, following, scroll, bottom):
     move again.
     """
     return bool(growing) and (bool(following) or scroll >= bottom)
+
+
+def reselect(keys, key, fallback):
+    """Where a cursor lands after its list is re-derived: on the SAME THING.
+
+    ⚠️ A CURSOR IS AN IDENTITY, NOT A ROW NUMBER. `reload` kept `sel` as an index and
+    only clamped it, so when another session added an item or moved one in
+    `order.md` — which the file watch reloads on, a second later — the cursor stayed
+    on row 3 while a different item slid under it, and the next `w`, `n` or `r` acted
+    on that one. The runs list is the same (a new live chain sorts first) and so is
+    the tree (a session adds nodes). Only a thing that is GONE falls back to the row,
+    clamped, since there is nothing left to follow.
+    """
+    if key is not None and key in keys:
+        return keys.index(key)
+    return max(0, min(fallback, len(keys) - 1))
+
+
+def find_next(texts, needle, cur):
+    """`/`: the first of `texts` after `cur` holding `needle`, wrapping; `(i, wrapped)`.
+
+    Smart case, as a pager does it: all lower case matches either, and a capital
+    means the author meant it — so `w13` finds W13, which is how ids get typed.
+    """
+    if not needle or not texts:
+        return None, False
+    fold = needle == needle.lower()
+    want = needle.lower() if fold else needle
+    n = len(texts)
+    for step in range(1, n + 1):
+        i = (cur + step) % n
+        if want in (texts[i].lower() if fold else texts[i]):
+            return i, i <= cur
+    return None, False
+
+
+# ⚠️ EVERY KEY THE SCREEN ANSWERS TO, for `?` (`lines_keys`). The footer holds a dozen
+# at most and drops them as the terminal narrows, and its own rule is that a key not
+# on it does not exist — which, on a narrow terminal, was most of them. This is the
+# list that does not narrow. `test_dfs_screen.py` checks it against `act`, so a key
+# added there and not here fails a test instead of disappearing.
+#
+# (where it applies, key as shown, the code `act` is handed, what it does). Where a
+# key is used decides the pane `?`'s Enter puts back before pressing it (`key_run`).
+KEY_PLACES = [("items", "on the item list"), ("tree", "in the tree — tab"),
+              ("runs", "in agent runs — l"), ("agentlog", "reading a run"),
+              ("artefact", "in artefacts — v"), ("panes", "panes"),
+              ("any", "anywhere")]
+KEYS = [
+    ("items", "⏎", 10, "work it in the background, or review it — whichever it needs"),
+    ("items", "tab", 9, "into the item's tree, and back out"),
+    ("items", "w", ord("w"), "walk the roadmap depth-first, or stop the walk"),
+    ("items", "n", ord("n"), "pin this item as where the walk goes next (again: unpin)"),
+    ("items", "K", ord("K"), "stop this item's running chain (asks first)"),
+    ("items", "r", ord("r"), "review: open the tree to answer and correct"),
+    ("items", "R", ord("R"), "review in the terminal pass (dfs_run.sh --review)"),
+    ("items", "c", ord("c"), "chat about this item (dfs_run.sh --chat)"),
+    ("items", "C", ord("C"), "chat about something new"),
+    ("items", "o", ord("o"), "open a new task (dfs_run.sh --open)"),
+    ("items", "e", ord("e"), "edit the item's file in $EDITOR"),
+    ("items", "[  -", ord("["), "move up among its siblings"),
+    ("items", "]  = +", ord("]"), "move down among its siblings"),
+    ("items", "{  <", ord("{"), "move out of its branch"),
+    ("items", "}  >", ord("}"), "move into the branch above"),
+    ("items", "b", ord("b"), "put a fence above it, or take the fence away"),
+    ("items", "x", ord("x"), "switch the agent: claude or codex"),
+    ("tree", "⏎", 10, "open or close the node under the cursor"),
+    ("tree", "space", ord(" "), "fold or unfold what is below it"),
+    ("tree", "a", ord("a"), "answer the raise here"),
+    ("tree", "f", ord("f"), "correct this node: it was really confirmed or refuted"),
+    ("tree", "A", ord("A"), "accept a finished tree (asks first)"),
+    ("tree", "tab", 9, "back to the item list"),
+    ("runs", "⏎", 10, "read this run"),
+    ("agentlog", "G", ord("G"), "to the end, and follow it while it grows"),
+    ("artefact", "⏎", 10, "open this artefact in a browser"),
+    ("panes", "3", ord("3"), "the task's log"),
+    ("panes", "l", ord("l"), "agent runs: the live chains and the finished ones"),
+    ("panes", "v", ord("v"), "artefacts: the pictures its raises name"),
+    ("panes", "t", ord("t"), "the epic's todo"),
+    ("any", "↑↓ j k", ord("j"), "move the cursor, or the text where there is none"),
+    ("any", "d  u", ord("d"), "half a page down, up"),
+    ("any", "space  pgdn pgup", curses.KEY_NPAGE, "a page"),
+    ("any", "g  G", ord("g"), "top, bottom"),
+    ("any", "/", ord("/"), "search this pane; ⏎ on an empty search finds the next"),
+    ("any", "esc", 27, "back one level (never quits)"),
+    ("any", "?", ord("?"), "these keys; ⏎ on one presses it"),
+    ("any", "q", ord("q"), "quit"),
+]
+# Second spellings `act` takes for a key above, for keyboards where the first is a
+# chord: `[ ] { }` are AltGr on German and French layouts, and `- = + < >` are keys of
+# their own there. Kept apart so the table above lists each action once.
+KEY_ALIASES = {ord("-"): ord("["), ord("="): ord("]"), ord("+"): ord("]"),
+               ord("<"): ord("{"), ord(">"): ord("}")}
 
 
 def tail_lines(path, limit=600):
@@ -1117,7 +1211,10 @@ class UI:
         self.art_sel = 0
         self.list_scroll = 0
         self.scroll = 0
-        self.pane = "item"          # item | reglog | runs | agentlog | todo | artefact
+        self.pane = "item"          # item | reglog | runs | agentlog | todo | artefact | keys
+        self.key_sel = 0            # the `?` pane's cursor, into `key_rows`
+        self.keys_from = ("item", "list")   # (pane, focus) `?` was pressed from
+        self.last_search = ""       # `/`, repeated by an empty one
         # Which half of the item pane the keys drive: the item list at the top, or
         # the item's tree below it. Tab swaps them; see `tree_focused`.
         self.focus = "list"
@@ -1215,6 +1312,8 @@ class UI:
             self.art_sel = max(0, min(self.art_sel + step, len(self.artefacts()) - 1))
         elif self.pane == "runs":
             self.run_sel = max(0, min(self.run_sel + step, len(self.runs) - 1))
+        elif self.pane == "keys":
+            self.key_sel = max(0, min(self.key_sel + step, len(self.key_rows()) - 1))
         elif self.tree_focused():
             self.tree_sel = max(0, min(self.tree_sel + step, len(self.tree_rows()) - 1))
         else:
@@ -1347,13 +1446,23 @@ class UI:
         return True
 
     def reload(self, note=""):
+        # What each cursor is ON, asked before the lists move under it — `reselect`.
+        was = self.current()
+        was_node = self.tree_row() if self.tree_focused() else None
+        was_run = (self.runs[self.run_sel]["path"]
+                   if 0 <= self.run_sel < len(self.runs) else None)
         self.data = load()
         self.dirty = roadmap_dirty()
         self.chains = dfs_runs.run_dirs()
         self.runs = discover_runs()
         self.sig = watch_signature()
-        self.sel = min(self.sel, max(0, len(self.items) - 1))
-        self.run_sel = min(self.run_sel, max(0, len(self.runs) - 1))
+        self.sel = reselect([i["id"] for i in self.items],
+                            was["id"] if was else None, self.sel)
+        self.run_sel = reselect([r["path"] for r in self.runs], was_run, self.run_sel)
+        if was_node is not None and was and self.current() is not None \
+                and self.current()["id"] == was["id"]:
+            self.tree_sel = reselect([r["key"] for r in self.tree_rows()],
+                                     was_node["key"], self.tree_sel)
         # The open run holds its chain's state, so it is re-bound rather than kept:
         # an entry captured while the chain was live goes on saying `live` for the
         # rest of the session, and a pane that is watching a finished chain must say
@@ -1563,6 +1672,8 @@ class UI:
             idx = val
             it = self.items[idx]
             marker = ">" if idx == self.sel else " "
+            if idx == self.sel:
+                self._list_y = y
             attr = ((curses.A_REVERSE if self.focus != "tree" or self.pane != "item"
                      else curses.A_BOLD) if idx == self.sel else 0)
             tag, tag_attr = tags[it["id"]]
@@ -2109,6 +2220,8 @@ class UI:
             return self.lines_runs(width)
         if self.pane == "artefact":
             return self.lines_artefacts(width)
+        if self.pane == "keys":
+            return self.lines_keys(width)
         if self.pane == "agentlog" and self.open_run:
             try:
                 if self.open_run.get("kind") == "console":
@@ -2159,6 +2272,120 @@ class UI:
     def tree_row(self):
         rows = self.tree_rows()
         return rows[self.tree_sel] if rows and self.tree_sel < len(rows) else None
+
+    # ---- ? and / ---------------------------------------------------------------
+
+    def key_place(self):
+        """Which part of `KEYS` the screen `?` was pressed from is in."""
+        pane, focus = self.keys_from
+        if pane == "item":
+            return "tree" if focus == "tree" else "items"
+        return pane if pane in ("runs", "agentlog", "artefact") else "panes"
+
+    def key_rows(self):
+        """`KEYS`, the part for where you were FIRST: the rest is still there below
+        it, since most keys work from anywhere and a list of only this pane's would
+        hide them."""
+        here = self.key_place()
+        order = [here] + [p for p, _ in KEY_PLACES if p != here]
+        return [k for p in order for k in KEYS if k[0] == p]
+
+    def lines_keys(self, width):
+        out, para = self.wrapper(width)
+        out.append(("keys — ⏎ presses the one under the cursor, esc goes back",
+                    curses.A_BOLD))
+        titles = dict(KEY_PLACES)
+        here = self.key_place()
+        rows = self.key_rows()
+        self.key_sel = max(0, min(self.key_sel, len(rows) - 1))
+        self._sel_row = None
+        place = None
+        for i, (p, label, _, what) in enumerate(rows):
+            if p != place:
+                place = p
+                out.append(("", 0))
+                out.append(("%s%s" % (titles[p], "  (where you were)" if p == here
+                                      else ""), curses.A_BOLD if p == here else curses.A_DIM))
+            sel = i == self.key_sel
+            if sel:
+                self._sel_row = len(out)
+            out.append(("%s %-18s %s" % (">" if sel else " ", label, what),
+                        curses.A_REVERSE if sel else 0))
+        return out
+
+    def key_run(self):
+        """⏎ on `?`: put back the pane the key belongs to, then press it.
+
+        The pane is the KEY'S, not simply the one `?` came from: a tree key read off
+        the item list is pressed in the tree, which is the only place it means
+        anything, rather than landing on the list and saying "tab to the tree"."""
+        rows = self.key_rows()
+        if not rows:
+            return True
+        place, _, code, _ = rows[self.key_sel]
+        pane, focus = self.keys_from
+        self.pane, self.focus, self.scroll = pane, focus, 0
+        if place == "items":
+            self.pane, self.focus = "item", "list"
+        elif place == "tree":
+            self.open_tree()
+        elif place in ("runs", "artefact"):
+            self.pane = place
+        elif place == "agentlog" and self.open_run is not None:
+            self.pane = "agentlog"
+        if code == ord("?"):
+            return True
+        # Drawn first: a key that prompts would otherwise ask its question over the
+        # keys pane, about a screen that is no longer the one it acts on.
+        self.draw()
+        return self.act(code)
+
+    def search_space(self):
+        """What `/` looks through here, where the cursor is in it, and how to land on
+        a match: the rows a pane's cursor walks, or the text of a pane without one."""
+        if self.pane == "keys":
+            rows = self.key_rows()
+            return ([" ".join((k[1], k[3])) for k in rows], self.key_sel,
+                    lambda i: setattr(self, "key_sel", i))
+        if self.pane == "runs":
+            return (["%s %s %s" % (r["item"], r["name"], os.path.basename(r["dir"]))
+                     for r in self.runs], self.run_sel,
+                    lambda i: setattr(self, "run_sel", i))
+        if self.pane == "artefact":
+            return ([a["name"] for a in self.artefacts()], self.art_sel,
+                    lambda i: setattr(self, "art_sel", i))
+        if self.tree_focused():
+            def text(r):
+                if r["kind"] == "node":
+                    return "%s %s" % (r["node"]["id"], r["node"]["title"])
+                if r["kind"] == "raise":
+                    return "RAISE " + r["raise_"]["body"]
+                return "%s %s" % (r["name"], r.get("text", ""))
+            return ([text(r) for r in self.tree_rows()], self.tree_sel,
+                    lambda i: setattr(self, "tree_sel", i))
+        if self.pane == "item":
+            def land(i):
+                self.sel, self.scroll = i, 0
+            return (["%s %s %s" % (i["id"], i["goal"], i.get("why", ""))
+                     for i in self.items], self.sel, land)
+        # A pane with no cursor: the match's line goes to the top, and reading
+        # somewhere is not following the end.
+        lines = self.detail_lines(self.scr.getmaxyx()[1])
+
+        def scroll_to(i):
+            self.follow = False
+            self.scroll = i
+        return [ln[0] for ln in lines], self.scroll, scroll_to
+
+    def search(self, needle):
+        self.last_search = needle
+        texts, cur, land = self.search_space()
+        i, wrapped = find_next(texts, needle, cur)
+        if i is None:
+            self.msg = "/%s — not here" % needle
+            return
+        land(i)
+        self.msg = "/%s%s" % (needle, " — from the top again" if wrapped else "")
 
     def lines_tree(self, width):
         out, para = self.wrapper(width)
@@ -2302,14 +2529,18 @@ class UI:
             actions, nav = ["l run list", "esc back"], ["↑↓ scroll", "d/u half"]
             if self.open_run and is_growing(self.open_run):
                 actions.insert(0, "G follow" if not self.follow else "● following")
-        segs = actions + nav + ["q quit"]
-        while len(segs) > 2 and len(" · ".join(segs)) > w - 2:
-            segs.pop(-2)
+        elif self.pane == "keys":
+            actions, nav = ["⏎ press it", "esc back"], ["↑↓/jk key", "/ search"]
+        # `?` is the last thing to go: it is where everything the footer dropped is.
+        segs = actions + nav + ["? keys", "q quit"]
+        while len(segs) > 3 and len(" · ".join(segs)) > w - 2:
+            segs.pop(-3)
         return " · ".join(segs)
 
     def draw(self):
         self.scr.erase()
         h, w = self.scr.getmaxyx()
+        self._list_y = None
         self.header()
         list_h = min(len(self.list_rows()), max(3, (h - 6) // 3))
         self.draw_list(3, list_h)
@@ -2317,7 +2548,7 @@ class UI:
         self.put(sep, 0, "─" * max(0, w - 1), curses.A_DIM)
         name = {"item": "item", "reglog": "task log", "runs": "agent runs",
                 "agentlog": "agent log", "todo": "epic todo",
-                "artefact": "artefacts"}[self.pane]
+                "artefact": "artefacts", "keys": "keys"}[self.pane]
         if self.pane == "item":
             name = "tree" if self.tree_focused() else "item"
         self.put(sep, 2, " %s " % name, curses.A_DIM)
@@ -2363,7 +2594,27 @@ class UI:
 
         self.put(h - 2, 0, self.msg[: w - 1], curses.A_BOLD)
         self.put(h - 1, 0, self.footer(w).ljust(max(0, w - 1)), curses.A_REVERSE)
+        # ⚠️ The hardware cursor is PARKED where the keys go, although it is hidden.
+        # A screen reader follows it, not the reverse video, and curses leaves it
+        # wherever the last write ended — the end of the footer, on every draw — so
+        # a reader was told the footer once a second and never the row you were on.
+        y = self.cursor_y(body_top, body_h)
+        if y is not None:
+            try:
+                self.scr.move(y, 0)
+            except curses.error:
+                pass
         self.scr.refresh()
+
+    def cursor_y(self, body_top, body_h):
+        """The screen row of whatever the keys drive: a pane's cursor row if it has
+        one on screen, else the selected item's row in the list."""
+        row = self._sel_row
+        if row is not None and self.scroll <= row < self.scroll + body_h:
+            return body_top + row - self.scroll
+        if self.pane == "item" and not self.tree_focused():
+            return self._list_y
+        return None
 
     # ---- acting --------------------------------------------------------------
 
@@ -2421,8 +2672,11 @@ class UI:
             self.msg = "could not start %s: %s" % (argv[0], e)
             return None
         self.reload()
-        self.msg = "%s: chain started in the background, cap %s, pid %d — [l] to watch" % (
-            item, cap, proc.pid)
+        # The COMMAND, not a paraphrase of it: what this key did is the runner line
+        # the console opens with, and saying it here is how the screen teaches the
+        # CLI underneath it — the thing that runs without the screen, from a script.
+        self.msg = "$ %s  — in the background, pid %d, [l] to watch" % (
+            shlex.join(argv), proc.pid)
         # ⚠️ The DIRECTORY, not the pid: the walk has to judge the chain it started
         # and no other, and a pid is reused while a run directory is not (see
         # `dfs_runs.pid_is_chain`, which needs both to answer even "is it alive").
@@ -2861,6 +3115,12 @@ class UI:
         curses.noecho()
         curses.curs_set(0)
         self.scr.timeout(POLL_MS)
+        # ⚠️ ESC CANCELS, and cancels past the default. `getstr` takes it as a
+        # character, so an Esc then Enter came back as "\x1b" — which the cap
+        # prompt handed to the runner as a cap. Esc means back everywhere else on
+        # this screen; here it is the same, one Enter later.
+        if "\x1b" in raw:
+            return ""
         return raw or default
 
     def next_action(self, it):
@@ -2924,10 +3184,25 @@ class UI:
         # rows the pane showed 30 and a page moved 40, so every space bar stepped
         # over ten rows nobody saw. One row is kept as context across the turn.
         page = max(1, self.body_h - 1)
+        ch = KEY_ALIASES.get(ch, ch)
 
         if ch in (ord("q"),):
             return False
-        if ch == 27:
+        if self.pane == "keys" and ch in (curses.KEY_ENTER, 10, 13):
+            return self.key_run()
+        if ch == ord("?") or (ch == 27 and self.pane == "keys"):
+            if self.pane == "keys":
+                self.pane, self.focus = self.keys_from
+            else:
+                self.keys_from = (self.pane, self.focus)
+                self.pane, self.key_sel = "keys", 0
+            self.scroll = 0
+        elif ch == ord("/"):
+            again = (" (⏎ again: %s)" % self.last_search) if self.last_search else ""
+            needle = self.prompt("/%s" % again, self.last_search)
+            if needle:
+                self.search(needle)
+        elif ch == 27:
             # Esc walks BACK one level and never quits. A key that sometimes exits
             # the program and sometimes closes a pane is one you stop pressing;
             # `q` is the only way out, from anywhere.
@@ -3035,8 +3310,12 @@ class UI:
                 if action == "review":
                     self.open_tree()
                 elif action == "work":
-                    cap = self.prompt("cap [5]:", "5")
-                    self.start_chain(item, cap)
+                    cap = self.prompt("cap [5], esc cancels:", "5")
+                    if cap.isdigit() and int(cap) > 0:
+                        self.start_chain(item, cap)
+                    else:
+                        self.msg = "not started%s" % (
+                            " — %r is not a number of sessions" % cap if cap else "")
                 elif it is None:
                     self.msg = "no items — press [o] to open one"
                 else:

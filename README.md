@@ -531,6 +531,31 @@ letter apart by accident rather than design, so the liveness check matches
 `dfs_run.sh` WITH its extension: a pid running the reader must never read as a live
 chain.
 
+## The screen's conventions — `?` and `/`
+
+**`?` lists every key**, the part for the pane you pressed it from first, and ⏎ on
+one presses it, in the pane it belongs to (a tree key read off the item list is
+pressed in the tree). The footer holds a dozen keys and drops them as the terminal
+narrows; `?` is the list that does not, and it is the one hint the footer keeps to
+the end. `KEYS` in `dfs_tui.py` is that list, and `test_dfs_screen.py` fails when
+`act` takes a key it does not name. **`/` searches the pane you are on**: the items,
+the tree's nodes, the runs, or the text of a pane with no cursor. Lower case matches
+either case, and an empty `/` finds the next match. `-` `=` `<` `>` do what `[` `]`
+`{` `}` do, since those are AltGr chords on German and French keyboards.
+
+⚠️ **A cursor is an identity, not a row number.** `reload` kept the selection as an
+index, so when another session added an item or rewrote `order.md`, the cursor stayed
+on its row while a different item slid under it, and the next `w`, `n` or `r` acted on
+that one. The item, tree and run cursors are re-found by id (`reselect`), and fall
+back to the row only when what they were on is gone. The hardware cursor is parked on
+the same row after every draw, hidden, because a screen reader follows it rather than
+the reverse video.
+
+A background chain's message is its runner line (`$ scripts/dfs_run.sh W7 5 — in the
+background…`), the same line its console opens with. Esc in a prompt cancels, one
+Enter later, since `getstr` takes it as a character: the cap prompt used to hand
+`"\x1b"` to the runner as a cap. The cap must now be a whole number of sessions.
+
 ## Branches
 
 A git branch forks a task the way a parked sibling does, except that both
