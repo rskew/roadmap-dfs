@@ -1145,6 +1145,7 @@ class UI:
         self.walk_started = 0.0     # epoch; when it was started — see walk_tick
         self.walk_content = set()   # what the trees said when that chain started
         self.walk_note = ""         # why the last walk stopped, until the next one
+        self.walk_next = None       # an item the author pinned for the next chain — walk_pin
         # The review tree. Folds and opened nodes are keyed by node id, which
         # carries its task, so a fold survives a trip to another item and back.
         self.tree_sel = 0
@@ -2276,7 +2277,7 @@ class UI:
         # footer is not worth walking /proc for.
         if it is not None and any(r["item"] == it["id"] for r in self.live()):
             enter = "⏎ (running)"
-        actions = [enter, "w walk" if not self.walk_on else "w STOP WALK",
+        actions = [enter, "w walk" if not self.walk_on else "w STOP WALK", "n walk next",
                    "r review", "c chat", "o open", "e edit", "[/] order",
                    "{/} branch", "b break", "3 log", "l logs", "v art", "t todo",
                    "x codex"]
@@ -2561,16 +2562,19 @@ class UI:
         a screenshot, and out of the corner of an eye. The red overlay in `header`
         is reinforcement, never the signal.
         """
+        pin = (" → %s" % self.walk_next) if self.walk_next else ""
         if not self.walk_on:
-            return ("○ walk off · %s" % self.walk_note) if self.walk_note else ""
+            if self.walk_note:
+                return "○ walk off%s · %s" % (pin, self.walk_note)
+            return ("○ walk off%s" % pin) if pin else ""
         spent = "%d/%d" % (self.walk_used(), self.walk_budget)
         held = self.walk_until - time.time()
         if held > 0:
-            return "● WALK HELD %s %s" % (walk_held_for(held), spent)
+            return "● WALK HELD %s%s %s" % (walk_held_for(held), pin, spent)
         run = self.walk_run()
         if run and run["live"]:
-            return "● WALK %s %s" % (run["item"], spent)
-        return "● WALK %s" % spent
+            return "● WALK %s%s %s" % (run["item"], pin, spent)
+        return "● WALK%s %s" % (pin, spent)
 
     def walk_tick(self):
         """One step of the walk, on the poll this screen already runs.
@@ -2616,7 +2620,8 @@ class UI:
             # blames the item for appending nothing.
             self.reload()
             moved = bool(set(self.data.get("content", ())) - self.walk_content)
-            action, why = walk_decide(run["stop"], moved, self.data.get("next_item"))
+            action, why = walk_decide(run["stop"], moved,
+                                      self.walk_next or self.data.get("next_item"))
             self.walk_spent += int(run["run"] or 0)
             self.walk_dir = None
             if action == "hold":
@@ -2640,10 +2645,11 @@ class UI:
         if left < 1:
             self.walk_off("%d sessions spent" % self.walk_spent)
             return
-        item = self.data.get("next_item")
+        item = self.walk_pinned() or self.data.get("next_item")
         if item is None:
             self.walk_off("every branch is blocked or finished")
             return
+        self.walk_next = None
         self.walk_content = set(self.data.get("content", ()))
         self.walk_started = time.time()
         # ⚠️ The chain's cap IS the remaining budget, which is what makes the budget
@@ -2652,6 +2658,60 @@ class UI:
         self.walk_dir = self.start_chain(item, str(left))
         if self.walk_dir is None:
             self.walk_off("could not start a chain on %s" % item)
+
+    def walk_pinned(self):
+        """The pinned item, while it can still be worked; a pin that cannot is dropped.
+
+        ⚠️ Checked when the chain STARTS, not when the key was pressed: a chain on an
+        item that finished or raised in between would end "done before run 1" having
+        moved nothing, and `walk_decide` would raise on it for that. Only the item's
+        OWN status is asked — a fence or an ancestor's raise is exactly the order the
+        author is overriding by pinning it."""
+        if self.walk_next is None:
+            return None
+        row = next((i for i in self.items if i["id"] == self.walk_next), None)
+        if row is None or row["status"] != "open":
+            self.msg = "walk: dropped the pin on %s — it is %s" % (
+                self.walk_next, row["status"] if row else "gone")
+            self.walk_next = None
+            return None
+        return self.walk_next
+
+    def walk_pin(self, it):
+        """`n`: the walk's next chain goes to the selected item, not `next_item`.
+
+        The walk's chain carries the walk's whole remaining budget, so "next" would
+        otherwise mean "whenever this item stops being workable". A chain on another
+        item is ended after the run in flight (`dfs_runs.lower_cap`, as `w` does), so
+        the switch happens at the next session. After that one chain, `next_item`
+        decides as usual — and since a walk finishes what it started
+        (`dfs_state.continue_last`), that keeps it on the pinned item while it is
+        open and nothing holds it. `n` on the pinned item takes the pin away."""
+        if it is None:
+            return
+        if self.walk_next == it["id"]:
+            self.walk_next = None
+            self.msg = "walk: pin on %s removed" % it["id"]
+            return
+        if it["status"] != "open":
+            self.msg = "walk: %s is %s — nothing for a chain to do there" % (
+                it["id"], it["status"])
+            return
+        self.walk_next = it["id"]
+        run = self.walk_run()
+        if not (self.walk_on and run and run["live"]) or run["item"] == it["id"]:
+            self.msg = ("walk: its next chain goes to %s" % it["id"] if self.walk_on
+                        else "walk: %s goes first when w starts it" % it["id"])
+            return
+        n = int(run["run"] or 0)
+        try:
+            dfs_runs.lower_cap(run["dir"], n)
+        except OSError as e:
+            self.msg = ("walk: %s pinned, but %s's chain could not be told to end (%s)"
+                        % (it["id"], run["item"], e))
+            return
+        self.msg = "walk: %s's chain ends after run %d, then %s" % (
+            run["item"], n, it["id"])
 
     def walk_raise(self, item, why):
         """Put a suspect item to the author and re-read the trees; True to carry on.
@@ -3035,6 +3095,8 @@ class UI:
             self.reparent(-1 if ch == ord("{") else 1)
         elif ch == ord("w"):
             self.walk_toggle()
+        elif ch == ord("n"):
+            self.walk_pin(it)
         elif ch == ord("o"):
             self.shell([RUNNER, "--open"])
         elif ch == ord("e"):

@@ -471,6 +471,18 @@ run the chain is on into its run directory (`dfs_runs.lower_cap`, a `cap` file),
 and none follows — a chain of one from that point. The file only ever LOWERS a cap.
 `K` is still the key that stops the run in flight too.
 
+**`n` pins the selected item as where the walk goes next**, over `next_item`. The
+walk's chain on another item is ended after its run in flight the same way (the
+`cap` file), and the next chain starts on the pinned item; after that one chain the
+pin is gone and `next_item` decides again, which by `continue_last` keeps the walk
+on that item while it is open and reachable. `n` on the pinned item takes the pin
+away; the header shows it as `● WALK W7 → W9 13/20`. Only the item's own status is
+checked, and it is checked when the chain starts rather than when `n` is pressed: an
+item that finished or raised in between is dropped rather than started, since a chain
+that moves nothing would raise on it. A fence or an ancestor's raise does not refuse
+a pin — overriding the order is what it is for. With the walk off, the pin waits for
+`w`.
+
 It waits on **any** live work chain, not only its own — two agents writing the same trees at
 once is how this roadmap's ids collided in the first place. The budget prompt is also
 the confirmation: `K` already asks before stopping one chain because that is an hour

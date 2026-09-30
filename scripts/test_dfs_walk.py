@@ -154,6 +154,7 @@ class Ticking(unittest.TestCase):
         ui.walk_started = 0.0
         ui.walk_content = set()
         ui.walk_note = ""
+        ui.walk_next = None
         ui.chains = []
         # The seam the tick re-asks through. Stubbed to a no-op so a test says which
         # chains are on the box; `re_ask` below hands it a list to find them in.
@@ -416,6 +417,76 @@ class Ticking(unittest.TestCase):
         self.assertIn("appended nothing", badge)
         ui.walk_note = ""
         self.assertEqual(ui.walk_badge(), "", "an off walk with nothing to say is silent")
+
+    # ── `n`: the author pins the item the walk's next chain goes to ────────────
+
+    def lowering(self):
+        lowered = []
+        real = TUI.dfs_runs.lower_cap
+        TUI.dfs_runs.lower_cap = lambda d, cap: lowered.append((d, cap))
+        self.addCleanup(setattr, TUI.dfs_runs, "lower_cap", real)
+        return lowered
+
+    def items(self, ui, **status):
+        ui.data["items"] = [dict(id=k, status=v) for k, v in status.items()]
+
+    def test_a_pinned_item_is_where_the_next_chain_starts(self):
+        ui = self.ui(walk_next="W9")
+        self.items(ui, W7="open", W9="open")
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [("W9", "20")])
+        self.assertIsNone(ui.walk_next, "a pin is for one chain; the order has the rest")
+
+    def test_a_pin_overrides_what_the_ended_chain_would_have_led_to(self):
+        ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"}, walk_next="W9")
+        self.items(ui, W7="open", W9="open")
+        self.live(ui, [self.chain(stop="cap", run="2")])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [("W9", "18")])
+
+    def test_a_pin_on_an_item_that_stopped_being_open_is_dropped(self):
+        # A chain on a done item ends "done before run 1" having moved nothing,
+        # which the walk would then raise on.
+        ui = self.ui(walk_next="W9")
+        self.items(ui, W7="open", W9="done")
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [("W7", "20")])
+        self.assertIsNone(ui.walk_next)
+
+    def test_pinning_ends_the_walk_s_chain_on_another_item_after_its_run(self):
+        lowered = self.lowering()
+        ui = self.ui(walk_dir="/runs/mine")
+        self.live(ui, [self.chain(live=True, run="3")])
+        ui.walk_pin(dict(id="W9", status="open"))
+        self.assertEqual(ui.walk_next, "W9")
+        self.assertEqual(lowered, [("/runs/mine", 3)])
+        self.assertTrue(ui.walk_on, "a switch is not a stop")
+        self.assertIn("→ W9", ui.walk_badge())
+
+    def test_pinning_the_item_the_chain_is_on_leaves_it_running(self):
+        lowered = self.lowering()
+        ui = self.ui(walk_dir="/runs/mine")
+        self.live(ui, [self.chain(live=True, run="3")])
+        ui.walk_pin(dict(id="W7", status="open"))
+        self.assertEqual(lowered, [])
+
+    def test_pinning_leaves_somebody_else_s_chain_alone(self):
+        lowered = self.lowering()
+        ui = self.ui(walk_dir="/runs/mine")
+        self.live(ui, [self.chain(dir="/runs/by-hand", live=True, run="3")])
+        ui.walk_pin(dict(id="W9", status="open"))
+        self.assertEqual(lowered, [])
+        self.assertEqual(ui.walk_next, "W9")
+
+    def test_n_again_takes_the_pin_away_and_a_closed_item_is_refused(self):
+        ui = self.ui(walk_next="W9")
+        ui.walk_pin(dict(id="W9", status="open"))
+        self.assertIsNone(ui.walk_next)
+        ui.walk_pin(dict(id="W8", status="blocked"))
+        self.assertIsNone(ui.walk_next)
+        self.assertIn("blocked", ui.msg)
 
 
 if __name__ == "__main__":
