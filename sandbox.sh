@@ -42,6 +42,8 @@
 #   CONTAINER_PORTS    ports to publish, e.g. "8006 5432" or "8080:80"
 #   CONTAINER_MOUNTS   extra mounts, e.g. "/dev/ttyUSB0:/dev/ttyUSB0"
 #   CONTAINER_ENV      extra env vars, e.g. "FOO=bar BAZ=qux"
+#   CONTAINER_PATH_PREFIX  prepended to the container's PATH, e.g. a store path's
+#                      bin (the flake's `sandbox` app puts roadmap-dfs there)
 #   CONTAINER_SHM_SIZE                                   (default: 1g)
 #   CONTAINER_APPARMOR_MODE  default|unconfined          (default: default)
 #
@@ -97,6 +99,7 @@ CONTAINER_APPARMOR_MODE="${CONTAINER_APPARMOR_MODE:-default}"
 CONTAINER_PORTS="${CONTAINER_PORTS:-}"
 CONTAINER_MOUNTS="${CONTAINER_MOUNTS:-}"
 CONTAINER_ENV="${CONTAINER_ENV:-}"
+CONTAINER_PATH_PREFIX="${CONTAINER_PATH_PREFIX:-}"
 CONTAINER_APP_CMD="${CONTAINER_APP_CMD:-}"
 CONTAINER_APP_READY_PORT="${CONTAINER_APP_READY_PORT:-}"
 CONTAINER_APP_READY_TIMEOUT="${CONTAINER_APP_READY_TIMEOUT:-300}"
@@ -242,7 +245,7 @@ run_in_container() {
     -e LOCALE_ARCHIVE="/usr/lib/locale/locale-archive"
     -e SSL_CERT_FILE="/etc/ssl/certs/host-ca-bundle.crt"
     -e NIX_SSL_CERT_FILE="/etc/ssl/certs/host-ca-bundle.crt"
-    -e PATH="/host-nix-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    -e PATH="${CONTAINER_PATH_PREFIX:+${CONTAINER_PATH_PREFIX}:}/host-nix-bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     -e NIX_CONFIG="experimental-features = nix-command flakes"
     -e CONTAINER_START_APP="${CONTAINER_START_APP}"
     -e CONTAINER_APP_CMD="${CONTAINER_APP_CMD}"
@@ -251,7 +254,6 @@ run_in_container() {
     -v "${REPO_ROOT}:${CONTAINER_WORKDIR}"
     -v "${CONTAINER_STATE_DIR}/nix-cache:${CONTAINER_HOME}/.cache/nix"
     -v /nix/store:/nix/store:ro
-    -v ~/roadmap-dfs:/roadmap-dfs
     -v "${nix_bin_dir}:/host-nix-bin:ro"
     -v "${ca_bundle}:/etc/ssl/certs/host-ca-bundle.crt:ro"
     -v "${locale_archive}:/usr/lib/locale/locale-archive:ro"
@@ -274,6 +276,12 @@ run_in_container() {
   for env_pair in ${CONTAINER_ENV}; do
     docker_args+=(-e "${env_pair}")
   done
+
+  # A checkout of roadmap-dfs in the home directory, when there is one. Mounting a
+  # missing path would have docker create it, owned by root.
+  if [[ -d "${HOME}/roadmap-dfs" ]]; then
+    docker_args+=(-v "${HOME}/roadmap-dfs:/roadmap-dfs")
+  fi
 
   # Agent config is only mounted when it exists on the host.
   local cfg

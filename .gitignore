@@ -1,2 +1,4 @@
 .container-state
 __pycache__
+result
+result-*
