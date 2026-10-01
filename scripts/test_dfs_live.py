@@ -174,7 +174,7 @@ class TheLogPaneKeepsUp(unittest.TestCase):
         ui.pane, ui.open_run = "runs", None
         ui.focus = "list"
         ui.sel = ui.run_sel = ui.art_sel = ui.scroll = ui.list_scroll = 0
-        ui.follow, ui.msg, ui.body_h, ui.codex = False, "", 1, False
+        ui.follow, ui.msg, ui.body_h, ui.agent = False, "", 1, "claude"
         ui._sel_row = None
         ui.walk_on, ui.walk_dir, ui.walk_note, ui.walk_next = False, None, "", None
         ui.walk_until = ui.walk_budget = ui.walk_spent = 0

@@ -75,9 +75,7 @@ def left_behind(item):
     chain on the same item is also live and IS an answer worth having.
     """
     sc = _dfs_context()
-    mine = (os.environ.get("CLAUDE_CODE_SESSION_ID")
-            or os.environ.get("CODEX_SESSION_ID")
-            or os.environ.get("CODEX_THREAD_ID") or "")
+    mine = sc.session_from_env()[1]
     for r in run_dirs():
         if item and r["item"] != item:
             continue

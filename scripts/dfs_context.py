@@ -6,15 +6,15 @@ overrun grew 532 tokens/turn against a 1,707 median, so its 136 turns cost about
 42 average ones would — and context is the quantity every turn is charged 0.1x on. A
 turn count cannot see that difference; this can.
 
-CLAUDE_CODE_SESSION_ID and CODEX_SESSION_ID name their provider's transcript, so a
-session can read its own state in one command rather than estimating it. Estimating
+CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID and KIRO_SESSION_ID name their provider's
+transcript, so a session can read its own state in one command rather than estimating it. Estimating
 is what went wrong:
 sessions reported "38 of 50" and "~36" while the transcript held 77 and 97 LINES, and
 both numbers were wrong in different directions until the line/response distinction
 was found.
 
   python3 <scripts>/dfs_context.py   exit 0 under the checkpoint, 1 over
-  python3 <scripts>/dfs_context.py --measure <transcript> claude|codex
+  python3 <scripts>/dfs_context.py --measure <transcript> claude|codex|kiro
   python3 <scripts>/dfs_context.py --flat-to
   python3 <scripts>/dfs_context.py --chain-ceiling
 """
@@ -154,6 +154,120 @@ def _codex_writes(rec):
     return 0, []
 
 
+# ── kiro ──────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ A KIRO SESSION'S TRANSCRIPT IS THE RUN LOG ITSELF. kiro-cli keeps its sessions in
+# a sqlite database, not in a file per session, so there is nothing to glob for the
+# way there is for claude and codex. What a chain DOES have is the stream it captured:
+# `kiro-cli chat --output-format stream-json` writes the run's ACP events as JSON
+# Lines, one self-describing event per line, and among them every session update
+# (`agent_message_chunk`, `tool_call`, `usage_update`, ...). So the run log under
+# `.dfs/runs/` is read as the transcript, and a session started outside a chain has
+# none — which `main` says rather than measuring the wrong thing.
+#
+# ⚠️ THE ENVELOPE AROUND THE UPDATES IS NOT PINNED HERE. No captured run exists yet
+# to write it against, so the readers below look for ACP's own field names
+# (`sessionId`, `sessionUpdate`) at any depth of a record rather than at one path.
+# When a real log is to hand, check `peak_and_turns` against it before trusting the
+# turn count: it is the number of `usage_update` events, on the assumption that kiro
+# sends one per model response.
+
+def _walk(obj, depth=0):
+    """Every dict inside one decoded record, the record first."""
+    if depth > 6:
+        return
+    if isinstance(obj, dict):
+        yield obj
+        for v in obj.values():
+            yield from _walk(v, depth + 1)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _walk(v, depth + 1)
+
+
+def acp_updates(rec):
+    """The ACP session updates one kiro stream record carries."""
+    return [d for d in _walk(rec) if isinstance(d.get("sessionUpdate"), str)]
+
+
+def kiro_session_id(records):
+    """The session a kiro stream belongs to, or "": the first `sessionId` in it."""
+    for rec in records:
+        for d in _walk(rec):
+            sid = d.get("sessionId")
+            if isinstance(sid, str) and sid:
+                return sid
+    return ""
+
+
+def _kiro_log(session_id, root=None):
+    """The newest chain run log under `.dfs/runs/` that names `session_id`, or None."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import dfs_paths
+    runs = str(dfs_paths.runs())
+    logs = glob.glob(os.path.join(runs, "*", "run-*.json"))
+    logs.sort(key=lambda f: os.path.getmtime(f) if os.path.exists(f) else 0, reverse=True)
+    needle = session_id.encode()
+    for log in logs:
+        try:
+            with open(log, "rb") as fh:
+                # The id is in the stream's first events; 256k is a bound, not a guess.
+                if needle in fh.read(256 * 1024):
+                    return log
+        except OSError:
+            continue
+    return None
+
+
+def _kiro_files_written(path):
+    """(paths, write calls) from a kiro stream's tool calls.
+
+    ACP gives every tool call a `kind`; an edit, delete or move is a write and names
+    its paths in `locations`, and an `execute` is a shell command judged by WRITE like
+    any other. `tool_call` and its `tool_call_update`s share a `toolCallId`, so each
+    call is counted once, from whatever fields its records carried between them.
+    """
+    calls = {}
+    with open(path, errors="replace") as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            for u in acp_updates(rec):
+                if u["sessionUpdate"] not in ("tool_call", "tool_call_update"):
+                    continue
+                tid = u.get("toolCallId") or "anon-%d" % len(calls)
+                merged = calls.setdefault(tid, {})
+                for k, v in u.items():
+                    if v not in (None, "", [], {}):
+                        merged[k] = v
+    seen, paths, n = set(), [], 0
+    def note(val):
+        if val and val not in seen:
+            seen.add(val); paths.append(val)
+    for c in calls.values():
+        if c.get("status") == "failed":
+            continue
+        kind = c.get("kind")
+        raw = c.get("rawInput") if isinstance(c.get("rawInput"), dict) else {}
+        if kind in ("edit", "delete", "move"):
+            n += 1
+            for loc in c.get("locations") or []:
+                if isinstance(loc, dict):
+                    note(loc.get("path"))
+            note(raw.get("path") or raw.get("file_path"))
+        elif kind == "execute":
+            cmd = raw.get("command") or raw.get("cmd") or ""
+            cmd = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
+            hits = _paths_in(cmd)
+            if hits or (WRITE.search(cmd) and not FD_REDIRECT.search(cmd)):
+                n += 1
+                for f in hits:
+                    note(f)
+    return paths, n
+
+
 def transcript_path(session_id, agent="claude", root=None):
     """Where a session's transcript is. GLOBBED first, derived only as a fallback.
 
@@ -168,6 +282,8 @@ def transcript_path(session_id, agent="claude", root=None):
     """
     if not session_id:
         return None
+    if agent == "kiro":
+        return _kiro_log(session_id, root)
     if agent == "codex":
         home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
         found = glob.glob(os.path.join(home, "sessions", "**",
@@ -203,6 +319,8 @@ def files_written(path, provider="claude"):
     are evidence and the count is the answer: a session with write calls and no
     readable paths still did not do nothing.
     """
+    if provider == "kiro":
+        return _kiro_files_written(path)
     seen, paths, calls = set(), [], 0
     def note(val):
         if val and val not in seen:
@@ -240,13 +358,22 @@ def files_written(path, provider="claude"):
 
 
 def peak_and_turns(path, provider):
-    """Peak context and response count for a Claude or Codex rollout."""
+    """Peak context and response count for a Claude or Codex rollout, or a Kiro stream."""
     best, seen = 0, set()
     with open(path, errors="replace") as fh:
         for line in fh:
             try:
                 rec = json.loads(line)
             except Exception:
+                continue
+            if provider == "kiro":
+                # ACP's `usage_update` says how much of the context window is in
+                # use (`used`, out of `size`), which is the quantity the budget is
+                # written in — not a sum over requests.
+                for u in acp_updates(rec):
+                    if u["sessionUpdate"] == "usage_update" and isinstance(u.get("used"), int):
+                        seen.add(len(seen))
+                        best = max(best, u["used"])
                 continue
             if provider == "codex":
                 if rec.get("type") != "event_msg":
@@ -273,6 +400,17 @@ def peak_and_turns(path, provider):
     return best, len(seen)
 
 
+def session_from_env():
+    """(provider, session id) of the session this process runs inside, or (None, "")."""
+    for provider, names in (("claude", ("CLAUDE_CODE_SESSION_ID",)),
+                            ("codex", ("CODEX_SESSION_ID", "CODEX_THREAD_ID")),
+                            ("kiro", ("KIRO_SESSION_ID",))):
+        for name in names:
+            if os.environ.get(name):
+                return provider, os.environ[name]
+    return None, ""
+
+
 def main(argv):
     # The runner measures a session it LAUNCHED, so it cannot read an env var for it,
     # and the TUI measures a run dir's transcript. Both go through this file rather
@@ -293,13 +431,10 @@ def main(argv):
         print(CHAIN_CEILING)
         return 0
 
-    claude_sid = os.environ.get("CLAUDE_CODE_SESSION_ID")
-    codex_sid = os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID")
-    sid = claude_sid or codex_sid
+    provider, sid = session_from_env()
     if not sid:
-        print("dfs_context: no Claude or Codex session id is set — run this inside a session")
+        print("dfs_context: no Claude, Codex or Kiro session id is set — run this inside a session")
         return 2
-    provider = "claude" if claude_sid else "codex"
     found = transcript_path(sid, provider)
     if not found or not os.path.exists(found):
         print(f"dfs_context: no transcript for {sid}")

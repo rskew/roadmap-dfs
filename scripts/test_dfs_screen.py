@@ -502,7 +502,7 @@ class StartingAChainSaysTheCommand(unittest.TestCase):
         TUI.dfs_runs.ensure_run_root = lambda: tmp
         TUI.subprocess.Popen = lambda *a, **k: Proc()
         try:
-            ui = a_screen([item("W1")], codex=False)
+            ui = a_screen([item("W1")], agent="claude")
             ui.reload = lambda note="": None
             ui.start_chain("W1", "5")
         finally:

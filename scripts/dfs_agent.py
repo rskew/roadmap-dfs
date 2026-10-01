@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which claude-code (and codex) dfs_run.sh launches: one pinned nixpkgs revision.
+"""Which claude-code (and codex, and kiro-cli) dfs_run.sh launches: one pinned nixpkgs revision.
 
     dfs_agent.py --rev      print the pinned revision; with none pinned yet, pin the
                             one nix already has cached, or resolve one if it has none

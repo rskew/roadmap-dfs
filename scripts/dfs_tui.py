@@ -79,6 +79,8 @@ ROOT = dfs_paths.work_root()
 STATE = dfs_paths.state()
 EPIC = dfs_paths.EPIC
 RUNNER = dfs_paths.rel(dfs_paths.SCRIPTS / "dfs_run.sh")
+# What `x` cycles through; each but the first is a dfs_run.sh flag of its own name.
+AGENTS = ("claude", "codex", "kiro")
 ART_DIR = dfs_paths.artefacts()
 ART_PORT = int(os.environ.get("DFS_ARTEFACT_PORT") or 3016)  # docs/artefacts.md
 
@@ -611,7 +613,7 @@ KEYS = [
     ("items", "}  >", ord("}"), "in", "move into the branch above"),
     ("items", "b", ord("b"), "fence", "put a fence above it, or take the fence away"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
-    ("items", "x", ord("x"), "agent", "switch the agent: claude or codex"),
+    ("items", "x", ord("x"), "agent", "switch the agent: claude, codex or kiro"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
     ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
     ("tree", "a", ord("a"), "answer", "answer the raise here"),
@@ -1053,6 +1055,109 @@ def codex_result_lines(events):
     return out + [("", "dim")] + lines
 
 
+# ── kiro's log shape ───────────────────────────────────────────────────────────
+#
+# `kiro-cli chat --output-format stream-json` writes the run's ACP events, one per
+# line, with kiro's own stderr captured between them (dfs_run.sh). That one file is
+# both the run's result and its transcript (dfs_context.py, `_kiro_log`), so it is
+# condensed once, to the same rows the other panes draw. The updates are found by
+# ACP's own field names at any depth (`dfs_context.acp_updates`), because no captured
+# run pinned the envelope around them when this was written.
+
+def kiro_session_id(events):
+    return _sc.kiro_session_id(e for e in events if isinstance(e, dict))
+
+
+def _acp_text(content):
+    """The text of an ACP content block, or of a list of them."""
+    if isinstance(content, list):
+        return "".join(_acp_text(c) for c in content)
+    if isinstance(content, dict):
+        if isinstance(content.get("text"), str):
+            return content["text"]
+        if "content" in content:
+            return _acp_text(content["content"])
+    return content if isinstance(content, str) else ""
+
+
+def kiro_result_lines(events):
+    """A kiro run's captured stream, as rows of (text, role).
+
+    Message and thought chunks arrive a few words at a time, so consecutive chunks of
+    one kind are joined into one row. A tool call is drawn when it starts, under the
+    title kiro gave it, and again only if it FAILS — a completed call's output is in
+    the file, and drawing every one is what made transcripts unreadable.
+    """
+    rows, counts, usage = [], collections.Counter(), {}
+    pending = [None, []]                  # the chunk kind being joined, its pieces
+
+    def flush():
+        kind, parts = pending
+        text = "".join(parts).strip()
+        if text:
+            if kind == "user_message_chunk":
+                rows.append((you_row(text), "you"))
+            elif kind == "agent_thought_chunk":
+                flat = re.sub(r"\s+", " ", text)
+                rows.append(("  … " + flat[:200] + ("   [%d chars]" % len(text)
+                                                     if len(flat) > 200 else ""), "think"))
+            else:
+                rows.append((text, "say"))
+        pending[0], pending[1] = None, []
+
+    titles = {}
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        if "_raw" in e:
+            # kiro's own stderr: on a run that died before it started (no login, a
+            # limit), the only thing that says why.
+            line = strip_ansi(e["_raw"]).strip()
+            if line:
+                flush()
+                rows.append(("  " + line[:200], "dim"))
+            continue
+        updates = _sc.acp_updates(e)
+        if not updates:
+            err = e.get("error")
+            if err:
+                flush()
+                msg = err.get("message") if isinstance(err, dict) else err
+                rows.append(("  ⨯ %s" % str(msg)[:400], "err"))
+            continue
+        for u in updates:
+            kind = u["sessionUpdate"]
+            if kind in ("user_message_chunk", "agent_message_chunk", "agent_thought_chunk"):
+                if pending[0] != kind:
+                    flush()
+                    pending[0] = kind
+                pending[1].append(_acp_text(u.get("content")))
+                continue
+            if kind == "usage_update":
+                usage = u
+                continue
+            if kind not in ("tool_call", "tool_call_update"):
+                continue
+            flush()
+            tid = u.get("toolCallId")
+            if kind == "tool_call" or tid not in titles:
+                titles[tid] = u.get("title") or titles.get(tid) or ""
+                if kind == "tool_call":
+                    counts["tool calls"] += 1
+                    rows.append(("  → %s  %s" % (u.get("kind") or "tool", titles[tid]), "run"))
+            if u.get("status") == "failed":
+                rows.append((_result_row(_acp_text(u.get("content")) or titles[tid],
+                                         marker="⨯ "), "err"))
+    flush()
+    counts["messages"] = sum(1 for _, role in rows if role == "say")
+    head = " · ".join("%d %s" % (v, k) for k, v in counts.items())
+    out = [(head, "head")]
+    if isinstance(usage.get("used"), int):
+        out.append(("context %s of %s" % (fmt_tokens(usage["used"]),
+                                          fmt_tokens(usage.get("size"))), "dim"))
+    return out + [("", "dim")] + rows
+
+
 YOU_CHARS = 600
 
 
@@ -1427,7 +1532,7 @@ class UI:
         # Which half of the item pane the keys drive: the item list at the top, or
         # the item's tree below it. Tab swaps them; see `tree_focused`.
         self.focus = "list"
-        self.codex = False
+        self.agent = "claude"       # which dfs_run.sh launches: one of AGENTS
         self.msg = ""
         self.agent_update = None    # the process start_agent_update began, from main
         self.data = load()
@@ -1934,7 +2039,7 @@ class UI:
 
     def header(self):
         h, w = self.scr.getmaxyx()
-        agent = "codex" if self.codex else "claude"
+        agent = self.agent
         live = len(self.live())
         # What a depth-first walk would take next, which is the whole point of the
         # tree and is otherwise only derivable by reading every row's blocked_by.
@@ -2413,6 +2518,18 @@ class UI:
             out.append(("result", curses.A_BOLD))
             for line in str(result.get("result", "")).splitlines() or [""]:
                 para(line, indent="  ", hang="  ")
+        elif agent == "kiro":
+            # The log IS the transcript, so it is drawn once, here, and measured
+            # rather than opened a second time below.
+            sid = kiro_session_id(events)
+            peak, responses = peak_and_turns(run["path"], agent)
+            out.append(("session %s · %d responses · peak context %s"
+                        % (sid or "unknown", responses, fmt_tokens(peak)), look("chrome")))
+            out.append(("", 0))
+            out.extend(self.emit_roles(kiro_result_lines(events), width))
+            self._cache = {k: v for k, v in self._cache.items() if k[0] != run["path"]}
+            self._cache[key] = out
+            return out
         else:
             # codex: a stream of events rather than one object, condensed to the same
             # rows the transcript pane draws instead of dumped back as the JSON it
@@ -2538,6 +2655,14 @@ class UI:
         results is what made a transcript unreadable in the first place, and the size
         marker already says there is more.
         """
+        if agent == "kiro":
+            events = []
+            for line in self.jsonl_lines(path, tail_bytes):
+                try:
+                    events.append(json.loads(line))
+                except ValueError:
+                    events.append({"_raw": line})
+            return self.emit_roles(kiro_result_lines(events), width)
         if agent == "codex":
             # A rollout's records are `response_item` and `event_msg`, so the Claude
             # filter below keeps NONE of them — this pane was empty under `--codex`
@@ -3138,7 +3263,7 @@ class UI:
         actions = [enter, "w walk" if not self.walk_on else "w STOP WALK", "n walk next",
                    "r review", "c chat", "o open", "e edit", "[/] order",
                    "{/} branch", "b break", "3 log", "l logs", "v art", "t todo",
-                   "x codex"]
+                   "x agent"]
         if self.live():
             # A key that stops a background chain has to be on the footer of the
             # screen that started it, or the only way to end one is `kill`.
@@ -3989,8 +4114,8 @@ class UI:
         so there is no flag and nothing to ask about.
         """
         argv = [RUNNER]
-        if self.codex:
-            argv.append("--codex")
+        if self.agent != "claude":
+            argv.append("--" + self.agent)
         return argv + [a for a in args if a]
 
     def tree_focused(self):
@@ -4099,8 +4224,8 @@ class UI:
             # line, and `follows` arms following from there if the file is growing.
             self.scroll = 10 ** 6
         elif ch == ord("x"):
-            self.codex = not self.codex
-            self.msg = "agent: " + ("codex" if self.codex else "claude")
+            self.agent = AGENTS[(AGENTS.index(self.agent) + 1) % len(AGENTS)]
+            self.msg = "agent: " + self.agent
         elif ch == ord("3"):
             # ⚠️ It was `r`, which now runs the review. The pane is called §3 and this
             # is its digit, so the key still spells what it opens — and moving a

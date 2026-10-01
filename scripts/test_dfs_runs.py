@@ -66,7 +66,8 @@ class LeftBehind(unittest.TestCase):
         sc.transcript_path = lambda sid, agent, root=None: str(self.tx / (sid + ".jsonl"))
         RUNS._dfs_context = lambda: sc
         self.env = {k: os.environ.pop(k, None) for k in
-                    ("CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID")}
+                    ("CLAUDE_CODE_SESSION_ID", "CODEX_SESSION_ID", "CODEX_THREAD_ID",
+                     "KIRO_SESSION_ID")}
 
     def tearDown(self):
         for k, v in self.env.items():

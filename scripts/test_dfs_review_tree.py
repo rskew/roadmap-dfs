@@ -188,7 +188,7 @@ class Pane(unittest.TestCase):
         ui = object.__new__(TUI.UI)
         ui.msg, ui.pane, ui.scroll, ui.follow, ui.body_h = "", "item", 0, False, 20
         ui.focus = "list"
-        ui.sel, ui.codex, ui._sel_row = 0, False, None
+        ui.sel, ui.agent, ui._sel_row = 0, "claude", None
         ui.tree_sel, ui.tree_item = 0, None
         ui.tree_folded, ui.tree_open = set(), set()
         ui.walk_on = False

@@ -23,6 +23,7 @@
 #   container.sh claude [args...]       App in background, then claude
 #   container.sh codex [args...]        App in background, then codex
 #   container.sh gemini [args...]       App in background, then gemini
+#   container.sh kiro [args...]         App in background, then kiro-cli
 #   container.sh app                    Just the app, in the foreground
 #   container.sh exec <command> [args]  App in background, then any command
 #   container.sh run <command> [args]   Any command, app NOT started
@@ -46,6 +47,9 @@
 #                      bin (the flake's `sandbox` app puts roadmap-dfs there)
 #   CONTAINER_SHM_SIZE                                   (default: 1g)
 #   CONTAINER_APPARMOR_MODE  default|unconfined          (default: default)
+#   KIRO_API_KEY       passed through when set, so kiro-cli runs headless without
+#                      a login (otherwise: `kiro-cli login --use-device-flow` once,
+#                      on the host or in `container.sh kiro`)
 #
 # Example — put this in <repo>/.container.env:
 #   CONTAINER_APP_CMD=scripts/start-dev.sh
@@ -283,13 +287,31 @@ run_in_container() {
     docker_args+=(-v "${HOME}/roadmap-dfs:/roadmap-dfs")
   fi
 
-  # Agent config is only mounted when it exists on the host.
+  # Agent config is only mounted when it exists on the host. kiro-cli keeps its
+  # settings and agents in ~/.kiro.
   local cfg
-  for cfg in .codex .claude .claude.json .gemini; do
+  for cfg in .codex .claude .claude.json .gemini .kiro; do
     if [[ -e "${HOME}/${cfg}" ]]; then
       docker_args+=(-v "${HOME}/${cfg}:${CONTAINER_HOME}/${cfg}")
     fi
   done
+
+  # kiro-cli keeps its login in ~/.local/share/kiro-cli/data.sqlite3. A bind mount
+  # that deep would have the engine create ~/.local and ~/.local/share owned by
+  # root, and every other tool writing there (claude among them) would fail, so the
+  # two parents get user-owned tmpfs of their own first.
+  if [[ -d "${HOME}/.local/share/kiro-cli" ]]; then
+    docker_args+=(
+      --tmpfs "${CONTAINER_HOME}/.local:uid=$(id -u),gid=$(id -g),mode=700"
+      --tmpfs "${CONTAINER_HOME}/.local/share:uid=$(id -u),gid=$(id -g),mode=700"
+      -v "${HOME}/.local/share/kiro-cli:${CONTAINER_HOME}/.local/share/kiro-cli"
+    )
+  fi
+
+  # By name only, so the key's value never lands on a command line.
+  if [[ -n "${KIRO_API_KEY:-}" ]]; then
+    docker_args+=(-e KIRO_API_KEY)
+  fi
 
   if [[ "${CONTAINER_APPARMOR_MODE}" == "unconfined" ]]; then
     docker_args+=(--security-opt apparmor=unconfined)
@@ -365,7 +387,7 @@ main() {
 
   # Modes that want the app running alongside them opt in here.
   case "${mode}" in
-    shell|app|exec|codex|claude|gemini)
+    shell|app|exec|codex|claude|gemini|kiro)
       CONTAINER_START_APP=1
       ;;
   esac
@@ -396,6 +418,12 @@ main() {
       ;;
     gemini)
       run_in_container bash -lc 'NIXPKGS_ALLOW_UNFREE=1 exec nix shell --impure github:numtide/llm-agents.nix#gemini-cli -c gemini "$@"' -- "$@"
+      ;;
+    kiro)
+      # kiro-cli-unwrapped, not kiro-cli: nixpkgs' kiro-cli is a bwrap FHS env, and
+      # bwrap cannot make its namespaces in a container with every capability
+      # dropped. The unwrapped binaries are already patched to run from the store.
+      run_in_container bash -lc 'NIXPKGS_ALLOW_UNFREE=1 KIRO_NO_AUTO_UPDATE=1 exec nix shell --impure github:NixOS/nixpkgs#kiro-cli-unwrapped -c kiro-cli chat --trust-all-tools "$@"' -- "$@"
       ;;
     *)
       usage

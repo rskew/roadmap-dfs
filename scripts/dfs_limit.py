@@ -29,6 +29,12 @@ So the STRUCTURED field is read first and the prose is a fallback:
   codex   `exec --json` writes a JSONL stream whose error shape is not pinned here, so
           this stays the whole-file prose match it already was — no worse than before,
           and the phrase set is wider.
+  kiro    `chat --output-format stream-json` writes ACP events as JSONL, with kiro's own
+          stderr captured beside them. Its monthly limit is matched by its own words
+          and its `monthlyLimitReached` reason code, and ONLY outside what the
+          session itself said or ran (message, thought and tool-call updates, and
+          the `finalText` that repeats its last message), for
+          the same reason claude's `result` is not enough alone.
 
 Usage:  dfs_limit.py <log> <agent>   ->  limit=0|1  resets='<text>'  (shell-quotable)
 """
@@ -47,6 +53,23 @@ LIMIT_RE = re.compile(
 )
 # The one thing worth printing beside the stop: when it lifts. Stops at the quote or
 # backslash that ends it inside JSON, exactly as the grep it replaces did.
+# kiro-cli's own wordings, read out of its binary (2.24.0): "The monthly usage limit
+# has been reached", "Monthly request limit reached", and the reason code.
+# ⚠️ AND THE OVERAGE CAP, which is the stop a plan with overages enabled reaches
+# instead of the monthly one. Its sentence comes from the service, not the binary, so
+# it is matched loosely (an overage and a limit within a few words of each other)
+# beside the error code the binary does carry. "You've used your monthly included
+# requests and are now using overages" names no limit and is a warning, not a stop.
+KIRO_LIMIT_RE = re.compile(
+    r"monthly (usage|request) limit"
+    r"|monthlyLimitReached|MONTHLY_REQUEST_COUNT"
+    r"|OverageRequestLimitExceeded"
+    r"|\boverages?\b[^\"\n]{0,60}\blimit\b|\blimit\b[^\"\n]{0,60}\boverages?\b",
+    re.I,
+)
+# Session updates that carry the SESSION's words, which must not convict it.
+KIRO_OWN_WORDS = ("user_message_chunk", "agent_message_chunk", "agent_thought_chunk",
+                  "tool_call", "tool_call_update", "plan")
 RESETS_RE = re.compile(r"resets [^\"\\\n]*")
 
 
@@ -93,8 +116,35 @@ def reset_at(resets, now):
     return at + RESET_MARGIN
 
 
+def _kiro_said(rec):
+    """Whether one stream record is the session's own words rather than kiro's."""
+    stack = [rec]
+    while stack:
+        d = stack.pop()
+        if isinstance(d, dict):
+            # `finalText` is the run's closing record repeating the session's last
+            # message, so it is the session's words too.
+            if d.get("sessionUpdate") in KIRO_OWN_WORDS or "finalText" in d:
+                return True
+            stack.extend(d.values())
+        elif isinstance(d, list):
+            stack.extend(d)
+    return False
+
+
 def classify(raw, agent):
     """(is_limit, resets) for one run log's bytes."""
+    if agent == "kiro":
+        for line in raw.splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                rec = None
+            if rec is not None and _kiro_said(rec):
+                continue
+            if KIRO_LIMIT_RE.search(line) or (rec is None and LIMIT_RE.search(line)):
+                return True, resets_in(line)
+        return False, ""
     if agent != "codex":
         try:
             rec = json.loads(raw)
