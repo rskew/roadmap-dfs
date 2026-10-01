@@ -353,6 +353,13 @@ class Pane(unittest.TestCase):
         self.assertEqual(self.logged, [])
         self.assertIn("--chat", ran[0])
 
+    def test_capital_c_is_a_chat_about_the_project_not_only_a_new_task(self):
+        ui = self.ui
+        ran = []
+        ui.shell = lambda argv, pause=True: ran.append(argv)
+        ui.act(ord("C"))
+        self.assertEqual(ran[0][-2:], ["--chat", "project"])
+
     def test_f_outside_the_tree_corrects_nothing_and_says_where_to_go(self):
         ui = self.ui
         ran = []

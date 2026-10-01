@@ -46,7 +46,7 @@
 #         <scripts>/dfs_run.sh --review <task>   answer raises, correct nodes,
 #                                           accept a finished tree
 #         <scripts>/dfs_run.sh --open [task]     write a new task file
-#         <scripts>/dfs_run.sh [--codex|--kiro] --chat [task|new]
+#         <scripts>/dfs_run.sh [--codex|--kiro] --chat [task|project]
 #         <scripts>/dfs_run.sh --bump-agent     pin the agents to nixpkgs now
 #                                           (dfs_tui.py does it in the background)
 # Env:    CLAUDE_CMD       how claude is launched here — a nix run, not a binary on PATH
@@ -94,7 +94,7 @@ for a in "$@"; do
 done
 ITEM="${args[0]:-}"
 CAP="${args[1]:-5}"
-[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro] <task> [cap]  |  --review <task>  |  --open  |  [--codex|--kiro] --chat [task|new]" >&2; exit 2; }
+[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro] <task> [cap]  |  --review <task>  |  --open  |  [--codex|--kiro] --chat [task|project]" >&2; exit 2; }
 
 # No agent needs to be a binary on PATH: each default launcher is a Nix command
 # line, split into an argv. Override the provider's command to use a local checkout, a
@@ -215,11 +215,13 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
            BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS:-21600000}")
 
 if [ "$MODE" = chat ]; then
-  if [ "$ITEM" = new ]; then
-    # Scoping work that does not exist yet. It stops where --open takes over, so the
+  if [ "$ITEM" = project ] || [ "$ITEM" = new ]; then
+    # The project as a whole, not one task: where it stands, what to do next, and new
+    # work when that is where the talk goes. `new` is the old name, from when this was
+    # only for scoping a new task. Scoping still stops where --open takes over, so a
     # task file is written from the author's words, in front of them.
-    default_chat_prompt="Read $DFS_ROADMAP_REL. The author wants to scope a NEW task. Ask what done looks like and why it is worth doing, then propose the Goal paragraph and a first linear chain of todo nodes, each one line. Do not create the task file and do not start work — the author writes it with $DFS_SCRIPTS_REL/dfs_run.sh --open."
-    chat_subject="a new task"
+    default_chat_prompt="Read $DFS_ROADMAP_REL. Discuss the project with the author: its direction, the tasks on the roadmap and how they stand, what to do next, or new work they have in mind. Do not perform work or edit files unless the author explicitly asks. If the talk turns to a NEW task, ask what done looks like and why it is worth doing, then propose the Goal paragraph and a first linear chain of todo nodes, each one line — but do not create the task file; the author writes it with $DFS_SCRIPTS_REL/dfs_run.sh --open. Start by summarising the roadmap in a few lines and asking what the author wants to talk about."
+    chat_subject="the project"
   elif [ -n "$ITEM" ]; then
     default_chat_prompt="Read $DFS_ROADMAP_REL and task $ITEM's parts, $DFS_ITEMS_REL/$ITEM.md and every file in $DFS_ITEMS_REL/$ITEM/, whichever exist. Discuss task $ITEM with the author. Do not perform the work, edit files or append to the task's log unless the author explicitly changes the task. Start by summarising the tree: where the work is, what was refuted and why, and the next question worth discussing."
     chat_subject="task $ITEM"

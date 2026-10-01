@@ -603,7 +603,7 @@ KEYS = [
     ("items", "r", ord("r"), "review", "review: open the tree to answer and correct"),
     ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (dfs_run.sh --review)"),
     ("items", "c", ord("c"), "chat", "chat about this item (dfs_run.sh --chat)"),
-    ("items", "C", ord("C"), "chat-new", "chat about something new"),
+    ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (dfs_run.sh --chat project)"),
     ("items", "o", ord("o"), "open", "open a new task (dfs_run.sh --open)"),
     ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
     ("items", "m", ord("m"), "needs-you", "show only what is waiting on you, or everything"),
@@ -4319,7 +4319,7 @@ class UI:
         elif ch == ord("c"):
             self.shell(self.runner("--chat", item))
         elif ch == ord("C"):
-            self.shell(self.runner("--chat", "new"))
+            self.shell(self.runner("--chat", "project"))
         elif ch == ord("K"):
             # Capital, and it asks: a chain is an hour of somebody's subscription and
             # there is no undo for stopping one halfway.
