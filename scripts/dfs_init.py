@@ -20,6 +20,10 @@ A hook that already exists is left alone and the lines to add are printed instea
 since it is the project's. Hooks in .git/hooks belong to this clone only, so run
 this again in every clone; it is idempotent.
 
+From the flake, with nothing installed: `nix run github:rskew/roadmap-dfs#dfs-init`.
+The hooks and the next steps it prints then go through the flake too (`nix run
+$DFS_FLAKE#dfs-hook`, default dfs_paths.FLAKE).
+
 Usage:
     dfs_init.py [--no-hooks] [--playwright-shell <flake ref>]
 """
@@ -46,7 +50,7 @@ def tool_default():
     sits inside this repo (a vendored copy, which moves with the repo), absolute when
     it is a checkout elsewhere on this machine, and nothing when it is a nix store
     path, which the next garbage collection deletes: then `dfs-hook` on PATH is the
-    way in."""
+    way in, else the flake."""
     tool = dfs_paths.TOOL_ROOT
     if str(tool).startswith("/nix/store/"):
         return ""
@@ -59,18 +63,23 @@ def tool_default():
 def snippet(hook):
     """The lines a hook needs: find the tool, run its guard, and say so when neither is
     here rather than skip in silence. Exit status is the guard's, so a violation stops
-    the commit."""
+    the commit. The flake is the last resort, and only for a commit that touches
+    `.dfs`, since it may fetch: every other commit stays as fast as without it."""
     base = " HEAD" if hook == "pre-merge-commit" else ""
     return ("# The roadmap guard (roadmap-dfs). DFS_TOOL, else the path below, else\n"
-            "# `dfs-hook` on PATH (the tool's flake).\n"
+            "# `dfs-hook` on PATH, else the tool's flake (DFS_FLAKE).\n"
             'dfs_tool="${DFS_TOOL:-%s}"\n'
             'if [ -n "$dfs_tool" ] && [ -f "$dfs_tool/scripts/dfs_hook.sh" ]; then\n'
             '  sh "$dfs_tool/scripts/dfs_hook.sh" %s || exit 1\n'
             "elif command -v dfs-hook >/dev/null 2>&1; then\n"
             "  dfs-hook %s || exit 1\n"
             'elif [ -n "$(git diff --cached --name-only%s -- .dfs)" ]; then\n'
-            '  echo "%s: the roadmap guard did not run: no roadmap-dfs found (set DFS_TOOL)" >&2\n'
-            "fi\n" % (tool_default(), hook, hook, base, hook))
+            "  if command -v nix >/dev/null 2>&1; then\n"
+            '    nix run "${DFS_FLAKE:-%s}#dfs-hook" -- %s || exit 1\n'
+            "  else\n"
+            '    echo "%s: the roadmap guard did not run: no roadmap-dfs found (set DFS_TOOL)" >&2\n'
+            "  fi\n"
+            "fi\n" % (tool_default(), hook, hook, base, dfs_paths.FLAKE, hook, hook))
 
 
 def say(what, path):
@@ -151,17 +160,12 @@ def main(argv):
               % dfs_paths.rel(path))
         print("    " + snippet(hook).rstrip("\n").replace("\n", "\n    "))
 
-    if str(dfs_paths.TOOL_ROOT).startswith("/nix/store/"):
-        run, tui = "dfs-run", "dfs"
-    else:
-        run = dfs_paths.rel(dfs_paths.SCRIPTS / "dfs_run.sh")
-        tui = "python3 " + dfs_paths.rel(dfs_paths.SCRIPTS / "dfs_tui.py")
     print("""
 Next:
   1. Read .dfs/ROADMAP.md and make its law yours; every session reads it whole.
   2. %s
-  3. Open a task:      %s --open
-     Work it:          %s <task> [sessions]
+  3. Open a task:      %s
+     Work it:          %s
      Or the screen:    %s
   Run all of them from here, the repo's root.
   Artefacts are served from .dfs/artefacts on port %s (DFS_ARTEFACT_PORT):
@@ -169,7 +173,9 @@ Next:
         ".dfs/ is gitignored here, so there is nothing to commit: it stays planning,\n"
         "     and each node's commit carries its code alone." if dfs_paths.ignored() else
         "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).",
-        run, run, tui, os.environ.get("DFS_ARTEFACT_PORT") or 3016,
+        dfs_paths.command("dfs_run.sh", "--open"),
+        dfs_paths.command("dfs_run.sh", "<task>", "[sessions]"),
+        dfs_paths.command("dfs_tui.py"), os.environ.get("DFS_ARTEFACT_PORT") or 3016,
         os.environ.get("DFS_ARTEFACT_PORT") or 3016))
     return 0
 

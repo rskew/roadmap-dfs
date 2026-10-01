@@ -27,8 +27,10 @@ down.
     eval "$(python3 <this file> --sh)"   # the same answers, for the shell
     python3 <this file> --require       # exit 0 if this directory has a roadmap
 """
+import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -41,6 +43,10 @@ TEMPLATES = TOOL_ROOT / "templates"
 EPIC = TOOL_ROOT / "docs" / "epic-agent-roadmap.md"
 
 STATE_DIR_NAME = ".dfs"
+
+# Where the tool's flake is, for a store copy to name itself: `nix run` puts its
+# commands on no PATH, and the store path is gone at the next garbage collection.
+FLAKE = "github:rskew/roadmap-dfs"
 
 
 def work_root() -> Path:
@@ -204,8 +210,22 @@ def has_roadmap() -> bool:
 def missing_message() -> str:
     return ("no roadmap here: %s does not exist.\n"
             "The work root is the current directory, so run this from the repo whose\n"
-            "roadmap you mean to work (or create %s/ there to start one)."
-            % (rel(roadmap()), STATE_DIR_NAME))
+            "roadmap you mean to work, or start one there, from its root:\n"
+            "    %s" % (rel(roadmap()), command("dfs_init.py")))
+
+
+def command(script: str, *args: str) -> str:
+    """One of the tool's scripts as the reader should type it, from the work root:
+    `dfs-foo` when the tool is installed, through the flake when it is a store copy
+    that `nix run` left on no PATH, and the script itself in a checkout."""
+    if str(TOOL_ROOT).startswith("/nix/store/"):
+        name = Path(script).stem.replace("_", "-")
+        if shutil.which(name):
+            return " ".join((name,) + args)
+        run = "nix run %s#%s" % (os.environ.get("DFS_FLAKE") or FLAKE, name)
+        return " ".join((run, "--") + args) if args else run
+    path = rel(SCRIPTS / script)
+    return " ".join((("python3 " + path) if script.endswith(".py") else path,) + args)
 
 
 def rel(p) -> str:

@@ -8,15 +8,18 @@ DFS on your roadmap:
 ## Run it with nix
 
 ```sh
-nix run github:rskew/roadmap-dfs#tui                 # the screen, in the repo you're standing in
-nix run github:rskew/roadmap-dfs#sandbox -- claude   # sandbox.sh, with the dfs-* commands on the container's PATH
-nix run github:rskew/roadmap-dfs#sandbox -- kiro     # the same, with kiro-cli
+nix run github:rskew/roadmap-dfs#dfs-init                # start a roadmap in the repo you're standing in
+nix run github:rskew/roadmap-dfs                         # the screen (dfs-tui), there
+nix run github:rskew/roadmap-dfs#dfs-sandbox -- claude   # a container, with the dfs-* commands on its PATH
+nix run github:rskew/roadmap-dfs#dfs-sandbox -- kiro     # the same, with kiro-cli
 ```
 
 Chains run under Claude Code by default; `x` in the screen switches to codex or
 kiro-cli, and `dfs-run --codex` / `dfs-run --kiro` do the same from the shell.
-kiro-cli needs a login first: `KIRO_API_KEY` in the environment (sandbox.sh passes
+kiro-cli needs a login first: `KIRO_API_KEY` in the environment (dfs-sandbox passes
 it through), or `kiro-cli login --use-device-flow` once.
 
-The package puts `dfs` (the screen), `dfs-run`, `dfs-init`, `dfs-hook`, `dfs-tree`
-and the rest of `scripts/dfs_*` on PATH, one command per script.
+One name per command: `scripts/dfs_foo.py` (or `.sh`) is the command `dfs-foo` in
+the package and the app `#dfs-foo` in the flake, for every script that runs on its
+own. Installed, they are all on PATH; with nothing installed, `dfs-init` writes
+hooks and prints next steps that go through the flake (`DFS_FLAKE` names another).

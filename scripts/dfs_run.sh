@@ -53,7 +53,7 @@
 #         CODEX_CMD        how codex is launched here — also a nix command by default
 #         KIRO_CMD         how kiro-cli is launched here — also a nix command by default,
 #                          of kiro-cli-unwrapped (nixpkgs' kiro-cli is a bwrap FHS env,
-#                          which cannot start inside sandbox.sh's container)
+#                          which cannot start inside dfs_sandbox.sh's container)
 #         NIX_AGENT_FLAGS  extra flags for the nix command in those defaults
 #                          (default: none)
 #         AGENT_NIXPKGS_REV the nixpkgs revision the defaults launch from

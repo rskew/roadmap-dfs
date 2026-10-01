@@ -6,6 +6,7 @@ Run:  python3 <scripts>/test_dfs_init.py
 """
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
@@ -87,6 +88,49 @@ class Init(unittest.TestCase):
         rc, out = self.run_init()
         self.assertEqual(rc, 2)
         self.assertIn("not in a git repo", out)
+
+    def from_the_store(self):
+        """As `nix run <flake>#dfs-init` runs it: the tool in the store, and nothing on
+        PATH but sh and git, so no dfs-* command. The bin directory is beside this
+        file, not in the temp directory, which is regularly on a noexec mount (this
+        container's /tmp is) where a stub on PATH cannot run."""
+        self.bin = Path(tempfile.mkdtemp(prefix=".test-bin-", dir=HERE))
+        self.addCleanup(shutil.rmtree, self.bin, True)
+        for tool in ("sh", "git"):
+            (self.bin / tool).symlink_to(shutil.which(tool))
+        tool, path = dfs_paths.TOOL_ROOT, os.environ["PATH"]
+        dfs_paths.TOOL_ROOT = Path("/nix/store/0000-roadmap-dfs/share/roadmap-dfs")
+        os.environ["PATH"] = str(self.bin)
+        self.addCleanup(setattr, dfs_paths, "TOOL_ROOT", tool)
+        self.addCleanup(os.environ.__setitem__, "PATH", path)
+
+    def test_from_the_flake_the_next_steps_name_the_flake(self):
+        self.from_the_store()
+        rc, out = self.run_init()
+        self.assertEqual(rc, 0, out)
+        self.assertIn("nix run %s#dfs-run -- --open" % dfs_paths.FLAKE, out)
+        self.assertIn("Or the screen:    nix run %s#dfs-tui\n" % dfs_paths.FLAKE, out)
+        self.assertIn("    nix run %s#dfs-init" % dfs_paths.FLAKE, dfs_paths.missing_message())
+
+    def test_from_the_flake_the_hook_runs_the_guard_from_the_flake(self):
+        """No DFS_TOOL and no dfs-hook on PATH: a commit touching .dfs runs the guard
+        with `nix run`, and exits with it; one that does not never calls nix."""
+        self.from_the_store()
+        self.run_init()
+        (self.bin / "nix").write_text('#!/bin/sh\necho "$@" > "%s/nix-args"\nexit 1\n' % self.root)
+        (self.bin / "nix").chmod(0o755)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        env = {"PATH": str(self.bin), "HOME": str(self.root)}
+        run = lambda: subprocess.run(["sh", str(hook)], cwd=self.root, env=env,
+                                     capture_output=True, text=True)
+        (self.root / "code.txt").write_text("x\n")
+        subprocess.run(["git", "add", "code.txt"], cwd=self.root, check=True)
+        self.assertEqual(run().returncode, 0)
+        self.assertFalse((self.root / "nix-args").exists())
+        subprocess.run(["git", "add", ".dfs"], cwd=self.root, check=True)
+        self.assertEqual(run().returncode, 1)
+        self.assertEqual((self.root / "nix-args").read_text(),
+                         "run %s#dfs-hook -- pre-commit\n" % dfs_paths.FLAKE)
 
 
 if __name__ == "__main__":

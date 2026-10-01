@@ -19,14 +19,14 @@
 # file at its root (see below); CONTAINER_APP_CMD overrides it ad hoc.
 #
 # Usage:
-#   container.sh shell                  App in background, interactive bash
-#   container.sh claude [args...]       App in background, then claude
-#   container.sh codex [args...]        App in background, then codex
-#   container.sh gemini [args...]       App in background, then gemini
-#   container.sh kiro [args...]         App in background, then kiro-cli
-#   container.sh app                    Just the app, in the foreground
-#   container.sh exec <command> [args]  App in background, then any command
-#   container.sh run <command> [args]   Any command, app NOT started
+#   dfs-sandbox shell                  App in background, interactive bash
+#   dfs-sandbox claude [args...]       App in background, then claude
+#   dfs-sandbox codex [args...]        App in background, then codex
+#   dfs-sandbox gemini [args...]       App in background, then gemini
+#   dfs-sandbox kiro [args...]         App in background, then kiro-cli
+#   dfs-sandbox app                    Just the app, in the foreground
+#   dfs-sandbox exec <command> [args]  App in background, then any command
+#   dfs-sandbox run <command> [args]   Any command, app NOT started
 #
 # Environment:
 #   CONTAINER_ENGINE   docker|podman                     (default: docker)
@@ -44,18 +44,18 @@
 #   CONTAINER_MOUNTS   extra mounts, e.g. "/dev/ttyUSB0:/dev/ttyUSB0"
 #   CONTAINER_ENV      extra env vars, e.g. "FOO=bar BAZ=qux"
 #   CONTAINER_PATH_PREFIX  prepended to the container's PATH, e.g. a store path's
-#                      bin (the flake's `sandbox` app puts roadmap-dfs there)
+#                      bin (the flake's `dfs-sandbox` puts the dfs-* commands there)
 #   CONTAINER_SHM_SIZE                                   (default: 1g)
 #   CONTAINER_APPARMOR_MODE  default|unconfined          (default: default)
 #   KIRO_API_KEY       passed through when set, so kiro-cli runs headless without
 #                      a login (otherwise: `kiro-cli login --use-device-flow` once,
-#                      on the host or in `container.sh kiro`)
+#                      on the host or in `dfs-sandbox kiro`)
 #
 # Example — put this in <repo>/.container.env:
 #   CONTAINER_APP_CMD=scripts/start-dev.sh
 #   CONTAINER_PORTS=8006
 #   CONTAINER_APP_READY_PORT=8006
-# then `container.sh claude` from the repo runs claude with the app already up.
+# then `dfs-sandbox claude` from the repo runs claude with the app already up.
 #
 # The app's output goes to $HOME/app.log inside the container.
 
@@ -401,13 +401,13 @@ main() {
       run_in_container bash
       ;;
     app)
-      [[ -n "${CONTAINER_APP_CMD}" ]] || { echo "container.sh app needs CONTAINER_APP_CMD or scripts/start-dev.sh" >&2; exit 1; }
+      [[ -n "${CONTAINER_APP_CMD}" ]] || { echo "dfs-sandbox app needs CONTAINER_APP_CMD or scripts/start-dev.sh" >&2; exit 1; }
       # Run the app in the foreground instead of backgrounding it.
       CONTAINER_START_APP=0
       run_in_container bash -lc "exec ${CONTAINER_APP_CMD}"
       ;;
     run|exec)
-      [[ $# -gt 0 ]] || { echo "container.sh ${mode} requires a command" >&2; exit 1; }
+      [[ $# -gt 0 ]] || { echo "dfs-sandbox ${mode} requires a command" >&2; exit 1; }
       run_in_container "$@"
       ;;
     codex)
