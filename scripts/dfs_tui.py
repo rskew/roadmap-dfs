@@ -613,7 +613,7 @@ KEYS = [
     ("items", "}  >", ord("}"), "in", "move into the branch above"),
     ("items", "b", ord("b"), "fence", "put a fence above it, or take the fence away"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
-    ("items", "x", ord("x"), "agent", "switch the agent: claude, codex or kiro"),
+    ("items", "x", ord("x"), "agent", "switch the agent: claude, codex or kiro (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
     ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
     ("tree", "a", ord("a"), "answer", "answer the raise here"),
@@ -1498,6 +1498,22 @@ def read_activity(path, keep=ACTIVITY_KEEP):
     return out
 
 
+def agent_file():
+    """Where the last `x` choice is kept, so the next screen launches the same agent:
+    beside `activity.log`, gitignored, and outside what the file watch reads."""
+    return os.path.join(dfs_runs.run_root(), "agent")
+
+
+def read_agent(path):
+    """The agent `path` names, or claude when it names none (or nothing we know)."""
+    try:
+        with open(path, errors="replace") as fh:
+            name = fh.read().strip()
+    except OSError:
+        return "claude"
+    return name if name in AGENTS else "claude"
+
+
 class UI:
     # State a screen built without __init__ (the tests' `object.__new__`) still
     # needs to draw: nothing being typed, no activity yet, the whole list shown.
@@ -1532,7 +1548,7 @@ class UI:
         # Which half of the item pane the keys drive: the item list at the top, or
         # the item's tree below it. Tab swaps them; see `tree_focused`.
         self.focus = "list"
-        self.agent = "claude"       # which dfs_run.sh launches: one of AGENTS
+        self.agent = read_agent(agent_file())   # which dfs_run.sh launches: one of AGENTS
         self.msg = ""
         self.agent_update = None    # the process start_agent_update began, from main
         self.data = load()
@@ -4226,6 +4242,12 @@ class UI:
         elif ch == ord("x"):
             self.agent = AGENTS[(AGENTS.index(self.agent) + 1) % len(AGENTS)]
             self.msg = "agent: " + self.agent
+            if self.real:
+                try:
+                    with open(os.path.join(dfs_runs.ensure_run_root(), "agent"), "w") as fh:
+                        fh.write(self.agent + "\n")
+                except OSError:
+                    pass
         elif ch == ord("3"):
             # ⚠️ It was `r`, which now runs the review. The pane is called §3 and this
             # is its digit, so the key still spells what it opens — and moving a

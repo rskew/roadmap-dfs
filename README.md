@@ -15,7 +15,8 @@ nix run github:rskew/roadmap-dfs#dfs-sandbox -- kiro     # the same, with kiro-c
 ```
 
 Chains run under Claude Code by default; `x` in the screen switches to codex or
-kiro-cli, and `dfs-run --codex` / `dfs-run --kiro` do the same from the shell.
+kiro-cli (and the screen remembers the choice next time), and `dfs-run --codex` /
+`dfs-run --kiro` do the same from the shell.
 kiro-cli needs a login first: `KIRO_API_KEY` in the environment (dfs-sandbox passes
 it through), or `kiro-cli login --use-device-flow` once.
 

@@ -336,6 +336,35 @@ class TheActivityLog(unittest.TestCase):
                          [(100.0, "run", "$ a"), (200.0, "stop", "walk off — x")])
 
 
+class TheAgentIsRemembered(unittest.TestCase):
+    """`x`'s choice outlives the screen: the next one launches the same agent."""
+
+    def test_the_file_is_read_back(self):
+        import tempfile
+        f = Path(tempfile.mkdtemp()) / "agent"
+        self.assertEqual(TUI.read_agent(str(f)), "claude")      # no file yet
+        f.write_text("kiro\n")
+        self.assertEqual(TUI.read_agent(str(f)), "kiro")
+        f.write_text("gemini\n")                               # one we do not run
+        self.assertEqual(TUI.read_agent(str(f)), "claude")
+
+    def test_x_writes_what_the_next_screen_reads(self):
+        import os
+        import tempfile
+        root = tempfile.mkdtemp()
+        old = (TUI.dfs_runs.run_root, TUI.dfs_runs.ensure_run_root)
+        TUI.dfs_runs.run_root = TUI.dfs_runs.ensure_run_root = lambda: root
+        try:
+            ui = a_screen([])
+            ui.real, ui.agent, ui.pane = True, "claude", "item"
+            ui.act(ord("x"))
+            self.assertEqual(ui.agent, "codex")
+            self.assertEqual(TUI.read_agent(TUI.agent_file()), "codex")
+            self.assertTrue(os.path.exists(os.path.join(root, "agent")))
+        finally:
+            TUI.dfs_runs.run_root, TUI.dfs_runs.ensure_run_root = old
+
+
 class Ringing(unittest.TestCase):
     """The bell is for the ends the walk exists to bring back, and nothing else."""
 
