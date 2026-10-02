@@ -42,6 +42,10 @@
             procps
             util-linux # `script`
           ]);
+          # The screen opens $EDITOR, else vi, for `e` and for the words it takes from the
+          # author, and a sandbox or a minimal box may have neither. Last on PATH, so
+          # the one the author has is still the one they get.
+          fallbackPath = lib.makeBinPath [ pkgs.vim ];
         in
         pkgs.stdenvNoCC.mkDerivation {
           pname = "roadmap-dfs";
@@ -67,7 +71,7 @@
             patchShebangs $share
 
             ${lib.concatStrings (lib.mapAttrsToList (name: file: ''
-              makeWrapper $share/scripts/${file} $out/bin/${name} --prefix PATH : ${runtimePath}
+              makeWrapper $share/scripts/${file} $out/bin/${name} --prefix PATH : ${runtimePath} --suffix PATH : ${fallbackPath}
             '') commands)}
             wrapProgram $out/bin/sandbox --prefix CONTAINER_PATH_PREFIX : $out/bin
 

@@ -3644,6 +3644,11 @@ class UI:
         except KeyboardInterrupt:
             rc = 130
             print("\n(interrupted)")
+        except OSError as e:
+            # A command that is not there (an $EDITOR this box lacks) is said, here,
+            # rather than ending the screen with a traceback.
+            rc = 127
+            print("\ncannot run %s: %s" % (argv[0], e.strerror or e))
         if pause:
             try:
                 input("\n[enter] back to the roadmap ")
