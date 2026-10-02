@@ -68,12 +68,12 @@ def snippet(hook):
     `.dfs`, since it may fetch: every other commit stays as fast as without it."""
     base = " HEAD" if hook == "pre-merge-commit" else ""
     return ("# The roadmap guard (roadmap-dfs). DFS_TOOL, else the path below, else\n"
-            "# `hook` on PATH, else the tool's flake (DFS_FLAKE).\n"
+            "# `dfs-hook` on PATH, else the tool's flake (DFS_FLAKE).\n"
             'dfs_tool="${DFS_TOOL:-%s}"\n'
             'if [ -n "$dfs_tool" ] && [ -f "$dfs_tool/scripts/hook.sh" ]; then\n'
             '  sh "$dfs_tool/scripts/hook.sh" %s || exit 1\n'
-            "elif command -v hook >/dev/null 2>&1; then\n"
-            "  hook %s || exit 1\n"
+            "elif command -v dfs-hook >/dev/null 2>&1; then\n"
+            "  dfs-hook %s || exit 1\n"
             'elif [ -n "$(git diff --cached --name-only%s -- .dfs)" ]; then\n'
             "  if command -v nix >/dev/null 2>&1; then\n"
             '    nix run "${DFS_FLAKE:-%s}#hook" -- %s || exit 1\n'

@@ -58,7 +58,7 @@
           dontConfigure = true;
           dontBuild = true;
 
-          # sandbox also puts the commands on the container's PATH. The container
+          # sandbox also puts the commands on the container's PATH, as dfs-<name>. The container
           # mounts the host's /nix/store, so the store path is valid inside it as it is.
           installPhase = ''
             runHook preInstall
@@ -73,7 +73,13 @@
             ${lib.concatStrings (lib.mapAttrsToList (name: file: ''
               makeWrapper $share/scripts/${file} $out/bin/${name} --prefix PATH : ${runtimePath} --suffix PATH : ${fallbackPath}
             '') commands)}
-            wrapProgram $out/bin/sandbox --prefix CONTAINER_PATH_PREFIX : $out/bin
+            # The container's PATH gets the commands as `dfs-<name>`: bare `tree`,
+            # `run` or `init` there would shadow, or be mistaken for, other programs.
+            mkdir -p $out/libexec/dfs-bin
+            ${lib.concatStrings (lib.mapAttrsToList (name: _: ''
+              ln -s $out/bin/${name} $out/libexec/dfs-bin/dfs-${name}
+            '') commands)}
+            wrapProgram $out/bin/sandbox --prefix CONTAINER_PATH_PREFIX : $out/libexec/dfs-bin
 
             runHook postInstall
           '';

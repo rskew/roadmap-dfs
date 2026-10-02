@@ -216,12 +216,18 @@ def missing_message() -> str:
 
 def command(script: str, *args: str) -> str:
     """One of the tool's scripts as the reader should type it, from the work root:
-    `foo` when the tool is installed, through the flake when it is a store copy
+    `dfs-foo` in the sandbox, `foo` when the tool is installed, through the flake when it is a store copy
     that `nix run` left on no PATH, and the script itself in a checkout."""
     if str(TOOL_ROOT).startswith("/nix/store/"):
         name = Path(script).stem.replace("_", "-")
-        if shutil.which(name):
-            return " ".join((name,) + args)
+        # `dfs-<name>` is what the sandbox puts on its PATH (bare `tree` or `init`
+        # would be other programs' names); the bare name is ours only where it
+        # resolves into this package, as an installed one does.
+        mine = str(TOOL_ROOT.parent.parent) + "/"
+        for cmd in ("dfs-" + name, name):
+            found = shutil.which(cmd)
+            if found and (cmd != name or os.path.realpath(found).startswith(mine)):
+                return " ".join((cmd,) + args)
         run = "nix run %s#%s" % (os.environ.get("DFS_FLAKE") or FLAKE, name)
         return " ".join((run, "--") + args) if args else run
     path = rel(SCRIPTS / script)

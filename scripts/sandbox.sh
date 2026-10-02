@@ -45,7 +45,7 @@
 #   CONTAINER_MOUNTS   extra mounts, e.g. "/dev/ttyUSB0:/dev/ttyUSB0"
 #   CONTAINER_ENV      extra env vars, e.g. "FOO=bar BAZ=qux"
 #   CONTAINER_PATH_PREFIX  prepended to the container's PATH, e.g. a store path's
-#                      bin (the flake's `sandbox` puts the tool's commands there)
+#                      directory of `dfs-<name>` links (the flake's `sandbox` puts the tool's commands there)
 #   TERM COLORTERM COLORFGBG NO_COLOR DFS_THEME  passed through when set, so a screen
 #                      looks as it does outside the container
 #   CONTAINER_SHM_SIZE                                   (default: 1g)

@@ -10,7 +10,7 @@ DFS on your roadmap:
 ```sh
 nix run github:rskew/roadmap-dfs#init                    # start a roadmap in the repo you're standing in
 nix run github:rskew/roadmap-dfs                         # the screen (tui), there
-nix run github:rskew/roadmap-dfs#sandbox -- claude       # a container, with the tool's commands on its PATH
+nix run github:rskew/roadmap-dfs#sandbox -- claude       # a container, with the commands on its PATH as dfs-<name>
 nix run github:rskew/roadmap-dfs#sandbox -- kiro         # the same, with kiro-cli
 nix run github:rskew/roadmap-dfs#sandbox -- opencode     # the same, with opencode
 ```
@@ -47,5 +47,6 @@ same `baseURL: http://127.0.0.1:11434/v1` works on the host and in the sandbox
 
 One name per command: `scripts/foo.py` (or `.sh`) is the command `foo` in
 the package and the app `#foo` in the flake, for every script that runs on its
-own (`init`, `run`, `tui`, `sandbox`, …). Installed, they are all on PATH; with nothing installed, `init` writes
+own (`init`, `run`, `tui`, `sandbox`, …). Installed, they are all on PATH, and in the
+sandbox they are there as `dfs-init`, `dfs-run`, `dfs-tui`, …; with nothing installed, `init` writes
 hooks and prints next steps that go through the flake (`DFS_FLAKE` names another).
