@@ -9,16 +9,16 @@
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      # One name per command, everywhere: scripts/dfs_foo.py (or .sh) is the command
-      # `dfs-foo` and the app `.#dfs-foo`. A script is a command when it runs on its
+      # One name per command, everywhere: scripts/foo.py (or .sh) is the command
+      # `foo` and the app `.#foo`. A script is a command when it runs on its
       # own: every .sh, and a .py with a __main__; the rest are modules. (Not
-      # lib.hasInfix: it is a regex match, which overflows the stack on dfs_tui.py.)
+      # lib.hasInfix: it is a regex match, which overflows the stack on tui.py.)
       contains = needle: text: builtins.replaceStrings [ needle ] [ "" ] text != text;
       commands = lib.mapAttrs' (file: _: lib.nameValuePair
           (lib.replaceStrings [ "_" ] [ "-" ] (lib.removeSuffix ".py" (lib.removeSuffix ".sh" file)))
           file)
         (lib.filterAttrs (file: type: type == "regular"
-            && lib.hasPrefix "dfs_" file
+            && !(lib.hasPrefix "test_" file)
             && (lib.hasSuffix ".sh" file
                 || (lib.hasSuffix ".py" file
                     && contains "__name__ == \"__main__\"" (builtins.readFile (./scripts + "/${file}")))))
@@ -54,7 +54,7 @@
           dontConfigure = true;
           dontBuild = true;
 
-          # dfs-sandbox also puts the commands on the container's PATH. The container
+          # sandbox also puts the commands on the container's PATH. The container
           # mounts the host's /nix/store, so the store path is valid inside it as it is.
           installPhase = ''
             runHook preInstall
@@ -69,14 +69,14 @@
             ${lib.concatStrings (lib.mapAttrsToList (name: file: ''
               makeWrapper $share/scripts/${file} $out/bin/${name} --prefix PATH : ${runtimePath}
             '') commands)}
-            wrapProgram $out/bin/dfs-sandbox --prefix CONTAINER_PATH_PREFIX : $out/bin
+            wrapProgram $out/bin/sandbox --prefix CONTAINER_PATH_PREFIX : $out/bin
 
             runHook postInstall
           '';
 
           meta = {
             description = "DFS on your roadmap";
-            mainProgram = "dfs-tui";
+            mainProgram = "tui";
           };
         };
     in
@@ -95,6 +95,6 @@
             meta.description = "roadmap-dfs: scripts/${file}";
           }) commands;
         in
-        apps // { default = apps.dfs-tui; });
+        apps // { default = apps.tui; });
     };
 }

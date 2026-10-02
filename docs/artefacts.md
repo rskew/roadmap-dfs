@@ -36,7 +36,7 @@ the raise, and a diagram is an aid, never the carrier.
    failure available here.
 3. Check it, and then LOOK at it:
 
-       <scripts>/dfs_artefact_check.sh .dfs/artefacts/<uuid>.html
+       <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
 
    (`<scripts>` is the tool's scripts directory, which your briefing names.) It
    takes `playwright` from PATH, else from the dev shell `.dfs/playwright-shell`

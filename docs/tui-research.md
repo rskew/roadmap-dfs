@@ -1,7 +1,7 @@
 # TUIs: what works, what doesn't, and for what
 
 Notes from surveying two different sets of terminal UIs, taken 2026-09-30 with
-`dfs_tui.py` in mind. The sets overlap less than you would expect, and the gap
+`tui.py` in mind. The sets overlap less than you would expect, and the gap
 between them is itself the first lesson:
 
 - **Highly regarded** — what people recommend, write posts about, and put on
@@ -37,11 +37,11 @@ lnav needs a real log corpus, so they were left out.
 | **htop** 3.5 | 16 | `/` and `\` (filter) take over the F-key bar with their own keys (`F3Next S-F3Prev EscCancel Search: python`). Both act as you type, and Esc cancels straight away. Between two snapshots a second apart, rows had swapped places under the sort. |
 | **btop** 1.4 | 82 | Truecolor, and it paints its own black background over the terminal's theme. It looks calm anyway because the borders are dark grey (`303030`, `404040`), text is light grey, and colour is kept for data. Box keys are superscript digits in the border (`¹cpu ²mem ³net`). |
 | **helix** 25.07 | 8 (theme) | `space` pops up every continuation with a one-line meaning. At `:`, typing `w` shows the matching commands as a grid, with a box above describing the top one (what it does, aliases, flags) before ⏎. |
-| **fzf** 0.74 | 8 | `tuipy` finds `scripts/dfs_tui.py` (letters in order). The selected row is a dark grey background (`303030`) plus a thin coloured `▌` in the first column rather than reverse video. Matched letters are tinted, the chrome is mid-grey (`5f5f5f`), and a `1/39` count sits on the prompt's rule. |
+| **fzf** 0.74 | 8 | `tuipy` finds `scripts/tui.py` (letters in order). The selected row is a dark grey background (`303030`) plus a thin coloured `▌` in the first column rather than reverse video. Matched letters are tinted, the chrome is mid-grey (`5f5f5f`), and a `1/39` count sits on the prompt's rule. |
 | **ncdu** 2.11 | 3 | Plain, reverse and bold reverse, and nothing else. It reads perfectly well, and it parks the cursor on the selected row. |
 | **visidata** 3.4 | 21 | After each key, the bottom-right shows the key and the command it ran (`Shift+F   freq-col`), and the bottom-left shows the stack of sheets as a breadcrumb (`1›t | 2📶t_item_freq`). A first-visit help sidebar opens on its own, which is useful the first time and in the way after that. |
 | **yazi** 26.9 | 19 | Parent · current · preview columns. Long names are cut in the middle so the extension survives (`new….txt`). Its icons need a Nerd Font and show as unknown glyphs without one. |
-| *dfs_tui.py*, for comparison | 5 | Two full-width reverse bars (the selected row and the footer) are the loudest things on screen. The header spends half its width on zeros (`refuted 0 · parked 0 · pruned 0`). |
+| *tui.py*, for comparison | 5 | Two full-width reverse bars (the selected row and the footer) are the loudest things on screen. The header spends half its width on zeros (`refuted 0 · parked 0 · pruned 0`). |
 
 What this changed from sections 1–8:
 
@@ -141,7 +141,7 @@ the wrong model for a tool someone uses for one project.
   confirmation rather than trust the Shift key.
 - **Esc meaning different things.** In vim-likes it's mode-exit; in k9s it's back; in
   some apps it quits. Tools that make Esc *back one level, never quit* and `q` the only
-  exit (ncdu, k9s, `dfs_tui.py`) are the ones people stop being afraid of.
+  exit (ncdu, k9s, `tui.py`) are the ones people stop being afraid of.
 - **The conventions users arrive with**, which cost nothing to honour: `q` quit, `?`
   help, `/` search then `n`/`N`, `j`/`k` and arrows, `g`/`G` top/bottom, Tab to cycle
   focus, Enter to go in, Space to toggle/select, Ctrl+P palette
@@ -288,23 +288,23 @@ commands that also run on their own).
 
 ---
 
-## 9. For `dfs_tui.py` specifically
+## 9. For `tui.py` specifically
 
 Where it already matches what works: Esc goes back one level and never quits, `q` is
 the only exit (§2); chains run in the background with the screen kept (§4); follow
 breaks on a deliberate scroll (§4); a stopped walk leaves a dim reason where the badge
 was (§4); the footer is per context and computed from the same place as the action
-(§2); the screen is a view over `dfs_run.sh` and `dfs_state.py`, and anything that
+(§2); the screen is a view over `run.sh` and `state.py`, and anything that
 takes the author's words hands off to the runner (§7); decisions are pure functions
 beside the drawing (§7).
 
 What came of the gaps, taken 2026-09-30 in the order below (README, "The screen's
-conventions"; tests in `scripts/test_dfs_screen.py`):
+conventions"; tests in `scripts/test_screen.py`):
 
 1. **`?` lists every key**, the part for the pane you were on first, and ⏎ presses the
    one under the cursor in the pane it belongs to. `KEYS` is the table, and a test
    fails when `act` takes a key it doesn't list. The footer keeps `? keys` to the end.
-2. **A background chain's message is its runner line** (`$ scripts/dfs_run.sh W7 5 —
+2. **A background chain's message is its runner line** (`$ scripts/run.sh W7 5 —
    in the background…`). The console already opened with it and `shell()` already
    printed it; the status line was the gap.
 3. **`/` searches the current pane** (items, tree nodes, runs, artefacts, keys, or the

@@ -13,7 +13,7 @@ session carries it out.
 
 1. Your **briefing** is in the prompt: the law, the task's status and current node, what
    the author has said since the last finished session, and any uncommitted work. It is
-   derived by `dfs_state.py`, the same code the runner stops on, so do not re-derive it.
+   derived by `state.py`, the same code the runner stops on, so do not re-derive it.
    It names the tool's scripts directory: `<scripts>` in this file means that
    directory, wherever roadmap-dfs is installed.
 2. Read the task file, `.dfs/items/<task>.md`, whole: `## Goal`, `## Background` if
@@ -45,6 +45,7 @@ Evidence:
 - for: <an observation that bears on an assumption, and what it shows>
 - against: <the same>
 Determination: <what you concluded, and so where the work goes next>
+Assumes: <only when it applies: see below>
 Corrects: <only on a node carrying out a correction or backtrack: its ts>
 ```
 
@@ -56,6 +57,14 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   node you add and every log entry goes there; read every other part of the task too,
   since the task is all of them. You may edit a node in another part to determine it,
   never add to one. Commit subjects start with the tagged id (`W13.1@<tag>: <what it did>`).
+- **Most nodes only say that something was done. A few rest on an assumption.** Add
+  `Assumes:` to a node when you decided something you could not settle yourself and
+  the work now depends on it: a reading of an ambiguous Goal, a choice between
+  designs the author might make differently, a fact taken on trust, scope you
+  narrowed or widened. One or two plain sentences: what you assumed, and what
+  changes if it is wrong. The screen marks the node and names it when the author
+  accepts the tree, so keep it for what is both important and open to question; an
+  ordinary design choice the evidence supports is a Hypothesis, not an Assumes.
 - **Each field has one job.** The Approach is the implementation: what the node
   does, where, and the check that will show it worked. The Hypothesis is not a second
   description of the work; it is the assumptions the Approach rests on, the facts
@@ -90,18 +99,18 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 - Add nodes freely and keep them small. After each node, re-plan the open nodes ahead:
   edit, add or refute them. Backing up is normal.
 - **A determined node is history.** Once confirmed or refuted and committed, it is not
-  edited; `dfs_check.py` refuses it. Later understanding goes in a new node. Its
+  edited; `check.py` refuses it. Later understanding goes in a new node. Its
   evidence lines may MOVE, verbatim, into `.dfs/archive/items/<task>.md` (leaving
   `Evidence: archived.`), which is how a task file over its budget shrinks; append
   them at the archive's END under a `**<id> Evidence**:` heading, since nothing
   already there may move, and stage the archive in the same commit. Its Approach and
-  Hypothesis may move too, by `dfs_tree.py shelve <task> [<ids>]`, which appends
+  Hypothesis may move too, by `tree.py shelve <task> [<ids>]`, which appends
   each verbatim to the archive's end as `**<id> Approach**: <text>` and leaves
   `Approach: archived.`; `dfs_tree.load` and the TUI put the words back, and the
   critic finds them in the archive with the evidence. (`Plan:`, the Approach's old
   name, is still read as it.) Status, Parent and
   Determination never move.
-- **The log only grows, but its past may move.** `dfs_tree.py compact <task>` moves
+- **The log only grows, but its past may move.** `tree.py compact <task>` moves
   every entry older than the author's last answer, correction or accept, verbatim, to
   the archive's end under `**Log**:`. Every count is read through `dfs_tree.load`,
   which merges them back, so nothing the briefing says changes. Stage both files.
@@ -125,6 +134,14 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   finding that shows the Goal is not met arrives as a new open node (lesser ones
   batched into one), and the next session fixes it. After two reviews that did not
   settle, the runner raises to the author rather than reviewing again.
+- **The session that completes the tree writes the `## Summary`**, in the same commit
+  as the last node: a section ABOVE `## Goal` (add it, or rewrite it if a review
+  reopened the task), two to four plain sentences for someone who has not read the
+  tree. Say what the finished work does now, whether the Goal's scope was fully
+  met, and what was left out or done differently and why. No node ids, no
+  commit hashes and no tree vocabulary (refuted, parked, hypothesis): the screen shows
+  it to the author above the Goal, once the task is done, to answer "did it
+  get there?" without reading the tree.
 
 ## When `.dfs/` is gitignored
 
@@ -151,7 +168,7 @@ tooling itself (roadmap-dfs, the `.dfs` rules, their hooks), including one that
 blocks your task, is raised and not fixed in the task.
 
 ```
-python3 <scripts>/dfs_tree.py log <task> raise <node> <<'EOF'
+python3 <scripts>/tree.py log <task> raise <node> <<'EOF'
 <the decision, answerable without opening the code: the options, what each commits
 the work to, what you would do, and the strongest case against it>
 EOF
@@ -160,7 +177,7 @@ EOF
 **When the decision turns on how parts of the system are wired together**, so the
 author would otherwise have to rebuild the picture in their head from prose, write
 an artefact for it first: one self-contained HTML page in `.dfs/artefacts/`, checked
-with `<scripts>/dfs_artefact_check.sh` and its screenshot looked at, then linked
+with `<scripts>/artefact_check.sh` and its screenshot looked at, then linked
 from the raise as `http://localhost:<port>/<uuid>.html`. How to write one is
 `<scripts>/../docs/artefacts.md`; read it before starting one. The raise must still
 be answerable with the artefact gone, so the options and your recommendation stay
@@ -171,7 +188,7 @@ Then stop. A raise blocks the task until it is answered.
 
 ## The budget
 
-Run `python3 <scripts>/dfs_context.py` after each node: it reports your peak
+Run `python3 <scripts>/context.py` after each node: it reports your peak
 context against the checkpoint (§1 L1) and says when to wrap up. A session may walk
 several nodes. To wrap up, commit a node that is finished; for one that is not, write
 its evidence so far into the task file and stop. The next session picks up the

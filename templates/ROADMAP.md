@@ -50,7 +50,7 @@ and the siblings made after it are pruned too; refuted, it resumes at a sibling.
 
 ## §1 Settled law
 
-L1 · The session checkpoint is whatever `<scripts>/dfs_context.py` reports (the tool's
+L1 · The session checkpoint is whatever `<scripts>/context.py` reports (the tool's
 scripts directory, which the briefing names), never a number carried in a session's
 head, and never restated beside it.
 
