@@ -3340,12 +3340,19 @@ class UI:
             nd, st = row["node"], row["status"]
             fold = ("▸" if row["folded"] else "▾") if row["kids"] else " "
             flag = "  ● raise" if row["raises"] else ""
-            if nd["fields"].get("Hypothesis") and st not in ("refuted", "pruned"):
+            assumes = (nd["fields"].get("Hypothesis")
+                       if st not in ("refuted", "pruned") else "")
+            if assumes:
                 flag += "  ⚑ assumption"
             if row["raises_below"]:
                 flag += "  ● %d raise%s below" % (row["raises_below"],
                                                   "" if row["raises_below"] == 1 else "s")
             attr = (look("chrome") if st in TREE_QUIET else 0)
+            if assumes:
+                # ⚠️ AMBER AND BOLD, because most nodes are "something was done" and
+                # these are the ones the author is there to read. A raise is red and
+                # wins: it blocks the task, an assumption only asks to be looked at.
+                attr = look("amber") | curses.A_BOLD
             if row["raises"] or row["raises_below"]:
                 attr = red | curses.A_BOLD
             if sel:
@@ -3365,9 +3372,17 @@ class UI:
             for line in (textwrap.wrap(
                     head, max(20, width - 2), subsequent_indent=" " * (lead + 2))):
                 out.append((line, attr, below if len(out) > first else above))
+            inner = " " * (lead + 2)
+            if assumes and row["key"] not in self.tree_open:
+                # The assumption itself, under the row, so it is read without opening
+                # the node: two lines of it, and the rest is a ⏎ away.
+                said = textwrap.wrap(assumes, max(20, width - len(inner) - 2))
+                for line in said[:2]:
+                    out.append((inner + line, look("amber")))
+                if len(said) > 2:
+                    out[-1] = (out[-1][0].rstrip() + " …", look("amber"))
             if row["key"] not in self.tree_open and not row["raises"]:
                 continue
-            inner = " " * (lead + 2)
             for r in row["raises"]:
                 out.append((inner + "RAISE %s — needs you" % r["ts"], red | curses.A_BOLD))
                 for line in r["body"].splitlines():

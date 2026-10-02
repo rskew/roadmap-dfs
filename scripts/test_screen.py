@@ -572,12 +572,9 @@ The thing.
 
 """ + "".join("""### W1.%d · step %d
 Status: confirmed
-Hypothesis: it is step %d.
-Evidence:
-- for: it was.
 Determination: step %d is done.
 
-""" % (n, n, n, n) for n in range(1, 13)) + """## Log
+""" % (n, n, n) for n in range(1, 13)) + """## Log
 """
 
 
@@ -614,6 +611,42 @@ class TheTreeKeepsItsExpandedNodeInView(unittest.TestCase):
         shown = [l[0] for l in lines[scroll:scroll + body_h]]
         self.assertTrue(any("step 12 is done" in t for t in shown), shown)
         self.assertTrue(any(t.startswith(">") for t in shown), shown)
+
+
+class AnAssumptionStandsOut(unittest.TestCase):
+    """Most nodes say something was done; one that states a Hypothesis is marked, in
+    its own colour, with the assumption under it where it is read without opening."""
+
+    HYP = "the author means v2 only, and nothing reads the old cursor file"
+
+    def lines(self, open_it=False):
+        text = TREE.replace("### W1.2 · step 2\nStatus: confirmed\n",
+                            "### W1.2 · step 2\nStatus: confirmed\nHypothesis: %s.\n" % self.HYP)
+        ui = a_screen([item("W1")], pane="item", focus="tree", tree_open=set())
+        ui.tree_of = lambda task: (TUI.dfs_tree.parse(text, "W1"), "", {})
+        ui.status_attr = lambda status: 0
+        ui._tree_cache = {}
+        ui.tree_item = "W1"
+        TUI.LOOK["amber"] = 7000
+        if open_it:
+            ui.tree_open = {"W1.2"}
+        return ui.lines_tree(100)
+
+    def test_it_is_marked_coloured_and_says_what_it_assumes(self):
+        lines = self.lines()
+        head = next(l for l in lines if "W1.2" in l[0])
+        self.assertIn("⚑ assumption", head[0])
+        self.assertTrue(head[1] & 7000 and head[1] & curses.A_BOLD, head)
+        self.assertTrue(any(self.HYP in l[0] and l[1] == 7000 for l in lines))
+
+    def test_a_plain_node_is_not(self):
+        plain = next(l for l in self.lines() if "W1.3" in l[0])
+        self.assertNotIn("⚑", plain[0])
+        self.assertFalse(plain[1] & 7000, plain)
+
+    def test_opened_it_is_not_said_twice_in_a_row(self):
+        said = [l[0] for l in self.lines(open_it=True) if self.HYP in l[0]]
+        self.assertEqual(len(said), 1, said)
 
 
 if __name__ == "__main__":
