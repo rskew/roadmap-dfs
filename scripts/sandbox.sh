@@ -46,6 +46,8 @@
 #   CONTAINER_ENV      extra env vars, e.g. "FOO=bar BAZ=qux"
 #   CONTAINER_PATH_PREFIX  prepended to the container's PATH, e.g. a store path's
 #                      bin (the flake's `sandbox` puts the tool's commands there)
+#   TERM COLORTERM COLORFGBG NO_COLOR DFS_THEME  passed through when set, so a screen
+#                      looks as it does outside the container
 #   CONTAINER_SHM_SIZE                                   (default: 1g)
 #   CONTAINER_APPARMOR_MODE  default|unconfined          (default: default)
 #   KIRO_API_KEY       passed through when set, so kiro-cli runs headless without
@@ -337,6 +339,18 @@ run_in_container() {
     docker_args+=(-v "${HOME}/${d}:${CONTAINER_HOME}/${d}")
   done
 
+  # The terminal's own settings, by name. `docker run -t` sets TERM=xterm whatever the
+  # host has, which is eight colours and no selection band: the same screen drawn from
+  # a plainer palette than outside the container. COLORTERM and COLORFGBG are how a
+  # program learns the colours and the light or dark background, and NO_COLOR and
+  # DFS_THEME are the author's own say about both. (A TERM the container has no
+  # terminfo entry for, e.g. a newer terminal's own, makes curses fall back or fail:
+  # set TERM=xterm-256color for the run then.)
+  for name in TERM COLORTERM COLORFGBG NO_COLOR DFS_THEME; do
+    if [[ -n "${!name:-}" ]]; then
+      docker_args+=(-e "${name}")
+    fi
+  done
   # By name only, so the key's value never lands on a command line.
   if [[ -n "${KIRO_API_KEY:-}" ]]; then
     docker_args+=(-e KIRO_API_KEY)
