@@ -154,9 +154,9 @@ class Chain(unittest.TestCase):
         self.assertEqual(meta.get("stop"), "cap", out)
         self.assertEqual(meta.get("agent"), "kiro")
         argv = (self.aside / "argv-1").read_text().splitlines()
-        self.assertEqual(argv[:5], ["chat", "--output-format", "stream-json",
+        self.assertEqual(argv[:6], ["chat", "--v3", "--output-format", "stream-json",
                                     "--no-interactive", "--trust-all-tools"], argv)
-        self.assertTrue(argv[5].startswith("Follow "), argv[5][:80])
+        self.assertTrue(argv[6].startswith("Follow "), argv[5][:80])
         # The session id is kiro's, read out of its own stream, and the peak is the
         # largest `used` in it.
         self.assertEqual(meta.get("sid"), SID % 2, out)
@@ -246,7 +246,7 @@ class Screen(unittest.TestCase):
         self.assertIn(("  warn: x", "dim"), rows)
 
     def test_the_x_key_cycles_every_agent(self):
-        self.assertEqual(TUI.AGENTS, ("claude", "codex", "kiro"))
+        self.assertEqual(TUI.AGENTS, ("claude", "codex", "kiro", "opencode"))
 
 
 if __name__ == "__main__":

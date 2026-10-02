@@ -42,11 +42,11 @@
 # ⚠️ RUN IT FROM THE WORK ROOT. The repo whose roadmap this works is the CURRENT
 # DIRECTORY — there is no setting and nothing remembered — and it is `<cwd>/.dfs`.
 #
-# Usage:  <scripts>/dfs_run.sh [--codex|--kiro] <task> [cap]   e.g. --codex W4 5
+# Usage:  <scripts>/dfs_run.sh [--codex|--kiro|--opencode] <task> [cap]   e.g. --codex W4 5
 #         <scripts>/dfs_run.sh --review <task>   answer raises, correct nodes,
 #                                           accept a finished tree
 #         <scripts>/dfs_run.sh --open [task]     write a new task file
-#         <scripts>/dfs_run.sh [--codex|--kiro] --chat [task|project]
+#         <scripts>/dfs_run.sh [--codex|--kiro|--opencode] --chat [task|project]
 #         <scripts>/dfs_run.sh --bump-agent     pin the agents to nixpkgs now
 #                                           (dfs_tui.py does it in the background)
 # Env:    CLAUDE_CMD       how claude is launched here — a nix run, not a binary on PATH
@@ -54,13 +54,18 @@
 #         KIRO_CMD         how kiro-cli is launched here — also a nix command by default,
 #                          of kiro-cli-unwrapped (nixpkgs' kiro-cli is a bwrap FHS env,
 #                          which cannot start inside dfs_sandbox.sh's container)
+#         OPENCODE_CMD     how opencode is launched here — also a nix command by default.
+#                          Its model and endpoint are NOT set here: opencode reads them
+#                          from its own config (~/.config/opencode/opencode.json, or the
+#                          project's opencode.json, or $OPENCODE_CONFIG). Set
+#                          OPENCODE_CMD="opencode -m provider/model" to override for one run.
 #         NIX_AGENT_FLAGS  extra flags for the nix command in those defaults
 #                          (default: none)
 #         AGENT_NIXPKGS_REV the nixpkgs revision the defaults launch from
 #                          (default: the pin in .dfs/runs/agent-nixpkgs.rev)
 #         PERMISSION_FLAGS default --dangerously-skip-permissions; with --codex the
 #                          default is --dangerously-bypass-approvals-and-sandbox, and
-#                          with --kiro it is --trust-all-tools
+#                          with --kiro it is --trust-all-tools, and with --opencode --auto
 #         MAX_TURNS  (default: 100)         PROMPT  (default: the SKILL.md line)
 #         CHAT_PROMPT override the opening discussion prompt
 #         MAX_CONTEXT (default: 400000, the chain ceiling)
@@ -88,13 +93,14 @@ for a in "$@"; do
     --chat)    MODE=chat ;;
     --codex)   AGENT=codex ;;
     --kiro)    AGENT=kiro ;;
+    --opencode) AGENT=opencode ;;
     --bump-agent) MODE=bump ;;
     *)         args+=("$a") ;;
   esac
 done
 ITEM="${args[0]:-}"
 CAP="${args[1]:-5}"
-[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro] <task> [cap]  |  --review <task>  |  --open  |  [--codex|--kiro] --chat [task|project]" >&2; exit 2; }
+[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro|--opencode] <task> [cap]  |  --review <task>  |  --open  |  [--codex|--kiro|--opencode] --chat [task|project]" >&2; exit 2; }
 
 # No agent needs to be a binary on PATH: each default launcher is a Nix command
 # line, split into an argv. Override the provider's command to use a local checkout, a
@@ -118,14 +124,16 @@ export NIXPKGS_ALLOW_UNFREE="${NIXPKGS_ALLOW_UNFREE:-1}"
 if [ "$MODE" = bump ]; then
   exec python3 "$HERE/dfs_agent.py" --update
 fi
-if [ -z "${AGENT_NIXPKGS_REV:-}" ] && { { [ "$AGENT" = claude ] && [ -z "${CLAUDE_CMD:-}" ]; } || { [ "$AGENT" = codex ] && [ -z "${CODEX_CMD:-}" ]; } || { [ "$AGENT" = kiro ] && [ -z "${KIRO_CMD:-}" ]; }; }; then
+if [ -z "${AGENT_NIXPKGS_REV:-}" ] && { { [ "$AGENT" = claude ] && [ -z "${CLAUDE_CMD:-}" ]; } || { [ "$AGENT" = codex ] && [ -z "${CODEX_CMD:-}" ]; } || { [ "$AGENT" = kiro ] && [ -z "${KIRO_CMD:-}" ]; } || { [ "$AGENT" = opencode ] && [ -z "${OPENCODE_CMD:-}" ]; }; }; then
   AGENT_NIXPKGS_REV="$(python3 "$HERE/dfs_agent.py" --rev)" || exit 2
 fi
 AGENT_NIXPKGS="github:nixos/nixpkgs/${AGENT_NIXPKGS_REV:-}"
 NIX_AGENT_FLAGS="${NIX_AGENT_FLAGS:-}"
 # kiro-cli takes its session flags after `chat`, so that word is part of how it is
-# started rather than of the command a caller overrides.
+# started rather than of the command a caller overrides. `--v3` is its next-generation
+# agent; it takes the same headless flags (checked against 2.24's `chat --help`).
 AGENT_SUB=()
+CHAT_PROMPT_FLAG=()     # opencode's TUI takes its opening prompt as a flag, not an argument
 if [ "$AGENT" = codex ]; then
   AGENT_CMD_ENV=CODEX_CMD
   AGENT_CMD="${CODEX_CMD:-nix shell $NIX_AGENT_FLAGS $AGENT_NIXPKGS#codex -c codex}"
@@ -133,8 +141,15 @@ if [ "$AGENT" = codex ]; then
 elif [ "$AGENT" = kiro ]; then
   AGENT_CMD_ENV=KIRO_CMD
   AGENT_CMD="${KIRO_CMD:-nix shell $NIX_AGENT_FLAGS --impure $AGENT_NIXPKGS#kiro-cli-unwrapped -c kiro-cli}"
-  AGENT_SUB=(chat)
+  AGENT_SUB=(chat --v3)
   PERMISSION_FLAGS="${PERMISSION_FLAGS---trust-all-tools}"
+elif [ "$AGENT" = opencode ]; then
+  # `opencode run` is the headless form, so it is added where a session starts
+  # (run_session) and not here: the same word would turn the interactive chat into one.
+  AGENT_CMD_ENV=OPENCODE_CMD
+  AGENT_CMD="${OPENCODE_CMD:-nix shell $NIX_AGENT_FLAGS $AGENT_NIXPKGS#opencode -c opencode}"
+  CHAT_PROMPT_FLAG=(--prompt)
+  PERMISSION_FLAGS="${PERMISSION_FLAGS---auto}"
 else
   AGENT_CMD_ENV=CLAUDE_CMD
   AGENT_CMD="${CLAUDE_CMD:-nix run $NIX_AGENT_FLAGS --impure $AGENT_NIXPKGS#claude-code --}"
@@ -208,9 +223,11 @@ fi
 # that was missing until 2026-09-18. A budget nobody reads buys nothing: two chains
 # died with the runner's hour available and unused, each having backgrounded the e2e
 # suite and ended its turn expecting to be woken. Keep the two in step.
-# kiro-cli updates itself unless told not to, and a chain's agent is the pinned one.
+# kiro-cli and opencode update themselves unless told not to, and a chain's agent is the
+# pinned one.
 AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
            -u KIRO_SESSION_ID KIRO_NO_AUTO_UPDATE=1
+           OPENCODE_DISABLE_AUTOUPDATE=true
            BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-3600000}"
            BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS:-21600000}")
 
@@ -237,7 +254,7 @@ if [ "$MODE" = chat ]; then
   # which is why the defaults above test for unset rather than for empty) passes none
   # and sits through the prompts.
   echo "dfs_run: opening an interactive $AGENT session for $chat_subject"
-  exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" "${PERMISSION_ARGV[@]}" "$CHAT_PROMPT"
+  exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" "${PERMISSION_ARGV[@]}" "${CHAT_PROMPT_FLAG[@]}" "$CHAT_PROMPT"
 fi
 
 # The caller may name the directory. dfs_tui.py does, because it starts a chain in the
@@ -375,9 +392,9 @@ transcript_measure() {  # transcript -> "<peak> <turns>"
 transcript_turns() { transcript_measure "$1" | cut -d' ' -f2; }
 
 transcript_path() {  # session id, run log -> the provider's persisted transcript
-  # A kiro session's transcript IS the stream this chain captured (dfs_context.py,
-  # `_kiro_log`), and here the log is known without searching for it.
-  if [ "$AGENT" = kiro ]; then printf '%s\n' "$2"; return; fi
+  # A kiro or opencode session's transcript IS the stream this chain captured
+  # (dfs_context.py, `_kiro_log`), and here the log is known without searching for it.
+  if [ "$AGENT" = kiro ] || [ "$AGENT" = opencode ]; then printf '%s\n' "$2"; return; fi
   python3 - "$1" "$AGENT" <<'PY'
 import glob, os, re, sys
 sid, agent = sys.argv[1:]
@@ -444,8 +461,29 @@ print(dfs_context.kiro_session_id(recs))
 PY
 }
 
-stream_sid() {  # the session id in a codex or kiro stream so far
-  if [ "$AGENT" = kiro ]; then kiro_session_id "$1"; else codex_thread_id "$1"; fi
+# opencode's is the `sessionID` on every event of its `--format json` stream.
+opencode_session_id() {
+  python3 - "$1" "$HERE" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[2])
+import dfs_context
+recs = []
+try:
+    with open(sys.argv[1], errors="replace") as fh:
+        for n, line in enumerate(fh):
+            if n >= 200: break
+            try: recs.append(json.loads(line))
+            except Exception: continue
+except FileNotFoundError:
+    pass
+print(dfs_context.opencode_session_id(recs))
+PY
+}
+
+stream_sid() {  # the session id in a codex, kiro or opencode stream so far
+  if [ "$AGENT" = kiro ]; then kiro_session_id "$1"
+  elif [ "$AGENT" = opencode ]; then opencode_session_id "$1"
+  else codex_thread_id "$1"; fi
 }
 
 CODEX_SID_TRIES="${CODEX_SID_TRIES:-120}"
@@ -463,11 +501,27 @@ stream_watch_sid() {  # stream_watch_sid <log> <pid>
 }
 
 # Start one fresh non-interactive session and leave its provider session id in SID.
-# Codex and Kiro assign the id and emit it in their JSONL stream; Claude accepts ours
-# up front.
+# Codex, Kiro and Opencode assign the id and emit it in their JSONL stream; Claude
+# accepts ours up front.
 run_session() {
   local prompt="$1" log="$2" session_rc agent_pid
-  if [ "$AGENT" = kiro ]; then
+  if [ "$AGENT" = opencode ]; then
+    # As kiro, below, and for the same reasons: stderr goes into the log (a config
+    # that does not parse, or a provider that cannot be reached, says so there and not
+    # in the stream), and the log is the transcript. The prompt is a positional, so it
+    # goes after every flag; `--format json` is the stream, and the run's exit status
+    # is 1 when it ends in an `error` event.
+    SID=""
+    meta_set sid=""
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --format json "${PERMISSION_ARGV[@]}" \
+      "$prompt" > "$log" 2>&1 < /dev/null &
+    agent_pid=$!
+    stream_watch_sid "$log" "$agent_pid"
+    wait "$agent_pid"
+    session_rc=$?
+    SID="$(stream_sid "$log")"
+    meta_set sid="$SID"
+  elif [ "$AGENT" = kiro ]; then
     # As codex, below. stderr goes into the log too: kiro reports a failed login or
     # a limit there and not in the stream, and the log is all a finished run leaves.
     # The lines that are not JSON are read as kiro's own (dfs_limit.py, dfs_tui.py).
@@ -752,6 +806,8 @@ fi
 echo "dfs_run: task $ITEM, cap $CAP, agent $AGENT, logs in $RUNDIR"
 if [ "$AGENT" = codex ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} exec --json ${PERMISSION_ARGV[*]} <prompt>"
+elif [ "$AGENT" = opencode ]; then
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} run --format json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = kiro ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
 else

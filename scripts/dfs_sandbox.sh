@@ -24,6 +24,7 @@
 #   dfs-sandbox codex [args...]        App in background, then codex
 #   dfs-sandbox gemini [args...]       App in background, then gemini
 #   dfs-sandbox kiro [args...]         App in background, then kiro-cli
+#   dfs-sandbox opencode [args...]     App in background, then opencode
 #   dfs-sandbox app                    Just the app, in the foreground
 #   dfs-sandbox exec <command> [args]  App in background, then any command
 #   dfs-sandbox run <command> [args]   Any command, app NOT started
@@ -50,6 +51,13 @@
 #   KIRO_API_KEY       passed through when set, so kiro-cli runs headless without
 #                      a login (otherwise: `kiro-cli login --use-device-flow` once,
 #                      on the host or in `dfs-sandbox kiro`)
+#   opencode           reads its model, provider and endpoint from ~/.config/opencode/
+#                      and its login from ~/.local/share/opencode/auth.json; both are
+#                      mounted when they exist. A provider key that config reads as
+#                      {env:NAME} goes in through CONTAINER_ENV. OPENCODE_CONFIG and
+#                      OPENCODE_CONFIG_CONTENT are passed through by name when set.
+#                      An endpoint on the host's own localhost is not reachable from
+#                      the container.
 #
 # Example — put this in <repo>/.container.env:
 #   CONTAINER_APP_CMD=scripts/start-dev.sh
@@ -256,6 +264,7 @@ run_in_container() {
     -e CONTAINER_APP_READY_PORT="${CONTAINER_APP_READY_PORT}"
     -e CONTAINER_APP_READY_TIMEOUT="${CONTAINER_APP_READY_TIMEOUT}"
     -v "${REPO_ROOT}:${CONTAINER_WORKDIR}"
+    --tmpfs "${CONTAINER_HOME}/.cache:uid=$(id -u),gid=$(id -g),mode=700"
     -v "${CONTAINER_STATE_DIR}/nix-cache:${CONTAINER_HOME}/.cache/nix"
     -v /nix/store:/nix/store:ro
     -v "${nix_bin_dir}:/host-nix-bin:ro"
@@ -296,22 +305,41 @@ run_in_container() {
     fi
   done
 
-  # kiro-cli keeps its login in ~/.local/share/kiro-cli/data.sqlite3. A bind mount
-  # that deep would have the engine create ~/.local and ~/.local/share owned by
-  # root, and every other tool writing there (claude among them) would fail, so the
-  # two parents get user-owned tmpfs of their own first.
-  if [[ -d "${HOME}/.local/share/kiro-cli" ]]; then
-    docker_args+=(
-      --tmpfs "${CONTAINER_HOME}/.local:uid=$(id -u),gid=$(id -g),mode=700"
-      --tmpfs "${CONTAINER_HOME}/.local/share:uid=$(id -u),gid=$(id -g),mode=700"
-      -v "${HOME}/.local/share/kiro-cli:${CONTAINER_HOME}/.local/share/kiro-cli"
-    )
-  fi
+  # kiro-cli keeps its login in ~/.local/share/kiro-cli/data.sqlite3, and opencode its
+  # in ~/.local/share/opencode (auth.json beside its session database) and its config
+  # in ~/.config/opencode. A bind mount that deep would have the engine create
+  # ~/.local, ~/.local/share and ~/.config owned by root, and every other tool
+  # writing there (claude among them) would fail, so each parent that is needed gets
+  # a user-owned tmpfs of its own first. ~/.cache is given one above, for the same
+  # reason: opencode keeps its caches there and cannot create them in a root-owned dir.
+  local -a deep=() parents=()
+  local d
+  for d in .local/share/kiro-cli .local/share/opencode .config/opencode; do
+    if [[ -d "${HOME}/${d}" ]]; then
+      deep+=("${d}")
+      case "${d}" in
+        .local/*) parents+=(.local .local/share) ;;
+        .config/*) parents+=(.config) ;;
+      esac
+    fi
+  done
+  for d in $(printf '%s\n' ${parents[@]+"${parents[@]}"} | awk '!seen[$0]++'); do
+    docker_args+=(--tmpfs "${CONTAINER_HOME}/${d}:uid=$(id -u),gid=$(id -g),mode=700")
+  done
+  for d in ${deep[@]+"${deep[@]}"}; do
+    docker_args+=(-v "${HOME}/${d}:${CONTAINER_HOME}/${d}")
+  done
 
   # By name only, so the key's value never lands on a command line.
   if [[ -n "${KIRO_API_KEY:-}" ]]; then
     docker_args+=(-e KIRO_API_KEY)
   fi
+  local name
+  for name in OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT; do
+    if [[ -n "${!name:-}" ]]; then
+      docker_args+=(-e "${name}")
+    fi
+  done
 
   if [[ "${CONTAINER_APPARMOR_MODE}" == "unconfined" ]]; then
     docker_args+=(--security-opt apparmor=unconfined)
@@ -387,7 +415,7 @@ main() {
 
   # Modes that want the app running alongside them opt in here.
   case "${mode}" in
-    shell|app|exec|codex|claude|gemini|kiro)
+    shell|app|exec|codex|claude|gemini|kiro|opencode)
       CONTAINER_START_APP=1
       ;;
   esac
@@ -423,7 +451,12 @@ main() {
       # kiro-cli-unwrapped, not kiro-cli: nixpkgs' kiro-cli is a bwrap FHS env, and
       # bwrap cannot make its namespaces in a container with every capability
       # dropped. The unwrapped binaries are already patched to run from the store.
-      run_in_container bash -lc 'NIXPKGS_ALLOW_UNFREE=1 KIRO_NO_AUTO_UPDATE=1 exec nix shell --impure github:NixOS/nixpkgs#kiro-cli-unwrapped -c kiro-cli chat --trust-all-tools "$@"' -- "$@"
+      run_in_container bash -lc 'NIXPKGS_ALLOW_UNFREE=1 KIRO_NO_AUTO_UPDATE=1 exec nix shell --impure github:NixOS/nixpkgs#kiro-cli-unwrapped -c kiro-cli chat --v3 --trust-all-tools "$@"' -- "$@"
+      ;;
+    opencode)
+      # --auto is its trust-everything flag, as --trust-all-tools is kiro's: the
+      # container is the boundary.
+      run_in_container bash -lc 'NIXPKGS_ALLOW_UNFREE=1 OPENCODE_DISABLE_AUTOUPDATE=true exec nix shell --impure github:NixOS/nixpkgs#opencode -c opencode --auto "$@"' -- "$@"
       ;;
     *)
       usage

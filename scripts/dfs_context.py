@@ -14,7 +14,7 @@ both numbers were wrong in different directions until the line/response distinct
 was found.
 
   python3 <scripts>/dfs_context.py   exit 0 under the checkpoint, 1 over
-  python3 <scripts>/dfs_context.py --measure <transcript> claude|codex|kiro
+  python3 <scripts>/dfs_context.py --measure <transcript> claude|codex|kiro|opencode
   python3 <scripts>/dfs_context.py --flat-to
   python3 <scripts>/dfs_context.py --chain-ceiling
 """
@@ -201,7 +201,9 @@ def kiro_session_id(records):
 
 
 def _kiro_log(session_id, root=None):
-    """The newest chain run log under `.dfs/runs/` that names `session_id`, or None."""
+    """The newest chain run log under `.dfs/runs/` that names `session_id`, or None.
+
+    Opencode's is found the same way: see the section below."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import dfs_paths
     runs = str(dfs_paths.runs())
@@ -268,6 +270,103 @@ def _kiro_files_written(path):
     return paths, n
 
 
+# ── opencode ──────────────────────────────────────────────────────────────────────
+#
+# ⚠️ AS KIRO'S, AN OPENCODE SESSION'S TRANSCRIPT IS THE RUN LOG. Its sessions live in
+# a sqlite database (`opencode.db`, under its data directory), and what a chain
+# captured is `opencode run --format json`: one JSON object per line, each with a
+# `type` (`step_start`, `text`, `tool_use`, `step_finish`, `error`) and the
+# `sessionID` at the top. Captured against opencode 1.18.34; the shapes read here are
+# those:
+#
+#   tool_use     part.tool (`bash`, `edit`, `write`, ...), part.state.{status,input,output},
+#                emitted once, when the call has finished (`completed` or `error`)
+#   step_finish  part.tokens {input, output, reasoning, cache: {read, write}}, one per
+#                model response, with `reason` `tool-calls` or `stop`
+#   error        error.{name, data: {message, statusCode, ...}}, after which it exits 1
+#
+# Opencode exports no session id to the tools it runs, so a session cannot read its
+# own budget from the environment as the other three do (`session_from_env`); a chain
+# measures it from here.
+
+OPENCODE_WRITE_TOOLS = ("edit", "write", "multiedit", "patch", "apply_patch")
+
+
+def opencode_session_id(records):
+    """The session an opencode stream belongs to, or "": the first `sessionID` in it."""
+    for rec in records:
+        if isinstance(rec, dict):
+            sid = rec.get("sessionID")
+            if isinstance(sid, str) and sid:
+                return sid
+    return ""
+
+
+def _opencode_tools(rec):
+    """The finished tool call one stream record carries, as its `part`, or None."""
+    if not isinstance(rec, dict) or rec.get("type") != "tool_use":
+        return None
+    part = rec.get("part")
+    return part if isinstance(part, dict) else None
+
+
+def _opencode_files_written(path):
+    """(paths, write calls) from an opencode stream's tool calls.
+
+    A call that errored wrote nothing. The file tools name their target in
+    `filePath`; `apply_patch` carries a patch whose paths are not read here, so it is
+    counted and the count is the answer, as `files_written` says. `bash` is judged by
+    WRITE like any other shell command.
+    """
+    seen, paths, n = set(), [], 0
+    def note(val):
+        if val and val not in seen:
+            seen.add(val); paths.append(val)
+    with open(path, errors="replace") as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            part = _opencode_tools(rec)
+            if not part:
+                continue
+            state = part.get("state") if isinstance(part.get("state"), dict) else {}
+            if state.get("status") == "error":
+                continue
+            inp = state.get("input") if isinstance(state.get("input"), dict) else {}
+            tool = part.get("tool")
+            if tool in OPENCODE_WRITE_TOOLS:
+                n += 1
+                note(inp.get("filePath") or inp.get("file_path") or inp.get("path"))
+            elif tool == "bash":
+                cmd = str(inp.get("command") or "")
+                hits = _paths_in(cmd)
+                if hits or (WRITE.search(cmd) and not FD_REDIRECT.search(cmd)):
+                    n += 1
+                    for f in hits:
+                        note(f)
+    return paths, n
+
+
+def _opencode_peak(rec):
+    """The context one `step_finish` record reports, or None when it is not one.
+
+    `input` is only the part that was not served from the cache, so the window the
+    response read is `input + cache.read + cache.write` — which is what the record's
+    own `total` is, less the output.
+    """
+    if not isinstance(rec, dict) or rec.get("type") != "step_finish":
+        return None
+    part = rec.get("part")
+    tokens = part.get("tokens") if isinstance(part, dict) else None
+    if not isinstance(tokens, dict):
+        return None
+    cache = tokens.get("cache") if isinstance(tokens.get("cache"), dict) else {}
+    return sum(v for v in (tokens.get("input"), cache.get("read"), cache.get("write"))
+               if isinstance(v, int))
+
+
 def transcript_path(session_id, agent="claude", root=None):
     """Where a session's transcript is. GLOBBED first, derived only as a fallback.
 
@@ -282,7 +381,7 @@ def transcript_path(session_id, agent="claude", root=None):
     """
     if not session_id:
         return None
-    if agent == "kiro":
+    if agent in ("kiro", "opencode"):
         return _kiro_log(session_id, root)
     if agent == "codex":
         home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
@@ -321,6 +420,8 @@ def files_written(path, provider="claude"):
     """
     if provider == "kiro":
         return _kiro_files_written(path)
+    if provider == "opencode":
+        return _opencode_files_written(path)
     seen, paths, calls = set(), [], 0
     def note(val):
         if val and val not in seen:
@@ -358,13 +459,19 @@ def files_written(path, provider="claude"):
 
 
 def peak_and_turns(path, provider):
-    """Peak context and response count for a Claude or Codex rollout, or a Kiro stream."""
+    """Peak context and response count for a Claude or Codex rollout, or a Kiro or Opencode stream."""
     best, seen = 0, set()
     with open(path, errors="replace") as fh:
         for line in fh:
             try:
                 rec = json.loads(line)
             except Exception:
+                continue
+            if provider == "opencode":
+                used = _opencode_peak(rec)
+                if used is not None:
+                    seen.add(len(seen))
+                    best = max(best, used)
                 continue
             if provider == "kiro":
                 # ACP's `usage_update` says how much of the context window is in

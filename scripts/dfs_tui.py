@@ -80,7 +80,7 @@ STATE = dfs_paths.state()
 EPIC = dfs_paths.EPIC
 RUNNER = dfs_paths.rel(dfs_paths.SCRIPTS / "dfs_run.sh")
 # What `x` cycles through; each but the first is a dfs_run.sh flag of its own name.
-AGENTS = ("claude", "codex", "kiro")
+AGENTS = ("claude", "codex", "kiro", "opencode")
 ART_DIR = dfs_paths.artefacts()
 ART_PORT = int(os.environ.get("DFS_ARTEFACT_PORT") or 3016)  # docs/artefacts.md
 
@@ -613,7 +613,7 @@ KEYS = [
     ("items", "}  >", ord("}"), "in", "move into the branch above"),
     ("items", "b", ord("b"), "fence", "put a fence above it, or take the fence away"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
-    ("items", "x", ord("x"), "agent", "switch the agent: claude, codex or kiro (remembered)"),
+    ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
     ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
     ("tree", "a", ord("a"), "answer", "answer the raise here"),
@@ -1155,6 +1155,73 @@ def kiro_result_lines(events):
     if isinstance(usage.get("used"), int):
         out.append(("context %s of %s" % (fmt_tokens(usage["used"]),
                                           fmt_tokens(usage.get("size"))), "dim"))
+    return out + [("", "dim")] + rows
+
+
+# ── opencode's log shape ───────────────────────────────────────────────────────
+#
+# `opencode run --format json` writes one event per line — `step_start`, `text`,
+# `reasoning`, `tool_use`, `step_finish`, `error` — with opencode's own stderr
+# captured between them (dfs_run.sh). As kiro's, that one file is the run's result and
+# its transcript (dfs_context.py), condensed once to the rows the other panes draw.
+# A `tool_use` arrives once, finished, so each call is one `→` row and a result row
+# only when it errored.
+
+def opencode_session_id(events):
+    return _sc.opencode_session_id(e for e in events if isinstance(e, dict))
+
+
+def opencode_call_argument(tool, state):
+    """What an opencode tool call was ABOUT, as a person would read it."""
+    inp = state.get("input") if isinstance(state.get("input"), dict) else {}
+    for key in ("command", "filePath", "file_path", "path", "pattern", "url", "query"):
+        if inp.get(key):
+            return str(inp[key]).strip().splitlines()[0]
+    return state.get("title") or ""
+
+
+def opencode_result_lines(events):
+    """An opencode run's captured `--format json` stream, as rows of (text, role)."""
+    rows, counts, last = [], collections.Counter(), None
+    for e in events:
+        if not isinstance(e, dict):
+            continue
+        if "_raw" in e:
+            # opencode's own stderr: on a run that died before it started (a config
+            # that does not parse, no credentials), the only thing that says why.
+            line = strip_ansi(e["_raw"]).strip()
+            if line:
+                rows.append(("  " + line[:200], "dim"))
+            continue
+        kind, part = e.get("type"), e.get("part") if isinstance(e.get("part"), dict) else {}
+        if kind == "text" and str(part.get("text") or "").strip():
+            rows.append((str(part["text"]).strip(), "say"))
+        elif kind == "reasoning" and str(part.get("text") or "").strip():
+            flat = re.sub(r"\s+", " ", part["text"]).strip()
+            rows.append(("  … " + flat[:200] + ("   [%d chars]" % len(flat)
+                                                 if len(flat) > 200 else ""), "think"))
+        elif kind == "tool_use":
+            counts["tool calls"] += 1
+            state = part.get("state") if isinstance(part.get("state"), dict) else {}
+            tool = part.get("tool") or "tool"
+            rows.append(("  → %s  %s" % (TOOL_LABEL.get(tool, tool),
+                                         opencode_call_argument(tool, state)), "run"))
+            if state.get("status") == "error":
+                rows.append((_result_row(str(state.get("error") or state.get("output") or ""),
+                                         marker="⨯ "), "err"))
+        elif kind == "step_finish":
+            last = _sc._opencode_peak(e)
+        elif kind == "error":
+            err = e.get("error") if isinstance(e.get("error"), dict) else {}
+            data = err.get("data") if isinstance(err.get("data"), dict) else {}
+            msg = data.get("message") or err.get("message") or err.get("name") or "error"
+            rows.append(("  ⨯ %s%s" % (str(msg)[:400],
+                                       " (HTTP %s)" % data["statusCode"]
+                                       if data.get("statusCode") else ""), "err"))
+    counts["messages"] = sum(1 for _, role in rows if role == "say")
+    out = [(" · ".join("%d %s" % (v, k) for k, v in counts.items()), "head")]
+    if last is not None:
+        out.append(("context %s" % fmt_tokens(last), "dim"))
     return out + [("", "dim")] + rows
 
 
@@ -2513,6 +2580,10 @@ class UI:
 
         result, events = read_result(run["path"])
         sid, agent = "", run["agent"] or "claude"
+        # A stream that is ONE line (a run that died on its first event) parses as a
+        # single JSON object, which `read_result` takes for claude's result.
+        if result is not None and agent in ("kiro", "opencode"):
+            result, events = None, [result]
         if result is not None:
             sid = result.get("session_id", "")
             usage = result.get("usage") or {}
@@ -2534,6 +2605,17 @@ class UI:
             out.append(("result", curses.A_BOLD))
             for line in str(result.get("result", "")).splitlines() or [""]:
                 para(line, indent="  ", hang="  ")
+        elif agent == "opencode":
+            # As kiro, below: the log IS the transcript.
+            sid = opencode_session_id(events)
+            peak, responses = peak_and_turns(run["path"], agent)
+            out.append(("session %s · %d responses · peak context %s"
+                        % (sid or "unknown", responses, fmt_tokens(peak)), look("chrome")))
+            out.append(("", 0))
+            out.extend(self.emit_roles(opencode_result_lines(events), width))
+            self._cache = {k: v for k, v in self._cache.items() if k[0] != run["path"]}
+            self._cache[key] = out
+            return out
         elif agent == "kiro":
             # The log IS the transcript, so it is drawn once, here, and measured
             # rather than opened a second time below.
@@ -2671,14 +2753,15 @@ class UI:
         results is what made a transcript unreadable in the first place, and the size
         marker already says there is more.
         """
-        if agent == "kiro":
+        if agent in ("kiro", "opencode"):
             events = []
             for line in self.jsonl_lines(path, tail_bytes):
                 try:
                     events.append(json.loads(line))
                 except ValueError:
                     events.append({"_raw": line})
-            return self.emit_roles(kiro_result_lines(events), width)
+            render = kiro_result_lines if agent == "kiro" else opencode_result_lines
+            return self.emit_roles(render(events), width)
         if agent == "codex":
             # A rollout's records are `response_item` and `event_msg`, so the Claude
             # filter below keeps NONE of them — this pane was empty under `--codex`

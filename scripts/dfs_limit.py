@@ -36,6 +36,14 @@ So the STRUCTURED field is read first and the prose is a fallback:
           the `finalText` that repeats its last message), for
           the same reason claude's `result` is not enough alone.
 
+  opencode `run --format json` writes JSONL, and a run that dies on the provider ends in
+          one `error` event whose `data.statusCode` is the HTTP status: 429 is the
+          rate-limit status, as for claude, and the provider's wording
+          is the second read. ONLY `error` events and lines that are not JSON (its
+          stderr, captured beside) are read, so a `text` or `tool_use` event, which
+          is the session's own, cannot convict it. The status is the provider's, so
+          this reads a quota or rate limit of ANY provider the user configured.
+
 Usage:  dfs_limit.py <log> <agent>   ->  limit=0|1  resets='<text>'  (shell-quotable)
 """
 import json
@@ -132,8 +140,30 @@ def _kiro_said(rec):
     return False
 
 
+def _opencode_error(rec):
+    """The `error` event's data: {message, statusCode, ...}, or {}."""
+    err = rec.get("error")
+    data = err.get("data") if isinstance(err, dict) else None
+    return data if isinstance(data, dict) else {}
+
+
 def classify(raw, agent):
     """(is_limit, resets) for one run log's bytes."""
+    if agent == "opencode":
+        for line in raw.splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                rec = None
+            if rec is None:
+                if LIMIT_RE.search(line):
+                    return True, resets_in(line)
+            elif isinstance(rec, dict) and rec.get("type") == "error":
+                data = _opencode_error(rec)
+                message = str(data.get("message") or "")
+                if data.get("statusCode") == 429 or LIMIT_RE.search(message):
+                    return True, resets_in(message)
+        return False, ""
     if agent == "kiro":
         for line in raw.splitlines():
             try:

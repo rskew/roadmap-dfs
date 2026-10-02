@@ -12,13 +12,27 @@ nix run github:rskew/roadmap-dfs#dfs-init                # start a roadmap in th
 nix run github:rskew/roadmap-dfs                         # the screen (dfs-tui), there
 nix run github:rskew/roadmap-dfs#dfs-sandbox -- claude   # a container, with the dfs-* commands on its PATH
 nix run github:rskew/roadmap-dfs#dfs-sandbox -- kiro     # the same, with kiro-cli
+nix run github:rskew/roadmap-dfs#dfs-sandbox -- opencode # the same, with opencode
 ```
 
-Chains run under Claude Code by default; `x` in the screen switches to codex or
-kiro-cli (and the screen remembers the choice next time), and `dfs-run --codex` /
-`dfs-run --kiro` do the same from the shell.
-kiro-cli needs a login first: `KIRO_API_KEY` in the environment (dfs-sandbox passes
-it through), or `kiro-cli login --use-device-flow` once.
+Chains run under Claude Code by default; `x` in the screen switches to codex,
+kiro-cli or opencode (and the screen remembers the choice next time), and
+`dfs-run --codex` / `dfs-run --kiro` / `dfs-run --opencode` do the same from the shell.
+kiro-cli runs its `--v3` agent, and needs a login first: `KIRO_API_KEY` in the
+environment (dfs-sandbox passes it through), or `kiro-cli login --use-device-flow` once.
+
+opencode is not told which model to use: it reads its own config, so set the default
+once there. `~/.config/opencode/opencode.json` (or an `opencode.json` in the project,
+or the file `OPENCODE_CONFIG` names) takes `"model": "provider/model"`, and a provider's
+endpoint under `provider.<id>.options.baseURL` (an OpenAI-compatible one uses
+`"npm": "@ai-sdk/openai-compatible"` and lists its `models`). Credentials come from
+`opencode auth login` (kept in `~/.local/share/opencode/auth.json`), or an environment
+variable the config reads as `"apiKey": "{env:NAME}"`. With no config at all it falls
+back to its own free hosted models. One run can override with
+`OPENCODE_CMD="opencode -m provider/model" dfs-run --opencode ...`. dfs-sandbox mounts
+that config and login, and passes `OPENCODE_CONFIG` and `OPENCODE_CONFIG_CONTENT`
+through; a key the config reads with `{env:NAME}` goes in through `CONTAINER_ENV`, and
+an endpoint on the host's own localhost is not reachable from the container.
 
 One name per command: `scripts/dfs_foo.py` (or `.sh`) is the command `dfs-foo` in
 the package and the app `#dfs-foo` in the flake, for every script that runs on its
