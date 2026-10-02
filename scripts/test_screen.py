@@ -613,6 +613,24 @@ class TheTreeKeepsItsExpandedNodeInView(unittest.TestCase):
         self.assertTrue(any(t.startswith(">") for t in shown), shown)
 
 
+class LOpensTheLastRunAtItsEnd(unittest.TestCase):
+    def test_l_reads_the_selected_items_newest_run_from_the_bottom(self):
+        runs = [dict(path="/r/b/console.log", item="W2", run={"live": False}),
+                dict(path="/r/a/console.log", item="W1", run={"live": False}),
+                dict(path="/r/c/console.log", item="W1", run={"live": False})]
+        saved = TUI.discover_runs
+        TUI.discover_runs = lambda: list(runs)
+        try:
+            ui = a_screen([item("W1"), item("W2")])
+            ui.act(ord("l"))
+        finally:
+            TUI.discover_runs = saved
+        self.assertEqual((ui.pane, ui.open_run["path"]), ("agentlog", "/r/a/console.log"))
+        self.assertEqual(ui.scroll, 10 ** 6, "the clamp in draw lands it on the last line")
+        ui.act(27)
+        self.assertEqual(ui.pane, "item", "esc goes back to the item, not a list it skipped")
+
+
 class AnAssumptionStandsOut(unittest.TestCase):
     """Most nodes say something was done; one that states a Hypothesis is marked, in
     its own colour, with the assumption under it where it is read without opening."""

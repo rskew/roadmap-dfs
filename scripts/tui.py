@@ -3683,9 +3683,10 @@ class UI:
         self.reload()
         return rc
 
-    def read_run(self, run, back):
+    def read_run(self, run, back, at_end=False):
         """Open one run's log. `back` is the pane esc returns to: the list it was
-        chosen from, or the item it was asked of directly (`l`)."""
+        chosen from, or the item it was asked of directly (`l`, which asks for the
+        END of it: the line worth reading is the last one, live or finished)."""
         self.open_run = run
         self.run_back = back
         self.pane = "agentlog"
@@ -3695,7 +3696,7 @@ class UI:
         # there, and arms a moment later if liveness lands a moment later
         # — a run directory whose `meta.json` is not written yet has none
         # to read, and that chain then runs for an hour.
-        self.scroll = 10 ** 6 if is_growing(self.open_run) else 0
+        self.scroll = 10 ** 6 if at_end or is_growing(self.open_run) else 0
 
     def start_chain(self, item, cap):
         """Start a work chain in the background and come straight back.
@@ -4453,7 +4454,7 @@ class UI:
             self.runs = discover_runs()
             run = next((r for r in self.runs if r["item"] == item), None)
             if run is not None:
-                self.read_run(run, "item")
+                self.read_run(run, "item", at_end=True)
             else:
                 self.msg = "no run of %s yet — [L] lists every run" % (item or "anything")
         elif ch == ord("L"):
