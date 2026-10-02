@@ -630,6 +630,14 @@ class LOpensTheLastRunAtItsEnd(unittest.TestCase):
         ui.act(27)
         self.assertEqual(ui.pane, "item", "esc goes back to the item, not a list it skipped")
 
+    def test_a_run_picked_from_the_list_opens_at_the_bottom_too(self):
+        ui = a_screen([item("W1")], pane="runs", run_sel=0,
+                      runs=[dict(path="/r/a/console.log", item="W1", run={"live": False})])
+        ui.act(10)
+        self.assertEqual((ui.pane, ui.scroll), ("agentlog", 10 ** 6))
+        ui.act(27)
+        self.assertEqual(ui.pane, "runs")
+
 
 class AnAssumptionStandsOut(unittest.TestCase):
     """Most nodes say something was done; one that states a Hypothesis is marked, in

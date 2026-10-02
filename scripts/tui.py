@@ -3685,8 +3685,8 @@ class UI:
 
     def read_run(self, run, back, at_end=False):
         """Open one run's log. `back` is the pane esc returns to: the list it was
-        chosen from, or the item it was asked of directly (`l`, which asks for the
-        END of it: the line worth reading is the last one, live or finished)."""
+        chosen from (`L`) or the item it was asked of directly (`l`). Both ask for the
+        END of it: the line worth reading is the last one, live or finished."""
         self.open_run = run
         self.run_back = back
         self.pane = "agentlog"
@@ -4480,7 +4480,7 @@ class UI:
                     self.msg = "no artefact in %s" % dfs_paths.rel(ART_DIR)
             elif self.pane == "runs":
                 if self.runs:
-                    self.read_run(self.runs[self.run_sel], "runs")
+                    self.read_run(self.runs[self.run_sel], "runs", at_end=True)
                 else:
                     self.msg = "no run logs on this box yet"
             else:
