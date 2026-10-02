@@ -494,6 +494,23 @@ def is_growing(run):
     return run["name"] == "run-%s.json" % chain["run"]
 
 
+def keep_in_view(scroll, top, end, body_h):
+    """The scroll that shows the cursor's row, and as much of what is under it as fits.
+
+    ⚠️ THE ROW'S HEADER IS NOT THE WHOLE OF IT. An expanded node is its header and then
+    its detail, and the cursor was kept in view by the header alone, so opening the
+    bottom node put everything it had to say below the fold, with nothing to scroll to
+    it but the author's own d. `end` is the row's last line: it is brought up into
+    view, but never by pushing `top` off the screen, so a block taller than the pane
+    opens at its header and reads down from there.
+    """
+    if top < scroll:
+        return top
+    if end >= scroll + body_h:
+        return min(top, end - body_h + 1)
+    return scroll
+
+
 def follows(growing, following, scroll, bottom):
     """Whether the log pane sticks to the end of its file on THIS draw.
 
@@ -1627,7 +1644,7 @@ class UI:
         self.follow = False         # derived every draw from now on — `follows`
         self._cache = {}            # (path, mtime) -> rendered lines
         self._measure_cache = {}    # transcript -> (when, peak, responses)
-        self._sel_row = None
+        self._sel_row = self._sel_end = None
         self.body_h = 1             # rows the detail pane showed at the last draw
         # The walk. Off until somebody turns it on, because it spends a
         # subscription with nobody watching (see `walk_toggle`).
@@ -3264,12 +3281,16 @@ class UI:
         if not rows:
             out.append(("no nodes yet", look("chrome")))
             return out
-        self._sel_row = None
+        self._sel_row = self._sel_end = None
         red = curses.color_pair(1)
         # The cursor is drawn only where the keys go: two highlighted rows on one
         # screen is a question about which one j moves.
         focused = self.tree_focused()
         for i, row in enumerate(rows):
+            # The row before this one is finished, and if it was the cursor's, its
+            # block ends here (see `keep_in_view`).
+            if self._sel_row is not None and self._sel_end is None:
+                self._sel_end = len(out) - 1
             sel = focused and i == self.tree_sel
             cursor = ">" if sel else " "
             pad = "  " * row["depth"]
@@ -3335,6 +3356,8 @@ class UI:
                          indent=inner, hang="    ")
                 out.append(("", 0, BLANK_GUIDES))
             out[first:] = [ln if len(ln) > 2 else ln + (below,) for ln in out[first:]]
+        if self._sel_row is not None and self._sel_end is None:
+            self._sel_end = len(out) - 1
         # A blank line carries only the guides both its neighbours do, so a rule
         # stops where its branch ends rather than hanging into the gap after it.
         def guides(n):
@@ -3429,7 +3452,7 @@ class UI:
         body_top = sep + 1
         body_h = max(1, h - body_top - 2)
         self.body_h = body_h
-        self._sel_row = None
+        self._sel_row = self._sel_end = None
         lines = self.detail_lines(main)
         # ⚠️ Following is DERIVED here, not remembered from the keypress that opened
         # the pane — see `follows`. One place, so the footer, the pane's own header
@@ -3445,10 +3468,8 @@ class UI:
         # A pane with a cursor owns its scroll: moving onto a row below the fold has
         # to bring the row with it, or j/k walks an invisible cursor.
         if self._sel_row is not None:
-            if self._sel_row < self.scroll:
-                self.scroll = self._sel_row
-            elif self._sel_row >= self.scroll + body_h:
-                self.scroll = self._sel_row - body_h + 1
+            end = self._sel_end if self._sel_end is not None else self._sel_row
+            self.scroll = keep_in_view(self.scroll, self._sel_row, end, body_h)
         self.scroll = max(0, min(self.scroll, max(0, len(lines) - body_h)))
         tag = ""
         if len(lines) > body_h:

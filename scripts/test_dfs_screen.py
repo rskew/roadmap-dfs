@@ -541,6 +541,81 @@ class StartingAChainSaysTheCommand(unittest.TestCase):
         self.assertIn("pid 4242", ui.msg)
 
 
+class KeepInView(unittest.TestCase):
+    """The scroll that follows the cursor's row, and what is under it."""
+
+    def test_a_row_above_the_fold_is_scrolled_to(self):
+        self.assertEqual(TUI.keep_in_view(10, 4, 4, 20), 4)
+
+    def test_a_single_line_row_below_the_fold_lands_on_the_last_line(self):
+        self.assertEqual(TUI.keep_in_view(0, 25, 25, 20), 6)
+
+    def test_an_expanded_row_brings_its_whole_block_up(self):
+        # Header at 15 of a 20-line pane, block to 29: the header alone was in view,
+        # so opening the bottom node showed none of what it said.
+        self.assertEqual(TUI.keep_in_view(0, 15, 29, 20), 10)
+
+    def test_a_block_taller_than_the_pane_opens_at_its_header(self):
+        self.assertEqual(TUI.keep_in_view(0, 15, 80, 20), 15)
+
+    def test_a_block_already_in_view_does_not_move(self):
+        self.assertEqual(TUI.keep_in_view(5, 8, 20, 20), 5)
+
+
+TREE = """# W1 · the thing
+
+## Goal
+
+The thing.
+
+## Tree
+
+""" + "".join("""### W1.%d · step %d
+Status: confirmed
+Hypothesis: it is step %d.
+Evidence:
+- for: it was.
+Determination: step %d is done.
+
+""" % (n, n, n, n) for n in range(1, 13)) + """## Log
+"""
+
+
+class TheTreeKeepsItsExpandedNodeInView(unittest.TestCase):
+    def screen(self, open_key):
+        ui = a_screen([item("W1")], pane="item", focus="tree", tree_open=set())
+        ui.tree_of = lambda task: (TUI.dfs_tree.parse(TREE, "W1"), "", {})
+        ui.status_attr = lambda status: 0
+        ui._tree_cache = {}
+        rows = TUI.tree_entries(TUI.dfs_tree.parse(TREE, "W1"), ui.tree_folded)
+        ui.tree_item = "W1"
+        bottom = max(n for n, r in enumerate(rows) if r["kind"] not in ("section", "raise"))
+        ui.tree_sel = bottom
+        if open_key:
+            ui.tree_open = {rows[bottom]["key"]}
+        return ui
+
+    def test_the_cursor_row_ends_where_its_detail_ends(self):
+        closed, opened = self.screen(False), self.screen(True)
+        lines_closed = closed.lines_tree(80)
+        lines_open = opened.lines_tree(80)
+        self.assertEqual(closed._sel_end, closed._sel_row)
+        self.assertGreater(opened._sel_end, opened._sel_row + 2)
+        # The bottom node's block is the last thing in the pane, bar any section after.
+        self.assertGreaterEqual(len(lines_open) - 1, opened._sel_end)
+        text = [l[0] for l in lines_open[opened._sel_row:opened._sel_end + 1]]
+        self.assertTrue(any("step 12 is done" in t for t in text), text)
+
+    def test_opening_the_bottom_node_scrolls_its_detail_into_view(self):
+        ui = self.screen(True)
+        lines = ui.lines_tree(80)
+        body_h = 12
+        scroll = TUI.keep_in_view(0, ui._sel_row, ui._sel_end, body_h)
+        shown = [l[0] for l in lines[scroll:scroll + body_h]]
+        self.assertTrue(any("step 12 is done" in t for t in shown), shown)
+        self.assertTrue(any(t.startswith(">") for t in shown), shown)
+
+
 if __name__ == "__main__":
     curses.color_pair = lambda n: 0       # no initscr here; attrs are opaque
     unittest.main()
