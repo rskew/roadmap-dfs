@@ -31,8 +31,19 @@ variable the config reads as `"apiKey": "{env:NAME}"`. With no config at all it 
 back to its own free hosted models. One run can override with
 `OPENCODE_CMD="opencode -m provider/model" dfs-run --opencode ...`. dfs-sandbox mounts
 that config and login, and passes `OPENCODE_CONFIG` and `OPENCODE_CONFIG_CONTENT`
-through; a key the config reads with `{env:NAME}` goes in through `CONTAINER_ENV`, and
-an endpoint on the host's own localhost is not reachable from the container.
+through; a key the config reads with `{env:NAME}` goes in through `CONTAINER_ENV`.
+
+The container cannot reach the host's localhost, so an ollama there is given to it as a
+unix socket, which is all of the host it can talk to:
+
+```sh
+socat UNIX-LISTEN:$XDG_RUNTIME_DIR/ollama.sock,fork,mode=600 TCP:127.0.0.1:11434 &
+OLLAMA_SOCKET=$XDG_RUNTIME_DIR/ollama.sock nix run github:rskew/roadmap-dfs#dfs-sandbox -- opencode
+```
+
+The container listens on its own `127.0.0.1:11434` and forwards to the socket, so the
+same `baseURL: http://127.0.0.1:11434/v1` works on the host and in the sandbox
+(`CONTAINER_OLLAMA_PORT` changes the port).
 
 One name per command: `scripts/dfs_foo.py` (or `.sh`) is the command `dfs-foo` in
 the package and the app `#dfs-foo` in the flake, for every script that runs on its

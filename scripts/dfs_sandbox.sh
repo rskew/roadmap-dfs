@@ -57,7 +57,14 @@
 #                      {env:NAME} goes in through CONTAINER_ENV. OPENCODE_CONFIG and
 #                      OPENCODE_CONFIG_CONTENT are passed through by name when set.
 #                      An endpoint on the host's own localhost is not reachable from
-#                      the container.
+#                      the container — unless it is given by socket:
+#   OLLAMA_SOCKET      a unix socket on the host that reaches ollama, e.g. made with
+#                        socat UNIX-LISTEN:$XDG_RUNTIME_DIR/ollama.sock,fork,mode=600 TCP:127.0.0.1:11434
+#                      It is mounted as /run/ollama.sock, and the container listens on its
+#                      own 127.0.0.1:11434 (CONTAINER_OLLAMA_PORT) and forwards to it, so
+#                      a config that says http://127.0.0.1:11434/v1 works here and on the
+#                      host. Nothing else of the host's network is reachable. Restart the
+#                      sandbox if you restart that socat: the mount follows the old file.
 #
 # Example — put this in <repo>/.container.env:
 #   CONTAINER_APP_CMD=scripts/start-dev.sh
@@ -334,6 +341,12 @@ run_in_container() {
   if [[ -n "${KIRO_API_KEY:-}" ]]; then
     docker_args+=(-e KIRO_API_KEY)
   fi
+  # An ollama on the host, reached by socket rather than by the network: one file is
+  # all of the host the container can talk to. The bootstrap listens for it.
+  if [[ -n "${OLLAMA_SOCKET:-}" ]]; then
+    [[ -S "${OLLAMA_SOCKET}" ]] || { echo "OLLAMA_SOCKET ${OLLAMA_SOCKET} is not a unix socket (is its socat running?)" >&2; exit 1; }
+    docker_args+=(-v "${OLLAMA_SOCKET}:/run/ollama.sock" -e "CONTAINER_OLLAMA_PORT=${CONTAINER_OLLAMA_PORT:-11434}")
+  fi
   local name
   for name in OPENCODE_CONFIG OPENCODE_CONFIG_CONTENT; do
     if [[ -n "${!name:-}" ]]; then
@@ -387,6 +400,19 @@ if [[ "${CONTAINER_START_APP:-0}" == "1" && -n "${CONTAINER_APP_CMD:-}" ]]; then
     done
     [[ "$ready" == "1" ]] || echo "[container] carrying on without a confirmed port; check \$HOME/app.log" >&2
   fi
+fi
+
+# The container's side of OLLAMA_SOCKET: loopback TCP to the mounted socket, so that a
+# provider's baseURL can stay http://127.0.0.1:<port>/... as it is on the host.
+if [[ -S /run/ollama.sock ]]; then
+  port="${CONTAINER_OLLAMA_PORT:-11434}"
+  nix shell github:NixOS/nixpkgs#socat -c socat "TCP-LISTEN:${port},bind=127.0.0.1,fork,reuseaddr" UNIX-CONNECT:/run/ollama.sock >"$HOME/ollama-forward.log" 2>&1 &
+  fwd_pid=$!
+  for _ in $(seq 1 120); do
+    kill -0 "$fwd_pid" 2>/dev/null || { echo "[container] ollama forwarder exited; see \$HOME/ollama-forward.log" >&2; break; }
+    (exec 3<>"/dev/tcp/127.0.0.1/${port}") 2>/dev/null && { exec 3>&- 3<&- || true; break; }
+    sleep 0.5
+  done
 fi
 
 exec "$@"
