@@ -30,8 +30,7 @@ session carries it out.
    work it says is not yours** comes before even the author: commit it on its own or
    stash it, as the briefing says, and note which in your node's Evidence.
 5. **Open nodes the critic or reviewer added** carry only an Approach: what is wrong
-   and what would settle it. Take them up like any open node, writing the Hypothesis as
-   you start.
+   and what would settle it. Take them up like any open node.
 
 ## A node
 
@@ -40,12 +39,11 @@ session carries it out.
 Parent: W13.3
 Status: open | parked | confirmed | refuted
 Approach: <what the node does and how: the files, the change, the check>
-Hypothesis: <the assumptions the approach rests on, and what would show them wrong>
+Hypothesis: <only if the work rests on an assumption: see below>
 Evidence:
-- for: <an observation that bears on an assumption, and what it shows>
+- for: <only with a Hypothesis: an observation that bears on it, and what it shows>
 - against: <the same>
 Determination: <what you concluded, and so where the work goes next>
-Assumes: <only when it applies: see below>
 Corrects: <only on a node carrying out a correction or backtrack: its ts>
 ```
 
@@ -57,24 +55,21 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   node you add and every log entry goes there; read every other part of the task too,
   since the task is all of them. You may edit a node in another part to determine it,
   never add to one. Commit subjects start with the tagged id (`W13.1@<tag>: <what it did>`).
-- **Most nodes only say that something was done. A few rest on an assumption.** Add
-  `Assumes:` to a node when you decided something you could not settle yourself and
-  the work now depends on it: a reading of an ambiguous Goal, a choice between
-  designs the author might make differently, a fact taken on trust, scope you
-  narrowed or widened. One or two plain sentences: what you assumed, and what
-  changes if it is wrong. The screen marks the node and names it when the author
-  accepts the tree, so keep it for what is both important and open to question; an
-  ordinary design choice the evidence supports is a Hypothesis, not an Assumes.
-- **Each field has one job.** The Approach is the implementation: what the node
-  does, where, and the check that will show it worked. The Hypothesis is not a second
-  description of the work; it is the assumptions the Approach rests on, the facts
-  about the code or the problem that, if false, make this the wrong branch
-  ("`sync()` is the only writer of `cursor`", not "adding the guard fixes the race").
-  The Evidence is the observations that bear on those assumptions, one line each: what
-  was run or read, what it showed, and which way it cuts. What you built, the steps
-  you took, what you tried first and every test you ran belong in the Approach and the
-  commit, not here; only the check that the Approach named, and its result, is a line
-  of evidence.
+- **Most nodes only say that something was done**, and need an Approach and a
+  Determination and nothing else: the Approach names the check, the Determination
+  says whether it passed. Do not invent a Hypothesis or Evidence for them.
+- **A Hypothesis marks the few nodes that rest on an assumption**: something you
+  decided and could not settle yourself, and the work now depends on it. A reading of
+  an ambiguous Goal, a choice between designs the author might make differently, a
+  fact taken on trust, scope narrowed or widened. It is the assumption itself, and
+  what would show it wrong ("`sync()` is the only writer of `cursor`"; "the Goal
+  means v2 only"), not a second description of the work. The Evidence is the
+  observations that bear on it, one line each: what was run or read, what it showed,
+  and which way it cuts. The screen marks a node with a Hypothesis (⚑) and names
+  those nodes when the author accepts the tree, so keep it for what is both
+  important and open to question: an ordinary choice the check settles is not one.
+  What you built, the steps you took and every test you ran belong in the Approach
+  and the commit, not here.
 - **A node's Approach and Hypothesis are concise, clear and stand alone.** A session,
   the critic and the TUI each read one node without the rest of the tree, so say the thing
   itself: the file, function, fault and check by name. "Fix what W13.3 found", "as in
@@ -87,9 +82,10 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   what is planned under it holds the task open.
 - A node is **live** unless it is pruned: below a refuted node, or cut off by a
   correction or backtrack.
-- **Write the hypothesis when you start the node**, before the work: what must be
-  true for this approach to be the right one, and what would show it is not. A node
-  with no hypothesis cannot be refuted, and the critic will say so.
+- **Write the hypothesis when you start the node**, before the work, when there is
+  one: the assumption, and what would show it is not so. A node that states one can
+  be refuted on evidence; the critic looks at it, and at the nodes that should have
+  stated one and did not.
 - **Evidence is what you saw, not what you believe**: the command and what it
   printed, the test and whether it went red, cited in a line, not pasted. Try to
   refute your own hypothesis. The critic looks for a node confirmed on reasoning

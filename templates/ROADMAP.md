@@ -9,8 +9,10 @@ order tasks are worked in is `.dfs/order.md`.
 Each task is a decision tree, and the tree is for planning: its branches are the
 different ways the goal could be reached. Lay the alternatives out as sibling nodes,
 pursue one and park the others with the reason. Each node's approach says what it
-does; its hypothesis says only what that approach assumes, and what would show the
-assumption wrong. As you work, append evidence for and against those assumptions. Evidence against the branch you are on is what tells you
+does. Most nodes need nothing more: something was done, and the check it named
+passed. Where the work rests on an important assumption you could not settle yourself,
+its hypothesis says what that is, and what would show it wrong; the author reads those
+before accepting the tree. As you work, append evidence for and against it. Evidence against the branch you are on is what tells you
 to jump to a parked sibling: refute the branch and unpark the alternative. Evidence
 for it lets you confirm the node and go deeper. Add nodes as the work reveals them,
 and after each node re-plan what is ahead.

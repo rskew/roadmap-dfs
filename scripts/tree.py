@@ -17,12 +17,11 @@ Each task is one file, `.dfs/items/<task>.md`:
     Parent: W13.0                 (optional; absent means a child of the task)
     Status: open | parked | confirmed | refuted
     Approach: <what this node does and how: the files, the change, the check>
-    Hypothesis: <the assumptions the approach rests on, and what would show them wrong>
+    Hypothesis: <optional: an important, questionable assumption, and what would show it wrong>
     Evidence:
     - for: <an observation bearing on an assumption>
     - against: <an observation bearing on an assumption>
     Determination: <what was concluded, and so where the work goes next>
-    Assumes: <optional: an important, questionable assumption the node made>
     Corrects: <the ts of the author's `correct` entry this node carries out>
 
     ## Log
@@ -39,9 +38,10 @@ of the task, `.dfs/items/<task>/<tag>.md`: the default branch's part is
 task merge with no conflict unless both edited the same node. Numbers count per tag. Siblings are ALTERNATIVE ways to reach their parent's end: the one being
 pursued is `open`, the others `parked` with the reason, and evidence against the
 pursued one is what says to jump to a parked sibling. A linear chain of steps is each
-node naming the one before it. Most nodes only say that something was done. `Assumes` is for the few where the
-session decided something it could not settle itself and the work now rests on it: the
-author reads those before accepting the tree, and the screen marks them. A node's commit is found by
+node naming the one before it. Most nodes only say that something was done, and have no Hypothesis or Evidence. A
+Hypothesis is for the few where the session decided something it could not settle
+itself and the work now rests on it: the Evidence bears on it, the author reads those
+nodes before accepting the tree, and the screen marks them. A node's commit is found by
 its subject (`W13.4: ...`), never written in the file, because a commit cannot name
 its own hash.
 
@@ -98,7 +98,7 @@ DETERMINED = ("confirmed", "refuted")
 KINDS = ("session", "end", "raise", "answer", "critic", "review", "correct", "backtrack",
          "accept")
 FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determination",
-          "Assumes", "Corrects")
+          "Corrects")
 # Old names still read, as the field they became: determined nodes are history, so
 # trees written before a rename keep them.
 RENAMED = {"Plan": "Approach"}

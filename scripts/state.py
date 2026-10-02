@@ -636,7 +636,7 @@ def _record_block(task, kind):
     out += ["  Keep the Approach concise, clear and standalone: name the file, "
             "function, fault and check themselves, so a session that reads only this "
             "node knows what to do, never just \"see <id>\" or \"as <id> found\".", "",
-            "  Leave Hypothesis and Evidence to the session that takes it up, and do not "
+            "  Leave any Hypothesis and Evidence to the session that takes it up, and do not "
             "edit an existing node: a determined node is history.", "",
             "- **Raise only on the grounds in §0**; anything else is a %s. An issue "
             "with the roadmap tooling itself (roadmap-dfs, the `.dfs` rules, their "
@@ -674,7 +674,10 @@ def critic_brief(task: str) -> str:
     out = [read_roadmap().rstrip(), "",
            "## What to judge in %s" % task, "",
            "You judge the tree's REASONING: its hypotheses, its evidence, and the "
-           "determinations drawn from them. You do not review the implementation, the "
+           "determinations drawn from them. Most nodes only say that something was done "
+           "and have neither: judge those on whether the check their Approach named "
+           "supports the Determination, and do not ask for a hypothesis they have no "
+           "use for. You do not review the implementation, the "
            "code's quality or its correctness — a review after the task is complete does "
            "that. Look at code only to check whether a piece of evidence is TRUE.", "",
            "Read `%s`, then for the nodes below ask:" % rel, "",
@@ -755,10 +758,11 @@ def review_brief(task: str) -> str:
            "scaffolding, a comment or doc the change made false.",
            "4. **Is every assumption that matters marked?** A node whose work rests on "
            "something the session decided and could not settle (a reading of the Goal, "
-           "a design the author might choose differently, scope narrowed) carries "
-           "`Assumes:`, which the author reads before accepting. If a live node makes "
-           "one without it, say so in your verdict body: the node, what it assumed, and "
-           "what to ask the author (a determined node is history, so it is not edited).", "",
+           "a design the author might choose differently, scope narrowed) carries a "
+           "`Hypothesis:`, which the author reads before accepting. If a live node makes "
+           "such an assumption without one, say so in your verdict body: the node, what "
+           "it assumed, and what to ask the author (a determined node is history, so it "
+           "is not edited).", "",
           ] + _round_note(t) + _record_block(task, "review") + [
            "### The task's commits, oldest first", ""]
     for nd in sorted(t["nodes"], key=lambda n: n["n"]):

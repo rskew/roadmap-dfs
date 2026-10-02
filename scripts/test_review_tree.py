@@ -116,14 +116,14 @@ class Rows(unittest.TestCase):
         self.assertNotIn("section:W1:Summary",
                          [r["key"] for r in TUI.tree_entries(dfs_tree.parse(opened, "W1"))])
 
-    def test_an_assumption_leads_the_nodes_detail(self):
+    def test_only_a_node_with_a_hypothesis_rests_on_an_assumption(self):
         t = dfs_tree.parse(TREE.replace(
             "Status: confirmed\nApproach: go deeper.",
-            "Status: confirmed\nApproach: go deeper.\nAssumes: the author means v2 only."), "W1")
-        nd = dfs_tree.by_id(t)["W1.2"]
-        self.assertEqual(nd["fields"]["Assumes"], "the author means v2 only.")
-        self.assertEqual(TUI.node_detail(nd)[0], ("Assumes", "the author means v2 only."))
-        self.assertEqual([k for k, _ in TUI.node_detail(nd)].count("Assumes"), 1)
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: the author means v2 only."
+        ).replace("Status: refuted\nApproach: try the other way.",
+                  "Status: refuted\nApproach: try the other way.\nHypothesis: moot."), "W1")
+        self.assertEqual(TUI.assumed_nodes(t), ["W1.2"])
+        self.assertEqual(TUI.assumed_nodes(tree()), [], "a plain node states none")
 
     def test_the_goal_starts_open_and_the_background_folded(self):
         rows = {r["key"]: r for r in TUI.tree_entries(tree())}

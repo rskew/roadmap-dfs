@@ -295,8 +295,6 @@ def node_detail(nd, archived=None, commits=()):
     """A node opened: `(label, text)` pairs in the order a reviewer reads them."""
     f, archived = nd["fields"], archived or {}
     out = []
-    if f.get("Assumes"):
-        out.append(("Assumes", f["Assumes"]))
     for k in ("Approach", "Hypothesis"):
         if k in nd.get("from_archive", ()):
             out.append(("%s (archive)" % k, f[k]))
@@ -307,10 +305,20 @@ def node_detail(nd, archived=None, commits=()):
     out += [("Evidence", ev) for ev in nd["evidence"]]
     if "Determination" in f:
         out.append(("Determination", f["Determination"]))
-    skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination", "Assumes")
+    skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination")
     out += [(k, v) for k, v in f.items() if k not in skip]
     out += [("Commit", "%s %s" % (sha[:7], subj)) for sha, subj, _at in commits]
     return out
+
+
+def assumed_nodes(t):
+    """The live nodes that rest on an assumption: those that state a Hypothesis. Most
+    nodes only say something was done and state none; the author reads these before
+    accepting the tree. A refuted or pruned node's assumption is moot."""
+    _, pruned = dfs_tree.effective(t)
+    return [nd["id"] for nd in t["nodes"]
+            if nd["fields"].get("Hypothesis") and nd["status"] != "refuted"
+            and nd["id"] not in pruned]
 
 
 def strip_comments(text):
@@ -3332,7 +3340,7 @@ class UI:
             nd, st = row["node"], row["status"]
             fold = ("▸" if row["folded"] else "▾") if row["kids"] else " "
             flag = "  ● raise" if row["raises"] else ""
-            if nd["fields"].get("Assumes") and st not in ("refuted", "pruned"):
+            if nd["fields"].get("Hypothesis") and st not in ("refuted", "pruned"):
                 flag += "  ⚑ assumption"
             if row["raises_below"]:
                 flag += "  ● %d raise%s below" % (row["raises_below"],
@@ -4155,13 +4163,10 @@ class UI:
             self.msg = "%s is not a finished tree waiting to be accepted" % item
             return
         t, _, _ = self.tree_of(item)
-        _, pruned = dfs_tree.effective(t)
-        assumed = [nd["id"] for nd in t["nodes"]
-                   if nd["fields"].get("Assumes") and nd["status"] != "refuted"
-                   and nd["id"] not in pruned]
-        # ⚠️ The assumptions are named in the question, because accepting is the
+        assumed = assumed_nodes(t)
+        # ⚠️ A node with a Hypothesis is one that rests on an assumption. They are named in the question, because accepting is the
         # moment they stop being looked at.
-        note = (" It rests on assumptions at %s (⚑)." % ", ".join(assumed)) if assumed else ""
+        note = (" Assumptions to check at %s (⚑)." % ", ".join(assumed)) if assumed else ""
         if self.prompt("accept %s's tree as finished?%s [y/N]:" % (item, note))[:1].lower() != "y":
             self.msg = "not accepted"
             return
