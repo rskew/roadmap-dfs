@@ -74,7 +74,9 @@
 #   CONTAINER_APP_READY_PORT=8006
 # then `sandbox claude` from the repo runs claude with the app already up.
 #
-# The app's output goes to $HOME/app.log inside the container.
+# The app's output goes to $HOME/app.log inside the container. In these modes it has
+# no terminal (no stdin, no controlling tty, PC_DISABLE_TUI=1 for process-compose),
+# because the agent or shell owns it; `app` mode runs it in the foreground, with one.
 
 set -euo pipefail
 
@@ -392,7 +394,14 @@ mkdir -p "$HOME" "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
 
 if [[ "${CONTAINER_START_APP:-0}" == "1" && -n "${CONTAINER_APP_CMD:-}" ]]; then
   echo "[container] starting app: ${CONTAINER_APP_CMD}" >&2
-  bash -lc "${CONTAINER_APP_CMD}" >"$HOME/app.log" 2>&1 &
+  # ⚠️ NOT ON THE TERMINAL. The agent or shell that follows owns it, and an app that
+  # also reads keys from it (process-compose's TUI, anything curses) fought it for
+  # the foreground, with about one key in five reaching either. So: no stdin, a
+  # session of its own (`setsid`: no controlling terminal to open), and
+  # process-compose told to run headless, its output going to app.log with the rest.
+  # `dfs-sandbox app` still gives an app the terminal, in the foreground.
+  export PC_DISABLE_TUI="${PC_DISABLE_TUI:-1}"
+  setsid bash -lc "${CONTAINER_APP_CMD}" </dev/null >"$HOME/app.log" 2>&1 &
   app_pid=$!
 
   if [[ -n "${CONTAINER_APP_READY_PORT:-}" ]]; then
