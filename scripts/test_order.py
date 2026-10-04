@@ -536,6 +536,7 @@ class BreaksOnTheScreen(InAWorkRoot):
 
     def test_b_puts_a_fence_above_the_selected_item(self):
         self.ui.sel = 1
+        self.ui.answers = ["y"]
         self.ui.toggle_break()
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
                          [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])
@@ -561,6 +562,7 @@ class BreaksOnTheScreen(InAWorkRoot):
 
     def test_b_again_takes_it_away(self):
         self.ui.sel = 1
+        self.ui.answers = ["y"]
         self.ui.toggle_break()
         self.ui.toggle_break()
         self.assertEqual(dfs_order.order_of(dfs_order.read_text()),
@@ -569,11 +571,20 @@ class BreaksOnTheScreen(InAWorkRoot):
 
     def test_an_ordinary_move_keeps_the_fence(self):
         self.ui.sel = 1
+        self.ui.answers = ["y"]
         self.ui.toggle_break()
         self.ui.sel = 2                      # W3, on the far side
         self.ui.reorder(-1)
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
                          [("W1", 0), (dfs_order.BREAK, 0), ("W3", 0), ("W2", 0)])
+
+    def test_b_without_a_yes_adds_no_break(self):
+        before = dfs_order.read_text()
+        self.ui.sel = 1
+        self.ui.answers = [""]
+        self.ui.toggle_break()
+        self.assertEqual(dfs_order.read_text(), before)
+        self.assertEqual(self.ui.msg, "no break added")
 
     def test_b_on_a_nested_item_says_so_and_writes_nothing(self):
         self.ui.sel = 1

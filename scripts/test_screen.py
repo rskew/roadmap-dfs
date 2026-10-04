@@ -613,6 +613,37 @@ class TheTreeKeepsItsExpandedNodeInView(unittest.TestCase):
         self.assertTrue(any(t.startswith(">") for t in shown), shown)
 
 
+class AddingABreakAsks(unittest.TestCase):
+    def screen(self, had, answers):
+        ui = a_screen([dict(item("W2"), depth=0)], answers=list(answers))
+        ui.nodes = lambda: []
+        wrote = []
+        ui.retree = lambda after, it, refusal: wrote.append(after) or after is not None
+        ui.said = lambda it, did: None
+        self.saved = (TUI.dfs_order.has_break_above, TUI.dfs_order.break_toggled)
+        TUI.dfs_order.has_break_above = lambda nodes, i: had
+        TUI.dfs_order.break_toggled = lambda nodes, i: "tree"
+        self.addCleanup(lambda: (setattr(TUI.dfs_order, "has_break_above", self.saved[0]),
+                                 setattr(TUI.dfs_order, "break_toggled", self.saved[1])))
+        return ui, wrote
+
+    def test_adding_one_needs_a_yes(self):
+        ui, wrote = self.screen(False, ["y"])
+        ui.toggle_break()
+        self.assertEqual(wrote, ["tree"])
+
+    def test_anything_else_adds_nothing(self):
+        for answer in ("", "n", "x"):
+            ui, wrote = self.screen(False, [answer])
+            ui.toggle_break()
+            self.assertEqual((wrote, ui.msg), ([], "no break added"))
+
+    def test_taking_one_away_does_not_ask(self):
+        ui, wrote = self.screen(True, [])
+        ui.toggle_break()
+        self.assertEqual(wrote, ["tree"])
+
+
 class LOpensTheLastRunAtItsEnd(unittest.TestCase):
     def test_l_reads_the_selected_items_newest_run_from_the_bottom(self):
         runs = [dict(path="/r/b/console.log", item="W2", run={"live": False}),

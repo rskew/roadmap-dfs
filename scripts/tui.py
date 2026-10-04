@@ -649,7 +649,7 @@ KEYS = [
     ("items", "]  = +", ord("]"), "down", "move down among its siblings"),
     ("items", "{  <", ord("{"), "out", "move out of its branch"),
     ("items", "}  >", ord("}"), "in", "move into the branch above"),
-    ("items", "b", ord("b"), "fence", "put a fence above it, or take the fence away"),
+    ("items", "b", ord("b"), "fence", "put a fence above it (asks first), or take the fence away"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
     ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
@@ -1860,7 +1860,16 @@ class UI:
         refusal = ("is nested — a break separates whole branches, never cuts one"
                    if it["depth"] else
                    "is the first item — a break above it would gate nothing")
-        if self.retree(dfs_order.break_toggled(nodes, it["id"]), it, refusal):
+        after = dfs_order.break_toggled(nodes, it["id"])
+        # ⚠️ ADDING ONE ASKS; taking one away does not. A fence gates everything after
+        # it on everything before, and `b` sits among the keys a hand finds by
+        # accident. A refusal (nested, first) says so without asking first.
+        if after is not None and not had:
+            if self.prompt("put a break above %s — everything after waits on "
+                           "everything above? [y/N]:" % it["id"])[:1].lower() != "y":
+                self.msg = "no break added"
+                return
+        if self.retree(after, it, refusal):
             self.said(it, "is no longer behind a break" if had
                           else "now waits on everything above the break")
 
