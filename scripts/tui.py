@@ -58,8 +58,10 @@ import shutil
 import signal
 import socket
 import subprocess
+import queue
 import tempfile
 import sys
+import threading
 import textwrap
 import time
 from pathlib import Path
@@ -71,6 +73,8 @@ import runs as dfs_runs               # noqa: E402  (needs HERE on the path firs
 import order as dfs_order              # noqa: E402  (the same)
 import paths as dfs_paths              # noqa: E402  (the same)
 import limit as dfs_limit              # noqa: E402  (the same)
+from walk import (AGENTS, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
+                  WALK_STOP, WalkMixin, agent_file, read_agent, walk_decide, walk_held_for)
 import tree as dfs_tree               # noqa: E402  (the same)
 
 # ⚠️ TWO ROOTS. `ROOT` is the repo being worked on — the CWD, and where everything is
@@ -81,105 +85,8 @@ STATE = dfs_paths.state()
 EPIC = dfs_paths.EPIC
 RUNNER = dfs_paths.rel(dfs_paths.SCRIPTS / "run.sh")
 # What `x` cycles through; each but the first is a run.sh flag of its own name.
-AGENTS = ("claude", "codex", "kiro", "opencode")
 ART_DIR = dfs_paths.artefacts()
 ART_PORT = int(os.environ.get("DFS_ARTEFACT_PORT") or 3016)  # docs/artefacts.md
-
-# ── the walk ──────────────────────────────────────────────────────────────────
-#
-# A chain ends; something has to decide what happens next. That decision is a
-# FUNCTION OF THREE FACTS and nothing else, so it lives out here where it can be
-# read and tested without a terminal: what the chain recorded about why it stopped
-# (`run.sh` writes it, `runs.py` gives it meaning), whether §3 actually
-# grew while it ran, and what a depth-first walk would take now (`dfs_state`).
-#
-# ⚠️ ONLY `limit` MEANS "WAIT AND TRY THE SAME THING AGAIN". Every other unhappy
-# ending — a crash, a session that appended nothing, a blown context ceiling —
-# means something about the machinery is wrong, and an autonomous spender that
-# treats those as "probably temporary" is one that burns a subscription overnight
-# on a loop. A usage limit and a crash are both `rc 1`, which is exactly why the
-# reason is recorded rather than inferred.
-#
-# ⚠️ A SUSPECT ITEM IS A RAISE, NOT A STOP. A chain that moved nothing in its tree,
-# or a session the runner found `idle`, says something about THAT item, and the
-# author's instrument for "look at this item" is a raise: it blocks the item, and
-# `next_item` then takes the next branch. Stopping the whole walk instead held every
-# other branch hostage to one item, overnight, for a check that can be wrong (see
-# `dfs_state.content`). It is still bounded: each raise blocks one item for good, so
-# a broken machine raises once per item and ends at "every branch is blocked".
-WALK_CONTINUE = {"blocked", "done", "cap"}
-# Endings that say something about THE ITEM, so the author hears about it on the item
-# and the walk takes the next branch.
-WALK_RAISE = {
-    "idle": "a session on it changed nothing in the repo",
-}
-# Endings that STOP the walk, because the next item would fare no better or because
-# they are significant enough that a person should look before more is spent.
-# ⚠️ `overbudget` and `overturns` stay here: the context ceiling (CHAIN_CEILING,
-# 400,000) was set far past any normal overrun precisely so that reaching it means
-# the budget is not holding (the highest peak on record is ~237,000). And `failed`
-# stays here because it is two things in one word: a session that exited non-zero
-# (on 2026-09-25 that was nix failing to fetch the agent, which every item would hit
-# next), and a critic or reviewer that changed code or gave no verdict. Raising on
-# the item for the first would raise on every item in turn.
-WALK_STOP = {
-    "interrupt": "interrupted",
-    "overbudget": "a session went past the context ceiling; the budget is not holding",
-    "overturns": "a session went past the turn ceiling with no context reading",
-    "failed": "a session failed; its console says whether the agent exited non-zero "
-              "or a critic or reviewer changed code or gave no verdict",
-}
-WALK_HOLD = 3600                # the fallback when the reset time is unparseable
-
-# ⚠️ A CHAIN IS NOT ON THE BOX UNTIL IT HAS SAID SO, AND IT SAYS SO SECOND.
-# `start_chain` MAKES the run directory and `run.sh` IDENTIFIES it, by writing
-# `meta.json` — and `dfs_runs.run_dirs` skips a directory that has none, because a
-# directory without one cannot be asked which item it is or whether it is alive. The
-# gap between those two moments is real and was measured on 2026-09-16: the chain
-# writes its meta about 110 ms after exec (three python starts before it), while
-# `start_chain`'s own `reload()` reaches `run_dirs()` at about 55 ms. So the walk's
-# own chain was absent from the list the walk then judged it by. This is how long it
-# may stay absent before that is read as a chain that DIED rather than one that has
-# not spoken yet.
-WALK_START_GRACE = 15           # seconds — see `walk_tick`
-
-
-def walk_decide(stop, moved, next_item):
-    """What the walk does after a chain ends, as `(action, why)`.
-
-    `run` carries the item, `hold` and `stop` carry a reason to show a person.
-
-    `raise` carries the question to put to the author on the item; the walk then
-    goes on to the next item, which the raise has just made the item stop being.
-
-    ⚠️ The `moved` cross-check is deliberately redundant with the runner's own
-    `idle` stop. The runner refuses to repeat a session that appended nothing
-    WITHIN a chain; this refuses to start another chain on an item that produced
-    nothing, which is the same guarantee one level up and the only thing standing
-    between a broken item and an unattended loop. Both end in a raise, which blocks
-    the item, rather than in a stop, which would block every other item too.
-
-    ⚠️ A chain that stopped `done` is exempt. `done` means the item is finished (every
-    live node confirmed and the last review found nothing, or the author accepted
-    it), and the review that says so is a verdict, not tree content, so a chain whose
-    last session was that review always moves nothing. No next chain goes to a done
-    item, so there is no loop to guard against. W20 raised on exactly this on
-    2026-09-30: its tree was complete, the review came back ok, and the author was
-    asked to look at an item that had only finished.
-    """
-    if stop == "limit":
-        return ("hold", "a usage limit")
-    if stop in WALK_RAISE:
-        return ("raise", WALK_RAISE[stop])
-    if stop not in WALK_CONTINUE:
-        return ("stop", WALK_STOP.get(stop) or stop
-                or "the chain ended without recording why")
-    if not moved and stop != "done":
-        return ("raise", "the chain moved nothing in the task tree")
-    if next_item is None:
-        return ("stop", "every branch is blocked or finished")
-    return ("run", next_item)
-
 
 # ── the review tree ───────────────────────────────────────────────────────────
 #
@@ -425,9 +332,6 @@ def strip_comments(text):
     return "\n".join(l for l in text.splitlines() if not l.startswith("#")).strip()
 
 
-def walk_held_for(seconds):
-    """A hold, in the units a person reads: whole minutes, floor 1."""
-    return "%dm" % max(1, int(seconds // 60))
 POLL_MS = 1000
 
 
@@ -1712,23 +1616,8 @@ def read_activity(path, keep=ACTIVITY_KEEP):
     return out
 
 
-def agent_file():
-    """Where the last `x` choice is kept, so the next screen launches the same agent:
-    beside `activity.log`, gitignored, and outside what the file watch reads."""
-    return os.path.join(dfs_runs.run_root(), "agent")
-
-
-def read_agent(path):
-    """The agent `path` names, or claude when it names none (or nothing we know)."""
-    try:
-        with open(path, errors="replace") as fh:
-            name = fh.read().strip()
-    except OSError:
-        return "claude"
-    return name if name in AGENTS else "claude"
-
-
-class UI:
+class UI(WalkMixin):
+    WATCH_HINT = ", [l] to watch"      # what a started chain's message adds for a person at the screen
     # State a screen built without __init__ (the tests' `object.__new__`) still
     # needs to draw: nothing being typed, no activity yet, the whole list shown.
     input = None
@@ -1762,6 +1651,7 @@ class UI:
         self.events = collections.deque(read_activity(activity_file()),
                                         maxlen=ACTIVITY_KEEP)
         self.real = True
+        self.commands = queue.Queue()   # what the web page asks of this screen: `call_soon`
         # Which half of the item pane the keys drive: the item list at the top, or
         # the item's tree below it. Tab swaps them; see `tree_focused`.
         self.focus = "list"
@@ -1779,17 +1669,7 @@ class UI:
         self._measure_cache = {}    # transcript -> (when, peak, responses)
         self._sel_row = self._sel_end = None
         self.body_h = 1             # rows the detail pane showed at the last draw
-        # The walk. Off until somebody turns it on, because it spends a
-        # subscription with nobody watching (see `walk_toggle`).
-        self.walk_on = False
-        self.walk_budget = 20       # SESSIONS, over the whole walk — see walk_toggle
-        self.walk_spent = 0         # sessions run by chains this walk has finished
-        self.walk_until = 0.0       # epoch; a usage-limit hold
-        self.walk_dir = None        # the run directory of the chain THIS started
-        self.walk_started = 0.0     # epoch; when it was started — see walk_tick
-        self.walk_content = set()   # what the trees said when that chain started
-        self.walk_note = ""         # why the last walk stopped, until the next one
-        self.walk_next = None       # an item the author pinned for the next chain — walk_pin
+        self.walk_init()
         # The review tree. Folds and opened nodes are keyed by node id, which
         # carries its task, so a fold survives a trip to another item and back.
         self.tree_sel = 0
@@ -1823,6 +1703,44 @@ class UI:
 
     def live(self, mode="work"):
         return [r for r in self.chains if r["live"] and r["mode"] == mode]
+
+    # ---- the web page beside this screen ---------------------------------------
+    # The web server runs in this process, on its own threads, and shares this screen's
+    # walk: one state, one set of decisions, controllable from either. Curses and the
+    # walk's state belong to THIS thread, so the server does not touch them: it hands
+    # a function to `call_soon`, which `poll` runs here, and waits for what it returns.
+
+    commands = None
+    web = None          # the running server's handle, from `start_web`
+
+    def call_soon(self, fn, timeout=5.0):
+        """Run `fn` on the screen's own thread and return its result (or raise its
+        error). A screen with a prompt open does not poll, so a request can wait: it
+        gives up after `timeout` seconds and says so."""
+        if self.commands is None:
+            raise ValueError("this screen is not serving the web page")
+        call = _Call(fn)
+        self.commands.put(call)
+        if not call.done.wait(timeout):
+            call.cancelled = True
+            raise ValueError("the terminal screen is busy (a prompt is open): try again in a moment")
+        if call.error is not None:
+            raise call.error
+        return call.result
+
+    def drain_commands(self):
+        while self.commands is not None:
+            try:
+                call = self.commands.get_nowait()
+            except queue.Empty:
+                return
+            if call.cancelled:
+                continue
+            try:
+                call.result = call.fn()
+            except Exception as e:      # the caller's to report, not the screen's to die of
+                call.error = e
+            call.done.set()
 
     def refresh_chains(self):
         """Re-derive which chains are on the box, NOW rather than at the last poll.
@@ -2209,6 +2127,7 @@ class UI:
     def poll(self):
         """Auto-refresh. Cheap enough to do every second, so there is no refresh key."""
         self.agent_update_tick()
+        self.drain_commands()
         self.walk_tick()
         sig = watch_signature()
         was_live = {r["dir"] for r in self.chains if r["live"]}
@@ -2299,7 +2218,10 @@ class UI:
             warn = "%d STAGED " % staged
         elif dirty:
             warn = "%d uncommitted " % dirty
-        right = warn + ("%s " % agent)
+        # The page this screen serves, as its port: enough to find it (the full address
+        # is the first line of `h`), short enough that it is the first thing to yield.
+        web = ("web :%s  " % self.web.url.rsplit(":", 1)[1].strip("/")) if self.web else ""
+        right = warn + web + ("%s " % agent)
         # ⚠️ Still ONE LINE THAT CHANGES SHAPE when the walk is on: the badge goes
         # first, in capitals, and red only while it is spending (see `walk_badge`).
         # The bar under it is gone — a slab of reverse video was the loudest thing
@@ -2343,6 +2265,8 @@ class UI:
         self.clip = None
         if warn:
             self.put(0, max(0, w - len(right) - 1), warn, look("amber"))
+        if web:
+            self.put(0, max(0, w - len(agent) - 2 - len(web)), web, look("chrome"))
         self.put(0, max(0, w - len(agent) - 2), agent, look("chrome"))
 
     def draw_list(self, top, height):
@@ -2564,8 +2488,14 @@ class UI:
             self.msg = "%s is named by entry %s but is not in %s" % (
                 art["name"], art["entry"], dfs_paths.rel(ART_DIR))
             return
-        url = ("http://localhost:%d/%s" % (ART_PORT, art["name"]) if art_server_up()
-               else (ART_DIR / art["name"]).as_uri())
+        # This screen's own web server serves them too (sandboxed), so when it is up that
+        # is the address: no second `http.server` to start.
+        if self.web:
+            url = "http://localhost:%s/artefacts/%s" % (
+                self.web.url.rsplit(":", 1)[1].strip("/"), art["name"])
+        else:
+            url = ("http://localhost:%d/%s" % (ART_PORT, art["name"]) if art_server_up()
+                   else (ART_DIR / art["name"]).as_uri())
         browser = os.environ.get("BROWSER")
         argv = ([browser, url] if browser else
                 next(([b, url] for b in ("xdg-open", "firefox", "chromium")
@@ -3961,14 +3891,64 @@ class UI:
 
     # ---- acting --------------------------------------------------------------
 
-    def shell(self, argv, pause=True):
+    def chat_env(self, scope):
+        """The session this scope's chat shares with the web page (chat.py): CHAT_SID, and
+        CHAT_RESUME when it has already got a transcript. Only claude's can be shared."""
+        if self.agent != "claude":
+            return None
+        try:
+            import chat as dfs_chat
+            sid, resume = dfs_chat.claim(scope)
+        except (OSError, ValueError, ImportError):
+            return None
+        return dict(os.environ, CHAT_SID=sid, **({"CHAT_RESUME": "1"} if resume else {}))
+
+    chat_host = None        # the chats running in the background, by scope (ptyrelay.ChatHost)
+
+    def chats_running(self):
+        if self.chat_host is None:
+            import ptyrelay
+            self.chat_host = ptyrelay.ChatHost()
+        return self.chat_host
+
+    def start_chat(self, scope):
+        """The chat for this scope, running in the BACKGROUND (started if it is not). Any
+        number can be going: the page types into them, `c` looks at one. A new one opens with
+        the summary (run.sh); one with a conversation already is resumed."""
+        argv = self.runner("--chat", scope)
+        return self.chats_running().ensure(scope, lambda: (argv, self.chat_env(scope) or dict(os.environ), ROOT))
+
+    def open_chat(self, scope):
+        """What `c` and `C` do: look at this scope's chat, running it first if it is not.
+        ctrl-] comes back to the roadmap and leaves it running."""
+        relay = self.start_chat(scope)
+        self.event("run", "chat %s" % scope)
+        curses.def_prog_mode()
+        curses.endwin()
+        print("\n[chat %s: ctrl-] returns to the roadmap and leaves it running]\n" % scope, flush=True)
+        try:
+            kept = relay.attach()
+        except KeyboardInterrupt:
+            kept = True
+        if not kept:
+            print("\n(the chat ended)")
+            try:
+                input("\n[enter] back to the roadmap ")
+            except (EOFError, KeyboardInterrupt):
+                pass
+        self.scr.clear()
+        curses.reset_prog_mode()
+        self.scr.refresh()
+        self.reload()
+
+    def shell(self, argv, pause=True, env=None):
         """Hand the real terminal over. Sessions are interactive and stream output."""
         self.event("run", "$ " + shlex.join(argv))
         curses.def_prog_mode()
         curses.endwin()
         print("\n$ " + " ".join(argv) + "\n", flush=True)
         try:
-            rc = subprocess.call(argv, cwd=ROOT)
+            rc = subprocess.call(argv, cwd=ROOT, env=env)
         except KeyboardInterrupt:
             rc = 130
             print("\n(interrupted)")
@@ -4003,51 +3983,17 @@ class UI:
         # to read, and that chain then runs for an hour.
         self.scroll = 10 ** 6 if at_end or is_growing(self.open_run) else 0
 
-    def start_chain(self, item, cap):
-        """Start a work chain in the background and come straight back.
-
-        ⚠️ The run directory is made HERE and handed down. The runner would mktemp
-        its own, and a parent that never reads the child's stdout could not learn
-        the name — so the console this pane tails would be a file nobody could find.
-
-        Detached (`start_new_session`) so it is not in this screen's process group:
-        a Ctrl-C aimed at the TUI, or quitting it, must not take a chain that has
-        been running for an hour with it. The flip side is that nothing else will
-        stop it either, which is what `K` is for.
-        """
-        live = dfs_runs.live_for(item)
-        if live:
-            self.msg = "%s already has a chain running (pid %s, %s) — [l] to watch it" % (
-                item, live["pid"], dfs_runs.progress(live))
-            return
-        root = dfs_runs.ensure_run_root()
-        rundir = tempfile.mkdtemp(prefix="dfs_run_", dir=root)
-        console = os.path.join(rundir, "console.log")
-        argv = self.runner(item, cap)
-        env = dict(os.environ, RUNDIR=rundir)
-        try:
-            with open(console, "ab") as fh:
-                fh.write(("$ %s\n\n" % " ".join(argv)).encode())
-                proc = subprocess.Popen(argv, cwd=ROOT, env=env,
-                                        stdin=subprocess.DEVNULL, stdout=fh,
-                                        stderr=subprocess.STDOUT,
-                                        start_new_session=True)
-        except OSError as e:
-            self.msg = "could not start %s: %s" % (argv[0], e)
-            return None
-        self.reload()
-        # The COMMAND, not a paraphrase of it: what this key did is the runner line
-        # the console opens with, and saying it here is how the screen teaches the
-        # CLI underneath it — the thing that runs without the screen, from a script.
-        self.event("run", "$ %s  (pid %d)" % (shlex.join(argv), proc.pid))
-        self.msg = "$ %s  — in the background, pid %d, [l] to watch" % (
-            shlex.join(argv), proc.pid)
-        # ⚠️ The DIRECTORY, not the pid: the walk has to judge the chain it started
-        # and no other, and a pid is reused while a run directory is not (see
-        # `dfs_runs.pid_is_chain`, which needs both to answer even "is it alive").
-        return rundir
-
     # ---- the walk ------------------------------------------------------------
+
+    def set_agent(self, name):
+        """`x`'s choice, kept for the next screen (and the web page) in `agent_file`."""
+        WalkMixin.set_agent(self, name)
+        if self.real:
+            try:
+                with open(os.path.join(dfs_runs.ensure_run_root(), "agent"), "w") as fh:
+                    fh.write(self.agent + "\n")
+            except OSError:
+                pass
 
     def walk_toggle(self):
         """Turn the depth-first walk on or off.
@@ -4091,69 +4037,10 @@ class UI:
         except ValueError:
             self.msg = "walk: %r is not a number of sessions" % raw
             return
-        if budget < 1:
-            self.msg = "walk: a budget of %d sessions is not a walk" % budget
-            return
-        self.walk_budget = budget
-        self.walk_spent = 0
-        self.walk_on = True
-        self.walk_until = 0.0
-        self.walk_dir = None
-        self.walk_note = ""
-        self.msg = "walk: on, %d sessions — w to stop" % budget
-        self.event("walk", "walk on, %d sessions" % budget)
-        self.walk_tick()
-
-    def walk_off(self, why):
-        self.walk_on = False
-        self.walk_dir = None
-        self.walk_until = 0.0
-        self.walk_note = why
-        self.msg = "walk: stopped — %s" % why
-        self.event("stop", "walk off — %s" % why)
-        if why != "stopped by hand":
-            self.notify("walk stopped: %s" % why)
-
-    def walk_end_chain(self):
-        """Turn the walk off by hand, and end its chain after the run it is in.
-
-        ⚠️ The walk's chain carries the walk's whole remaining budget as its cap
-        (`walk_tick`), so turning the walk off and leaving that chain alone left it
-        free to run every session the walk had left, with nothing watching it — W19
-        went from run 3 to run 5 of 33 after the walk was off. The cap is lowered to
-        the run it is on (`dfs_runs.lower_cap`), which is a chain of one from here:
-        the session in flight finishes its node's work, and no further one starts.
-        `K` is still the key for stopping the run in flight as well."""
-        run = self.walk_run()
-        self.walk_off("stopped by hand")
-        if not (run and run["live"]):
-            return
-        n = int(run["run"] or 0)
         try:
-            dfs_runs.lower_cap(run["dir"], n)
-        except OSError as e:
-            self.msg = ("walk: stopped, but %s's chain could not be told to end (%s) — "
-                        "K stops it" % (run["item"], e))
-            return
-        self.event("stop", "%s's chain told to end after run %d" % (run["item"], n))
-        self.msg = ("walk: stopped — %s's chain ends after run %d; K stops that run too"
-                    % (run["item"], n) if n else
-                    "walk: stopped — %s's chain ends before its first run" % run["item"])
-
-    def walk_run(self):
-        """The run directory this walk started, as `dfs_runs` currently sees it."""
-        return next((r for r in self.chains if r["dir"] == self.walk_dir), None)
-
-    def walk_used(self):
-        """Sessions spent so far: the finished chains, plus the live one's own count.
-
-        ⚠️ Read off the chain rather than counted here. `run.sh` records the run
-        it is ON before starting it, so this is the number of sessions that have
-        BEGUN — which is the one that should be charged against a budget, since a
-        session that started has already cost its context.
-        """
-        run = self.walk_run()
-        return self.walk_spent + (int(run["run"] or 0) if run else 0)
+            self.walk_begin(budget)
+        except ValueError as e:
+            self.msg = "walk: %s" % e
 
     def chain_progress(self, chain):
         """Where a chain IS — placed in the walk when the walk started it.
@@ -4205,166 +4092,6 @@ class UI:
             return "● WALK %s%s %s" % (run["item"], pin, spent)
         return "● WALK%s %s" % (pin, spent)
 
-    def walk_tick(self):
-        """One step of the walk, on the poll this screen already runs.
-
-        ⚠️ It waits on ANY live work chain, not only its own: two agents in one tree
-        append to §3 at the same time, which is how this roadmap's ids collided in
-        the first place. The walk is a second pair of hands, not a second author.
-        """
-        if not self.walk_on:
-            return
-        # ⚠️ THE WALK DECIDES ON A LIST IT MADE ITSELF. `poll` runs this tick BEFORE
-        # it re-derives `self.chains`, so what it hands over is the list
-        # `start_chain`'s own reload made — and that reload happens BEFORE the chain
-        # has written its `meta.json` (see `WALK_START_GRACE`). Every question below
-        # is about chains, so every one of them was being asked of a list that could
-        # not contain the chain this walk had just started: the walk turned itself
-        # off one second after starting its first chain, every time, and the chain
-        # ran on unwatched. Nobody saw why either — `walk_off` writes `self.msg` and
-        # the same `poll` overwrote it with "refreshed" before the screen was drawn,
-        # which is why a stop is now in the HEADER too (`walk_badge`).
-        self.refresh_chains()
-        if self.live():
-            return
-        if time.time() < self.walk_until:
-            return
-
-        if self.walk_dir is not None:
-            run = self.walk_run()
-            if run is None:
-                # Made, but not yet named by the chain itself. That is a start in
-                # progress, not a death — and the difference is how long it has had.
-                if time.time() - self.walk_started < WALK_START_GRACE:
-                    return
-                self.walk_off("the chain it started is no longer on the box")
-                return
-            if run["live"]:
-                return
-            # ⚠️ And the ROADMAP is read after the chain ended, for the same reason
-            # the chain list is. `poll` reloads only once this tick has returned, so
-            # a chain whose last append and whose exit landed inside the same second
-            # would be judged against a §3 that predates its own entry — and an
-            # entry the walk cannot see is `moved` false, which STOPS the walk and
-            # blames the item for appending nothing.
-            self.reload()
-            moved = bool(set(self.data.get("content", ())) - self.walk_content)
-            action, why = walk_decide(run["stop"], moved,
-                                      self.walk_next or self.data.get("next_item"))
-            self.walk_spent += int(run["run"] or 0)
-            self.walk_dir = None
-            if action == "hold":
-                # Until the stated reset when there is one; the flat hour only when
-                # the provider said nothing we can parse (dfs_limit.reset_at).
-                now = time.time()
-                at = dfs_limit.reset_at(run["resets"], now)
-                self.walk_until = at if at is not None else now + WALK_HOLD
-                tail = (" (%s)" % run["resets"]) if run["resets"] else ""
-                self.msg = self.event("hold", "walk: %s hit %s — holding %s%s" % (
-                    run["item"], why, walk_held_for(self.walk_until - now), tail))
-                return
-            if action == "stop":
-                self.walk_off("%s: %s" % (run["item"], why))
-                return
-            if action == "raise":
-                if not self.walk_raise(run["item"], why):
-                    return
-
-        left = self.walk_budget - self.walk_spent
-        if left < 1:
-            self.walk_off("%d sessions spent" % self.walk_spent)
-            return
-        item = self.walk_pinned() or self.data.get("next_item")
-        if item is None:
-            self.walk_off("every branch is blocked or finished")
-            return
-        self.walk_next = None
-        self.walk_content = set(self.data.get("content", ()))
-        self.walk_started = time.time()
-        # ⚠️ The chain's cap IS the remaining budget, which is what makes the budget
-        # a real bound rather than a thing checked between chains: a chain cannot
-        # overshoot it by running one more session than the walk has left to spend.
-        self.walk_dir = self.start_chain(item, str(left))
-        if self.walk_dir is None:
-            self.walk_off("could not start a chain on %s" % item)
-
-    def walk_pinned(self):
-        """The pinned item, while it can still be worked; a pin that cannot is dropped.
-
-        ⚠️ Checked when the chain STARTS, not when the key was pressed: a chain on an
-        item that finished or raised in between would end "done before run 1" having
-        moved nothing, and `walk_decide` would raise on it for that. Only the item's
-        OWN status is asked — a fence or an ancestor's raise is exactly the order the
-        author is overriding by pinning it."""
-        if self.walk_next is None:
-            return None
-        row = next((i for i in self.items if i["id"] == self.walk_next), None)
-        if row is None or row["status"] != "open":
-            self.msg = "walk: dropped the pin on %s — it is %s" % (
-                self.walk_next, row["status"] if row else "gone")
-            self.walk_next = None
-            return None
-        return self.walk_next
-
-    def walk_pin(self, it):
-        """`n`: the walk's next chain goes to the selected item, not `next_item`.
-
-        The walk's chain carries the walk's whole remaining budget, so "next" would
-        otherwise mean "whenever this item stops being workable". A chain on another
-        item is ended after the run in flight (`dfs_runs.lower_cap`, as `w` does), so
-        the switch happens at the next session. After that one chain, `next_item`
-        decides as usual — and since a walk finishes what it started
-        (`dfs_state.continue_last`), that keeps it on the pinned item while it is
-        open and nothing holds it. `n` on the pinned item takes the pin away."""
-        if it is None:
-            return
-        if self.walk_next == it["id"]:
-            self.walk_next = None
-            self.msg = "walk: pin on %s removed" % it["id"]
-            return
-        if it["status"] != "open":
-            self.msg = "walk: %s is %s — nothing for a chain to do there" % (
-                it["id"], it["status"])
-            return
-        self.walk_next = it["id"]
-        run = self.walk_run()
-        if not (self.walk_on and run and run["live"]) or run["item"] == it["id"]:
-            self.msg = self.event("walk", "walk: its next chain goes to %s" % it["id"]
-                                  if self.walk_on else
-                                  "walk: %s goes first when w starts it" % it["id"])
-            return
-        n = int(run["run"] or 0)
-        try:
-            dfs_runs.lower_cap(run["dir"], n)
-        except OSError as e:
-            self.msg = ("walk: %s pinned, but %s's chain could not be told to end (%s)"
-                        % (it["id"], run["item"], e))
-            return
-        self.msg = self.event("walk", "walk: pinned %s — %s's chain ends after run %d" % (
-            it["id"], run["item"], n))
-
-    def walk_raise(self, item, why):
-        """Put a suspect item to the author and re-read the trees; True to carry on.
-
-        ⚠️ The raise is what moves the walk on, so it is checked rather than trusted:
-        if `next_item` still names the item afterwards, the raise did not block it,
-        and starting another chain there is the loop this exists to prevent."""
-        body = ("The walk suspects a problem with %s: %s. Look at the last chain's "
-                "run and the tree (%s --review %s): answer this to let the walk take "
-                "it again, or correct the node where it went wrong."
-                % (item, why, RUNNER, item))
-        try:
-            dfs_tree.append_log(item, "raise", (), body)
-        except (OSError, ValueError) as e:
-            self.walk_off("%s: %s, and the raise failed (%s)" % (item, why, e))
-            return False
-        self.reload()
-        if self.data.get("next_item") == item:
-            self.walk_off("%s: %s, and the raise did not block it" % (item, why))
-            return False
-        self.msg = self.event("raise", "walk: raised on %s — %s; moving on" % (item, why))
-        return True
-
     def stop_chain(self, item):
         """Ctrl-C for a chain nobody has a terminal on.
 
@@ -4382,14 +4109,9 @@ class UI:
             self.msg = "left it running"
             return
         try:
-            os.killpg(r["pid"], signal.SIGINT)
-        except OSError as e:
-            self.msg = "could not signal pid %s: %s" % (r["pid"], e)
-            return
-        self.event("stop", "interrupted %s's chain (pid %s)" % (item, r["pid"]))
-        self.msg = ("interrupted %s's chain — it stops after the run it is in; the "
-                    "next session picks up the node's uncommitted work" % item)
-        self.reload()
+            self.interrupt_chain(item)
+        except ValueError as e:
+            self.msg = str(e)
 
     def compose(self, frame):
         """The author's words, written in `$EDITOR` under `frame` as `#` lines.
@@ -4634,18 +4356,6 @@ class UI:
             return "review" if it.get("standing") else "none"
         return "work"
 
-    def runner(self, *args):
-        """The runner argv for a pass.
-
-        `can_fold` and the `--fold` it put on the line are gone with the fold session:
-        the fold is the first act of the session that picks the item up (§0.1 step 3),
-        so there is no flag and nothing to ask about.
-        """
-        argv = [RUNNER]
-        if self.agent != "claude":
-            argv.append("--" + self.agent)
-        return argv + [a for a in args if a]
-
     def tree_focused(self):
         return self.pane == "item" and self.focus == "tree"
 
@@ -4765,14 +4475,7 @@ class UI:
             # line, and `follows` arms following from there if the file is growing.
             self.scroll = 10 ** 6
         elif ch == ord("x"):
-            self.agent = AGENTS[(AGENTS.index(self.agent) + 1) % len(AGENTS)]
-            self.msg = "agent: " + self.agent
-            if self.real:
-                try:
-                    with open(os.path.join(dfs_runs.ensure_run_root(), "agent"), "w") as fh:
-                        fh.write(self.agent + "\n")
-                except OSError:
-                    pass
+            self.set_agent(AGENTS[(AGENTS.index(self.agent) + 1) % len(AGENTS)])
         elif ch == ord("3"):
             # ⚠️ It was `r`, which now runs the review. The pane is called §3 and this
             # is its digit, so the key still spells what it opens — and moving a
@@ -4876,9 +4579,9 @@ class UI:
         elif ch == ord("A") and self.tree_focused():
             self.tree_accept(item)
         elif ch == ord("c"):
-            self.shell(self.runner("--chat", item))
+            self.open_chat(item)
         elif ch == ord("C"):
-            self.shell(self.runner("--chat", "project"))
+            self.open_chat("project")
         elif ch == ord("K"):
             # Capital, and it asks: a chain is an hour of somebody's subscription and
             # there is no undo for stopping one halfway.
@@ -4941,6 +4644,96 @@ class UI:
                 break
 
 
+class _Call:
+    """One thing the web server asked of the screen, and where its answer goes."""
+
+    def __init__(self, fn):
+        self.fn, self.done = fn, threading.Event()
+        self.result = self.error = None
+        self.cancelled = False
+
+
+class UiWalker:
+    """The screen's own walk, as the web page sees it: the interface `HeadlessWalk` has,
+    but nothing here is state. Controls are run on the screen's thread (`UI.call_soon`);
+    the snapshot is only read."""
+
+    def __init__(self, ui):
+        self.ui = ui
+
+    def start(self, budget):
+        self.ui.call_soon(lambda: self.ui.walk_start(budget))
+
+    def stop(self):
+        self.ui.call_soon(lambda: self.ui.walk_end_chain() if self.ui.walk_on else None)
+
+    def pin(self, item):
+        self.ui.call_soon(lambda: self.ui.walk_pin_id(item))
+
+    def stop_chain(self, item):
+        self.ui.call_soon(lambda: self.ui.interrupt_chain(item))
+
+    def set_agent(self, name):
+        self.ui.call_soon(lambda: self.ui.set_agent(name))
+
+    def agent(self):
+        return self.ui.agent
+
+    # the chats: background agents this process runs, any number, that the page types into
+    has_screen = True
+
+    def _relay(self, scope):
+        return self.ui.chat_host.get(scope) if self.ui.chat_host else None
+
+    def chat_live(self, scope):
+        return self._relay(scope) is not None
+
+    def chat_active(self, scope):
+        r = self._relay(scope)
+        return bool(r and r.active)
+
+    def chat_open(self, scope):
+        """A new chat was opened on the page: start it, and it opens with the summary."""
+        self.ui.start_chat(scope)
+        return True
+
+    def chat_send(self, scope, text):
+        if self.ui.agent != "claude":
+            return False
+        return self.ui.start_chat(scope).send(text)
+
+    def chat_close(self, scope):
+        if self.ui.chat_host:
+            self.ui.chat_host.close(scope)
+
+    def loop(self, stop, interval=1.0):
+        stop.wait()             # the screen's own poll steps the walk
+
+    def snapshot(self, data=None):
+        return self.ui.walk_snapshot()
+
+
+def start_web(ui):
+    """Serve the web page from this process, beside the screen, unless DFS_WEB says not
+    to. It shares the screen's walk. The first free port from DFS_WEB_PORT (8765) up:
+    another project's screen may have the first. Returns the server's handle or None."""
+    if os.environ.get("DFS_WEB", "1").lower() in ("0", "off", "no", "false"):
+        return None
+    try:
+        import web as dfs_web
+        handle = dfs_web.serve(dfs_web.default_host(),
+                               int(os.environ.get("DFS_WEB_PORT", "8765")), walker=UiWalker(ui),
+                               tries=20)
+    except (OSError, ValueError, ImportError) as e:
+        ui.event("stop", "web: not serving (%s)" % e)
+        return None
+    ui.event("run", "web: %s%s" % (handle.url, "  (no login: anyone on this network can "
+                                    "answer, correct, accept and start the walk)"
+                                    if handle.public else ""))
+    ui.msg = "web: " + handle.url
+    return handle
+
+
 def main(stdscr):
     # ncurses defaults ESCDELAY to 1000ms: having read an ESC byte it waits that
     # long for the rest of a possible escape sequence (an arrow key is ESC [ A)
@@ -4964,7 +4757,14 @@ def main(stdscr):
     # From here and not UI(): the tests build a UI of their own, and one that went to
     # the network and rewrote a pin every time it was constructed would be a test of nix.
     ui.agent_update = start_agent_update()
-    ui.loop()
+    ui.web = start_web(ui)
+    try:
+        ui.loop()
+    finally:
+        if ui.web is not None:
+            ui.web.stop()
+        if ui.chat_host is not None:
+            ui.chat_host.close_all()        # the chats run for as long as this screen does
 
 
 if __name__ == "__main__":

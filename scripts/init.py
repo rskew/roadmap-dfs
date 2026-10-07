@@ -123,6 +123,11 @@ def main(argv):
 
     print("dfs_init: %s" % dfs_paths.state())
     write_new(dfs_paths.roadmap(), (dfs_paths.TEMPLATES / "ROADMAP.md").read_text())
+    if dfs_paths.read_title():
+        say("kept", dfs_paths.title_file())
+    else:
+        dfs_paths.write_title(dfs_paths.git_project_name())
+        say("made", dfs_paths.title_file())
     if dfs_paths.items().is_dir():
         say("kept", dfs_paths.items())
     else:

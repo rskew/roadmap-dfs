@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f5f4ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171a1d" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="{{project}}">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="data:,">
+<title>{{project}}</title>
+<link rel="stylesheet" href="/design.css">
+<script>
+try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<style>
+/* The page's own layout. What things ARE (type, colour, buttons, tags, fields, cards,
+   dialogs) is the design system, /design.css; what is here is where they go. */
+:root { --bar: 56px; --tabs: 52px; --col: 880px; --page: 1180px; }
+body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
+
+/* the bar: a name, a way back, and the three colours as one thin line */
+#bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; align-items: center; gap: var(--s3);
+  min-height: var(--bar); padding: 0 var(--s4); background: var(--paper); border-bottom: var(--rule) solid var(--line);
+}
+#bar::after { content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: var(--rule-strong);
+  background: linear-gradient(90deg, var(--attention) 0 33.33%, var(--assumption-fill) 0 66.66%, var(--settled) 0 100%); }
+#bar h1 { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-body); line-height: 1.2; font-weight: 500; padding: var(--s2) 0; }
+#bar h1 .rename { display: block; max-width: 100%; text-align: left; font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 28px; padding: 8px 0; margin: -8px 0; box-sizing: content-box; }
+#bar h1 .rename:hover, #bar h1 .rename:focus-visible { text-decoration-color: var(--ink); }
+#bar h1 small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--fs-label); font-weight: 400; color: var(--muted); letter-spacing: .04em; }
+#bar .iconbtn { margin-right: -10px; }
+#back[hidden], #live[hidden] { display: none; }
+@media (max-width: 899px) { #back, .desk { display: none; } }          /* the bottom bar has these */
+#live { font-size: var(--fs-label); color: var(--attention); letter-spacing: .08em; text-transform: uppercase; }
+
+#layout { max-width: var(--page); margin: 0 auto; }
+#view { padding: var(--s3) var(--s4) 28px; min-width: 0; }
+#view.col { max-width: var(--col); margin: 0 auto; }
+
+/* tabs: two words; the current one carries a line */
+#tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex;
+  height: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--paper); border-top: var(--rule) solid var(--line);
+}
+#tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--s2); font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border-top: var(--rule-strong) solid transparent; margin-top: -1px; }
+#tabs button[aria-current="page"] { color: var(--ink); border-top-color: var(--ink); }
+.count { font-variant-numeric: tabular-nums; color: var(--assumption); }
+.count[hidden] { display: none; }
+
+/* the task list: ruled, with ids in a column */
+.filters { display: flex; gap: 22px; margin: var(--s1) 0 6px; border-bottom: var(--rule) solid var(--line); }
+.filters button { min-height: var(--hit); min-width: var(--hit); padding: 0 var(--s1); font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border-bottom: var(--rule-strong) solid transparent; margin-bottom: -1px; }
+.filters button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.item { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 var(--s3); width: 100%; padding: var(--s4) 0; padding-left: calc(var(--ind, 0px) + var(--gx, 0px)); border-bottom: var(--rule) solid var(--line); }
+.item.tint { margin: 0 -10px; width: calc(100% + 20px); --gx: 10px; padding-right: 10px; }
+.item.assumes { background: var(--assumption-wash); }
+.item.blocks { background: var(--attention-wash); }          /* a blocker is the more urgent: it wins */
+.item:active { background: var(--sel); }
+.item .iid { font-weight: 600; letter-spacing: .03em; }
+.item .goal { font-weight: 500; overflow-wrap: anywhere; }
+.item .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin-top: 6px; font-size: var(--fs-control); }
+.item .st { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.item .st.done { color: var(--settled); } .item .st.blocked { color: var(--attention); }
+.item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
+.break { margin: 18px 0 6px; display: flex; align-items: center; gap: var(--s3); }
+.break::after { content: ""; flex: 1; border-top: var(--rule) solid var(--line); }
+.hint { color: var(--muted); padding: 28px 0; }
+p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
+
+/* the walk */
+.walk { margin: 6px 0 10px; border-bottom: var(--rule) solid var(--line); }
+.walk > summary { min-height: 52px; display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
+.walk > summary::-webkit-details-marker { display: none; }
+.walk > summary .state { font-size: var(--fs-body); font-weight: 500; }
+.walk > summary .brief { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; }
+.walk > summary .chev { margin-left: auto; align-self: center; width: var(--s2); height: var(--s2); border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform var(--ease); }
+.walk[open] > summary .chev { transform: rotate(-135deg); }
+.walk .state .on { color: var(--settled); } .walk .state .hold { color: var(--assumption); }
+.walk .line2 { color: var(--muted); font-size: var(--fs-small); margin: 0 0 6px; }
+.walk .row2 { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0; }
+.walk .row2.act { margin-bottom: 14px; }
+.walk label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.walk .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
+.walk .chain span:first-child { overflow-wrap: anywhere; }
+.walk details { margin-top: 6px; }
+.walk details > summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; list-style: none; }
+.walk details > summary::after { content: ""; margin-left: 10px; width: 6px; height: 6px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.walk details[open] > summary::after { transform: rotate(-135deg); }
+.walk details summary::-webkit-details-marker { display: none; }
+.walk .ev { margin: 0; padding: 0 0 10px; list-style: none; font-size: 14px; color: var(--muted); }
+.walk .ev li { padding: 2px 0; display: flex; gap: 10px; }
+.walk .ev time { flex: none; width: 5.5em; font-variant-numeric: tabular-nums; }
+
+/* one task */
+.head h2 { margin: 10px 0 var(--s1); font-size: var(--fs-title); line-height: 1.25; font-weight: 500; text-wrap: balance; }
+.head p { margin: 2px 0 0; font-size: var(--fs-small); }
+details.sec.arts .body { white-space: normal; }
+.arts ul { margin: 0 0 var(--s2); padding: 0; list-style: none; } .arts li a.art { display: flex; align-items: center; min-height: var(--hit); }
+.arts .sub { margin: 6px 0 2px; }
+
+/* the tree: a column of hairlines; the left rule says what the node came to */
+.tree { margin-top: var(--s2); }
+.row { display: flex; align-items: stretch; margin-left: calc(var(--d, 0) * 12px); border-bottom: var(--rule) solid var(--faint); }
+@media (min-width: 600px) { .row { margin-left: calc(var(--d, 0) * 20px); } }
+.row .fold { flex: 0 0 40px; min-height: 56px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 20px; }
+.row .fold.none { visibility: hidden; }
+.row .main { flex: 1; min-width: 0; padding: var(--s3) 6px var(--s3) 14px; border-left: var(--rule-status) solid var(--st, var(--line)); }
+.row .main:active, .row.sel .main { background: var(--sel); }
+.row.s-confirmed { --st: var(--settled); } .row.s-refuted { --st: var(--attention); }
+.row.s-open { --st: var(--ink); } .row.s-parked, .row.s-dormant, .row.s-pruned { --st: var(--line); }
+.row .line { overflow-wrap: anywhere; }
+.row .nid { font-weight: 600; margin-right: var(--s2); letter-spacing: .03em; }
+.row .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+.row .skim { margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row.quiet .line { color: var(--muted); }
+.row.assumes .main { background: var(--assumption-wash); }
+.row.assumes .nid { color: var(--assumption); }
+.row.hasraise .main { background: var(--attention-wash); }
+.row.hasraise .nid { color: var(--attention); }
+.row.sel .main { box-shadow: inset 0 0 0 var(--rule) var(--ink); }
+.row.overruled .skim { color: var(--attention); }
+
+/* the node: a sheet from the bottom on a phone, a column beside the tree on a wide screen */
+#sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; height: min(86dvh, 760px); display: none; flex-direction: column;
+  background: var(--panel); border-top: var(--rule) solid var(--ink); padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+#sheet.open { display: flex; }
+#scrim { position: fixed; inset: 0; z-index: 7; background: var(--scrim); display: none; }
+#scrim.open { display: block; }
+.sheet-nav, .sheet-actions { flex: none; }
+/* the node's own bar, at the bottom: Back leftmost, Next where the right thumb rests */
+.sheet-nav { display: grid; grid-template-columns: repeat(4, 1fr); border-top: var(--rule) solid var(--line); }
+.sheet-nav button { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; text-align: center; }
+.sheet-nav button + button { border-left: var(--rule) solid var(--faint); }
+.sheet-nav button[data-act=next] { font-weight: 700; color: var(--ink); background: var(--sel); }
+.sheet-nav button:disabled { color: var(--muted); opacity: .45; cursor: default; background: none; }
+.sheet-nav button:not(:disabled):active { background: var(--sel); text-decoration: underline; text-underline-offset: 6px; }
+.sheet-body .where { margin-bottom: var(--s1); font-variant-numeric: tabular-nums; }
+.sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4) var(--s4) 20px; overscroll-behavior: contain; }
+.sheet-body h3 { margin: 0 0 2px; font-size: var(--fs-title); line-height: 1.25; font-weight: 500; overflow-wrap: anywhere; }
+.sheet-body .meta { color: var(--muted); font-size: 14px; letter-spacing: .04em; margin-bottom: var(--s1); }
+.sheet-body h4 { margin: 20px 0 var(--s1); font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); text-transform: uppercase; color: var(--muted); }
+.sheet-body .raise h4 { margin: 0 0 var(--s2); }
+.sheet-body h4.amber { color: var(--assumption); } .sheet-body h4.red { color: var(--attention); }
+.sheet-body p { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: var(--measure); }
+.sheet-body p.amber { color: var(--assumption); }
+.sheet-body p.plus { color: var(--settled); } .sheet-body p.minus { color: var(--attention); }
+.sheet-body p.plus::before { content: "For \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+.sheet-body p.minus::before { content: "Against \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+.sheet-body p.red { color: var(--attention); } .sheet-body p.dim { color: var(--muted); }
+.sheet-body .raise { margin: var(--s3) 0; }
+.sheet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
+
+/* chat: a conversation in a dialog of its own, full height on a phone */
+#chat { width: min(720px, 100vw); max-width: 100vw; margin: auto; padding: 0; flex-direction: column; }
+#chat[open] { display: flex; }
+.chat-top { flex: none; display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); }
+.chat-nav { grid-template-columns: repeat(3, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.chat-nav button[data-act=chatclose] { font-weight: 700; }
+#chat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4); overscroll-behavior: contain; }
+.msg { margin: 0 0 var(--s3); max-width: var(--measure); }
+.msg .who { display: block; margin-bottom: 2px; }
+.msg .what { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.you { padding: var(--s2) var(--s3); background: var(--sel); border-left: var(--rule-status) solid var(--ink); }
+.msg.error { padding: var(--s2) var(--s3); background: var(--attention-wash); border-left: var(--rule-status) solid var(--attention); }
+.msg.wait { color: var(--muted); }
+.msg pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
+#chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
+#chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: 30dvh; resize: none; }
+#chat-form .btn { flex: none; }
+
+/* A keyboard shrinks the VISUAL viewport and may leave the layout one as it was: the dialogs
+   are fitted to the visual one (--vvh, --vvt, set below), their fields scroll, and the row of
+   actions sticks to the bottom of what is left, so nothing you press is ever under the keys. */
+#form[open], #chat[open] { top: var(--vvt, 0px); bottom: calc(100dvh - var(--vvt, 0px) - var(--vvh, 100dvh)); max-height: var(--vvh, 100dvh); }
+#chat { height: min(var(--vvh, 100dvh), 900px); }
+#form form { max-height: var(--vvh, 100dvh); overflow-y: auto; overscroll-behavior: contain; }
+#form .row-btns { position: sticky; bottom: calc(-1 * var(--s4)); margin-bottom: calc(-1 * var(--s4)); padding: var(--s2) 0 var(--s4); background: var(--panel); }
+@media (min-width: 900px) {
+  body { padding-bottom: 0; }
+  #tabs { position: fixed; top: 0; left: auto; right: var(--s4); bottom: auto; width: auto; height: var(--bar); border: 0; background: transparent; padding: 0; gap: var(--s2); z-index: 7; }
+  #tabs button { flex: none; padding: 0 14px; margin: 0; border-top: 0; border-bottom: var(--rule-strong) solid transparent; height: var(--bar); }
+  #tabs button[aria-current="page"] { border-bottom-color: var(--ink); }
+  #bar { padding-right: 280px; }
+  #layout.has-node { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 44%); gap: 0 28px; align-items: start; }
+  #sheet { position: sticky; top: calc(var(--bar) + var(--s3)); right: auto; left: auto; bottom: auto; height: calc(100dvh - var(--bar) - 28px); border: var(--rule) solid var(--line); margin: var(--s3) var(--s4) 0 0; display: none; }
+  #layout.has-node #sheet.open { display: flex; }
+  .sheet-nav { order: -1; border-top: 0; border-bottom: var(--rule) solid var(--line); }
+  .sheet-nav button { min-height: var(--hit); }
+  #scrim { display: none !important; }
+  #toast { top: auto; bottom: var(--s5); }
+}
+</style>
+</head>
+<body>
+<header id="bar">
+  <button class="textbtn" id="back" hidden>Back</button>
+  <h1 id="title">{{project}}</h1>
+  <span id="live" hidden>reconnecting</span>
+  <button class="iconbtn" id="theme" aria-label="Switch between light and dark"></button>
+</header>
+<nav id="tabs" aria-label="Navigate"></nav>
+<div id="layout">
+  <main id="view" aria-live="polite"></main>
+  <aside id="sheet" role="dialog" aria-label="Node" aria-modal="false"></aside>
+</div>
+<div id="scrim"></div>
+<dialog id="form"></dialog>
+<dialog id="chat" aria-label="Chat">
+  <div class="chat-top"><span class="cap" id="chat-title"></span></div>
+  <div id="chat-log" role="log" aria-live="polite"></div>
+  <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn primary" id="chat-send" type="submit">Send</button></form>
+  <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
+</dialog>
+<div id="toast" role="status"></div>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+let PROJECT = {{project_json}};
+const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, node: null, sig: "", dirty: false };
+const wide = () => matchMedia("(min-width: 900px)").matches;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  let j = {};
+  try { j = await r.json(); } catch (e) { /* not JSON */ }
+  if (!r.ok) throw new Error(j.error || ("error " + r.status));
+  return j;
+}
+let toastT;
+function toast(msg, err) {
+  const t = $("#toast");
+  t.textContent = msg; t.className = "show" + (err ? " err" : "");
+  clearTimeout(toastT); toastT = setTimeout(() => t.className = "", err ? 5000 : 2600);
+}
+
+/* ── routing: #/  #/t/W3  #/t/W3/W3.2  #/assumptions ─────────────────────────── */
+function route() {
+  const p = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+  if (p[0] === "t" && p[1]) return { view: "task", task: p[1], node: p[2] || null };
+  if (p[0] === "assumptions") return { view: "assumptions" };
+  if (p[0] === "chats") return { view: "chats" };
+  return { view: "tasks" };
+}
+const go = (h, replace) => replace ? location.replace("#/" + h) : (location.hash = "/" + h);
+
+let lastView = "";
+let RENDERS = 0;
+async function render(force) {
+  // A render is a fetch and then a draw, and a newer one can start before an older one
+  // lands: an older list render finishing after the tap on a task drew the list over it.
+  // Only the newest draws.
+  const mine = ++RENDERS;
+  const r = route();
+  const where = r.view + ":" + (r.task || "");
+  if (where !== lastView) { lastView = where; window.scrollTo(0, 0); S.sig = ""; }
+  try {
+    if (r.view === "task") {
+      if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
+      let t;
+      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk")]);
+      if (mine !== RENDERS) return;
+      S.node = r.node;
+      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + (S.walk && S.walk.pinned);
+      S.task = t;
+      if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
+    } else if (r.view === "assumptions") {
+      const asm = (await api("/api/assumptions")).assumed;
+      if (mine !== RENDERS) return;
+      S.asm = asm;
+      S.node = null; drawAsm();
+    } else if (r.view === "chats") {
+      const [list, state] = await Promise.all([api("/api/chats"), api("/api/state")]);
+      if (mine !== RENDERS) return;
+      S.chats = list.chats; S.state = state; S.node = null; drawChats();
+    } else {
+      const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk")]);
+      if (mine !== RENDERS) return;
+      S.state = state; S.walk = walk;
+      S.node = null; drawTasks();
+    }
+    chrome(r);
+    refreshCount();
+  } catch (e) { toast(e.message, true); }
+}
+async function refreshCount() {
+  try {
+    S.asmCount = (await api("/api/assumptions")).assumed.length;
+    const b = $("#asmcount"); if (b) { b.hidden = !S.asmCount; b.textContent = S.asmCount; }
+  } catch (e) { /* a count is a convenience */ }
+}
+/* The bar at the bottom is where the thumbs are, so it holds what you press to move: on a phone,
+   Back is always its right cell, under the right thumb, with what moves you on the left, and what is next to it is what that screen leads to. On a wide
+   screen it is the two tabs, up at the top, and Back is in the header. */
+function drawBar(r) {
+  const tab = (name, label, cur) => `<button data-tab="${name}" ${cur ? 'aria-current="page"' : ""}>${label}</button>`;
+  const count = `<span class="count" id="asmcount" ${S.asmCount ? "" : "hidden"}>${S.asmCount || ""}</span>`;
+  let html, mode;
+  if (r.view !== "task" || wide()) {
+    mode = "tabs";
+    html = tab("tasks", "Tasks", r.view === "tasks") + tab("assumptions", `Assumptions ${count}`, r.view === "assumptions")
+      + (chatOn() ? tab("chats", "Chats", r.view === "chats") : "");
+  } else {
+    mode = "task";
+    const flagged = S.task ? S.task.assumed.length : 0;
+    html = (chatOn() ? `<button data-act="chat" data-scope="${esc(r.task)}">Chat</button>` : "")
+      + (flagged ? `<button data-act="nextflag">Flagged ${flagged}</button>` : "")
+      + `<button data-act="up">Back</button>`;
+  }
+  const bar = $("#tabs");
+  if (bar.dataset.sig !== mode + html) { bar.innerHTML = html; bar.dataset.sig = mode + html; }
+  bar.dataset.mode = mode;
+}
+function chrome(r) {
+  drawBar(r);
+  $("#back").hidden = r.view === "tasks" || r.view === "assumptions" || r.view === "chats";
+  const t = $("#title");
+  if (r.view === "task" && S.task) t.innerHTML = `${esc(S.task.id)}<small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
+  else if (r.view === "assumptions") t.innerHTML = `Assumptions<small>what rests on a decision of yours</small>`;
+  else if (r.view === "chats") t.innerHTML = `Chats<small>${S.chats ? S.chats.length : 0} going, any of them yours to pick up</small>`;
+  else if (S.state) t.innerHTML = `<button class="rename" data-act="rename" aria-label="Rename the project">${esc(PROJECT)}</button><small>${S.state.items.length} tasks, ${S.state.needs_you} need you</small>`;
+  document.title = (r.view === "task" ? r.task + " · " : "") + PROJECT;
+  const open = r.view === "task" && !!r.node && !!S.task && S.task.rows.some(x => x.key === r.node);
+  $("#sheet").classList.toggle("open", open);
+  $("#scrim").classList.toggle("open", open && !wide());
+  $("#layout").classList.toggle("has-node", r.view === "task");
+  if (r.view === "task" && !open) $("#sheet").innerHTML = wide() ? `<p class="hint" style="padding:0 16px">Pick a node to read it here.</p>` : "";
+  if (open) drawSheet();
+}
+
+/* ── the walk: start it, stop it, choose where it goes next ─────────────────────── */
+function walkHtml() {
+  const w = S.walk;
+  if (!w || !w.enabled) return "";
+  const chain = w.chain && w.chain.live ? w.chain : null;
+  const state = w.on
+    ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : `<span class="on">Walking</span>`)
+    : "Walk is off";
+  const line2 = w.on
+    ? `${w.used} of ${w.budget} sessions used${chain ? `. Now ${esc(chain.item)}, ${esc(chain.progress)}.` : "."}`
+    : (w.note ? `Stopped: ${esc(w.note)}.` : `A walk works the tasks depth-first, under a budget of sessions.`);
+  const auto = w.auto ? `Automatic: ${esc(w.auto)}` : "Automatic: nothing is workable";
+  const options = [`<option value="">${auto}</option>`].concat(w.candidates.map(c =>
+    `<option value="${esc(c.id)}" ${w.pinned === c.id ? "selected" : ""}>${esc(c.id)}  ${esc(c.goal)}</option>`)).join("");
+  const agents = (w.agents || []).map(a => `<option value="${esc(a)}" ${w.agent === a ? "selected" : ""}>${esc(a)}</option>`).join("");
+  const others = w.live.filter(c => !(chain && c.item === chain.item));
+  const chains = (chain ? [{ item: chain.item, progress: chain.progress }] : []).concat(others).map(c =>
+    `<div class="chain"><span><b>${esc(c.item)}</b> ${esc(c.progress)}</span><button class="btn danger" data-act="chainstop" data-item="${esc(c.item)}">Stop chain</button></div>`).join("");
+  const events = w.events.length ? `<details><summary class="cap">Activity</summary><ul class="ev">${w.events.slice(0, 6).map(e =>
+    `<li><time>${esc(e.age)}</time><span>${esc(e.text)}</span></li>`).join("")}</ul></details>` : "";
+  const brief = w.on ? `${w.used}/${w.budget} sessions${chain ? ", " + esc(chain.item) : ""}` : `next ${esc(w.pinned || w.auto || "none")} · ${esc(w.agent)}`;
+  const open = S.walkOpen === undefined ? w.on : S.walkOpen;
+  return `<details class="walk" id="walkbox" ${open ? "open" : ""}><summary><span class="cap">Walk</span><span class="state">${state}</span><span class="brief">${brief}</span><span class="chev" aria-hidden="true"></span></summary>
+    <p class="line2">${line2}</p>
+    <div class="row2"><label for="nextsel">Next</label><select id="nextsel">${options}</select></div>
+    <div class="row2"><label for="agentsel">Agent</label><select id="agentsel">${agents}</select></div>
+    <div class="row2 act"><span></span>${w.on ? `<button class="btn" data-act="walkstop">Stop walk</button>` : `<button class="btn primary" data-act="walkstart">Start walk</button>`}</div>
+    ${chains}${events}</details>`;
+}
+async function setAgent(agent) {
+  try { S.walk = await api("/api/walk/agent", { agent }); toast("The next chain uses " + agent + "."); drawTasks(); }
+  catch (e) { toast(e.message, true); render(true); }
+}
+async function setNext(item) {
+  try { S.walk = await api("/api/walk/pin", { item: item || null }); toast(item ? "Next goes to " + item + "." : "Next is automatic."); drawTasks(); }
+  catch (e) { toast(e.message, true); render(true); }
+}
+function walkStartForm() {
+  form(`<h3>Start the walk?</h3>
+    <p class="muted" style="margin:0">It starts agent sessions on this machine, one chain at a time, depth-first, until the budget is spent, every branch is blocked or finished, or you stop it. They run with the agent's permission prompts off.</p>
+    <div><label for="bud">Budget, in sessions</label><input type="number" id="bud" name="budget" min="1" max="500" value="${esc(S.walk.budget)}" required></div>${buttons("Start walk")}`,
+    async fd => { S.walk = await api("/api/walk/start", { budget: parseInt(fd.get("budget"), 10) }); toast("Walking."); drawTasks(); });
+}
+function chainStopForm(item) {
+  form(`<h3>Stop ${esc(item)}'s chain?</h3>
+    <p class="muted" style="margin:0">It stops after the run it is in. The next session picks up the node's uncommitted work.</p>${buttons("Stop chain", true)}`,
+    async () => { S.walk = await api("/api/chain/stop", { item }); toast("Told it to stop."); drawTasks(); });
+}
+
+/* ── the task list ──────────────────────────────────────────────────────────── */
+/* ── chats: every conversation there is, to leave and come back to ──────────────────── */
+const ago = ts => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 129600 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
+function drawChats() {
+  const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
+  const who = { you: "You", agent: "Agent", error: "Not answered" };
+  const rows = S.chats.map(c => `<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
+      <span class="iid">${esc(c.scope === "project" ? "All" : c.scope)}</span>
+      <span><span class="goal">${esc(goal(c.scope))}</span>
+        <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}<span class="muted">${esc(ago(c.updated))}</span></span>
+        ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button>`).join("");
+  $("#view").className = "col";
+  $("#view").innerHTML = `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up.</p>`
+    + (rows || `<p class="hint">No conversations yet.</p>`)
+    + `<p class="foot"><button class="textlink" data-act="chat" data-scope="project">Chat about the project</button></p>`;
+}
+function drawTasks() {
+  const items = S.state.items.filter(i => !S.only || i.needs_you);
+  let seg = 0, html = walkHtml() + `<div class="filters" role="group" aria-label="Filter">
+    <button data-act="only" data-v="0" aria-pressed="${!S.only}">All</button>
+    <button data-act="only" data-v="1" aria-pressed="${S.only}">Needs you ${S.state.needs_you}</button></div>`;
+  for (const it of S.state.items) {
+    if (it.segment > seg && !S.only) html += `<div class="break cap">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
+    seg = it.segment;
+    if (S.only && !it.needs_you) continue;
+    const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
+    html += `<button class="item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}" data-act="task" data-id="${esc(it.id)}" style="--ind:${Math.min(it.depth, 3) * 14}px">
+      <span class="iid">${esc(it.id)}</span>
+      <span><span class="goal">${esc(it.goal)}</span>
+        <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
+          ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
+          ${it.waiting_on ? `<span class="tag">waiting on ${esc(it.waiting_on)}</span>` : ""}
+          ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}</span></span>
+      ${it.status !== "open" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}</button>`;
+  }
+  if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
+  html += `<div class="actions"><button class="btn primary" data-act="newtask">Add a task</button></div>`;
+  html += `<p class="foot">${chatOn() ? `<button class="textlink" data-act="chat" data-scope="project">Chat about the project</button>` : ""}</p>`;
+  $("#view").className = "col"; $("#view").innerHTML = html;
+}
+
+/* ── one task ───────────────────────────────────────────────────────────────── */
+function visibleRows(t) {
+  const folded = S.folded[t.id] || new Set(), byId = {};
+  t.rows.forEach(r => { if (r.kind === "node") byId[r.id] = r; });
+  const hidden = r => { let p = r.parent; while (p && byId[p]) { if (folded.has(p)) return true; p = byId[p].parent; } return false; };
+  return t.rows.filter(r => r.kind !== "node" || !hidden(r));
+}
+function drawTask() {
+  const t = S.task, folded = S.folded[t.id] || new Set();
+  let html = `<div class="head"><h2>${esc(t.goal)}</h2>
+    <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p></div>
+    <div class="actions">
+      ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
+      <button class="btn" data-act="add" data-parent="">Add a node</button>
+      ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
+      ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
+      ${S.walk && S.walk.enabled && S.walk.candidates.some(c => c.id === t.id) ? `<button class="btn" data-act="walkhere" data-item="${esc(t.id)}">${S.walk.pinned === t.id ? "Walk goes here next" : "Walk here next"}</button>` : ""}
+    </div>${artefactsHtml(t)}<div class="tree">`;
+  for (const r of visibleRows(t)) {
+    if (r.kind === "section") {
+      // The Goal is a tap away on any width: open, it is a screen of its own above the
+      // tree, and the tree is what this page is for. The summary and notes stay open.
+      const open = r.open && !/^Goal/.test(r.name);
+      html += `<details class="sec" ${open ? "open" : ""}><summary class="cap">${esc(r.name)}</summary><div class="body">${rich(r.text.trim())}</div></details>`;
+    } else if (r.kind === "raise") {
+      html += raiseCard(r, "on the task");
+    } else {
+      const quiet = ["refuted", "parked", "dormant", "pruned"].includes(r.status);
+      const cls = ["row", "s-" + r.status, quiet ? "quiet" : "", r.assumes || r.ask ? "assumes" : "", r.raises.length ? "hasraise" : "", r.overruled ? "overruled" : "", S.node === r.key ? "sel" : ""].join(" ");
+      const chips = [
+        r.raises.length ? `<span class="tag attention">raise, ${esc(r.raises[0].age)}</span>` : "",
+        r.raises_below ? `<span class="tag attention">${r.raises_below} raise${r.raises_below === 1 ? "" : "s"} below</span>` : "",
+        r.assumes ? `<span class="tag assumption">assumption</span>` : "",
+        r.ask ? `<span class="tag attention">ask</span>` : "",
+        r.answered ? `<span class="tag">answered</span>` : "",
+        ["refuted", "parked", "dormant", "pruned"].includes(r.status) ? `<span class="tag ${r.status === "refuted" ? "red" : ""}">${esc(r.status)}</span>` : ""].join("");
+      html += `<div class="${cls}" style="--d:${r.depth}">
+        <button class="fold ${r.kids ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
+        <button class="main" data-act="node" data-id="${esc(r.id)}">
+          <div class="line"><span class="nid">${esc(r.id)}</span>${esc(r.title)}</div>
+          ${chips ? `<div class="chips">${chips}</div>` : ""}
+          ${r.skim ? `<div class="skim">${esc(r.skim)}</div>` : ""}</button></div>`;
+    }
+  }
+  $("#view").className = ""; $("#view").innerHTML = html + `</div>`;
+}
+/* An artefact named in prose (`.dfs/artefacts/<name>.html`, or the localhost URL older raises carry)
+   becomes a link to the page this server serves, when the task has it. Text is escaped first. */
+function rich(text) {
+  const have = new Map(((S.task && S.task.artefacts) || []).map(a => [a.file, a.title]));
+  return esc(text).replace(/(?:https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/|(?:\.dfs\/)?artefacts\/)([0-9A-Za-z][0-9A-Za-z._-]*\.html)/g,
+    (m, name) => have.has(name) ? `<a class="art" href="/artefacts/${name}" target="_blank" rel="noopener">${esc(have.get(name))}</a>` : m);
+}
+function artefactsHtml(t) {
+  const arts = t.artefacts || [];
+  if (!arts.length) return "";
+  const mine = arts.filter(a => a.named), others = arts.filter(a => !a.named);
+  const li = a => `<li><a class="art" href="/artefacts/${esc(a.file)}" target="_blank" rel="noopener">${esc(a.title)}</a></li>`;
+  return `<details class="sec arts" ${mine.length ? "open" : ""}><summary class="cap">Artefacts${mine.length ? " " + mine.length : ""}</summary><div class="body">
+    ${mine.length ? `<ul>${mine.map(li).join("")}</ul>` : ""}
+    ${others.length ? `<div class="cap sub">${mine.length ? "Also in this project" : "In this project"}</div><ul>${others.map(li).join("")}</ul>` : ""}</div></details>`;
+}
+function raiseCard(r, where) {
+  return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you</h4>
+    <div class="text">${rich(r.body)}</div>
+    <div class="actions"><button class="btn primary" data-act="answer" data-ts="${esc(r.ts)}">Answer</button></div></div>`;
+}
+
+/* ── the node card ──────────────────────────────────────────────────────────── */
+function drawSheet() {
+  const t = S.task, rows = visibleRows(t).filter(r => r.kind === "node"), i = rows.findIndex(r => r.key === S.node);
+  const r = t.rows.find(x => x.key === S.node);
+  if (!r) return;
+  const blockHtml = ([role, text]) => {
+    if (role === "label") {
+      const cls = /Hypothesis|Wrong if/.test(text) ? "amber" : /Ask|Raise/.test(text) ? "red" : "";
+      return `<h4 class="${cls}">${esc(text)}</h4>`;
+    }
+    if (role === "meta") return `<div class="meta">${esc(text)}</div>`;
+    return `<p class="${esc(role)}">${rich(text.replace(/^[+−] /, ""))}</p>`;
+  };
+  const metaHtml = r.card.filter(([role]) => role === "meta").map(blockHtml).join("");
+  const restHtml = r.card.filter(([role]) => role !== "meta").map(blockHtml).join("");
+  $("#sheet").innerHTML = `<div class="sheet-body"><div class="cap where">${i + 1} of ${rows.length}</div><h3>${esc(r.id)}  ${esc(r.title)}</h3>
+      ${metaHtml}${r.raises.map(x => raiseCard(x, "")).join("")}${restHtml}</div>
+    <div class="sheet-actions">
+      <button class="btn" data-act="correct" data-id="${esc(r.id)}">Refute/confirm</button>
+      <button class="btn" data-act="add" data-parent="${esc(r.id)}">Add under</button></div>
+    <nav class="sheet-nav" aria-label="Nodes">
+      <button data-act="prev" ${i <= 0 ? "disabled" : ""}>Prev</button>
+      <button data-act="next" ${i >= rows.length - 1 ? "disabled" : ""}>Next</button>
+      <button data-act="nextflag">Flagged</button>
+      <button data-act="close">Back</button></nav>`;
+  const sb = $(".sheet-body"); if (sb && S.lastNode !== S.node) sb.scrollTop = 0;
+  S.lastNode = S.node;
+}
+function step(d) {
+  const rows = visibleRows(S.task).filter(r => r.kind === "node"), i = rows.findIndex(r => r.key === S.node);
+  const n = rows[Math.max(0, Math.min(rows.length - 1, i + d))];
+  if (n) go(`t/${S.task.id}/${n.id}`, true);
+}
+function nextFlag() {
+  const all = S.task.rows.filter(r => r.kind === "node"), at = Math.max(0, all.findIndex(r => r.key === S.node));
+  for (let k = 1; k <= all.length; k++) {
+    const r = all[(at + k) % all.length];
+    if (r.raises.length || r.assumes || r.ask) {
+      const folded = S.folded[S.task.id]; if (folded) { for (let p = r.parent, byId = Object.fromEntries(all.map(x => [x.id, x])); p && byId[p]; p = byId[p].parent) folded.delete(p); }
+      return go(`t/${S.task.id}/${r.id}`, true);
+    }
+  }
+  toast("No raise, assumption or ask in this tree.");
+}
+
+/* ── assumptions across the tasks ───────────────────────────────────────────── */
+function drawAsm() {
+  $("#view").className = "col";
+  if (!S.asm.length) { $("#view").innerHTML = `<p class="hint">Nothing to read: every task is accepted, or none states a hypothesis or an ask.</p>`; return; }
+  let task = "", html = "";
+  for (const a of S.asm) {
+    if (a.task !== task) { task = a.task; html += `<div class="cap" style="margin:20px 0 4px">${esc(task)}</div>`; }
+    html += `<button class="item" data-act="asm" data-task="${esc(a.task)}" data-id="${esc(a.id)}">
+      <span class="iid c-assumption">${esc(a.id)}</span>
+      <span><span class="goal">${esc(a.title)}</span>
+      ${a.assumption ? `<span class="asm">${esc(a.assumption)}</span>` : ""}
+      ${a.wrong ? `<span style="display:block;margin-top:6px"><span class="cap c-assumption">Wrong if</span> ${esc(a.wrong)}</span>` : ""}
+      ${a.ask ? `<span class="c-attention" style="display:block;margin-top:6px"><span class="cap c-attention">Ask</span> ${esc(a.ask)}</span>` : ""}</span></button>`;
+  }
+  $("#view").innerHTML = html;
+}
+
+/* ── writing: the same log entries the terminal writes ──────────────────────── */
+function form(html, onsubmit) {
+  const d = $("#form"); d.innerHTML = `<form method="dialog">${html}</form>`;
+  d.showModal();
+  const f = $("form", d), first = $("textarea, input[type=text]", d); if (first) first.focus();
+  f.addEventListener("submit", async ev => {
+    ev.preventDefault();
+    if (ev.submitter && ev.submitter.value === "cancel") { d.close(); return; }
+    const btn = ev.submitter; if (btn) btn.disabled = true;
+    try { await onsubmit(new FormData(f)); d.close(); }
+    catch (e) { toast(e.message, true); if (btn) btn.disabled = false; }
+  });
+  d.addEventListener("close", () => { d.innerHTML = ""; if (S.dirty) { S.dirty = false; render(false); } }, { once: true });
+}
+(function () {                          // the visual viewport is what the keyboard leaves
+  const vv = window.visualViewport; if (!vv) return;
+  const fit = () => { const s = document.documentElement.style; s.setProperty("--vvh", vv.height + "px"); s.setProperty("--vvt", vv.offsetTop + "px"); };
+  vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); fit();
+})();
+const buttons = (ok, danger) => `<div class="row-btns"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn ${danger ? "danger" : "primary"}" value="ok">${ok}</button></div>`;
+let VERDICT = {};
+function verdictHelp() {
+  const el = $("#verdicthelp"), v = document.querySelector('input[name="verdict"]:checked');
+  if (el) el.innerHTML = (v ? [VERDICT[v.value]] : [VERDICT.refuted, VERDICT.confirmed]).map(t => `<span style="display:block;margin-top:6px">${esc(t)}</span>`).join("");
+}
+try { const w = sessionStorage.getItem("walkOpen"); if (w !== null) S.walkOpen = w === "1"; } catch (e) {}
+document.addEventListener("toggle", e => { if (e.target.id !== "walkbox") return; S.walkOpen = e.target.open; try { sessionStorage.setItem("walkOpen", e.target.open ? "1" : "0"); } catch (x) {} }, true);
+document.addEventListener("change", e => { if (e.target.name === "verdict") verdictHelp(); });
+async function wrote(res, msg) { S.task = res.task; S.sig = ""; toast(msg); await render(true); }
+
+function answerForm(ts) {
+  const r = S.task.rows.flatMap(x => x.kind === "raise" ? [x] : x.kind === "node" ? x.raises : []).find(x => x.ts === ts);
+  form(`<h3>Answer the raise</h3><div class="quote">${esc(r ? r.body : "")}</div>
+    <div><label for="b">Your answer, in your own words</label><textarea id="b" name="body" required></textarea></div>${buttons("Record answer")}`,
+    async fd => wrote(await api("/api/answer", { task: S.task.id, ts, body: fd.get("body") }), "Answered."));
+}
+function correctForm(id) {
+  const r = S.task.rows.find(x => x.key === id);
+  const i = S.task.rows.indexOf(r); let under = 0;
+  for (let j = i + 1; j < S.task.rows.length && S.task.rows[j].kind === "node" && S.task.rows[j].depth > r.depth; j++) under++;
+  const sub = under ? `its ${under} sub-step${under === 1 ? "" : "s"}` : "what is under it";
+  const be = under > 1 ? "are" : "is";
+  VERDICT = {
+    refuted: `Refuted: ${sub} ${be} dropped, and the work moves to a sibling (unpark one or add one).`,
+    confirmed: r.status === "confirmed" ? "Confirmed: nothing is dropped, and the work carries on under it with your note."
+      : `Confirmed: ${sub} and the siblings made after it are dropped, and the work carries on under it.`,
+  };
+  form(`<h3>Refute/confirm ${esc(id)}</h3><p class="muted" style="margin:0">Currently ${esc(r.status)}.</p>
+    <div class="seg"><label><input type="radio" name="verdict" value="refuted" required><span>Refute</span></label>
+    <label><input type="radio" name="verdict" value="confirmed"><span>Confirm</span></label></div>
+    <p class="muted" id="verdicthelp" style="margin:0"></p>
+    <div><label for="b">Why, and what the work should do from here</label><textarea id="b" name="body" required></textarea></div>${buttons("Save")}`,
+    async fd => wrote(await api("/api/correct", { task: S.task.id, node: id, verdict: fd.get("verdict"), body: fd.get("body") }), (fd.get("verdict") === "refuted" ? "Refuted" : "Confirmed") + "; the task reopens."));
+  verdictHelp();
+}
+/* ── chat: basic, read-only, one agent turn at a time ──────────────────────────────── */
+const chatOn = () => !!(S.walk && S.walk.enabled);
+const CHAT = { scope: null, busyT: null, last: "" };
+function md(raw) {                      // fences, `code` and **bold**: all a chat reply needs
+  return String(raw).split(/```[^\n]*\n?/).map((part, i) => i % 2
+    ? `<pre>${esc(part.replace(/\n$/, ""))}</pre>`
+    : rich(part).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")).join("");
+}
+function chatDraw(st) {
+  const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  const who = { you: "You", agent: "Agent", error: "Not answered" };
+  const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note]);
+  if (sig === CHAT.last) return;
+  CHAT.last = sig;
+  log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">Running in the terminal's process: type here, or press <code>c</code> there to look at it.</p>` : "")
+    + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
+    + (st.messages.length ? "" : `<p class="muted">Ask about ${CHAT.scope === "project" ? "the project" : "this task"}: where the work is, what was refuted and why, what to do next. It can read the roadmap and the task; it changes nothing.</p>`)
+    + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
+    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Thinking… ${st.busy_for}s</div></div>` : "");
+  $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
+  if (atEnd || st.busy) log.scrollTop = log.scrollHeight;
+}
+async function chatLoad() {
+  if (!CHAT.scope) return;
+  try {
+    const st = await api("/api/chat/" + encodeURIComponent(CHAT.scope));
+    chatDraw(st);
+    clearTimeout(CHAT.busyT);
+    // while it is open the page follows the conversation: the screen's chat writes to it too
+    if ($("#chat").open) CHAT.busyT = setTimeout(chatLoad, st.busy || st.live ? 1500 : 4000);
+  } catch (e) { $("#chat-log").innerHTML = `<div class="msg error"><span class="who cap">Not available</span><div class="what">${esc(e.message)}</div></div>`; }
+}
+// a new conversation opens with the summary; one that has begun is left as it is
+async function chatBegin(scope) {
+  try { const st = await api("/api/chat/open", { scope }); if (CHAT.scope === scope && $("#chat").open) chatDraw(st); } catch (e) { /* the log shows what there is */ }
+  chatLoad();
+}
+function chatOpen(scope) {
+  CHAT.scope = scope; CHAT.last = "";
+  $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
+  $("#chat-log").innerHTML = ""; $("#chat-input").value = "";
+  $("#chat").showModal(); $("#chat-input").focus();
+  chatBegin(scope);
+}
+$("#chat-form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const input = $("#chat-input"), message = input.value.trim();
+  if (!message || !CHAT.scope) return;
+  $("#chat-send").disabled = true;
+  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatLoad(); }
+  catch (e) { toast(e.message, true); $("#chat-send").disabled = false; }
+});
+$("#chat-input").addEventListener("keydown", ev => { if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); } });
+function renameForm() {
+  form(`<h3>Project name</h3>
+    <p class="muted" style="margin:0">Shown on this page and under the installed app's icon. Kept in <code>.dfs/title</code>, so it travels with the repo.</p>
+    <div><label for="pn">Name</label><input type="text" id="pn" name="title" value="${esc(PROJECT)}" maxlength="80" required autocomplete="off"></div>${buttons("Save")}`,
+    async fd => { const res = await api("/api/title", { title: fd.get("title") }); PROJECT = res.title; toast("Renamed."); S.sig = ""; await render(true); });
+}
+function newTaskForm() {
+  form(`<h3>Add a task</h3>
+    <div><label for="nn">Name</label><input type="text" id="nn" name="name" required autocomplete="off" placeholder="A few words"></div>
+    <div><label for="ng">Goal, in your own words: what done looks like, and why</label><textarea id="ng" name="goal"></textarea></div>
+    <div><label for="nt">First steps, one per line, optional</label><textarea id="nt" name="todos" placeholder="Each line becomes a node, in order"></textarea></div>${buttons("Add task")}`,
+    async fd => { const res = await api("/api/new", { name: fd.get("name"), goal: fd.get("goal"), todos: fd.get("todos") }); toast("Added " + res.added + "."); go("t/" + res.added); });
+}
+function addForm(parent) {
+  const p = parent && S.task.rows.find(x => x.key === parent);
+  const dead = p && ["refuted", "pruned"].includes(p.status);
+  form(`<h3>Add a node ${parent ? "under " + esc(parent) : ""}</h3>
+    ${dead ? `<p class="warn">${esc(parent)} is ${esc(p.status)}, so a node under it is pruned too.</p>` : ""}
+    <div><label for="t">Title</label><input type="text" id="t" name="title" required autocomplete="off"></div>
+    <div><label for="a">Approach, optional: what to do, where, and the check</label><textarea id="a" name="approach"></textarea></div>${buttons("Add")}`,
+    async fd => { const res = await api("/api/add", { task: S.task.id, parent: parent || null, title: fd.get("title"), approach: fd.get("approach") }); await wrote(res, "Added " + res.added + "."); go(`t/${S.task.id}/${res.added}`, true); });
+}
+function acceptForm() {
+  const a = S.task.assumed;
+  form(`<h3>Accept ${esc(S.task.id)}'s tree as finished?</h3>
+    ${a.length ? `<p class="muted" style="margin:0">It rests on ${a.length} assumption${a.length === 1 ? "" : "s"} you have not accepted:</p>
+      <ul>${a.map(x => `<li><b>${esc(x.id)}</b> ${x.wrong ? "wrong if " + esc(x.wrong) : esc(x.ask || x.assumption)}</li>`).join("")}</ul>` : `<p class="muted" style="margin:0">Nothing in it states an assumption or an ask.</p>`}
+    ${S.task.notes.length ? `<p class="warn">What the ${S.task.notes.length === 1 ? "reviewer said" : "reviewer and critic said"}:</p>
+      <div class="quote">${S.task.notes.map(n => esc(n.kind + " " + n.verdict + ": " + n.body)).join("\n\n")}</div>` : ""}
+    ${buttons("Accept")}`,
+    async () => wrote(await api("/api/accept", { task: S.task.id }), "Accepted."));
+}
+
+/* ── events ─────────────────────────────────────────────────────────────────── */
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-act]"), tab = e.target.closest("[data-tab]");
+  if (tab) return go(tab.dataset.tab === "tasks" ? "" : tab.dataset.tab);
+  if (e.target.id === "scrim") return go(`t/${S.task.id}`, true);
+  if (!b || b.disabled) return;
+  const d = b.dataset;
+  ({
+    only: () => { S.only = d.v === "1"; drawTasks(); },
+    task: () => go("t/" + d.id),
+    asm: () => go(`t/${d.task}/${d.id}`),
+    node: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
+    fold: () => { const s = S.folded[S.task.id] ||= new Set(); s.has(d.id) ? s.delete(d.id) : s.add(d.id); S.sig = ""; render(true); },
+    close: () => go(`t/${S.task.id}`, true), up,
+    prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
+    answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm,
+    chat: () => chatOpen(d.scope), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
+    chatclear: async () => { try { CHAT.last = ""; chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
+    add: () => addForm(d.parent), accept: acceptForm,
+    walkstart: walkStartForm, walkstop: async () => { try { S.walk = await api("/api/walk/stop", {}); toast("Walk stopped; its chain ends after this run."); drawTasks(); } catch (e) { toast(e.message, true); } },
+    chainstop: () => chainStopForm(d.item),
+    walkhere: async () => { try { S.walk = await api("/api/walk/pin", { item: d.item }); toast(S.walk.pinned ? "The walk goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
+  }[d.act] || (() => {}))();
+});
+const up = () => { if (S.node) go(`t/${S.task.id}`, true); else go(""); };
+$("#back").onclick = up;
+matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
+addEventListener("hashchange", () => render(true));
+setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
+addEventListener("keydown", e => {
+  if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey) return;
+  if (!S.task || route().view !== "task") return;
+  if (e.key === "j") step(1); else if (e.key === "k") step(-1); else if (e.key === "n") nextFlag();
+  else if (e.key === "Escape" && S.node) go(`t/${S.task.id}`, true);
+});
+matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
+document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
+
+/* ── being told: the server pushes `change` when the roadmap does ──────────────── */
+let pushT;
+function listen() {
+  if (!window.EventSource) return;
+  const es = new EventSource("/api/events");
+  es.addEventListener("change", () => {
+    clearTimeout(pushT);
+    pushT = setTimeout(() => { if ($("#chat").open) chatLoad(); if ($("#form").open) S.dirty = true; else render(false); }, 120);
+  });
+  es.onopen = () => { $("#live").hidden = true; };
+  es.onerror = () => { $("#live").hidden = false; };     // the browser reconnects by itself
+}
+if ("serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => {});
+const dark = () => document.documentElement.dataset.theme
+  ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/></svg>';
+const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></svg>';
+function themeLabel() {
+  const b = $("#theme"), d = dark();
+  b.innerHTML = d ? MOON : SUN;                         // the icon is the mode you are in
+  b.title = b.ariaLabel = d ? "Dark. Switch to light" : "Light. Switch to dark";
+}
+$("#theme").onclick = () => {
+  const next = dark() ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch (e) {}
+  themeLabel();
+};
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeLabel);
+themeLabel();
+listen();
+render(true);
+</script>
+</body>
+</html>

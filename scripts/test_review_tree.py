@@ -503,28 +503,30 @@ class Pane(unittest.TestCase):
     def test_c_is_chat_while_the_list_has_the_keys(self):
         ui = self.ui
         ran = []
-        ui.shell = lambda argv, pause=True: ran.append(argv)
+        ui.open_chat = lambda scope: ran.append(scope)
         ui.act(ord("c"))
         self.assertEqual(self.logged, [])
-        self.assertIn("--chat", ran[0])
+        self.assertEqual(len(ran), 1)
+        self.assertNotEqual(ran[0], "project")      # the item's chat, not the project's
 
     def test_c_is_chat_while_the_tree_has_the_keys_too(self):
         # ⚠️ It was the correction there: one key, two writes, chosen by focus.
         ui = self.ui
         ran = []
-        ui.shell = lambda argv, pause=True: ran.append(argv)
+        ui.open_chat = lambda scope: ran.append(scope)
         ui.open_tree()
         self.to("W1.4")
         ui.act(ord("c"))
         self.assertEqual(self.logged, [])
-        self.assertIn("--chat", ran[0])
+        self.assertEqual(len(ran), 1)
+        self.assertNotEqual(ran[0], "project")      # the item's chat, not the project's
 
     def test_capital_c_is_a_chat_about_the_project_not_only_a_new_task(self):
         ui = self.ui
         ran = []
-        ui.shell = lambda argv, pause=True: ran.append(argv)
+        ui.open_chat = lambda scope: ran.append(scope)
         ui.act(ord("C"))
-        self.assertEqual(ran[0][-2:], ["--chat", "project"])
+        self.assertEqual(ran, ["project"])
 
     def test_f_outside_the_tree_corrects_nothing_and_says_where_to_go(self):
         ui = self.ui

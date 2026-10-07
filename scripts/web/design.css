@@ -1,0 +1,158 @@
+/* The roadmap's design system: calm Bauhaus.
+
+   Quiet paper, hairline rules, the system's own type. Three colours, kept for MEANING and
+   never for decoration:
+       settled     (blue)    what is decided, confirmed, done
+       attention   (red)     what waits on you: a raise, a blocker, a refusal
+       assumption  (amber)   what rests on a choice nobody could settle: yours to review
+   Square corners, no shadows, no icons but the theme switch; the one flourish is a
+   two-pixel line of the three, under the bar. Everything below is a token or is built from
+   tokens, so a change to the system is a change in this file. docs/design-system.md says
+   why; /design shows it, in either theme. */
+
+/* ── tokens ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* surface and text */
+  --paper: #f5f4ef;      /* the page */
+  --panel: #fcfbf8;      /* what sits on it: the sheet, a dialog, a field */
+  --sel: #e8e6dd;        /* pressed, selected */
+  --ink: #1a1d21;        /* text, and the strong rule */
+  --muted: #565a61;      /* secondary text: 5.9:1 on paper */
+  --line: #bebbb1;       /* a rule */
+  --faint: #dddbd3;      /* a rule between rows */
+
+  /* the three meanings. -ink is text (4.5:1 on paper and on its own wash), -fill is a
+     solid mark, -wash is the tint a whole row or card takes. */
+  --settled: #1f5aa6;      --settled-wash: #d4e2f4;
+  --attention: #ad2b20;    --attention-wash: #f8d9d3;
+  --assumption: #8a5a00;   --assumption-wash: #fbe8a6;   --assumption-fill: #e0a400;
+  --on-attention: #fff;    /* text on a solid attention surface (an error toast) */
+  --scrim: rgba(60, 56, 48, .22);
+
+  /* type: five steps. Caps labels are tracked, and only ever small. */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fs-label: 12px;      /* caps labels, tags, counters */
+  --fs-control: 13px;    /* caps on a control */
+  --fs-small: 15px;      /* secondary prose: a skim line, a hint */
+  --fs-body: 17px;
+  --fs-title: 22px;      /* a node, a task, a dialog */
+  --track-label: .14em; --track-control: .1em; --track-body: .005em;
+
+  /* space: a 4px base and six steps */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+
+  /* rules, shape, reach */
+  --rule: 1px; --rule-strong: 2px; --rule-status: 3px;
+  --radius: 0;
+  --hit: 44px;           /* the smallest thing a thumb is asked to hit */
+  --measure: 68ch;       /* the longest line of prose */
+  --ease: .12s;
+
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #171a1d; --panel: #1e2226; --sel: #262b30; --ink: #e9e7e1; --muted: #8f939a;
+    --line: #353a40; --faint: #272b30;
+    --settled: #86a8cf; --settled-wash: #1f2833;
+    --attention: #dc7d70; --attention-wash: #2e2220;
+    --assumption: #dcb455; --assumption-wash: #2b2617; --assumption-fill: #c9a043;
+    --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #171a1d; --panel: #1e2226; --sel: #262b30; --ink: #e9e7e1; --muted: #8f939a;
+  --line: #353a40; --faint: #272b30;
+  --settled: #86a8cf; --settled-wash: #1f2833;
+  --attention: #dc7d70; --attention-wash: #2e2220;
+  --assumption: #dcb455; --assumption-wash: #2b2617; --assumption-fill: #c9a043;
+  --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
+  color-scheme: dark;
+}
+
+/* ── base ───────────────────────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 var(--fs-body)/1.5 var(--font); letter-spacing: var(--track-body); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; letter-spacing: inherit; }
+:is(button, a, textarea, input, select):focus-visible { outline: var(--rule) solid var(--ink); outline-offset: 3px; }
+.muted { color: var(--muted); }
+.cap { font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); text-transform: uppercase; color: var(--muted); }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
+.c-settled { color: var(--settled); } .c-attention { color: var(--attention); } .c-assumption { color: var(--assumption); }
+.prose { white-space: pre-wrap; overflow-wrap: anywhere; max-width: var(--measure); }
+
+/* ── button: outlined, square, caps. primary is the one thing the screen wants done ───── */
+.btn { min-height: var(--hit); padding: 0 var(--s4); border: var(--rule) solid var(--ink); font-size: var(--fs-control); font-weight: 500; letter-spacing: var(--track-control); text-transform: uppercase; text-align: center; display: inline-flex; align-items: center; justify-content: center; }
+.btn.primary { background: var(--ink); color: var(--paper); }
+.btn.danger { border-color: var(--attention); color: var(--attention); }
+.btn:disabled { opacity: .45; }
+.btn:not(:disabled):active { background: var(--sel); }
+.btn.primary:not(:disabled):active { opacity: .85; background: var(--ink); }
+/* a button that is only words: the bar's, the sheet's */
+.textbtn { min-height: var(--hit); display: inline-flex; align-items: center; padding: 0 var(--s1); font-size: 14px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.textbtn:disabled { color: var(--muted); opacity: .45; cursor: default; }
+.textbtn:not(:disabled):active { text-decoration: underline; text-underline-offset: 6px; }
+.textlink { color: var(--muted); font-size: var(--fs-control); text-decoration: underline; text-underline-offset: 3px; min-height: var(--hit); padding: 0 var(--s3); }
+/* the one icon in the system: the theme switch */
+.iconbtn { width: var(--hit); height: var(--hit); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.iconbtn:hover, .iconbtn:focus-visible { color: var(--ink); }
+.iconbtn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* a link in prose: blue, underlined, as big as its words */
+a.art, .link { color: var(--settled); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: var(--rule); }
+
+/* ── tag: a word that qualifies. outlined, small; coloured only when it means something ── */
+.tag { display: inline-block; padding: 0 7px; border: var(--rule) solid var(--line); font-size: var(--fs-label); font-weight: 500; letter-spacing: .06em; line-height: 20px; color: var(--muted); white-space: nowrap; }
+.tag.assumption { color: var(--assumption); border-color: var(--assumption-fill); background: var(--assumption-wash); }
+.tag.attention { color: var(--attention); border-color: var(--attention); background: var(--attention-wash); }
+.tag.settled { color: var(--settled); border-color: var(--settled); background: var(--settled-wash); }
+
+/* ── field: a place to type or choose ────────────────────────────────────────────────── */
+.field, :is(dialog, .walk) :is(textarea, select, input[type=text], input[type=number]) { width: 100%; min-width: 0; padding: var(--s3); font: inherit; border: var(--rule) solid var(--muted); background: var(--paper); color: var(--ink); border-radius: var(--radius); }
+:is(dialog, .walk) select { min-height: var(--hit); padding: 0 var(--s3); background: var(--panel); border-color: var(--line); }
+dialog input[type=number] { width: 8em; border-color: var(--line); }
+.field:focus-visible, dialog :is(textarea, input):focus-visible { outline-offset: 0; border-color: var(--ink); }
+dialog textarea { min-height: 116px; resize: vertical; }
+label.cap, dialog label { display: block; margin-bottom: 6px; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+/* a choice of one among few: the picked one is ruled in ink and set */
+.seg { display: flex; gap: var(--s3); }
+.seg label { flex: 1; margin: 0; padding: 13px; text-align: center; border: var(--rule) solid var(--muted); color: var(--ink); font-size: 14px; letter-spacing: .08em; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; }
+.seg label:has(input:checked) { border-color: var(--ink); background: var(--sel); font-weight: 600; }
+
+/* ── disclosure: a ruled row that opens ─────────────────────────────────────────────── */
+details.sec { border-top: var(--rule) solid var(--line); }
+details.sec > summary { list-style: none; min-height: 48px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+details.sec > summary::-webkit-details-marker { display: none; }
+details.sec > summary::after { content: "+"; color: var(--muted); font-size: 20px; font-weight: 400; }
+details.sec[open] > summary::after { content: "\2212"; }
+details.sec .body { padding: 0 0 var(--s4); max-width: var(--measure); }
+details.sec:not(.arts) .body { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ── cards: a region the colour has marked ───────────────────────────────────────────── */
+/* attention: something is asked of you */
+.raise { margin: var(--s3) 0; padding: var(--s3) var(--s4); border: var(--rule) solid var(--attention); background: var(--attention-wash); }
+.raise h4 { margin: 0 0 var(--s2); font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); text-transform: uppercase; color: var(--attention); }
+.raise .text { white-space: pre-wrap; overflow-wrap: anywhere; max-width: var(--measure); }
+.raise .actions { margin: var(--s3) 0 0; }
+/* assumption: this rests on a choice */
+.asm { display: block; margin-top: 6px; padding: var(--s2) 10px; background: var(--assumption-wash); border-left: var(--rule-status) solid var(--assumption-fill); }
+
+/* ── a row of actions, and the toast ────────────────────────────────────────────────── */
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: var(--s4) 0; }
+#toast { position: fixed; left: 50%; width: max-content; top: calc(var(--bar, 56px) + var(--s3) + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 20; max-width: calc(100vw - 2 * var(--s4)); padding: 10px 18px; background: var(--ink); color: var(--paper); font-size: 14px; letter-spacing: .04em; display: none; }
+#toast.show { display: block; }
+#toast.err { background: var(--attention); color: var(--on-attention); }
+
+/* ── dialog ──────────────────────────────────────────────────────────────────────────── */
+dialog { width: min(560px, calc(100vw - 2 * var(--s4))); max-height: 92dvh; padding: 0; border: var(--rule) solid var(--ink); background: var(--panel); color: var(--ink); }
+dialog::backdrop { background: var(--scrim); }
+dialog form { display: flex; flex-direction: column; gap: var(--s3); padding: 20px; }
+dialog h3 { margin: 0; font-size: var(--fs-title); font-weight: 500; line-height: 1.25; }
+dialog .quote { max-height: 40dvh; overflow: auto; padding: 10px var(--s3); border: var(--rule) solid var(--line); background: var(--paper); white-space: pre-wrap; font-size: var(--fs-small); }
+dialog .row-btns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 10px; }
+dialog .row-btns .btn { white-space: nowrap; padding-left: var(--s2); padding-right: var(--s2); }
+dialog ul { margin: 0; padding-left: 1.1em; }
+dialog li { margin: 0 0 6px; }
+dialog .warn { margin: 0; color: var(--assumption); font-size: var(--fs-small); }

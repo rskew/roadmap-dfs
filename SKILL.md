@@ -68,7 +68,10 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   `Wrong if` and shows the second half on its own, since it is the part the author
   answers. Not a second description of the work. The Evidence is the
   observations that bear on it, one line each: what was run or read, what it showed,
-  and which way it cuts. The screen marks a node with a Hypothesis (⚑) and names
+  and which way it cuts. When the assumption is easier to judge by looking (the two
+  designs side by side, the data the claim rests on), draw an artefact for it (see
+  Raising) and name its path in the Hypothesis or the Ask: the author meets the
+  picture where the assumption is. The screen marks a node with a Hypothesis (⚑) and names
   those nodes when the author accepts the tree, so keep it for what is both
   important and open to question: an ordinary choice the check settles is not one.
   What you built, the steps you took and every test you ran belong in the Approach
@@ -149,7 +152,8 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   met, and what was left out or done differently and why. No node ids, no
   commit hashes and no tree vocabulary (refuted, parked, hypothesis): the screen shows
   it to the author above the Goal, once the task is done, to answer "did it
-  get there?" without reading the tree.
+  get there?" without reading the tree. When what the finished work does is a shape (what now talks to what), name an
+  artefact in the Summary by its path.
 
 ## When `.dfs/` is gitignored
 
@@ -182,15 +186,18 @@ the work to, what you would do, and the strongest case against it>
 EOF
 ```
 
-**When the decision turns on how parts of the system are wired together**, so the
-author would otherwise have to rebuild the picture in their head from prose, write
-an artefact for it first: one self-contained HTML page in `.dfs/artefacts/`, checked
-with `<scripts>/artefact_check.sh` and its screenshot looked at, then linked
-from the raise as `http://localhost:<port>/<uuid>.html`. How to write one is
-`<scripts>/../docs/artefacts.md`; read it before starting one. The raise must still
-be answerable with the artefact gone, so the options and your recommendation stay
-written out in the raise itself. A raise about anything else (a budget, a tooling
-bug, a choice between two wordings) needs no artefact.
+**Reach for an artefact whenever a picture would let the author decide, or check, faster
+than prose can.** Wiring and data flow, before and after, two or three options set side
+by side on the same axes, a sequence of what ran and what it showed, a layout, measured
+results as a chart or a table: if you would otherwise be describing a shape in words, draw
+it. It is one self-contained HTML page in `.dfs/artefacts/`, checked with
+`<scripts>/artefact_check.sh` and its screenshot looked at. Name it in the raise by its
+path, `.dfs/artefacts/<uuid>.html`: the author's web page turns that into a link, and
+the screen's `v` pane lists it. (`http://localhost:<port>/<uuid>.html` still works.) How to
+write one is `<scripts>/../docs/artefacts.md`; read it before starting one. The raise must
+still be answerable with the artefact gone, so the options and your recommendation stay
+written out in the raise itself. Skip it only for what has no shape to draw: a budget, a
+tooling bug, a choice between two wordings.
 
 Then stop. A raise blocks the task until it is answered.
 

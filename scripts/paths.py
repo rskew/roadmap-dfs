@@ -119,6 +119,59 @@ def _git(*args):
     return subprocess.run(["git", *args], cwd=work_root(), capture_output=True, text=True)
 
 
+def title_file() -> Path:
+    return state() / "title"
+
+
+def read_title() -> str:
+    """The project's name as `.dfs/title` has it: its first line, "" when there is none."""
+    try:
+        return (title_file().read_text().strip().splitlines() or [""])[0].strip()
+    except OSError:
+        return ""
+
+
+def write_title(name: str) -> str:
+    """Set the project's name: one line, no longer than a header can carry. Returns it."""
+    name = " ".join(str(name).split())
+    if not name:
+        raise ValueError("a project needs a name")
+    if len(name) > 80:
+        raise ValueError("a project name is 80 characters or fewer")
+    title_file().parent.mkdir(parents=True, exist_ok=True)
+    title_file().write_text(name + "\n")
+    return name
+
+
+def git_project_name() -> str:
+    """What git calls this project: the `origin` remote's name, else the repository's
+    directory. Used once, to start `.dfs/title`; the file is the name from then on."""
+    r = _git("config", "--get", "remote.origin.url")
+    url = r.stdout.strip().rstrip("/") if r.returncode == 0 else ""
+    named = Path(url.split(":")[-1]).name if url else ""
+    if named.endswith(".git"):
+        named = named[:-4]
+    if named:
+        return named
+    top = _git("rev-parse", "--show-toplevel")
+    return Path(top.stdout.strip() or work_root()).name or "Roadmap"
+
+
+def project_title() -> str:
+    """The project's name: `.dfs/title`, which is made from git the first time it is
+    asked for (and by `init`) and is the name from then on, whatever the checkout is
+    mounted as, whatever the remote is later called, and editable on the web page."""
+    name = read_title()
+    if name:
+        return name
+    name = git_project_name()
+    try:
+        write_title(name)
+    except (OSError, ValueError):
+        pass
+    return name
+
+
 def branch():
     """The checked-out branch; "" when this is not a git repo at all; None when HEAD
     is detached."""

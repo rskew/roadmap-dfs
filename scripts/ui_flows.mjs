@@ -1,0 +1,477 @@
+// The web page's core flows, driven in a real browser: node ui_flows.mjs <flow> <url> <fixture-dir>
+// Run by test_ui.py, which builds the fixture, serves it, and judges what the flow wrote to
+// disk. A flow throws on the first thing that is wrong, and prints nothing on success.
+import { createRequire } from "node:module";
+import fs from "node:fs";
+import path from "node:path";
+
+const require = createRequire(import.meta.url);
+const { chromium, devices } = require("playwright");
+const [flow, URL_, DIR] = process.argv.slice(2);
+
+function assert(cond, msg) { if (!cond) throw new Error(msg); }
+function same(a, b, msg) { assert(JSON.stringify(a) === JSON.stringify(b), `${msg}: ${JSON.stringify(a)} != ${JSON.stringify(b)}`); }
+
+function chromiumPath() {
+  if (process.env.DFS_UI_CHROMIUM) return process.env.DFS_UI_CHROMIUM;
+  const root = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (root && fs.existsSync(root)) {
+    for (const d of fs.readdirSync(root).filter(d => d.startsWith("chromium-")).sort().reverse()) {
+      const p = path.join(root, d, "chrome-linux", "chrome");
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return undefined;
+}
+
+const PHONE = { ...devices["iPhone 13"] };
+const NARROW = { viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true };
+const DESKTOP = { viewport: { width: 1280, height: 800 } };
+
+// ── what a page is audited for, in either theme ───────────────────────────────────────
+const AUDIT = () => {
+  const lum = c => { const [r, g, b] = c.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4; }); return .2126 * r + .7152 * g + .0722 * b; };
+  const parse = s => { const m = s.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[ ,\/]+/).map(Number); return { c: p.slice(0, 3), a: p.length > 3 ? p[3] : 1 }; };
+  const bgOf = el => { const stack = []; for (let e = el; e; e = e.parentElement) { const p = parse(getComputedStyle(e).backgroundColor); if (p && p.a > 0) { stack.push(p); if (p.a >= 1) break; } } let base = [255, 255, 255]; for (const p of stack.reverse()) base = base.map((v, i) => Math.round(p.c[i] * p.a + v * (1 - p.a))); return base; };
+  const out = { overflow: document.documentElement.scrollWidth > innerWidth + 1, low: [], small: [] };
+  const seen = new Set();
+  for (const el of document.querySelectorAll("body *")) {
+    const cs = getComputedStyle(el); if (cs.visibility === "hidden" || cs.display === "none" || +cs.opacity === 0) continue;
+    const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) continue;
+    if ([...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) {
+      const fg = parse(cs.color), bg = bgOf(el);
+      if (fg && !el.closest(":disabled,[disabled]")) {
+        const L1 = lum(fg.c), L2 = lum(bg), cr = (Math.max(L1, L2) + .05) / (Math.min(L1, L2) + .05);
+        const big = parseFloat(cs.fontSize) >= 24 || (parseFloat(cs.fontSize) >= 18.66 && +cs.fontWeight >= 700);
+        const key = el.tagName + el.className + cs.color + bg.join();
+        if (cr < (big ? 3 : 4.5) && !seen.has(key)) { seen.add(key); out.low.push(`${el.className || el.tagName} "${el.textContent.trim().slice(0, 24)}" ${cr.toFixed(1)}:1`); }
+      }
+    }
+    if (el.matches("button,a,select,input,textarea,[role=button]") && (r.width < 40 || r.height < 40)
+        && !(el.tagName === "A" && cs.display === "inline")) {      // a link in a sentence is as big as its words
+      const k = el.tagName + el.className + el.id;
+      if (!seen.has(k)) { seen.add(k); out.small.push(`${el.tagName}.${el.className || el.id} ${Math.round(r.width)}x${Math.round(r.height)} "${(el.textContent || "").trim().slice(0, 18)}"`); }
+    }
+  }
+  return out;
+};
+
+const PAGES = [];
+async function open(browser, opts, scheme = "light") {
+  const ctx = await browser.newContext({ ...opts, colorScheme: scheme });
+  const page = await ctx.newPage();
+  PAGES.push(page);
+  const errors = [];
+  page.on("pageerror", e => errors.push(String(e)));
+  page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+  await page.goto(URL_);
+  await page.waitForSelector(".item");
+  return { ctx, page, errors };
+}
+const bg = page => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+async function task(page, id) { await page.click(`.item[data-id=${id}]`); await page.waitForSelector(".row"); }
+// Back to the list from wherever: the bar's Back on a phone, the header's on a wide screen.
+async function toList(page) {
+  for (let i = 0; i < 3 && !(await page.$(".item")); i++) {
+    await page.evaluate(() => document.querySelector("#sheet [data-act=close]")?.click());
+    const b = (await page.$("#tabs [data-act=up]")) || (await page.$("#back:not([hidden])"));
+    if (b && await b.isVisible()) await b.click();
+    await page.waitForTimeout(150);
+  }
+  await page.waitForSelector(".item");
+}
+async function dialog(page) { await page.waitForSelector("dialog[open]"); }
+async function openWalk(page) {
+  if (!(await page.$("#walkbox[open]"))) await page.click("#walkbox summary");
+  await page.waitForSelector("#nextsel");
+}
+
+const FLOWS = {
+  // The list, its filter, the project's name, and nothing in the console.
+  async list(b) {
+    const { page, errors } = await open(b, PHONE);
+    assert((await page.$$(".item")).length === 9, "nine tasks in the fixture");
+    const name = fs.readFileSync(path.join(DIR, ".dfs", "title"), "utf8").trim();
+    same(await page.title(), name, "the tab is named after the project");
+    assert((await page.textContent("#title")).startsWith(name), "so is the header");
+    await page.click("[data-act=only][data-v='1']");
+    const ids = await page.$$eval(".item", a => a.map(x => x.dataset.id));
+    same(ids, ["W2", "W4", "W9"], "needs you: the ones that wait on the author");
+    same(errors, [], "no page errors");
+  },
+
+  // A task: its tree, folds, and the blocked and tinted rows.
+  async task_tree(b) {
+    const { page, errors } = await open(b, PHONE);
+    assert((await page.getAttribute(".item[data-id=W9]", "class")).includes("blocks"), "a blocked task is tinted");
+    assert((await page.getAttribute(".item[data-id=W1]", "class")).includes("assumes"), "one with an assumption is too");
+    await task(page, "W9");
+    assert((await page.$$(".row")).length >= 8, "the tree is there");
+    assert(await page.$(".row.hasraise"), "a raise marks its row");
+    const before = (await page.$$(".row")).length;
+    await page.click(".row .fold:not(.none) >> nth=0");
+    await page.waitForFunction(n => document.querySelectorAll(".row").length < n, before, { timeout: 4000 })
+      .catch(() => { throw new Error("folding hides what is under it"); });
+    same(errors, [], "no page errors");
+  },
+
+  // The node sheet: prev and next move, and stay exactly where they are.
+  async node_sheet(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W1");
+    await page.click(".row .main >> nth=0");
+    await page.waitForSelector("#sheet.open");
+    const box = async sel => JSON.stringify(await page.$eval(sel, e => { const r = e.getBoundingClientRect(); return [r.x, r.y, r.width, r.height].map(Math.round); }));
+    const prev0 = await box("#sheet [data-act=prev]"), next0 = await box("#sheet [data-act=next]");
+    for (let i = 0; i < 4; i++) {
+      await page.click("#sheet [data-act=next]"); await page.waitForTimeout(120);
+      same([await box("#sheet [data-act=prev]"), await box("#sheet [data-act=next]")], [prev0, next0], `step ${i}: Prev/Next stay put`);
+    }
+    await page.click("#sheet [data-act=close]");
+    await page.waitForFunction(() => !document.querySelector("#sheet.open"), null, { timeout: 4000 })
+      .catch(() => { throw new Error("close closes it"); });
+    same(errors, [], "no page errors");
+  },
+
+  // Answer a raise: the log gets the same entry the terminal writes.
+  async answer(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click(".row.hasraise .main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=answer]"); await dialog(page);
+    await page.fill("dialog textarea", "Spinning disks. Test on one.");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector(".row.hasraise"));
+    same(errors, [], "no page errors");
+  },
+
+  // Refute/confirm: the form says what each choice does, then writes the correction.
+  async correct(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("[data-id='W9.2'].main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=correct]"); await dialog(page);
+    const both = await page.textContent("#verdicthelp");
+    assert(/Refuted:/.test(both) && /Confirmed:/.test(both), "both outcomes are stated before a choice");
+    await page.click("dialog label:has(input[value=refuted])");
+    assert(/^Refuted:/.test(await page.textContent("#verdicthelp")), "then only the chosen one");
+    await page.fill("dialog textarea", "WAL is wrong on this disk.");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => /overruled by you/.test(document.body.textContent));
+    same(errors, [], "no page errors");
+  },
+
+  // A keyboard leaves a short screen: the action buttons of a form are still on it, unscrolled.
+  async keyboard(b) {
+    const { page, errors } = await open(b, PHONE);
+    await page.setViewportSize({ width: 390, height: 330 });        // what is left above the keys
+    await task(page, "W9");
+    await page.click("[data-id='W9.2'].main"); await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=correct]"); await dialog(page);
+    await page.click("dialog label:has(input[value=refuted])");
+    for (const sel of ["dialog button[value=ok]", "dialog button[value=cancel]"]) {
+      const r = await page.$eval(sel, e => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom }; });
+      assert(r.top >= 0 && r.bottom <= 330, `${sel} is in view above the keys (${Math.round(r.top)}..${Math.round(r.bottom)} of 330)`);
+    }
+    await page.fill("dialog textarea", "WAL is wrong on this disk.");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => /overruled by you/.test(document.body.textContent));
+    same(errors, [], "no page errors");
+  },
+
+  // Add a node under another.
+  async add(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W3");
+    await page.click("[data-act=add]"); await dialog(page);
+    await page.fill("#t", "Cover the stampede with a test");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => /Cover the stampede with a test/.test(document.body.textContent));
+    same(errors, [], "no page errors");
+  },
+
+  // Accept a finished tree.
+  async accept(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W4");
+    await page.click("[data-act=accept]"); await dialog(page);
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector("[data-act=accept]"));
+    same(errors, [], "no page errors");
+  },
+
+  // The walk, through the controls the page offers (a recording walker stands behind them).
+  async walk(b) {
+    const { page, errors } = await open(b, PHONE);
+    await openWalk(page);
+    await page.selectOption("#nextsel", "W2");
+    await page.selectOption("#agentsel", "codex");
+    await page.click("[data-act=walkstart]"); await dialog(page);
+    assert(/permission prompts/i.test(await page.textContent("dialog")), "starting says what it does");
+    await page.fill("#bud", "7");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => /Walking/.test(document.querySelector("#walkbox")?.textContent || ""));
+    assert(/7/.test(await page.textContent("#walkbox")), "the budget shows");
+    await page.click("[data-act=walkstop]");
+    await page.waitForFunction(() => /Walk is off/.test(document.querySelector("#walkbox")?.textContent || ""));
+    same(errors, [], "no page errors");
+  },
+
+  // The thumbs: what you press to move is in the bottom of the screen, Back always at the right, under the right thumb, what moves you on the left.
+  async thumbs(b) {
+    for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW]]) {
+      const { ctx, page, errors } = await open(b, opts);
+      const H = () => page.evaluate(() => innerHeight), W = () => page.evaluate(() => innerWidth);
+      const box = async sel => page.$eval(sel, e => { const r = e.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, b: r.bottom }; });
+      const low = async (sel, what) => {
+        const r = await box(sel), h = await H();
+        assert(r.y > h * 0.7, `${name}: ${what} is in the lower third (y ${Math.round(r.y)} of ${h})`);
+        assert(r.h >= 44, `${name}: ${what} is tap-sized (${Math.round(r.h)}px)`);
+        return r;
+      };
+      // the list: its two tabs
+      await low("#tabs [data-tab=tasks]", "Tasks tab"); await low("#tabs [data-tab=assumptions]", "Assumptions tab"); await low("#tabs [data-tab=chats]", "Chats tab");
+      assert(await page.$eval("#back", e => getComputedStyle(e).display === "none"), `${name}: no Back up in the header`);
+      // a task: Chat and Flagged on the left, Back at the right
+      await task(page, "W9");
+      const back = await low("#tabs [data-act=up]", "Back");
+      const chat = await low("#tabs [data-act=chat]", "Chat"), flagged = await low("#tabs [data-act=nextflag]", "Flagged");
+      assert(chat.x < flagged.x && flagged.x < back.x, `${name}: Chat, then Flagged, then Back, left to right`);
+      assert(back.x + back.w > (await W()) * 0.7, `${name}: Back is under the right thumb`);
+      // a node: its bar replaces it, Prev and Next on the left, Back at the right
+      await page.click("#tabs [data-act=nextflag]"); await page.waitForSelector("#sheet.open");
+      const nb = await low("#sheet [data-act=close]", "node Back"), np = await low("#sheet [data-act=prev]", "Prev");
+      const nn = await low("#sheet [data-act=next]", "Next"), nf = await low("#sheet [data-act=nextflag]", "node Flagged");
+      assert(np.x < nn.x && nn.x < nf.x && nf.x < nb.x, `${name}: Prev, Next, Flagged, Back, left to right`);
+      assert(np.x < (await W()) / 3, `${name}: Prev is under the left thumb`);
+      assert(nb.x + nb.w > (await W()) * 0.7, `${name}: Back is under the right thumb`);
+      const where = async () => (await page.textContent("#sheet .where")).trim();
+      const first = await where();
+      await page.click("#sheet [data-act=next]"); await page.waitForFunction(w => document.querySelector("#sheet .where").textContent.trim() !== w, first);
+      await page.click("#sheet [data-act=prev]"); await page.waitForFunction(w => document.querySelector("#sheet .where").textContent.trim() === w, first);
+      // back, back: the node, then the task
+      await page.click("#sheet [data-act=close]");
+      await page.waitForFunction(() => !document.querySelector("#sheet.open") && document.querySelector("#tabs [data-act=up]"));
+      await page.click("#tabs [data-act=up]"); await page.waitForSelector(".item");
+      assert(await page.$("#tabs [data-tab=tasks]"), `${name}: the tabs are back`);
+      // the chat: Back at the bottom
+      await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
+      await low("#chat [data-act=chatclose]", "chat Back");
+      await page.click("#chat [data-act=chatclose]"); await page.waitForFunction(() => !document.querySelector("#chat[open]"));
+      same(errors, [], `${name}: no page errors`);
+      await ctx.close();
+    }
+    // a wide screen keeps its Back in the header and its tabs at the top
+    const { ctx, page, errors } = await open(b, DESKTOP);
+    await task(page, "W9");
+    assert(await page.$eval("#back", e => getComputedStyle(e).display !== "none"), "desktop: Back is in the header");
+    assert((await page.$eval("#tabs", e => e.getBoundingClientRect().y)) < 60, "desktop: the tabs are at the top");
+    await ctx.close();
+  },
+
+  // Chat: a basic, read-only conversation about a task, then about the project.
+  async chat(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]");
+    await page.waitForSelector("#chat[open]");
+    // a new chat opens with the summary, unprompted, before anything is said
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 1, null, { timeout: 20000 });
+    assert(!(await page.$("#chat-log .msg.you")), "nobody has spoken: the opening is the tool's, not yours");
+    await page.fill("#chat-input", "Where is the journal mode decided?");
+    await page.click("#chat-send");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 2, null, { timeout: 20000 });
+    assert(await page.$("#chat-log .msg.you"), "what you said is kept");
+    assert(await page.$("#chat-log .msg.agent b"), "bold is bold");
+    assert(await page.$("#chat-log .msg.agent code"), "code is code");
+    assert(!(await page.$eval("#chat-send", e => e.disabled)), "and you can ask again");
+    await page.fill("#chat-input", "and then?");
+    await page.keyboard.press("Control+Enter");
+await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 3, null, { timeout: 20000 });
+    await page.reload(); await page.waitForSelector(".row");          // the route is still W9
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 5, null, { timeout: 5000 });
+    await page.click("[data-act=chatclear]");
+    await page.waitForFunction(() => { const m = document.querySelectorAll("#chat-log .msg"); return m.length === 1 && m[0].classList.contains("agent") && !document.querySelector("#chat-log .msg.you"); }, null, { timeout: 20000 });    // and a new one opens with the summary again
+    await page.click("[data-act=chatclose]");
+    await toList(page);
+    await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
+    assert(/Chat · /.test(await page.textContent("#chat-title")), "the project has its own");
+    same(errors, [], "no page errors");
+  },
+
+  // Chats: start several, leave each, find them in the Chats section, pick one up again.
+  async chats(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.fill("#chat-input", "first about W9");
+    await page.click("#chat-send");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 2, null, { timeout: 20000 });
+    await page.click("#chat [data-act=chatlist]");                       // leave it, to the list of chats
+    await page.waitForFunction(() => !document.querySelector("#chat[open]") && document.querySelector("#tabs [data-tab=chats][aria-current=page]"));
+    await page.waitForSelector(".chatrow");
+    // a second, about the project, begun from here
+    await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
+    await page.fill("#chat-input", "and about the project");
+    await page.click("#chat-send");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 2, null, { timeout: 20000 });
+    await page.click("#chat [data-act=chatclose]");
+    await page.waitForFunction(() => document.querySelectorAll(".chatrow").length === 2, null, { timeout: 8000 });
+    const rows = await page.$$eval(".chatrow", e => e.map(x => x.dataset.scope));
+    same(rows.sort(), ["W9", "project"], "both conversations are listed");
+    // the first is still there, where it was left
+    await page.click(".chatrow[data-scope=W9]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => /first about W9/.test(document.querySelector("#chat-log")?.textContent || ""), null, { timeout: 5000 });
+    assert(!(await page.$eval("#chat-send", e => e.disabled)), "and can be gone on with");
+    const nav = await page.$$eval("#chat .chat-nav button", e => e.map(x => x.dataset.act));
+    same(nav, ["chatclear", "chatlist", "chatclose"], "the chat's bar: New, Chats, Back at the right");
+    await page.click("#chat [data-act=chatclose]");
+    same(errors, [], "no page errors");
+  },
+
+  // Light and dark: the switch flips the page, shows the mode you are in, and remembers.
+  async theme(b) {
+    const { page, errors } = await open(b, PHONE, "light");
+    const light = await bg(page);
+    assert((await page.$$eval("#theme circle", e => e.length)) === 1, "a sun in light mode");
+    await page.click("#theme");
+    const dark = await bg(page);
+    assert(dark !== light, "the page changed");
+    assert(/^M20/.test(await page.$eval("#theme path", e => e.getAttribute("d"))), "a moon in dark mode");
+    await page.reload(); await page.waitForSelector(".item");
+    same(await bg(page), dark, "and it was remembered");
+    await page.click("#theme");
+    same(await bg(page), light, "and switches back");
+    same(errors, [], "no page errors");
+  },
+
+  // The project's name is editable in the page and lives in .dfs/title.
+  async rename(b) {
+    const { page, errors } = await open(b, PHONE);
+    await page.click("[data-act=rename]"); await dialog(page);
+    await page.fill("#pn", "Gateway core");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => document.title === "Gateway core");
+    assert((await page.textContent("#title")).startsWith("Gateway core"), "the header follows");
+    same(errors, [], "no page errors");
+  },
+
+  // A new task from the bottom of the list, and the title renamed by clicking it.
+  async newtask(b) {
+    const { page, errors } = await open(b, PHONE);
+    const btn = await page.$eval("[data-act=newtask]", e => { const r = e.getBoundingClientRect(); return { h: r.height, after: r.top > document.querySelector(".item:last-of-type").getBoundingClientRect().top }; });
+    assert(btn.h >= 44 && btn.after, "the button is tap-sized and below the items");
+    await page.click("[data-act=newtask]"); await dialog(page);
+    await page.fill("#nn", "Cache the lookups");
+    await page.fill("#ng", "Hits above 90%.");
+    await page.fill("#nt", "profile it\nadd the cache");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => /Cache the lookups/.test(document.body.textContent) && /profile it/.test(document.body.textContent) && /add the cache/.test(document.body.textContent), null, { timeout: 8000 });
+    await toList(page);
+    assert(await page.$(".item .goal:text('Cache the lookups')"), "and it is in the list");
+    // the title is the control: click it to rename
+    await page.click("#title .rename"); await dialog(page);
+    assert((await page.inputValue("#pn")).length > 0, "the form has the name");
+    await page.keyboard.press("Escape");
+    assert(!(await page.$("[data-act=rename]:not(#title .rename)")), "there is no second rename button");
+    same(errors, [], "no page errors");
+  },
+
+  // An artefact named in a raise is linked and served sandboxed: its script cannot reach the API.
+  async artefacts(b, ctx0) {
+    const { ctx, page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    assert((await page.textContent(".arts")).includes("Where the fsync lands"), "the task lists it");
+    await page.click(".row.hasraise .main");
+    await page.waitForSelector("#sheet.open");
+    assert((await page.$$("#sheet a.art")).length >= 1, "the raise links it inline");
+    const [popup] = await Promise.all([ctx.waitForEvent("page"), page.click("#sheet a.art >> nth=0")]);
+    await popup.waitForLoadState(); await popup.waitForTimeout(400);
+    same(await popup.title(), "Where the fsync lands", "it opens");
+    same(await popup.textContent("#r"), "blocked", "its script could not reach the page's API");
+    same(errors, [], "no page errors");
+  },
+
+  // A change made elsewhere (a chain, the terminal) reaches an open page by itself.
+  async live(b) {
+    const { page, errors } = await open(b, PHONE);
+    assert(!(await page.getAttribute(".item[data-id=W3]", "class")).includes("blocks"), "W3 is not blocked");
+    fs.appendFileSync(path.join(DIR, ".dfs", "items", "W3.md"),
+      "\n- 2026-10-01T09:00:00Z · raise · W3.1\n  Which cache backend do we target?\n");
+    await page.waitForFunction(() => document.querySelector(".item[data-id=W3]")?.className.includes("blocks"), null, { timeout: 8000 });
+    same(errors, [], "no page errors");
+  },
+
+  // The design system's own specimen: it must pass what it asks of the page, in both themes.
+  async design(b) {
+    for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW], ["desktop", DESKTOP]]) {
+      for (const scheme of ["light", "dark"]) {
+        const ctx = await b.newContext({ ...opts, colorScheme: scheme });
+        const page = await ctx.newPage(); PAGES.push(page);
+        const errors = [];
+        page.on("pageerror", e => errors.push(String(e)));
+        page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+        await page.goto(URL_ + "/design"); await page.waitForSelector("#colours .sw");
+        const a = await page.evaluate(AUDIT);
+        assert(!a.overflow, `${name}/${scheme}: /design scrolls sideways`);
+        assert(!a.low.length, `${name}/${scheme}: /design low contrast: ${a.low.join("; ")}`);
+        assert(!a.small.length, `${name}/${scheme}: /design small targets: ${a.small.join("; ")}`);
+        const measured = await page.$$eval("#colours span, #colours .pair", n => n.map(e => e.textContent).filter(t => /:1/.test(t)));
+        assert(measured.length >= 8, "the specimen measures the colours it names");
+        for (const t of measured) { const r = parseFloat(t.match(/([\d.]+):1/)[1]); assert(r >= 4.5, `${name}/${scheme}: ${t} is under 4.5 to 1`); }
+        await page.click("#d-dialog"); await page.waitForSelector("dialog[open]"); await page.keyboard.press("Escape");
+        same(errors, [], `${name}/${scheme}: no page errors`);
+        await ctx.close();
+      }
+    }
+  },
+
+  // Every screen, both themes, three widths: nothing overflows, text can be read, targets can be hit.
+  async layout(b) {
+    for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW], ["desktop", DESKTOP]]) {
+      for (const scheme of ["light", "dark"]) {
+        const { ctx, page, errors } = await open(b, opts, scheme);
+        const check = async what => {
+          await page.waitForTimeout(150);
+          const a = await page.evaluate(AUDIT);
+          assert(!a.overflow, `${name}/${scheme}/${what}: scrolls sideways`);
+          assert(!a.low.length, `${name}/${scheme}/${what}: low contrast: ${a.low.join("; ")}`);
+          assert(!a.small.length, `${name}/${scheme}/${what}: small targets: ${a.small.join("; ")}`);
+        };
+        await check("list");
+        await page.click("[data-act=only][data-v='1']"); await check("needs you");
+        await page.click("[data-act=only][data-v='0']");
+        await task(page, "W9"); await check("task");
+        await page.click(".row.hasraise .main"); await page.waitForSelector("#sheet.open"); await check("node");
+        await page.click("#sheet [data-act=correct]"); await dialog(page); await check("correct form");
+        await page.keyboard.press("Escape");
+        await page.evaluate(() => document.querySelector("#sheet [data-act=close]")?.click());
+        await toList(page);
+        await page.click("#tabs [data-tab=assumptions]"); await check("assumptions");
+        await page.click("#tabs [data-tab=chats]"); await check("chats");
+        await page.click("#tabs [data-tab=tasks]"); await page.waitForSelector(".item");
+        await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]"); await check("chat");
+        same(errors, [], `${name}/${scheme}: no page errors`);
+        await ctx.close();
+      }
+    }
+  },
+};
+
+const fn = FLOWS[flow];
+if (!fn) { console.error("no flow " + flow + "; have " + Object.keys(FLOWS).join(", ")); process.exit(2); }
+const browser = await chromium.launch({ executablePath: chromiumPath(), args: ["--no-sandbox"] });
+try {
+  await fn(browser);
+} catch (e) {
+  console.error(`${flow}: ${e.message.split("\n")[0]}`);
+  if (process.env.DFS_UI_SHOTS && PAGES.length) {     // what the page looked like when it went wrong
+    try { await PAGES[PAGES.length - 1].screenshot({ path: path.join(process.env.DFS_UI_SHOTS, flow + "-failed.png") }); } catch (_) {}
+  }
+  process.exitCode = 1;
+} finally {
+  await browser.close();
+}

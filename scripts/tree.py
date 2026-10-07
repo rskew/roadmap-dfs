@@ -566,6 +566,46 @@ def append_log(task, kind, args=(), body=""):
     return ts
 
 
+def next_task_id():
+    """The id a new task gets: one past the highest W on ANY branch this checkout can see,
+    tagged with this branch's. Raises dfs_paths.NoBranch on a detached HEAD."""
+    tag = dfs_paths.branch_tag()
+    nums = [int(m.group(1)) for m in (re.fullmatch(r"W(\d+)(?:@.*)?", i) for i in task_ids()) if m]
+    return "W%d%s" % (max(nums, default=0) + 1, "@" + tag if tag else "")
+
+
+def create_task(name, goal="", todos=(), task=None):
+    """Write a new task file: the author's words unchanged, the todo lines a LINEAR chain of
+    open nodes (each the child of the one before, the shape a task starts in; the sessions
+    add nodes, branch and back up from there). `task` is an id the author chose (letters then
+    a number, tagged here), else the next one. Returns the id; ValueError says what is wrong."""
+    tag = dfs_paths.branch_tag()
+    suffix = "@" + tag if tag else ""
+    name = " ".join((name or "").split())
+    if not name:
+        raise ValueError("a task needs a name")
+    task = (task or "").strip() or next_task_id()
+    if re.fullmatch(r"[A-Za-z]+\d+", task):
+        task += suffix
+    if not re.fullmatch(r"[A-Za-z]+\d+%s" % re.escape(suffix), task):
+        raise ValueError("a task id is letters then a number (W25)%s, not %r"
+                         % (", tagged %s on this branch" % suffix if suffix else "", task))
+    if exists(task):
+        raise ValueError("%s already exists: pick another id" % task)
+    path = part_path(task, tag)
+    todos = [" ".join(x.split()) for x in todos if x and x.strip()]
+    body = ["# %s · %s" % (task, name), "", "## Goal", "", (goal or "").strip() or name, "", "## Tree", ""]
+    for n, todo in enumerate(todos, 1):
+        body += ["### %s · %s" % (node_id(task, n, tag), todo)]
+        if n > 1:
+            body += ["Parent: %s" % node_id(task, n - 1, tag)]
+        body += ["Status: open", ""]
+    body += ["## Log", ""]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(body).rstrip() + "\n")
+    return task
+
+
 def add_node(task, title, parent=None, approach=""):
     """Add an open node to this branch's part: the author's way of putting work in the
     tree between sessions. It takes the next number this branch has not used, so it

@@ -253,6 +253,31 @@ class InARepo(unittest.TestCase):
                        shell=True, cwd=self.root, check=True)
 
 
+class NewTask(InARepo):
+    def test_the_next_id_is_one_past_the_highest_and_the_words_go_in_unchanged(self):
+        self.write(task())
+        self.assertEqual(dfs_tree.next_task_id(), "W2")
+        got = dfs_tree.create_task("  Cache   the lookups ", "Done is: hits above 90%.\nBecause the p99 hurts.", ["- [ ] profile it", "", "add the cache"])
+        self.assertEqual(got, "W2")
+        t = dfs_tree.load("W2")
+        self.assertIn("Done is: hits above 90%.\nBecause the p99 hurts.", (self.root / ".dfs" / "items" / "W2.md").read_text())
+        nodes = dfs_tree.by_id(t)
+        self.assertEqual([(n["id"], n["parent"], n["status"]) for n in nodes.values()],
+                         [("W2.1", None, "open"), ("W2.2", "W2.1", "open")])
+        self.assertEqual(dfs_tree.next_task_id(), "W3")
+
+    def test_a_task_with_no_todos_and_no_goal_is_still_a_task(self):
+        got = dfs_tree.create_task("Just a name")
+        self.assertIn("Just a name", (self.root / ".dfs" / "items" / (got + ".md")).read_text())
+        self.assertEqual(dfs_tree.by_id(dfs_tree.load(got)), {})
+
+    def test_what_is_not_a_task_is_refused(self):
+        self.write(task())
+        for bad in (dict(name=""), dict(name="x", task="W1"), dict(name="x", task="nope")):
+            with self.assertRaises(ValueError):
+                dfs_tree.create_task(bad["name"], task=bad.get("task"))
+
+
 class AppendLog(InARepo):
     def test_timestamps_are_unique_and_later_than_everything(self):
         self.write(task(node(1), "- 2099-01-01T00:00:00Z · session · work\n"))

@@ -44,6 +44,8 @@
 #   CONTAINER_PORTS    ports to publish, e.g. "8006 5432" or "8080:80"
 #   CONTAINER_MOUNTS   extra mounts, e.g. "/dev/ttyUSB0:/dev/ttyUSB0"
 #   CONTAINER_ENV      extra env vars, e.g. "FOO=bar BAZ=qux"
+#                      (DFS_WEB_HOST=0.0.0.0 is always set inside, so the web page is reachable
+#                      through a published port: CONTAINER_PORTS=8765. It has no login.)
 #   CONTAINER_PATH_PREFIX  prepended to the container's PATH, e.g. a store path's
 #                      directory of `dfs-<name>` links (the flake's `sandbox` puts the tool's commands there)
 #   TERM COLORTERM COLORFGBG NO_COLOR DFS_THEME  passed through when set, so a screen
@@ -274,6 +276,7 @@ run_in_container() {
     -e CONTAINER_APP_CMD="${CONTAINER_APP_CMD}"
     -e CONTAINER_APP_READY_PORT="${CONTAINER_APP_READY_PORT}"
     -e CONTAINER_APP_READY_TIMEOUT="${CONTAINER_APP_READY_TIMEOUT}"
+    -e DFS_WEB_HOST=0.0.0.0
     -v "${REPO_ROOT}:${CONTAINER_WORKDIR}"
     --tmpfs "${CONTAINER_HOME}/.cache:uid=$(id -u),gid=$(id -g),mode=700"
     -v "${CONTAINER_STATE_DIR}/nix-cache:${CONTAINER_HOME}/.cache/nix"

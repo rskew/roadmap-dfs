@@ -47,6 +47,8 @@
 #                                           accept a finished tree
 #         <scripts>/run.sh --open [task]     write a new task file
 #         <scripts>/run.sh [--codex|--kiro|--opencode] --chat [task|project]
+#         <scripts>/run.sh --chat-turn <task|project>   one turn of a READ-ONLY chat, for the web
+#                          page: the author's message on stdin, CHAT_SID to resume, JSON out
 #         <scripts>/run.sh --bump-agent     pin the agents to nixpkgs now
 #                                           (tui.py does it in the background)
 # Env:    CLAUDE_CMD       how claude is launched here — a nix run, not a binary on PATH
@@ -91,6 +93,7 @@ for a in "$@"; do
     --answer)  MODE=review ;;   # the old name of the same pass
     --open)    MODE=open ;;
     --chat)    MODE=chat ;;
+    --chat-turn) MODE=chatturn ;;
     --codex)   AGENT=codex ;;
     --kiro)    AGENT=kiro ;;
     --opencode) AGENT=opencode ;;
@@ -100,7 +103,7 @@ for a in "$@"; do
 done
 ITEM="${args[0]:-}"
 CAP="${args[1]:-5}"
-[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro|--opencode] <task> [cap]  |  --review <task>  |  --open  |  [--codex|--kiro|--opencode] --chat [task|project]" >&2; exit 2; }
+[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = chatturn ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro|--opencode] <task> [cap]  |  --review <task>  |  --open  |  [--codex|--kiro|--opencode] --chat [task|project]" >&2; exit 2; }
 
 # No agent needs to be a binary on PATH: each default launcher is a Nix command
 # line, split into an argv. Override the provider's command to use a local checkout, a
@@ -128,7 +131,7 @@ fi
 # author typing, and asking nix which nixpkgs to pin put a network round trip (and, on a
 # box with no pin yet or no route out, a hang with nothing on the screen) in front of
 # `o` and `R`. A chat `--review` starts runs `--chat`, which resolves for itself.
-if { [ "$MODE" = work ] || [ "$MODE" = chat ]; } && [ -z "${AGENT_NIXPKGS_REV:-}" ] && { { [ "$AGENT" = claude ] && [ -z "${CLAUDE_CMD:-}" ]; } || { [ "$AGENT" = codex ] && [ -z "${CODEX_CMD:-}" ]; } || { [ "$AGENT" = kiro ] && [ -z "${KIRO_CMD:-}" ]; } || { [ "$AGENT" = opencode ] && [ -z "${OPENCODE_CMD:-}" ]; }; }; then
+if { [ "$MODE" = work ] || [ "$MODE" = chat ] || [ "$MODE" = chatturn ]; } && [ -z "${AGENT_NIXPKGS_REV:-}" ] && { { [ "$AGENT" = claude ] && [ -z "${CLAUDE_CMD:-}" ]; } || { [ "$AGENT" = codex ] && [ -z "${CODEX_CMD:-}" ]; } || { [ "$AGENT" = kiro ] && [ -z "${KIRO_CMD:-}" ]; } || { [ "$AGENT" = opencode ] && [ -z "${OPENCODE_CMD:-}" ]; }; }; then
   AGENT_NIXPKGS_REV="$(python3 "$HERE/agent.py" --rev)" || exit 2
 fi
 AGENT_NIXPKGS="github:nixos/nixpkgs/${AGENT_NIXPKGS_REV:-}"
@@ -196,7 +199,7 @@ build_prompt() {  # build_prompt work|critic|review
   printf '%s\n\n%s\n' "$lead" "$brief"
 }
 
-if [ "$MODE" = work ] || [ "$MODE" = chat ]; then
+if [ "$MODE" = work ] || [ "$MODE" = chat ] || [ "$MODE" = chatturn ]; then
   command -v "${AGENT_ARGV[0]}" >/dev/null || { echo "dfs_run: cannot run '${AGENT_ARGV[0]}' (set $AGENT_CMD_ENV)" >&2; exit 2; }
 fi
 
@@ -235,6 +238,10 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
            BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-3600000}"
            BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS:-21600000}")
 
+# What an item's chat opens with, here and on the web page (--chat-turn's opening): short, in
+# this order, then the question. Concise on purpose: the author is often reading it on a phone.
+TREE_SUMMARY_ASK="Start with a concise summary, in short lines and no more than you need: (1) the tree, where the work is and what was refuted and why; (2) each assumption it rests on, in plain words, and what would make it wrong; (3) each open raise, what it asks of the author and the options with your recommendation. Say plainly if there are no assumptions or no raises. Then ask what the author wants to talk about."
+
 if [ "$MODE" = chat ]; then
   if [ "$ITEM" = project ] || [ "$ITEM" = new ]; then
     # The project as a whole, not one task: where it stands, what to do next, and new
@@ -244,7 +251,7 @@ if [ "$MODE" = chat ]; then
     default_chat_prompt="Read $DFS_ROADMAP_REL. Discuss the project with the author: its direction, the tasks on the roadmap and how they stand, what to do next, or new work they have in mind. Do not perform work or edit files unless the author explicitly asks. If the talk turns to a NEW task, ask what done looks like and why it is worth doing, then propose the Goal paragraph and a first linear chain of todo nodes, each one line — but do not create the task file; the author writes it with $DFS_SCRIPTS_REL/run.sh --open. Start by summarising the roadmap in a few lines and asking what the author wants to talk about."
     chat_subject="the project"
   elif [ -n "$ITEM" ]; then
-    default_chat_prompt="Read $DFS_ROADMAP_REL and task $ITEM's parts, $DFS_ITEMS_REL/$ITEM.md and every file in $DFS_ITEMS_REL/$ITEM/, whichever exist. Discuss task $ITEM with the author. Do not perform the work, edit files or append to the task's log unless the author explicitly changes the task. Start by summarising the tree: where the work is, what was refuted and why, and the next question worth discussing."
+    default_chat_prompt="Read $DFS_ROADMAP_REL and task $ITEM's parts, $DFS_ITEMS_REL/$ITEM.md and every file in $DFS_ITEMS_REL/$ITEM/, whichever exist. Discuss task $ITEM with the author. Do not perform the work, edit files or append to the task's log unless the author explicitly changes the task. $TREE_SUMMARY_ASK"
     chat_subject="task $ITEM"
   else
     default_chat_prompt="Read $DFS_EPIC_REL and $DFS_ROADMAP_REL. Discuss the roadmap tool with the author. Do not perform work or edit files unless the author explicitly changes the task. Start by summarising its current goal, open decisions, and the next question worth discussing."
@@ -257,8 +264,61 @@ if [ "$MODE" = chat ]; then
   # prompt to allow a read they already asked for. PERMISSION_FLAGS= (set and empty,
   # which is why the defaults above test for unset rather than for empty) passes none
   # and sits through the prompts.
+  # ⚠️ ONE CONVERSATION PER SCOPE, SHARED WITH THE WEB PAGE. With CHAT_SID (the screen sets it,
+  # from chat.py's record) the session is started under that id, or RESUMED when it already has
+  # a transcript, so what is said here is on the page and what was said on the page is here.
+  # A resumed session needs no opening prompt: it already has one.
+  chat_session=()
+  if [ "$AGENT" = claude ] && [ -n "${CHAT_SID:-}" ]; then
+    if [ -n "${CHAT_RESUME:-}" ]; then
+      chat_session=(--resume "$CHAT_SID"); CHAT_PROMPT=""
+    else
+      chat_session=(--session-id "$CHAT_SID")
+    fi
+  fi
   echo "dfs_run: opening an interactive $AGENT session for $chat_subject"
-  exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" "${PERMISSION_ARGV[@]}" "${CHAT_PROMPT_FLAG[@]}" "$CHAT_PROMPT"
+  if [ -n "$CHAT_PROMPT" ]; then
+    exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" "${chat_session[@]}" "${PERMISSION_ARGV[@]}" "${CHAT_PROMPT_FLAG[@]}" "$CHAT_PROMPT"
+  fi
+  exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" "${chat_session[@]}" "${PERMISSION_ARGV[@]}"
+fi
+
+# One turn of a chat, for the web page: the author's message on stdin, the agent's reply as
+# the JSON claude prints on stdout. ⚠️ READ-ONLY, and that is the whole difference from the
+# interactive chat above: the page may be open to a network, the person typing may be on a
+# phone, and a chat is for talking, so the tools are the three that look (Read, Grep, Glob)
+# and the permission-skipping flags every other mode passes are NOT passed. Anything else
+# the agent reaches for is refused, headless, rather than asked about. The first turn gets
+# the framing; a resumed one is just the message, the session already has it.
+if [ "$MODE" = chatturn ]; then
+  [ "$AGENT" = claude ] || { echo "dfs_run: a chat from the web page runs under claude; \`c\` on the screen opens the others" >&2; exit 2; }
+  message="$(cat)"
+  # CHAT_OPENING: the page opened a new chat and nobody has said anything yet, so the turn is
+  # the same opening the screen's chat starts with: the summary, unprompted.
+  [ -n "$message" ] || [ -n "${CHAT_OPENING:-}" ] || { echo "dfs_run: --chat-turn wants the message on stdin" >&2; exit 2; }
+  if [ -n "${CHAT_SID:-}" ] && [ -n "${CHAT_RESUME:-}" ]; then
+    prompt="$message"
+    session_flag=(--resume "$CHAT_SID")
+  else
+    if [ "$ITEM" = project ]; then
+      about="the project as a whole: read $DFS_ROADMAP_REL for how it stands"
+    else
+      about="task $ITEM: read $DFS_ROADMAP_REL, then $DFS_ITEMS_REL/$ITEM.md and every file in $DFS_ITEMS_REL/$ITEM/, whichever exist"
+    fi
+    framing="You are talking with the author about $about. They are on a phone: answer briefly and plainly, in short paragraphs, and say which node or file you mean. You may only read. Do not edit files, run commands or add to any task's log; if the author wants something changed, tell them what to do and where in their page (answer a raise, refute or confirm a node, add a node)."
+    if [ -n "${CHAT_OPENING:-}" ] && [ -z "$message" ]; then
+      if [ "$ITEM" = project ]; then
+        prompt="$framing Start by summarising the roadmap in a few short lines and asking what the author wants to talk about."
+      else
+        prompt="$framing $TREE_SUMMARY_ASK"
+      fi
+    else
+      prompt="$framing The author writes: $message"
+    fi
+    session_flag=(--session-id "${CHAT_SID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}")
+  fi
+  exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json "${session_flag[@]}" \
+    --allowedTools Read Grep Glob --disallowedTools Bash Edit Write NotebookEdit < /dev/null
 fi
 
 # The caller may name the directory. tui.py does, because it starts a chain in the
@@ -720,13 +780,9 @@ want, here = sys.argv[1].strip(), sys.argv[2]
 sys.path.insert(0, here)
 import paths as dfs_paths, tree as dfs_tree
 try:
-    tag = dfs_paths.branch_tag()
+    nxt = dfs_tree.next_task_id()
 except dfs_paths.NoBranch as e:
     print("dfs_run: %s" % e, file=sys.stderr); raise SystemExit(2)
-# One past the highest W on ANY branch this checkout can see, tagged with this one's.
-nums = [int(m.group(1)) for m in (re.fullmatch(r"W(\d+)(?:@.*)?", t) for t in dfs_tree.task_ids()) if m]
-suffix = "@" + tag if tag else ""
-nxt = "W%d%s" % (max(nums, default=0) + 1, suffix)
 
 tty_in, tty_out = open("/dev/tty", "r"), open("/dev/tty", "w")
 def say(*a): print(*a, file=tty_out, flush=True)
@@ -743,16 +799,6 @@ def block(label):
     return "\n".join(lines).strip()
 
 task = want or ask("  task id [%s]: " % nxt) or nxt
-if re.fullmatch(r"[A-Za-z]+\d+", task):
-    task += suffix
-if not re.fullmatch(r"[A-Za-z]+\d+%s" % re.escape(suffix), task):
-    say("dfs_run: a task id is letters then a number (W25)%s, not %r."
-        % (", tagged %s on this branch" % suffix if suffix else "", task)); raise SystemExit(2)
-path = dfs_tree.part_path(task, tag)
-if dfs_tree.exists(task):
-    say("dfs_run: %s already exists. Pick another id." % task); raise SystemExit(2)
-path.parent.mkdir(parents=True, exist_ok=True)
-
 say("\nYour words go in unchanged. End a multi-line answer with a lone '.'\n")
 name = ask("  short name: ")
 if not name:
@@ -764,16 +810,11 @@ while True:
     ln = tty_in.readline()
     if ln == "" or ln.rstrip("\n") == ".": break
     if ln.strip(): todos.append(ln.strip().lstrip("-[ ]x").strip())
-
-body = ["# %s · %s" % (task, name), "", "## Goal", "", goal or name, "", "## Tree", ""]
-for n, todo in enumerate(todos, 1):
-    body += ["### %s · %s" % (dfs_tree.node_id(task, n, tag), todo)]
-    if n > 1:
-        body += ["Parent: %s" % dfs_tree.node_id(task, n - 1, tag)]
-    body += ["Status: open", ""]
-body += ["## Log", ""]
-path.write_text("\n".join(body).rstrip() + "\n")
-say("\ndfs_run: wrote %s — %d node%s." % (path, len(todos), "" if len(todos) == 1 else "s"))
+try:
+    task = dfs_tree.create_task(name, goal, todos, task=task)
+except ValueError as e:
+    say("dfs_run: %s." % e); raise SystemExit(2)
+say("\ndfs_run: wrote %s — %d node%s." % (dfs_tree.part_path(task, dfs_paths.branch_tag()), len(todos), "" if len(todos) == 1 else "s"))
 PY
   python3 "$HERE/check.py" --warn || true
 }

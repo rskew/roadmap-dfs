@@ -1,7 +1,8 @@
-# Raise artefacts
+# Artefacts
 
-A picture for one raise, when the decision turns on how parts of the system are
-wired together and prose makes the author reconstruct it in their head. Committed,
+A picture for a raise, an assumption or a finished task, whenever the author would
+otherwise reconstruct a shape from prose: how parts are wired, before and after, options
+set side by side, what ran and what it showed, measured results. Committed,
 so the URL in a raise, which the Log never edits, still resolves from any clone long
 after the raise was answered.
 
@@ -45,10 +46,15 @@ the raise, and a diagram is an aid, never the carrier.
    `/tmp/artefact-check/<uuid>.png`. Read the image once the checks are clean; it
    catches what no assertion does (a diagram that is legible and still says the
    wrong thing), and reading it costs context, so not on every iteration.
-4. Reference it from the raise as `http://localhost:<port>/<uuid>.html`: the port
-   is `DFS_ARTEFACT_PORT`, 3016 unless set, and something has to serve
-   `.dfs/artefacts` there (the TUI shows the `python3 -m http.server` command when
-   nothing is).
+4. Reference it by its path, `.dfs/artefacts/<uuid>.html`, in the raise (or the
+   Hypothesis, Ask or Summary it belongs to). The web page links that path to the page it
+   serves at `/artefacts/<uuid>.html`, and lists every artefact a task names under the
+   task; the screen's `v` pane lists them too. The older form,
+   `http://localhost:<port>/<uuid>.html` (`DFS_ARTEFACT_PORT`, 3016 unless set), still
+   works in both, but it needs something serving that port, and the path does not.
+
+   The web page serves artefacts sandboxed (no network, no way back to its own controls),
+   because an artefact is a page an agent wrote. That is what "self-contained" is for.
 
 How the author opens one is in the README, under "Raise artefacts".
 
