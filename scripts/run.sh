@@ -316,9 +316,11 @@ META
 #   blocked     an open raise — the agent's, the critic's, the reviewer's, or the session limit's
 #   done        every live node confirmed, and the implementation reviewed or accepted
 #   cap         the chain ran its full cap with the task still open
-#   idle        the repo did not move: the session changed nothing
+#   idle        the repo did not move: the session changed nothing (a critic or
+#               reviewer that gave no verdict, twice, with nothing changed either)
 #   failed      a session exited non-zero, or a critic or reviewer changed the tree
-#               or gave no verdict
+#               or wrote to the task and still gave no verdict (one that changed
+#               nothing at all is carried past, and `idle` twice running)
 #   overbudget  a session went past the context ceiling
 #   overturns   no context reading, and past the turn ceiling
 #   interrupt   Ctrl-C
@@ -583,8 +585,9 @@ session_cost() {
 # Transcription throughout — the words are the author's — so this pass spends no
 # session of its own. It shows the tree, takes the open raises in log order, then any
 # corrections: a node whose determination the author overrides, with a directive. A
-# correction prunes everything below the node and every sibling made after it, and
-# the next session resumes from it. A finished tree can then be accepted.
+# correction prunes everything below the node (and, if confirmed, every sibling made
+# after it) unless it only confirms what already stood confirmed; the next session
+# resumes from it. A finished tree can then be accepted.
 review_mode() {
   if [ -z "$ITEM" ]; then
     echo "dfs_run: --review takes a task: $0 --review W7." >&2
@@ -684,9 +687,13 @@ while True:
     body = prose("  directive — what the work should do from here (a lone '.' ends it):")
     if not body:
         say("  empty directive, skipped.\n"); continue
-    dfs_tree.append_log(task, "correct", [nid, "confirmed" if v == "c" else "refuted"], body)
+    verdict = "confirmed" if v == "c" else "refuted"
+    was = dfs_tree.effective(t)[0].get(nid)          # what it stands as NOW, corrections applied
+    dfs_tree.append_log(task, "correct", [nid, verdict], body)
     wrote += 1
-    say("  -> corrected; everything below %s is pruned and %s reopens\n" % (nid, task))
+    say("  -> corrected; %s and %s reopens\n" % (
+        "it already stood confirmed, so nothing is pruned" if dfs_tree.keeps(verdict, was)
+        else "everything below %s is pruned" % nid, task))
 
 t = dfs_tree.load(task)
 status, why = dfs_tree.status_of(t)
@@ -865,7 +872,7 @@ for i in $(seq 1 "$CAP"); do
     verdicts_before="$(python3 "$HERE/state.py" --verdicts "$ITEM" "$kind")"
   fi
   tree_log session "$kind" "$(basename "$RUNDIR")/run-$i"
-  if [ "$kind" = work ]; then fp_before="$(python3 "$HERE/state.py" --fingerprint)"; fi
+  if [ "$kind" = work ]; then fp_before="$(python3 "$HERE/state.py" --fingerprint)"; else fp_tree_before="$(python3 "$HERE/state.py" --fingerprint)"; fi
   IN_SESSION="$kind"
   set +e
   run_session "$prompt" "$log"
@@ -921,12 +928,59 @@ for i in $(seq 1 "$CAP"); do
       echo "dfs_run: the $kind changed the working tree outside .dfs/. Stopping — look at what it did before anything else runs."
       exit 1
     fi
+    if [ "$verdicts_after" -le "$verdicts_before" ] \
+       && [ "$(python3 "$HERE/state.py" --fingerprint)" = "$fp_tree_before" ]; then
+      # ⚠️ A SESSION THAT CHANGED NOTHING AT ALL IS NOT A FAILED ONE. It wrote no
+      # verdict and touched neither the code nor the task file, so there is nothing
+      # to look at, and `failed` stopped the whole walk for it. The chain carries on:
+      # the critic's cadence restarts as it does for any critic, and a review that is
+      # still due is simply the next run. Silence TWICE RUNNING, with no work session
+      # between, is `idle`, which the walk takes as a fact about THIS item: it raises
+      # on it and goes on to the next, and a review that can never speak does not
+      # loop to the cap. A critic that DID write to the task and still gave no
+      # verdict is the case below, and that one is still `failed`.
+      silent=$(( ${silent:-0} + 1 ))
+      tree_log end "$kind" silent
+      if [ "$silent" -ge 2 ]; then
+        stop_is idle
+        echo "dfs_run: the $kind changed nothing and gave no verdict, twice running. Stopping rather than repeating it."
+        exit 1
+      fi
+      echo "dfs_run: the $kind changed nothing and gave no verdict. Carrying on."
+      if [ "$i" -ge "$CAP" ]; then stop_is cap; break; fi
+      continue
+    fi
     if [ "$verdicts_after" -le "$verdicts_before" ]; then
       tree_log end "$kind" failed
       stop_is failed
       echo "dfs_run: the $kind gave no verdict (no \`$kind\` entry in the log). Stopping."
       exit 1
     fi
+    if [ "$kind" = critic ]; then
+      # ⚠️ AN `ok` HAS TO BE ONE THE RECORD SUPPORTS. It names the live nodes it checked,
+      # and the session shows a read or a command besides the one that logged it
+      # (state.py --critic-problem says which is missing). One that does neither is
+      # treated as a critic that said nothing: the entry stays in the log, the end
+      # entry says why it was not accepted, and two running stop the chain as `idle`.
+      problem="$(python3 "$HERE/state.py" --critic-problem "$ITEM" "$tp" "$AGENT" 2>/dev/null | head -1 || true)"
+      if [ -n "$problem" ]; then
+        # Counted apart from `silent`: a critic runs every few work sessions, so two
+        # refusals are never back to back. Two with no accepted verdict between them
+        # is a critic that cannot be made to check, and that is `idle` for this item.
+        refused=$(( ${refused:-0} + 1 ))
+        tree_log end "$kind" unjustified "$problem"
+        echo "dfs_run: the critic's ok was not accepted: $problem."
+        if [ "$refused" -ge 2 ]; then
+          stop_is idle
+          echo "dfs_run: the critic's ok was refused twice with none accepted between. Stopping rather than repeating it."
+          exit 1
+        fi
+        if [ "$i" -ge "$CAP" ]; then stop_is cap; break; fi
+        continue
+      fi
+    fi
+    silent=0
+    [ "$kind" = critic ] && refused=0
     tree_log end "$kind" ok "peak $peak"
   else
     fp_after="$(python3 "$HERE/state.py" --fingerprint)"
@@ -937,6 +991,7 @@ for i in $(seq 1 "$CAP"); do
       exit 1
     fi
     tree_log end work ok "peak $peak"
+    silent=0
   fi
   # What the run did to the task, as one outline.
   python3 "$TREE_PY" show "$ITEM" | sed 's/^/   /'

@@ -22,6 +22,7 @@ Each task is one file, `.dfs/items/<task>.md`:
     - for: <an observation bearing on an assumption>
     - against: <an observation bearing on an assumption>
     Determination: <what was concluded, and so where the work goes next>
+    Ask: <optional: a question only the author can answer, that the work does not wait on>
     Corrects: <the ts of the author's `correct` entry this node carries out>
 
     ## Log
@@ -98,7 +99,7 @@ DETERMINED = ("confirmed", "refuted")
 KINDS = ("session", "end", "raise", "answer", "critic", "review", "correct", "backtrack",
          "accept")
 FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determination",
-          "Corrects")
+          "Ask", "Corrects")
 # Old names still read, as the field they became: determined nodes are history, so
 # trees written before a rename keep them.
 RENAMED = {"Plan": "Approach"}
@@ -609,18 +610,33 @@ def descendants(t, nid):
     return out
 
 
+def keeps(verdict, was):
+    """Whether a correction to `verdict` of a node that stands `was` prunes nothing: confirming
+    what already stands confirmed only adds the author's words. The one rule, for the
+    derivation (`corrections`) and for every place that tells the author what a correction
+    will do before it is written."""
+    return verdict == "confirmed" and was == "confirmed"
+
+
 def corrections(t):
     """The author's corrections and the critic's backtracks, each with whether a node
     has carried it out. A backtrack's `disp` is "backtrack"."""
     carried = {nd["fields"].get("Corrects") for nd in t["nodes"]}
+    now = {nd["id"]: nd["status"] for nd in t["nodes"]}
     out = []
     for e in t["log"]:
         if e["kind"] not in ("correct", "backtrack") or not e["args"]:
             continue
         disp = ("backtrack" if e["kind"] == "backtrack" else
                 e["args"][1] if len(e["args"]) > 1 else "refuted")
-        out.append(dict(ts=e["ts"], node=e["args"][0], disp=disp, body=e["body"],
-                        done=e["ts"] in carried))
+        node = e["args"][0]
+        # `keeps`: confirming what already stands confirmed only adds the author's words;
+        # nothing under it was built on a wrong verdict, so nothing is pruned.
+        kept = keeps(disp, now.get(node))
+        if disp != "backtrack" and node in now:
+            now[node] = disp if disp in DETERMINED else "refuted"
+        out.append(dict(ts=e["ts"], node=node, disp=disp, body=e["body"],
+                        done=e["ts"] in carried, keeps=kept))
     return out
 
 
@@ -633,7 +649,9 @@ def effective(t):
     happens to them depends on the verdict: refuted, and they stay — they are what the
     work jumps to; confirmed, and every sibling made after N is pruned too — those were
     the alternatives taken when N was wrongly abandoned. Work resumes under N if
-    confirmed, at a sibling if refuted. Nothing in the file is edited: a determined
+    confirmed, at a sibling if refuted. The exception: confirming a node that already
+    stands confirmed (`keeps`) abandoned nothing, so it prunes nothing and only adds
+    the author's words. Nothing in the file is edited: a determined
     node is history, and what it means now is derived here.
 
     A critic's BACKTRACK at N says neither: N's evidence does not carry its
@@ -655,6 +673,8 @@ def effective(t):
                        if d["fields"].get("Corrects") != c["ts"])
             continue
         status[c["node"]] = c["disp"] if c["disp"] in DETERMINED else "refuted"
+        if c["keeps"]:
+            continue
         for d in descendants(t, nd["id"]):
             # A node made to carry the correction out is not cut by it.
             if d["fields"].get("Corrects") != c["ts"]:
@@ -879,6 +899,60 @@ def accepted(t):
     last_work = max((e["ts"] for e in t["log"] if e["kind"] in ("end", "correct", "backtrack")),
                     default="")
     return bool(last_acc) and last_acc >= last_work
+
+
+def assumed(t):
+    """The live nodes that rest on an assumption (they state a Hypothesis) or put a
+    question to the author (they state an Ask), in tree order. Most nodes only say
+    something was done and are neither. A refuted or pruned node's assumption is moot."""
+    status, pruned = effective(t)
+    return [nd["id"] for nd in sorted(t["nodes"], key=order_key)
+            if (nd["fields"].get("Hypothesis") or nd["fields"].get("Ask"))
+            and status[nd["id"]] != "refuted" and nd["id"] not in pruned]
+
+
+def split_falsifier(text):
+    """A Hypothesis as `(the assumption, what would show it wrong)`. The skill asks
+    for both in one field, the second after `Wrong if`; `("...", "")` when it has none."""
+    m = re.search(r"\bwrong if\b[:,]?\s*", text or "", re.I)
+    if not m:
+        return (text or "").strip(), ""
+    return text[:m.start()].strip(" .;—-") + ".", text[m.end():].strip()
+
+
+def story(t, nid):
+    """What the author has SAID about one node, so the screen can keep it with the
+    node instead of in the log pane: the raises on it and their answers, the
+    corrections at it (and a determination that now contradicts one), and the
+    correction a node carries out.
+
+    ⚠️ A node's Determination is history and is never edited, so after the author
+    overrules it the file still says `Confirmed`. `overruled` says so, with the
+    author's own reason."""
+    nodes = by_id(t)
+    nd = nodes.get(nid)
+    if nd is None:
+        return dict(answered=[], corrections=[], carries=None, overruled=None)
+    answers = {e["args"][0]: e for e in t["log"] if e["kind"] == "answer" and e["args"]}
+    answered = [(e, answers[e["ts"]]) for e in t["log"]
+                if e["kind"] == "raise" and e["args"][:1] == [nid] and e["ts"] in answers]
+    corr = [c for c in corrections(t) if c["node"] == nid]
+    carries = next((c for c in corrections(t) if c["ts"] == nd["fields"].get("Corrects")), None)
+    overruled = None
+    for c in corr:
+        if c["disp"] in DETERMINED and nd["status"] in DETERMINED and c["disp"] != nd["status"]:
+            overruled = c
+    return dict(answered=answered, corrections=corr, carries=carries, overruled=overruled)
+
+
+def notes(t):
+    """The critic's and the reviewer's remarks that came with a verdict, newest last:
+    `(kind, ts, verdict, body)`. A review's `ok` carries its MINOR findings in the
+    body and the skill says the author reads them when they accept the tree, so they
+    are listed here for the screen to put in front of the author."""
+    return [(e["kind"], e["ts"], e["args"][0] if e["args"] else "", e["body"].strip())
+            for e in t["log"]
+            if e["kind"] in ("critic", "review") and e["body"].strip()]
 
 
 # ── commits ──────────────────────────────────────────────────────────────────

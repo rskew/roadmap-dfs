@@ -391,6 +391,34 @@ def check_history(task, text, head, archive=""):
     return bad
 
 
+# A node that points at another instead of saying the thing. SKILL.md: a session, the
+# critic and the screen each read ONE node without the rest of the tree.
+BACKREF = re.compile(r"^\s*(see|as in|same as|as for|fix what|the other|per|like)\b|"
+                     r"\b(see|as in|same as|what) %s\b" % dfs_tree.NODE_RE, re.I)
+
+
+def standalone_notes(task, text, head=None, archive=""):
+    """Notes (not violations) on nodes new in `text`, against the standalone rule: an
+    Approach that is a pointer ("Fix what W9.6 found", "See W9.6.") or too short to
+    say what to do. A node with no Approach at all is one `--open` wrote and is left
+    alone. Advice only: the guard does not refuse a commit for it."""
+    t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
+    old = {nd["id"] for nd in dfs_tree.parse(head, task)["nodes"]} if head else set()
+    out = []
+    for nd in t["nodes"]:
+        if nd["id"] in old:
+            continue
+        for field in ("Approach", "Determination"):
+            v = (nd["fields"].get(field) or "").strip()
+            if not v or v == "archived.":
+                continue
+            if BACKREF.search(v) or (field == "Approach" and len(v) < 25):
+                out.append("%s %s reads as a pointer or too short to stand alone: %r. "
+                           "Name the file, the fault and the check itself." % (
+                               nd["id"], field, v[:50]))
+    return out
+
+
 def main() -> int:
     warn_only = "--warn" in sys.argv
     # Silent when this directory has no roadmap: the guard runs from a repo's
@@ -461,6 +489,8 @@ def main() -> int:
             elif verdict == "note":
                 print(f"dfs_check: note — {rel} is ~{now_tok:,} tokens, over the "
                       f"{budget:,} budget. Not grown here.")
+            for note in standalone_notes(task, text, head, arc):
+                print(f"dfs_check: note — {rel}: {note}")
             in_log = False
             for n, line in enumerate(text.splitlines(), 1):
                 if line.startswith("## "):

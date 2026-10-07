@@ -55,7 +55,9 @@ Evidence:
 #   rminor     a review verdict of ok carrying a minor finding
 #   issue      a critic raise plus an issues verdict
 #   meddle     a critic that edits code and gives a verdict
-#   silent     a critic that gives no verdict
+#   okbare     a critic ok that names no node (the plain `ok` recipe names W1.1)
+#   silent     a critic that changes nothing and gives no verdict
+#   noverdict  a critic that raises on W1.1 but gives no verdict
 #   limit      die on a 429
 #   lower      `work`, then lower the chain's cap to this run, as the TUI's `w` does
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
@@ -74,7 +76,8 @@ case "$recipe" in
   confirm) python3 -c 'import os; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Status: open","Status: confirmed\nDetermination: done.",1))'
            git add -A && git -c user.name=t -c user.email=t@t commit -qm "W1.1: the step is done" ;;
   raise)   echo "which way?" | $T log W1 raise W1.1 > /dev/null ;;
-  ok)      $T log W1 critic ok < /dev/null > /dev/null ;;
+  ok)      echo "W1.1: re-ran its check; it passes" | $T log W1 critic ok > /dev/null ;;
+  okbare)  $T log W1 critic ok < /dev/null > /dev/null ;;
   rok)     $T log W1 review ok < /dev/null > /dev/null ;;
   rissue)  echo "the step's code has a bug" | $T log W1 raise W1.1 > /dev/null
            echo "one issue" | $T log W1 review issues > /dev/null ;;
@@ -89,6 +92,7 @@ case "$recipe" in
            echo "one issue" | $T log W1 critic issues > /dev/null ;;
   meddle)  echo "critic was here" >> app.txt; $T log W1 critic ok < /dev/null > /dev/null ;;
   silent)  : ;;
+  noverdict) echo "a note" | $T log W1 raise W1.1 > /dev/null ;;
   lower)   python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n"
            echo "$n" > "$LOWER_FILE" ;;
   stash)   case "$prompt" in *"NOT this task's"*"app.txt"*) ;; *) echo "not told to clear app.txt" >&2; exit 3 ;; esac
@@ -224,8 +228,32 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
         self.assertIn("changed the working tree", out)
 
-    def test_a_critic_with_no_verdict_fails_the_chain(self):
-        rc, meta, out = self.run_chain("work,work,work,work,work,silent", cap=7)
+    def test_a_critic_that_changed_nothing_does_not_stop_the_chain(self):
+        rc, meta, out = self.run_chain("work,work,work,work,work,silent,work,work", cap=8)
+        self.assertEqual(self.kinds_run(), ["work"] * 5 + ["critic", "work", "work"], out)
+        self.assertEqual(meta.get("stop"), "cap", out)
+        self.assertIn("Carrying on", out)
+
+    def test_a_review_that_is_silent_twice_is_idle_not_failed(self):
+        rc, meta, out = self.run_chain("confirm,silent,silent", cap=6)
+        self.assertEqual((rc, meta.get("stop")), (1, "idle"), out)
+        self.assertEqual(self.kinds_run(), ["work", "review", "review"], out)
+
+    def test_an_ok_that_names_no_node_is_not_accepted_and_carries_on(self):
+        rc, meta, out = self.run_chain("work,work,work,work,work,okbare,work,work", cap=8)
+        self.assertEqual(self.kinds_run(), ["work"] * 5 + ["critic", "work", "work"], out)
+        self.assertEqual(meta.get("stop"), "cap", out)
+        self.assertIn("ok was not accepted", out)
+        self.assertIn("names no node", out)
+
+    def test_an_ok_refused_twice_with_none_accepted_between_is_idle(self):
+        rc, meta, out = self.run_chain(
+            "work,work,work,work,work,okbare,work,work,work,work,work,okbare", cap=14)
+        self.assertEqual((rc, meta.get("stop")), (1, "idle"), out)
+        self.assertIn("refused twice with none accepted between", out)
+
+    def test_a_critic_that_wrote_to_the_task_without_a_verdict_still_fails(self):
+        rc, meta, out = self.run_chain("work,work,work,work,work,noverdict", cap=7)
         self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
         self.assertIn("no verdict", out)
 

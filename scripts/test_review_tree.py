@@ -92,7 +92,47 @@ class Rows(unittest.TestCase):
         self.assertEqual([r["key"] for r in rows],
                          ["section:W1:Goal", "section:W1:Background",
                           "raise:2026-09-27T01:06:00Z", "W1.1", "W1.2", "W1.3", "W1.4"])
-        self.assertEqual([r["depth"] for r in rows], [0, 0, 0, 0, 1, 2, 0])
+        # A chain (W1.1 → W1.2 → W1.3) stays in one column: only a fork steps in.
+        self.assertEqual([r["depth"] for r in rows], [0, 0, 0, 0, 0, 0, 0])
+
+    def test_a_fork_steps_its_children_in_and_a_chain_does_not(self):
+        t = dfs_tree.parse(TREE.replace(
+            "### W1.4 · A refuted sibling\nStatus: refuted",
+            "### W1.4 · A refuted sibling\nParent: W1.2\nStatus: refuted"), "W1")
+        rows = {r["key"]: r["depth"] for r in TUI.tree_entries(t) if r["kind"] == "node"}
+        # W1.2 has two children (W1.3, W1.4): both step in. W1.1 → W1.2 does not.
+        self.assertEqual(rows, {"W1.1": 0, "W1.2": 0, "W1.3": 1, "W1.4": 1})
+
+    def test_a_finished_task_shows_its_summary_above_the_goal(self):
+        done = TREE.replace("Status: open", "Status: confirmed").replace(
+            "\n## Goal", "\n## Summary\n\nIt works now: the other thing no longer happens.\n\n## Goal", 1
+        ).replace("- 2026-09-27T01:05:00Z · raise · W1.3\n  Which way should W1.3 go?\n", "").replace(
+            "- 2026-09-27T01:06:00Z · raise\n  Ten sessions without you.\n", "")
+        t = dfs_tree.parse(done, "W1")
+        self.assertEqual(dfs_tree.status_of(t)[0], "done")
+        rows = TUI.tree_entries(t)
+        self.assertEqual([r["key"] for r in rows[:3]],
+                         ["section:W1:Summary", "section:W1:Goal", "section:W1:Background"])
+        self.assertIn("no longer happens", rows[0]["text"])
+        self.assertTrue(rows[0]["open_default"])
+
+    def test_a_finished_task_without_one_says_so_and_an_open_one_shows_none(self):
+        done = dfs_tree.parse(TREE.replace("Status: open", "Status: confirmed").replace(
+            "- 2026-09-27T01:05:00Z · raise · W1.3\n  Which way should W1.3 go?\n", "").replace(
+            "- 2026-09-27T01:06:00Z · raise\n  Ten sessions without you.\n", ""), "W1")
+        self.assertEqual(TUI.tree_entries(done)[0]["text"], TUI.SUMMARY_MISSING)
+        opened = TREE.replace("\n## Goal", "\n## Summary\n\nAll done.\n\n## Goal", 1)
+        self.assertNotIn("section:W1:Summary",
+                         [r["key"] for r in TUI.tree_entries(dfs_tree.parse(opened, "W1"))])
+
+    def test_only_a_node_with_a_hypothesis_rests_on_an_assumption(self):
+        t = dfs_tree.parse(TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: the author means v2 only."
+        ).replace("Status: refuted\nApproach: try the other way.",
+                  "Status: refuted\nApproach: try the other way.\nHypothesis: moot."), "W1")
+        self.assertEqual(TUI.assumed_nodes(t), ["W1.2"])
+        self.assertEqual(TUI.assumed_nodes(tree()), [], "a plain node states none")
 
     def test_a_finished_task_shows_its_summary_above_the_goal(self):
         done = TREE.replace("Status: open", "Status: confirmed").replace(
@@ -233,12 +273,107 @@ class Pane(unittest.TestCase):
         ui.compose = lambda frame: (ui.composed.append(frame) or ui.typed)
         ui.prompted = ""
         ui.prompt = lambda label, default="": ui.prompted or default
+        ui.choose = lambda label, keys: ui.prompted[:1] if ui.prompted[:1] in keys else ""
         ui.live = lambda mode="work": []
         self.ui = ui
 
     def to(self, key):
         keys = [r["key"] for r in self.ui.tree_rows()]
         self.ui.tree_sel = keys.index(key)
+
+    def flagged_tree(self):
+        t = dfs_tree.parse(TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if it leaks.\n"
+            "Ask: warn or fail?\nDetermination: Confirmed: it holds. Next, more."), "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        return t
+
+    def test_n_walks_the_raises_and_assumptions_and_wraps(self):
+        ui = self.ui
+        self.flagged_tree()
+        ui.open_tree()
+        seen = []
+        for _ in range(4):
+            ui.act(ord("n"))
+            seen.append(ui.tree_row()["key"])
+        # the task's raise row, then W1.2 (⚑ and ask), then W1.3 (its raise), then round.
+        self.assertEqual(seen, ["raise:2026-09-27T01:06:00Z", "W1.2", "W1.3",
+                                "raise:2026-09-27T01:06:00Z"])
+        ui.act(ord("N"))
+        self.assertEqual(ui.tree_row()["key"], "W1.3")
+
+    def test_g_and_G_move_the_cursor_not_the_text(self):
+        ui = self.ui
+        ui.open_tree()
+        ui.act(ord("G"))
+        self.assertEqual(ui.tree_sel, len(ui.tree_rows()) - 1)
+        ui.act(ord("g"))
+        self.assertEqual(ui.tree_sel, 0)
+
+    def test_the_card_says_what_the_node_says_and_what_the_author_said(self):
+        t = self.flagged_tree()
+        row = next(r for r in TUI.tree_entries(t) if r["key"] == "W1.2")
+        card = TUI.node_card(t, row)
+        roles = [r for r, _ in card]
+        self.assertEqual(roles[:2], ["head", "meta"])
+        self.assertIn(("red", "warn or fail?"), card)
+        self.assertIn(("amber", "it holds."), card)
+        self.assertIn(("amber", "it leaks."), card)
+        self.assertLess(card.index(("label", "Ask — a question for you")),
+                        card.index(("label", "Approach")))
+
+    def test_a_skim_line_says_the_verdict_without_the_verdict_word(self):
+        self.flagged_tree()
+        self.ui.open_tree()
+        text = "\n".join(l for l, *_ in self.ui.lines_tree(100))
+        self.assertIn("it holds.", text)
+        self.assertNotIn("Next, more", text)
+        self.assertIn("? ask", text)
+
+    def test_adding_under_a_refuted_node_asks_first(self):
+        ui = self.ui
+        ui.open_tree()
+        self.to("W1.4")
+        added = []
+        saved = TUI.dfs_tree.add_node
+        TUI.dfs_tree.add_node = lambda *a: added.append(a) or "W1.5"
+        self.addCleanup(setattr, TUI.dfs_tree, "add_node", saved)
+        answers = iter(["", "a title"])
+        ui.prompt = lambda label, default="": next(answers)
+        ui.tree_add("W1")
+        self.assertEqual(added, [], "an empty answer to the warning adds nothing")
+        self.assertEqual(ui.msg, "no node added")
+
+    def test_H_lists_every_assumption_and_enter_goes_to_it_in_its_tree(self):
+        ui = self.ui
+        t = self.flagged_tree()
+        ui.data["items"][0]["assumptions"] = dfs_tree.assumed(t)
+        ui.act(ord("H"))
+        self.assertEqual(ui.pane, "assumptions")
+        self.assertEqual([nd["id"] for _, nd in ui.asm_rows()], ["W1.2"])
+        text = "\n".join(l for l, *_ in ui.lines_assumptions(100))
+        self.assertIn("wrong if it leaks.", text)
+        self.assertIn("ask: warn or fail?", text)
+        ui.act(10)
+        self.assertTrue(ui.tree_focused())
+        self.assertEqual(ui.tree_row()["key"], "W1.2")
+        ui.act(ord("H"))
+        ui.act(27)
+        self.assertEqual(ui.pane, "item")
+
+    def test_a_raise_says_how_long_it_has_waited_not_its_timestamp(self):
+        now = 1_800_000_000
+        import calendar
+        ts = lambda secs: __import__("time").strftime("%Y-%m-%dT%H:%M:%SZ",
+                                                      __import__("time").gmtime(now - secs))
+        self.assertEqual(TUI.age(ts(3 * 86400 + 5), now), "3d ago")
+        self.assertEqual(TUI.age(ts(7200), now), "2h ago")
+        self.assertEqual(TUI.age(ts(30), now), "just now")
+        self.ui.open_tree()
+        text = "\n".join(l for l, *_ in self.ui.lines_tree(100))
+        self.assertIn("RAISE on the task ·", text)
+        self.assertNotIn("2026-09-27T01:06:00Z", text)
 
     def test_the_goal_shows_above_the_tree_and_folds(self):
         ui = self.ui
@@ -273,8 +408,8 @@ class Pane(unittest.TestCase):
         self.to("W1.1")
         ui.act(10)
         text = "\n".join(l for l, *_ in ui.lines_tree(100))
-        self.assertIn("Approach (archive): cut the slice, and here is the whole", text)
-        self.assertIn("Determination: confirmed. It holds.", text)
+        self.assertIn("cut the slice, and here is the whole", text)
+        self.assertIn("confirmed. It holds.", text)
         ui.act(10)
         text = "\n".join(l for l, *_ in ui.lines_tree(100))
         self.assertNotIn("Determination: confirmed. It holds.", text, "enter closes it")

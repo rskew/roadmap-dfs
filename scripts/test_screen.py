@@ -596,7 +596,8 @@ class TheTreeKeepsItsExpandedNodeInView(unittest.TestCase):
         closed, opened = self.screen(False), self.screen(True)
         lines_closed = closed.lines_tree(80)
         lines_open = opened.lines_tree(80)
-        self.assertEqual(closed._sel_end, closed._sel_row)
+        # A closed node is its row and the one line of what it concluded.
+        self.assertEqual(closed._sel_end, closed._sel_row + 1)
         self.assertGreater(opened._sel_end, opened._sel_row + 2)
         # The bottom node's block is the last thing in the pane, bar any section after.
         self.assertGreaterEqual(len(lines_open) - 1, opened._sel_end)
@@ -611,6 +612,24 @@ class TheTreeKeepsItsExpandedNodeInView(unittest.TestCase):
         shown = [l[0] for l in lines[scroll:scroll + body_h]]
         self.assertTrue(any("step 12 is done" in t for t in shown), shown)
         self.assertTrue(any(t.startswith(">") for t in shown), shown)
+
+
+class TheNodePanel(unittest.TestCase):
+    def test_it_replaces_the_activity_column_only_while_the_tree_has_the_keys(self):
+        tree_ui = a_screen([item("W1")], pane="item", focus="tree")
+        list_ui = a_screen([item("W1")], pane="item", focus="list")
+        self.assertGreater(tree_ui.side_w(120), 0)
+        self.assertEqual(tree_ui.side_w(NARROW := TUI.NODE_AT - 1), 0)
+        self.assertEqual(list_ui.side_w(120), 0, "the activity column waits for SIDE_AT")
+        self.assertGreater(list_ui.side_w(TUI.SIDE_AT), 0)
+
+    def test_a_node_scrolls_to_the_top_when_the_cursor_moves_to_another(self):
+        ui = a_screen([item("W1")], pane="item", focus="tree")
+        ui.card_panel = True
+        ui.act(4)
+        self.assertEqual(ui.card_scroll, 6)
+        ui.act(21)
+        self.assertEqual(ui.card_scroll, 0)
 
 
 class AddingABreakAsks(unittest.TestCase):

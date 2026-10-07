@@ -89,6 +89,31 @@ class Derivation(unittest.TestCase):
         self.assertEqual(status["W1.1"], "confirmed")
         self.assertEqual(pruned, {"W1.2", "W1.3"})
 
+    def test_confirming_what_already_stands_confirmed_prunes_nothing(self):
+        t = self.t(node(1, "confirmed"), node(2, "confirmed", 1), node(3, "parked"),
+                   log="- 2026-09-25T09:00:00Z · correct · W1.1 · confirmed\n  yes\n")
+        status, pruned = dfs_tree.effective(t)
+        self.assertEqual((status["W1.1"], pruned), ("confirmed", set()))
+        self.assertTrue(dfs_tree.corrections(t)[0]["keeps"])
+
+    def test_confirming_after_an_earlier_refute_correction_still_prunes(self):
+        t = self.t(node(1, "confirmed"), node(2, "confirmed"),
+                   log="- 2026-09-25T09:00:00Z · correct · W1.1 · refuted\n  no\n"
+                       "- 2026-09-25T10:00:00Z · correct · W1.1 · confirmed\n  yes after all\n")
+        self.assertEqual(dfs_tree.effective(t)[1], {"W1.2"})
+
+    def test_keeps_is_the_one_rule_and_judges_by_what_the_node_stands_as_now(self):
+        self.assertTrue(dfs_tree.keeps("confirmed", "confirmed"))
+        for verdict, was in (("confirmed", "refuted"), ("confirmed", "parked"),
+                             ("confirmed", "open"), ("refuted", "confirmed"), ("refuted", "refuted")):
+            self.assertFalse(dfs_tree.keeps(verdict, was), (verdict, was))
+        # The node says confirmed in the file; the author refuted it, so what it stands as
+        # NOW is refuted, and confirming it again is an overrule that prunes, not a note.
+        t = self.t(node(1, "confirmed"), node(2, "confirmed", 1),
+                   log="- 2026-09-25T09:00:00Z · correct · W1.1 · refuted\n  no\n")
+        self.assertEqual(dfs_tree.effective(t)[0]["W1.1"], "refuted")
+        self.assertFalse(dfs_tree.keeps("confirmed", dfs_tree.effective(t)[0]["W1.1"]))
+
     def test_parked_alternatives_and_their_plans_do_not_hold_the_task_open(self):
         t = self.t(node(1, "confirmed"), node(2, "parked"), node(3, parent=2))
         self.assertEqual(dfs_tree.dormant(t), {"W1.2", "W1.3"})
@@ -182,7 +207,7 @@ class Derivation(unittest.TestCase):
 
     def test_the_node_carrying_a_correction_out_is_not_cut_by_it(self):
         log = "- 2026-09-25T09:00:00Z · correct · W1.1 · confirmed\n  go deeper\n"
-        t = self.t(node(1, "confirmed"), node(2, "confirmed", 1),
+        t = self.t(node(1, "refuted"), node(2, "confirmed", 1),
                    node(3, parent=1, extra="Corrects: 2026-09-25T09:00:00Z\n"), log=log)
         status, pruned = dfs_tree.effective(t)
         self.assertEqual(pruned, {"W1.2"})
@@ -531,6 +556,46 @@ class Check(InARepo):
             dfs_tree.add_node("W1", "orphan", "W1.9")
         with self.assertRaises(ValueError):
             dfs_tree.add_node("W1", "   ")
+
+    def test_the_authors_words_stay_with_the_node(self):
+        log = (self.LOG + "- 2026-09-25T09:10:00Z · raise · W1.1\n  Which way?\n"
+               "- 2026-09-25T09:11:00Z · answer · 2026-09-25T09:10:00Z\n  The second.\n"
+               "- 2026-09-25T09:12:00Z · correct · W1.1 · refuted\n  It leaks.\n")
+        self.write(task(node(1, "confirmed", extra="Hypothesis: it holds. Wrong if it leaks.\n"
+                                                   "Determination: Confirmed: fine.\n"), log))
+        t = dfs_tree.load("W1")
+        st = dfs_tree.story(t, "W1.1")
+        self.assertEqual([(r["body"].strip(), a["body"].strip()) for r, a in st["answered"]],
+                         [("which?\n\n**this** or that", "this"), ("Which way?", "The second.")])
+        self.assertEqual(st["overruled"]["body"].strip(), "It leaks.")
+        self.assertEqual(dfs_tree.assumed(t), [], "refuted by the author, so moot")
+        self.assertEqual(dfs_tree.split_falsifier("It holds. Wrong if it leaks."),
+                         ("It holds.", "it leaks."))
+
+    def test_notes_are_the_remarks_that_came_with_a_verdict(self):
+        log = self.LOG + "- 2026-09-25T09:13:00Z · review · ok\n  `_locks` grows.\n- 2026-09-25T09:14:00Z · critic · ok\n"
+        self.write(task(node(1), log))
+        self.assertEqual(dfs_tree.notes(dfs_tree.load("W1")),
+                         [("review", "2026-09-25T09:13:00Z", "ok", "`_locks` grows.")])
+
+    def test_a_node_that_asks_is_assumed_too(self):
+        self.write(task(node(1, extra="Ask: Should it warn or fail?\n"), self.LOG))
+        self.assertEqual(dfs_tree.assumed(dfs_tree.load("W1")), ["W1.1"])
+
+    def test_a_node_that_points_instead_of_saying_gets_a_note_not_a_refusal(self):
+        text = task(node(1, "open", extra="Approach: Fix what W1.0 found\n")
+                    + node(2, "open", extra="Approach: In src/cache.py get_or_set, take a "
+                                            "per-key lock, re-check the cache inside it.\n")
+                    + node(3, "open"), self.LOG)
+        notes = dfs_check.standalone_notes("W1", text)
+        self.assertEqual(len(notes), 1)
+        self.assertIn("W1.1 Approach", notes[0])
+        self.assertEqual(dfs_check.standalone_notes("W1", text, head=text), [],
+                         "only nodes that are new in this change")
+        self.write(text)
+        self.commit()
+        code, out = self.run_check()
+        self.assertEqual(code, 0, out)
 
     def test_a_verdict_given_across_a_compact_is_still_counted(self):
         old = "- 2026-09-25T09:01:30Z · critic · ok\n"

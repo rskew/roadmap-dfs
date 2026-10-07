@@ -141,6 +141,9 @@ def state_for(task: str):
         # The author's pass over this row has something to show them: an open raise,
         # or a finished tree nobody has accepted since it last changed.
         standing=(["tree"] if status == "done" and not dfs_tree.accepted(t) else []),
+        # The nodes the author should read before accepting: those that state a
+        # Hypothesis or an Ask. What `rev` counts, beside the raises.
+        assumptions=([] if dfs_tree.accepted(t) else dfs_tree.assumed(t)),
     )
 
 
@@ -511,6 +514,12 @@ def brief(task: str) -> str:
                 out += ["  " + ln for ln in c["body"].splitlines()]
                 continue
             confirmed = c["disp"] == "confirmed"
+            if c.get("keeps"):
+                out += ["- **Note at %s — the author confirms it.** Not yet carried out. %s already "
+                        "stood confirmed, so nothing is pruned. Resume under %s: make a new node "
+                        "with `Corrects: %s`." % (c["node"], c["node"], c["node"], c["ts"])]
+                out += ["  " + ln for ln in c["body"].splitlines()]
+                continue
             out += ["- **Correction at %s — the author says %s.** Not yet carried out. Everything "
                     "below %s%s is pruned. Resume %s: make a new node with `Corrects: %s`." % (
                         c["node"], c["disp"], c["node"],
@@ -595,7 +604,7 @@ def _record_block(task, kind):
     tree_cmd = "python3 %s/tree.py" % dfs_paths.rel(dfs_paths.SCRIPTS)
     rel = dfs_paths.rel(dfs_tree.path_for(task))
     tag = dfs_paths.branch_tag()
-    node_shape = ["    ### %s · <the issue, named as what to fix>"
+    node_shape = ["    ### %s · Fix: <the issue, named as what to fix>"
                   % dfs_tree.next_node_id(dfs_tree.load(task), tag),
                   "    Parent: <the node whose work it is in; none for something the "
                   "Goal asks that no node attempted>",
@@ -621,11 +630,17 @@ def _record_block(task, kind):
                 "something the Goal asks for that nothing delivers, or a fault in what "
                 "was built that its user would meet (a wrong answer, lost data, a check "
                 "that passes when it should fail). Each such finding is a new open node "
-                "in the Tree, one past the highest id with this branch's tag. Adding it "
-                "reopens the task, and the next session fixes it:", ""] + node_shape + [
+                "in the Tree, one past the highest id with this branch's tag, titled `Fix: …` "
+                "and with the node it repairs as its Parent: siblings are alternatives "
+                "everywhere else, and a fix beside the work it fixes reads as one. Adding "
+                "it reopens the task, and the next session fixes it:", ""] + node_shape + [
                 "- **Everything else is MINOR and never a node of its own**: a wording, a "
                 "stale sentence in a doc or comment, a message that names the wrong "
-                "reason, a missing test for a guard, a style rule, tidying. A node "
+                "reason, a missing test for a guard, a style rule, tidying. NOT minor, "
+                "whatever the size of the code: a resource that grows without bound (a "
+                "leak, a cache nothing evicts), a failure path nothing handles, and "
+                "anything the Goal's own words are about (a thread pool exhausted "
+                "by a hung call, when the Goal is not exhausting it). Those are nodes. A node "
                 "reopens the task and earns another review, and a review always finds "
                 "something smaller, so these must not be what keeps a task open. If you "
                 "added a node above, add ONE more for all of them together (`<id> · "
@@ -648,9 +663,14 @@ def _record_block(task, kind):
             "would pick, and the strongest case against it>",
             "    EOF", "",
             "Then, exactly once, the verdict:", "",
-            "    %s log %s %s ok%s" % (tree_cmd, task, kind,
-                                     " <<'EOF'\n    <the minor findings, one per line, "
-                                     "or nothing>\n    EOF" if kind == "review" else ""),
+            "    %s log %s %s ok <<'EOF'" % (tree_cmd, task, kind),
+            "    <%s, one per line, or nothing>" % (
+                "the minor findings" if kind == "review" else
+                "ONE LINE PER LIVE NODE YOU CHECKED, `<node id>: <what you re-ran or "
+                "read, and what it showed>`, then anything the author should know that "
+                "is not a finding. An ok that names no node, or that comes from a "
+                "session that read and ran nothing, is not accepted"),
+            "    EOF",
             "    %s log %s %s issues <<'EOF'" % (tree_cmd, task, kind),
             "    <one line per %s, naming it>" % (
                 "node added, backtrack or raise" if kind == "critic" else "node added or raise"),
@@ -776,6 +796,45 @@ def review_brief(task: str) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+VERIFIED_TRANSCRIPTS = {"claude"}
+
+
+def critic_problem(task, transcript="", provider="claude"):
+    """Why the critic's latest `ok` should not be believed, or "" when it can be.
+
+    1. It must SHOW ITS WORK: a body that names at least one live node, a line each on
+       what was re-run. An `ok` with no body, or none naming a node of the tree, says
+       nothing a person could check, and "ok" was the cheapest thing to write.
+    2. It must have LOOKED: the transcript must show a read, a search or a command
+       (not counting the call that logs the verdict). A transcript that cannot be read
+       is not held against it: unknown is not zero.
+
+    Only `ok` is judged. `issues` comes with a node, a backtrack or a raise, which are
+    their own evidence."""
+    t = dfs_tree.load(task)
+    last = next((e for e in reversed(t["log"]) if e["kind"] == "critic"), None)
+    if last is None or last["args"][:1] != ["ok"]:
+        return ""
+    status, pruned = dfs_tree.effective(t)
+    live = {nid for nid in status if nid not in pruned}
+    named = set(re.findall(dfs_tree.NODE_RE, last["body"] or "")) & live
+    if not named:
+        return ("its ok names no node of the tree: an ok has to say which live nodes it "
+                "checked, a line each on what it re-ran")
+    # ⚠️ Only claude's transcript has been checked against the real thing (a critic run as a
+    # subagent and its record read back). The other providers' parsers are written from
+    # their formats and untested on a live session, and a parser that counts zero where
+    # the agent ran things would refuse good verdicts and stop walks: so for them the
+    # first rule stands alone, and this one waits for a real transcript to be checked.
+    if transcript and provider in VERIFIED_TRANSCRIPTS:
+        import context as dfs_context
+        used = dfs_context.tool_uses(transcript, provider)
+        if used == 0:
+            return ("its ok came from a session that read nothing and ran nothing: the "
+                    "transcript has no tool call but the one that logged the verdict")
+    return ""
+
+
 def verdicts(task, kind):
     """How many `kind` entries (critic or review verdicts) the task's log holds, read
     through `load`: a `compact` during the session moves earlier verdicts to the
@@ -793,6 +852,10 @@ def main() -> int:
         for k in ("status", "why", "sessions", "since_critic", "critic_due", "review_due",
                   "review_rounds", "review_limit", "limit", "progress"):
             print("%s=%s" % (k, shlex.quote(str(st[k]))))
+        return 0
+    if args and args[0] == "--critic-problem":
+        print(critic_problem(args[1], args[2] if len(args) > 2 else "",
+                             args[3] if len(args) > 3 else "claude"))
         return 0
     if args and args[0] == "--verdicts":
         if len(args) < 3:

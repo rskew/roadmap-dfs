@@ -45,6 +45,7 @@ refresh key because there is nothing to refresh by hand.
 
 Run:  python3 <scripts>/tui.py
 """
+import calendar
 import collections
 import curses
 import glob
@@ -250,6 +251,15 @@ def tree_entries(t, folded=()):
             out.append(dict(key="section:%s:%s" % (t["task"], name), kind="section",
                             depth=0, name=name, text=sections[name],
                             open_default=shown))
+    held = [] if dfs_tree.accepted(t) else dfs_tree.notes(t)
+    if held:
+        # ⚠️ WHAT THE REVIEW SAID ON ITS WAY TO `ok`. A reviewer's minor findings and a
+        # critic's remarks live in the log body and the skill tells the author to read
+        # them when they accept, but nothing on the screen did.
+        out.append(dict(key="section:%s:Notes" % t["task"], kind="section", depth=0,
+                        name="Reviewer and critic notes", open_default=True,
+                        text="\n".join("%s %s:\n%s\n" % (k, v, body)
+                                       for k, _ts, v, body in held)))
     for r in dfs_tree.open_raises(t):
         nid = r["args"][0] if r["args"] else ""
         if nid in nodes:
@@ -276,7 +286,12 @@ def tree_entries(t, folded=()):
                             raises=on_node.get(nid, []), kids=len(kids),
                             folded=shut, raises_below=below))
             if nid not in folded:
-                walk(nid, d + 1)
+                # ⚠️ INDENT ONLY AT A FORK. `--open` makes every todo the child of the
+                # one before, so a twenty-step task was a staircase forty columns
+                # deep and a real alternative (two siblings) looked like one more
+                # step. A node that is the only child of its parent continues at its
+                # parent's column; its siblings, when there are any, step in.
+                walk(nid, d + (1 if len(kids) > 1 else 0))
     walk(None, 0)
     return out
 
@@ -305,20 +320,104 @@ def node_detail(nd, archived=None, commits=()):
     out += [("Evidence", ev) for ev in nd["evidence"]]
     if "Determination" in f:
         out.append(("Determination", f["Determination"]))
-    skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination")
+    skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination", "Ask", "Corrects")
     out += [(k, v) for k, v in f.items() if k not in skip]
     out += [("Commit", "%s %s" % (sha[:7], subj)) for sha, subj, _at in commits]
     return out
 
 
+def age(ts, now=None):
+    """`2d ago` for an ISO timestamp: a raise's identity is its timestamp, and the
+    screen showed it as one, where how long it has waited is what the author reads."""
+    try:
+        secs = (now or time.time()) - calendar.timegm(time.strptime(ts, "%Y-%m-%dT%H:%M:%SZ"))
+    except (ValueError, TypeError):
+        return ts
+    for size, unit in ((86400, "d"), (3600, "h"), (60, "m")):
+        if secs >= size:
+            return "%d%s ago" % (secs // size, unit)
+    return "just now"
+
+
+def clip(text, width):
+    """`text` in `width` columns, with an ellipsis INSIDE them when it is cut: the
+    one that said there was more used to be written past the edge, and clipped off."""
+    return text if len(text) <= width else text[:max(0, width - 1)].rstrip() + "…"
+
+
+def first_sentence(text):
+    """The first sentence of a Determination, without the verdict word the row's mark
+    already says: what the author skims under each node."""
+    text = re.sub(r"^\s*(confirmed|refuted)\b[:.,—-]*\s*", "", text or "", flags=re.I)
+    m = re.search(r"(?<=[.!?])\s", text)
+    return (text[:m.start()] if m else text).strip()
+
+
+def node_card(t, row, archive="", commits=()):
+    """One node as the author reads it: `(role, text)` blocks, in the order a review
+    goes. The panel at the right and a node opened in place both draw this, so they
+    cannot disagree about what a node says.
+
+    Roles: head, meta, label, text, amber, plus, minus, red, dim. The author's own
+    words are kept WITH the node: an answered raise, a correction and its reason, and
+    a determination the author has since overruled."""
+    nd, st = row["node"], row["status"]
+    f = nd["fields"]
+    story = dfs_tree.story(t, nd["id"])
+    out = [("head", "%s · %s" % (nd["id"], nd["title"]))]
+    meta = "%s %s" % (TREE_MARK.get(st, "?"), st)
+    if nd["parent"]:
+        meta += " · under %s" % nd["parent"]
+    out.append(("meta", meta))
+    if story["overruled"]:
+        out.append(("red", "you overruled this: the agent said %s, you said %s"
+                    % (nd["status"], story["overruled"]["disp"])))
+    for r in row.get("raises", ()):
+        out += [("label", "Raise · %s — needs you" % age(r["ts"])), ("red", r["body"].strip())]
+    if f.get("Ask"):
+        out += [("label", "Ask — a question for you"), ("red", f["Ask"])]
+    for label, text in node_detail(nd, archived_fields(archive, nd["id"]), commits):
+        base = label.split(" ")[0]
+        if base == "Hypothesis":
+            assumption, wrong = dfs_tree.split_falsifier(text)
+            out += [("label", "⚑ Hypothesis"), ("amber", assumption)]
+            if wrong:
+                out += [("label", "Wrong if"), ("amber", wrong)]
+        elif base == "Evidence":
+            if not any(r == "label" and x == "Evidence" for r, x in out):
+                out.append(("label", "Evidence"))
+            kind, _, rest = text.partition(":")
+            if kind.strip().lower() == "for":
+                out.append(("plus", "+ " + rest.strip()))
+            elif kind.strip().lower() == "against":
+                out.append(("minus", "− " + rest.strip()))
+            else:
+                out.append(("text", text))
+        elif base == "Determination":
+            out.append(("label", "Determination"))
+            out.append(("dim" if story["overruled"] else "text", text))
+        elif base == "Commit":
+            out.append(("dim", "commit " + text))
+        else:
+            out += [("label", label), ("text", text)]
+    for c in story["corrections"]:
+        out += [("label", "You corrected this to %s" % c["disp"]), ("text", c["body"].strip())]
+    c = story["carries"]
+    if c:
+        out += [("label", "Carries out %s of %s" % (
+            "your correction" if c["disp"] != "backtrack" else "the critic's backtrack", c["node"])),
+                ("text", c["body"].strip())]
+    for raised, answer in story["answered"]:
+        out += [("label", "You answered a raise on this node"),
+                ("dim", (raised["body"].strip().splitlines() or [""])[0]),
+                ("text", answer["body"].strip())]
+    return out
+
+
 def assumed_nodes(t):
-    """The live nodes that rest on an assumption: those that state a Hypothesis. Most
-    nodes only say something was done and state none; the author reads these before
-    accepting the tree. A refuted or pruned node's assumption is moot."""
-    _, pruned = dfs_tree.effective(t)
-    return [nd["id"] for nd in t["nodes"]
-            if nd["fields"].get("Hypothesis") and nd["status"] != "refuted"
-            and nd["id"] not in pruned]
+    """The live nodes the author should read before accepting: those that state a
+    Hypothesis (an assumption) or an Ask (a question). See `dfs_tree.assumed`."""
+    return dfs_tree.assumed(t)
 
 
 def strip_comments(text):
@@ -655,6 +754,8 @@ KEYS = [
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
     ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
     ("tree", "a", ord("a"), "answer", "answer the raise here"),
+    ("tree", "n  N", ord("n"), "next-flag", "next, previous raise, ⚑ or ask in the tree"),
+    ("tree", "^d  ^u", 4, "card-scroll", "scroll the node panel at the right"),
     ("tree", "i", ord("i"), "add", "add a node under the one at the cursor (none: under the task)"),
     ("tree", "f", ord("f"), "correct", "correct this node: it was really confirmed or refuted"),
     ("tree", "A", ord("A"), "accept", "accept a finished tree (asks first)"),
@@ -667,6 +768,7 @@ KEYS = [
     ("panes", "L", ord("L"), "runs", "agent runs: the live chains and the finished ones, newest first"),
     ("panes", "v", ord("v"), "art", "artefacts: the pictures its raises name"),
     ("panes", "t", ord("t"), "todo", "the epic's todo"),
+    ("panes", "H", ord("H"), "assumptions", "every open assumption and ask, across the tasks"),
     ("panes", "h", ord("h"), "activity", "what this screen and its walk did"),
     ("any", "↑↓ j k", ord("j"), "move", "move the cursor, or the text where there is none"),
     ("any", "d  u", ord("d"), "half-page", "half a page down, up"),
@@ -1435,8 +1537,12 @@ def review_cell(it):
     Blank at zero, deliberately. A column of `rev 0` down a roadmap teaches the eye to
     skip the column, and the rows that matter here are the few that are not zero.
     """
-    n = len(it.get("open_raises") or ()) + len(it.get("standing") or ())
-    return "rev %d" % n if n else ""
+    n = len(it.get("open_raises") or ()) + len(it.get("assumptions") or ())
+    if n:
+        return "rev %d" % n
+    # A finished tree with nothing in it to read still waits for a tick: said as that,
+    # so it is not the same `rev 1` as a task with a decision in it.
+    return "accept" if it.get("standing") else ""
 
 
 # ---- the look -----------------------------------------------------------------
@@ -1455,6 +1561,7 @@ PAIRS = {"red": 1, "green": 2, "cyan": 3, "chrome": 4, "accent": 5, "sel": 6,
 LOOK = {}     # name -> attr, filled by `init_look`; empty (all 0) until then
 LIGHT = False  # the terminal's background, asked once before curses starts
 SIDE_AT = 150  # columns from which the activity column sits beside the tree
+NODE_AT = 110  # columns from which the selected node is shown beside the tree
 BAR = "▌"      # the cursor's one-cell accent, where the band is drawn
 
 
@@ -1631,6 +1738,9 @@ class UI:
     order_undo = ()
     answers = ()
     real = False     # only a screen made by __init__ writes the log or rings
+    card_panel = False   # the selected node is drawn at the right (set by `draw`)
+    card_scroll = 0      # how far down that panel is read (^d ^u)
+    asm_sel = 0          # the assumptions pane's cursor
 
     def __init__(self, stdscr):
         self.scr = stdscr
@@ -1751,6 +1861,8 @@ class UI:
             self.run_sel = max(0, min(self.run_sel + step, len(self.runs) - 1))
         elif self.pane == "keys":
             self.key_sel = max(0, min(self.key_sel + step, len(self.key_rows()) - 1))
+        elif self.pane == "assumptions":
+            self.asm_sel = max(0, min(self.asm_sel + step, len(self.asm_rows()) - 1))
         elif self.tree_focused():
             self.tree_sel = max(0, min(self.tree_sel + step, len(self.tree_rows()) - 1))
         else:
@@ -2343,6 +2455,26 @@ class UI:
                 out.append((line, attr))
         return out, para
 
+    def card_lines(self, width, blocks, indent=""):
+        """`node_card`'s blocks as wrapped, styled lines: the node as the panel at the
+        right draws it and as a node opened in place draws it."""
+        out, para = self.wrapper(width)
+        chrome, red, green = look("chrome"), curses.color_pair(1), curses.color_pair(2)
+        attrs = dict(head=curses.A_BOLD, meta=chrome, label=chrome, text=0,
+                     amber=look("amber"), plus=green, minus=red,
+                     red=red | curses.A_BOLD, dim=chrome)
+        for role, text in blocks:
+            if role == "label":
+                if out and out[-1][0].strip():
+                    out.append(("", 0))
+                out.append((indent + text, chrome | curses.A_BOLD))
+                continue
+            for line in (text or "").splitlines() or [""]:
+                para(line, attrs.get(role, 0),
+                     indent=indent + ("" if role in ("head", "meta") else "  "),
+                     hang="  " if role in ("plus", "minus") else "")
+        return out
+
     def log_wrap(self, width, text, attr, hang="      "):
         """Wrap one log line, keeping its marker column and hanging its continuations.
 
@@ -2450,6 +2582,49 @@ class UI:
             self.msg = "%s — could not launch %s: %s" % (url, argv[0], e)
             return
         self.msg = "opened %s in %s" % (art["name"], os.path.basename(argv[0]))
+
+    def asm_rows(self):
+        """Every assumption and ask the author has not accepted, across the tasks:
+        `(item index, node)`. The pre-accept job is "show me every open assumption I
+        have not looked at", and the only way was to enter each task."""
+        out = []
+        for idx, it in enumerate(self.items):
+            if not it.get("assumptions"):
+                continue
+            t, _, _ = self.tree_of(it["id"])
+            nodes = dfs_tree.by_id(t)
+            out += [(idx, nodes[nid]) for nid in it["assumptions"] if nid in nodes]
+        return out
+
+    def lines_assumptions(self, width):
+        out, para = self.wrapper(width)
+        rows = self.asm_rows()
+        self.asm_sel = max(0, min(self.asm_sel, len(rows) - 1))
+        out.append(("assumptions and asks · what rests on a decision of yours, in every task "
+                    "you have not accepted", curses.A_BOLD))
+        out.append(("  ⏎ goes to it in its tree · ↑↓/jk moves · esc back", look("chrome")))
+        out.append(("", 0))
+        self._sel_row = None
+        if not rows:
+            out.append(("  none: every task is accepted, or none states a hypothesis or an ask",
+                        look("chrome")))
+            return out
+        for i, (idx, nd) in enumerate(rows):
+            sel = i == self.asm_sel
+            if sel:
+                self._sel_row = len(out)
+            f = nd["fields"]
+            out.append(("%s %s  %s" % (">" if sel else " ", nd["id"], nd["title"]),
+                        look("amber") | curses.A_BOLD | (curses.A_REVERSE if sel else 0)))
+            if f.get("Hypothesis"):
+                assumption, wrong = dfs_tree.split_falsifier(f["Hypothesis"])
+                para(assumption, look("amber"), indent="    ")
+                if wrong:
+                    para("wrong if " + wrong, look("amber"), indent="    ")
+            if f.get("Ask"):
+                para("ask: " + f["Ask"], curses.color_pair(1), indent="    ")
+            out.append(("", 0))
+        return out
 
     def lines_artefacts(self, width):
         out, para = self.wrapper(width)
@@ -2880,6 +3055,8 @@ class UI:
             return self.lines_activity(width)
         if self.pane == "plan":
             return self.lines_plan(width)
+        if self.pane == "assumptions":
+            return self.lines_assumptions(width)
         if self.pane == "agentlog" and self.open_run:
             try:
                 if self.open_run.get("kind") == "console":
@@ -2926,6 +3103,43 @@ class UI:
             return []
         t, _, _ = self.tree_of(it["id"])
         return tree_entries(t, self.tree_folded)
+
+    def tree_jump_flag(self, step):
+        """Move the cursor to the next (or previous) row that wants the author: an open
+        raise, an assumption (⚑) or an ask. A tree is read for those, and with nothing
+        to jump by the only way to find them was to open every node."""
+        rows = self.tree_rows()
+
+        def wants(r):
+            if r["kind"] == "raise":
+                return True
+            if r["kind"] != "node":
+                return False
+            f = r["node"]["fields"]
+            return bool(r["raises"] or (r["status"] not in ("refuted", "pruned")
+                                        and (f.get("Hypothesis") or f.get("Ask"))))
+        for k in range(1, len(rows) + 1):
+            i = (self.tree_sel + step * k) % len(rows)
+            if wants(rows[i]):
+                self.tree_sel = i
+                return
+        self.msg = "no raise, ⚑ or ask in this tree"
+
+    def choose(self, label, keys):
+        """One KEY out of `keys`, with no ⏎: `""` for any other, which cancels. The
+        `[c]onfirmed or [r]efuted:` question looked like a single key and took a line."""
+        if self.answers:
+            return self.answers.pop(0)[:1].lower()
+        self.msg = label
+        self.draw()
+        self.scr.timeout(-1)
+        try:
+            ch = self.scr.getch()
+        finally:
+            self.scr.timeout(POLL_MS)
+        self.msg = ""
+        got = chr(ch).lower() if 32 <= ch < 127 else ""
+        return got if got in keys else ""
 
     def tree_row(self):
         rows = self.tree_rows()
@@ -3341,7 +3555,7 @@ class UI:
             if row["kind"] == "raise":
                 r = row["raise_"]
                 on = (" on " + r["args"][0]) if r["args"] else " on the task"
-                out.append(("%s ● RAISE %s%s — needs you" % (cursor, r["ts"], on),
+                out.append(("%s ● RAISE%s · %s — needs you" % (cursor, on, age(r["ts"])),
                             red | curses.A_BOLD | (curses.A_REVERSE if sel else 0)))
                 for line in r["body"].splitlines():
                     para(line, indent="    ", hang="  ")
@@ -3349,15 +3563,20 @@ class UI:
             nd, st = row["node"], row["status"]
             fold = ("▸" if row["folded"] else "▾") if row["kids"] else " "
             flag = "  ● raise" if row["raises"] else ""
-            assumes = (nd["fields"].get("Hypothesis")
-                       if st not in ("refuted", "pruned") else "")
+            live_node = st not in ("refuted", "pruned")
+            assumes = nd["fields"].get("Hypothesis") if live_node else ""
+            asks = nd["fields"].get("Ask") if live_node else ""
             if assumes:
                 flag += "  ⚑ assumption"
+            if asks:
+                flag += "  ? ask"
+            if dfs_tree.story(t, nd["id"])["answered"]:
+                flag += "  ✎ answered"
             if row["raises_below"]:
                 flag += "  ● %d raise%s below" % (row["raises_below"],
                                                   "" if row["raises_below"] == 1 else "s")
             attr = (look("chrome") if st in TREE_QUIET else 0)
-            if assumes:
+            if assumes or asks:
                 # ⚠️ AMBER AND BOLD, because most nodes are "something was done" and
                 # these are the ones the author is there to read. A raise is red and
                 # wins: it blocks the task, an assumption only asks to be looked at.
@@ -3382,27 +3601,41 @@ class UI:
                     head, max(20, width - 2), subsequent_indent=" " * (lead + 2))):
                 out.append((line, attr, below if len(out) > first else above))
             inner = " " * (lead + 2)
-            if assumes and row["key"] not in self.tree_open:
-                # The assumption itself, under the row, so it is read without opening
-                # the node: two lines of it, and the rest is a ⏎ away.
-                said = textwrap.wrap(assumes, max(20, width - len(inner) - 2))
-                for line in said[:2]:
-                    out.append((inner + line, look("amber")))
-                if len(said) > 2:
-                    out[-1] = (out[-1][0].rstrip() + " …", look("amber"))
+            room = max(20, width - len(inner) - 2)
+            story = dfs_tree.story(t, nd["id"])
+            if row["key"] not in self.tree_open:
+                # ⚠️ SKIM: the verdict, one line, under each node. The tree was a list
+                # of titles and the story a keypress away per node, so nothing could
+                # be skimmed. What the AUTHOR overruled is said instead of the
+                # determination they overruled.
+                if story["overruled"]:
+                    why = (story["overruled"]["body"].strip().splitlines() or [""])[0]
+                    out.append((inner + clip("overruled by you: " + why, room),
+                                red | curses.A_BOLD))
+                elif first_sentence(nd["fields"].get("Determination")):
+                    out.append((inner + clip(first_sentence(nd["fields"]["Determination"]),
+                                             room), look("chrome")))
+                if not getattr(self, "card_panel", False):
+                    # With the node panel at the right the whole of it is there; without
+                    # one the assumption and what would show it wrong are kept under the
+                    # row, each on a line of its own and clipped with a visible mark.
+                    if assumes:
+                        assumption, wrong = dfs_tree.split_falsifier(assumes)
+                        out.append((inner + clip(assumption, room), look("amber")))
+                        if wrong:
+                            out.append((inner + clip("wrong if " + wrong, room), look("amber")))
+                    if asks:
+                        out.append((inner + clip("ask: " + asks, room), red))
             if row["key"] not in self.tree_open and not row["raises"]:
                 continue
             for r in row["raises"]:
-                out.append((inner + "RAISE %s — needs you" % r["ts"], red | curses.A_BOLD))
+                out.append((inner + "RAISE · %s — needs you" % age(r["ts"]), red | curses.A_BOLD))
                 for line in r["body"].splitlines():
                     para(line, indent=inner + "  ", hang="  ")
             if row["key"] in self.tree_open:
-                out.append((inner + "status: %s" % st, look("chrome")))
-                for label, text in node_detail(nd, archived_fields(archive, nd["id"]),
-                                               commits.get(nd["id"], ())):
-                    para("%s: %s" % (label, text),
-                         look("chrome") if label == "Commit" else 0,
-                         indent=inner, hang="    ")
+                # The same card the panel draws (minus its heading, which is the row).
+                card = node_card(t, dict(row, raises=[]), archive, commits.get(nd["id"], ()))
+                out += self.card_lines(width - len(inner), card[1:], inner)
                 out.append(("", 0, BLANK_GUIDES))
             out[first:] = [ln if len(ln) > 2 else ln + (below,) for ln in out[first:]]
         if self._sel_row is not None and self._sel_end is None:
@@ -3445,7 +3678,7 @@ class UI:
         elif self.pane == "runs":
             actions, nav = ["⏎ open", "esc back"], ["↑↓/jk run"]
         elif self.tree_focused():
-            actions = ["⏎ open", "space fold", "i add", "a answer", "f correct"]
+            actions = ["⏎ open", "n next ⚑", "space fold", "i add", "a answer", "f correct"]
             if it is not None and it["status"] == "done" and self.tree_acceptable(it):
                 actions.append("A accept")
             actions += ["R terminal review", "c chat", "tab items"]
@@ -3469,6 +3702,12 @@ class UI:
         """The activity column's width: none below `SIDE_AT`, where the main column
         needs every cell it has; then about a third, and never so wide that the tree
         is the one squeezed."""
+        if self.tree_focused():
+            # ⚠️ WHILE THE TREE HAS THE KEYS the right column is the selected node,
+            # not the activity log: reading a tree is moving through it, and a node
+            # was one ⏎ and most of a small screen each. It starts earlier (NODE_AT)
+            # than the activity column does, because it is what the pane is for.
+            return 0 if w < NODE_AT else min(84, max(50, w * 42 // 100))
         return 0 if w < SIDE_AT else min(72, max(44, w * 36 // 100))
 
     def rule(self, y, x0, x1, title="", tag=""):
@@ -3488,15 +3727,23 @@ class UI:
         side = self.side_w(w)
         main = w - side - (1 if side else 0)
         self.clip = main
+        self.card_panel = bool(side) and self.tree_focused()
         list_h = min(len(self.list_rows()), max(3, (h - 5) // 3))
+        if self.tree_focused():
+            # ⚠️ THE LIST IS ONE ROW, the selected item, while the tree has the keys:
+            # at 80×24 it kept eight rows and left the tree twelve, so one opened node
+            # filled the pane and the task's own name scrolled out of it.
+            list_h = 1
         self.draw_list(2, list_h)
         sep = 2 + list_h
         name = {"item": "item", "reglog": "task log", "runs": "agent runs",
                 "agentlog": "agent log", "todo": "epic todo",
                 "artefact": "artefacts", "keys": "keys", "activity": "activity",
-                "plan": "walk plan"}[self.pane]
+                "plan": "walk plan", "assumptions": "assumptions"}[self.pane]
         if self.pane == "item":
-            name = "tree" if self.tree_focused() else "item"
+            name = ("tree · %s" % self.current()["id"]
+                    if self.tree_focused() and self.current() else
+                    "tree" if self.tree_focused() else "item")
 
         body_top = sep + 1
         body_h = max(1, h - body_top - 2)
@@ -3546,7 +3793,7 @@ class UI:
                         self.put(y, 1 + c, "│", look("chrome"))
         self.clip = None
         if side:
-            self.draw_side(main, 2, h - 3, w)
+            (self.draw_card if self.card_panel else self.draw_side)(main, 2, h - 3, w)
 
         self.put(h - 2, 1, self.msg, 0)
         if self.input is not None:
@@ -3609,6 +3856,55 @@ class UI:
         if menu:
             self.rule(h - 2 - min(len(menu), h - 6), 0, w - 1, inp.get("title", ""))
         return (h - 1, x + inp.get("pos", len(inp["text"])) - start)
+
+    def card_for_row(self, width):
+        """The lines of the panel at the right: whatever the tree's cursor is on."""
+        row = self.tree_row()
+        it = self.current()
+        if row is None or it is None:
+            return [("nothing selected", look("chrome"))]
+        t, archive, commits = self.tree_of(it["id"])
+        if row["kind"] == "node":
+            return self.card_lines(width, node_card(t, row, archive, commits.get(row["key"], ())))
+        out, para = self.wrapper(width)
+        if row["kind"] == "section":
+            out.append((row["name"], curses.A_BOLD))
+            out.append(("", 0))
+            for line in prose_blocks(row["text"]):
+                para(line, 0, indent="", hang="  " if re.match(r"^\s*([-*+]|\d+[.)])\s", line) else "")
+        else:
+            r = row["raise_"]
+            out.append(("raise%s · %s — needs you" % (
+                (" on " + r["args"][0]) if r["args"] else "", age(r["ts"])),
+                        curses.color_pair(1) | curses.A_BOLD))
+            out.append(("", 0))
+            for line in r["body"].splitlines():
+                para(line, 0, indent="", hang="  ")
+        return out
+
+    def draw_card(self, x0, top, bottom, w):
+        """The selected node, formatted, at the right of the tree (see `side_w`)."""
+        for y in range(top, bottom):
+            self.put(y, x0, "│", look("chrome"))
+        x = x0 + 2
+        width = w - x - 1
+        row = self.tree_row()
+        self.rule(top, x, w - 1, row["key"] if row and row["kind"] == "node" else
+                  (row["name"] if row and row["kind"] == "section" else "raise") if row else "")
+        lines = self.card_for_row(width)
+        room = max(1, bottom - top - 1)
+        key = row["key"] if row else None
+        if getattr(self, "_card_key", None) != key:
+            self._card_key, self.card_scroll = key, 0
+        start = max(0, min(getattr(self, "card_scroll", 0), max(0, len(lines) - room)))
+        self.card_scroll = start
+        shown = lines[start:start + room]
+        for i, line in enumerate(shown):
+            self.put(top + 1 + i, x, line[0][:width], line[1])
+        if start + room < len(lines):
+            # Over the last line, padded so what it replaces does not show through.
+            self.put(top + room, x, ("… %d more — ^d" % (len(lines) - start - room))
+                     .ljust(width)[:width], look("chrome"))
 
     def draw_side(self, x0, top, bottom, w):
         """The activity column: what is running now, then what has happened.
@@ -4143,16 +4439,19 @@ class UI:
             self.msg = "put the cursor on the node to correct"
             return
         nid = row["key"]
-        v = self.prompt("%s was really [c]onfirmed or [r]efuted (empty cancels):" % nid)
-        v = v[:1].lower()
+        v = self.choose("%s was really [c]onfirmed or [r]efuted? (any other key cancels)" % nid,
+                        "cr")
         if v not in ("c", "r"):
             self.msg = "not corrected"
             return
         verdict = "confirmed" if v == "c" else "refuted"
         frame = (["Directive for %s, corrected to %s: what the work should do from here."
                   % (nid, verdict),
-                  "Everything below it is pruned%s, and %s reopens."
-                  % (" and so are the siblings made after it" if v == "c" else "", item),
+                  "%s, and %s reopens."
+                  % ("Nothing is pruned: it already stands confirmed"
+                     if dfs_tree.keeps(verdict, row["status"]) else
+                     "Everything below it is pruned%s"
+                     % (" and so are the siblings made after it" if v == "c" else ""), item),
                   "Lines starting # are dropped; an empty directive cancels.", ""]
                  + row["node"]["raw"])
         body = self.compose(frame)
@@ -4169,6 +4468,13 @@ class UI:
         the footer, the approach only if there is one to give."""
         row = self.tree_row()
         parent = row["key"] if row and row["kind"] == "node" else None
+        if parent and row["status"] in ("refuted", "pruned"):
+            # ⚠️ Born pruned: a node under a refuted or pruned one is cut off with it,
+            # and the new node would be drawn as dead the moment it was made.
+            if self.prompt("%s is %s, so a node under it is %s too. Add one anyway? [y/N]:"
+                           % (parent, row["status"], "pruned")).strip()[:1].lower() != "y":
+                self.msg = "no node added"
+                return
         title = self.prompt("new node under %s — title (empty cancels):" % (parent or item))
         if not title.strip():
             self.msg = "no node added"
@@ -4189,9 +4495,18 @@ class UI:
             return
         t, _, _ = self.tree_of(item)
         assumed = assumed_nodes(t)
-        # ⚠️ A node with a Hypothesis is one that rests on an assumption. They are named in the question, because accepting is the
-        # moment they stop being looked at.
-        note = (" Assumptions to check at %s (⚑)." % ", ".join(assumed)) if assumed else ""
+        # ⚠️ NAMED IN THE QUESTION, with what would show each one wrong, because accepting
+        # is the moment they stop being looked at; and the reviewer's notes are counted.
+        bits = []
+        nodes = dfs_tree.by_id(t)
+        for nid in assumed:
+            f = nodes[nid]["fields"]
+            wrong = dfs_tree.split_falsifier(f.get("Hypothesis") or "")[1] or f.get("Ask", "")
+            bits.append("%s (%s)" % (nid, clip(wrong, 36)) if wrong else nid)
+        note = (" Assumptions: %s." % "; ".join(bits)) if bits else ""
+        kept = len(dfs_tree.notes(t))
+        if kept:
+            note += " %d reviewer note%s above." % (kept, "" if kept == 1 else "s")
         if self.prompt("accept %s's tree as finished?%s [y/N]:" % (item, note))[:1].lower() != "y":
             self.msg = "not accepted"
             return
@@ -4374,6 +4689,10 @@ class UI:
             self.search_typed()
         elif ch == ord(":"):
             return self.command()
+        elif ch == ord("H"):
+            self.pane = "item" if self.pane == "assumptions" else "assumptions"
+            self.asm_sel = 0
+            self.scroll = 0
         elif ch == ord("h"):
             self.pane = "item" if self.pane == "activity" else "activity"
             self.scroll = 10 ** 6            # newest last, so it opens at the end
@@ -4390,7 +4709,7 @@ class UI:
                 self.pane = getattr(self, "run_back", "runs")   # where it was opened from
             elif self.tree_focused():
                 self.focus = "list"      # out of the tree, back to the items
-            elif self.pane in ("runs", "reglog", "todo", "artefact", "activity"):
+            elif self.pane in ("runs", "reglog", "todo", "artefact", "activity", "assumptions"):
                 self.pane = "item"
             self.scroll = 0
         elif ch in (ord("j"), curses.KEY_DOWN):
@@ -4427,6 +4746,15 @@ class UI:
             # half a screen, so what you were reading is still on it.
             self.scroll = max(0, self.scroll + (page // 2 if ch == ord("d")
                                                 else -(page // 2)))
+        elif self.card_panel and ch in (4, 21):
+            # ^d ^u: the panel at the right, which `d` `u` (the tree's own text) leave be.
+            self.card_scroll = max(0, getattr(self, "card_scroll", 0) + (6 if ch == 4 else -6))
+        elif self.tree_focused() and ch in (curses.KEY_HOME, ord("g")):
+            # ⚠️ THE CURSOR, not the text. In the tree `g` scrolled to the top and left
+            # the cursor on a row nobody could see, and the next ⏎ acted on it.
+            self.tree_sel = 0
+        elif self.tree_focused() and ch in (curses.KEY_END, ord("G")):
+            self.tree_sel = max(0, len(self.tree_rows()) - 1)
         elif ch in (curses.KEY_HOME, ord("g")):
             self.unfollow()
             self.scroll = 0
@@ -4481,6 +4809,14 @@ class UI:
                 row = self.tree_row()
                 if row:
                     self.tree_open ^= {row["key"]}
+            elif self.pane == "assumptions":
+                rows = self.asm_rows()
+                if rows:
+                    idx, nd = rows[max(0, min(self.asm_sel, len(rows) - 1))]
+                    self.sel = idx
+                    self.open_tree()
+                    keys = [r["key"] for r in self.tree_rows()]
+                    self.tree_sel = keys.index(nd["id"]) if nd["id"] in keys else 0
             elif self.pane == "artefact":
                 arts = self.artefacts()
                 if arts:
@@ -4563,6 +4899,8 @@ class UI:
             self.reparent(-1 if ch == ord("{") else 1)
         elif ch == ord("w"):
             self.walk_toggle()
+        elif ch in (ord("n"), ord("N")) and self.tree_focused():
+            self.tree_jump_flag(1 if ch == ord("n") else -1)
         elif ch == ord("n"):
             self.walk_pin(it)
         elif ch == ord("o"):

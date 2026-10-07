@@ -43,12 +43,14 @@ issue with the roadmap tooling itself (roadmap-dfs, the `.dfs` rules, the hooks
 that enforce them), including a tooling rule that blocks the task, is raised and not
 fixed in the task. It is not the task's Goal, and where it is worked is the author's
 call, since the author orders the tasks. Anything you could
-reasonably choose, choose, and write it down as the node's hypothesis: the author
-reviews the whole tree when the task is done. A raise blocks the task until it is
+reasonably choose, choose: and where the choice matters and could go the other way,
+write it down as that node's hypothesis (or an ask, if it is a question for them), so
+the author, who reviews the whole tree when the task is done, finds it. A raise blocks the task until it is
 answered, and an answer reopens it until a work session acts on the answer. Ten
 sessions on a task without the author raises for their review. When the author
 corrects a node, everything below it is pruned; confirmed, the work resumes under it
 and the siblings made after it are pruned too; refuted, it resumes at a sibling.
+Confirming a node that already stood confirmed prunes nothing.
 
 ## §1 Settled law
 

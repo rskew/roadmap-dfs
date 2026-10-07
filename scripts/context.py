@@ -507,6 +507,77 @@ def peak_and_turns(path, provider):
     return best, len(seen)
 
 
+def _is_verdict_call(text):
+    """Whether a tool call is the session logging its own verdict (`tree.py log ...`):
+    that is how a critic ENDS, so it cannot be what shows it looked."""
+    return "tree.py" in text and re.search(r"\blog\b", text) is not None
+
+
+# The claude tools that LOOK: read, search, run, or hand a question to another agent. Found
+# by running a real critic (a subagent) and reading its transcript: the harness adds a
+# `SubagentHandback` call to the end of a subagent's, `TodoWrite` and the plan tools are
+# bookkeeping, and `Edit`/`Write` change things rather than look at them; none of those is
+# a check. An `mcp__` tool is a look at something outside.
+LOOKING = {"Bash", "Read", "Grep", "Glob", "LS", "NotebookRead", "WebFetch", "WebSearch",
+           "Agent", "Task"}
+
+
+def _looks(name):
+    return name in LOOKING or str(name).startswith("mcp__")
+
+
+def tool_uses(path, provider="claude"):
+    """How many tool calls a session made to LOOK at things: reads, searches and
+    commands, not counting the one that logs its verdict. -1 when the transcript is
+    unreadable, which callers must treat as unknown rather than as zero.
+
+    ⚠️ This is the question "did the critic check anything", asked of the record rather
+    than of the critic: an `ok` that comes from a session that never opened a file or
+    ran a command is a reading of the briefing, and the briefing is what the critic is
+    meant to be checking AGAINST. A tool call is counted once however many JSONL lines
+    carry its message (claude writes one line per content block)."""
+    try:
+        fh = open(path, errors="replace")
+    except OSError:
+        return -1
+    seen, calls = set(), 0
+    with fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if provider == "opencode":
+                part = _opencode_tools(rec)
+                if part is not None and not _is_verdict_call(json.dumps(part)):
+                    calls += 1
+                continue
+            if provider == "kiro":
+                for u in acp_updates(rec):
+                    if u.get("sessionUpdate") == "tool_call" and not _is_verdict_call(json.dumps(u)):
+                        key = u.get("toolCallId") or len(seen)
+                        if key not in seen:
+                            seen.add(key)
+                            calls += 1
+                continue
+            if provider == "codex":
+                payload = rec.get("payload") or {}
+                item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
+                if (item.get("type") or item.get("item_type")) in ("CommandExecution", "FileChange") \
+                        and not _is_verdict_call(json.dumps(item)):
+                    calls += 1
+                continue
+            for b in ((rec.get("message") or {}).get("content") or []):
+                if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id") not in seen:
+                    seen.add(b.get("id"))
+                    if not _looks(b.get("name")):
+                        continue
+                    if b.get("name") == "Bash" and _is_verdict_call(json.dumps(b.get("input") or {})):
+                        continue
+                    calls += 1
+    return calls
+
+
 def session_from_env():
     """(provider, session id) of the session this process runs inside, or (None, "")."""
     for provider, names in (("claude", ("CLAUDE_CODE_SESSION_ID",)),
@@ -530,6 +601,9 @@ def main(argv):
         except (FileNotFoundError, IsADirectoryError):
             peak, turns = -1, -1
         print(peak, turns)
+        return 0
+    if argv[:1] == ["--tool-uses"]:
+        print(tool_uses(argv[1], argv[2]))
         return 0
     if argv[:1] == ["--flat-to"]:
         print(FLAT_TO)

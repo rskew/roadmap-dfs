@@ -39,11 +39,12 @@ session carries it out.
 Parent: W13.3
 Status: open | parked | confirmed | refuted
 Approach: <what the node does and how: the files, the change, the check>
-Hypothesis: <only if the work rests on an assumption: see below>
+Hypothesis: <only if the work rests on an assumption: "<it>. Wrong if <what would show it wrong>.">
 Evidence:
 - for: <only with a Hypothesis: an observation that bears on it, and what it shows>
 - against: <the same>
-Determination: <what you concluded, and so where the work goes next>
+Determination: <the verdict, in one sentence: what you found, and so the status>
+Ask: <only when there is one: a question only the author can answer, that the work does not wait on>
 Corrects: <only on a node carrying out a correction or backtrack: its ts>
 ```
 
@@ -62,14 +63,25 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   decided and could not settle yourself, and the work now depends on it. A reading of
   an ambiguous Goal, a choice between designs the author might make differently, a
   fact taken on trust, scope narrowed or widened. It is the assumption itself, and
-  what would show it wrong ("`sync()` is the only writer of `cursor`"; "the Goal
-  means v2 only"), not a second description of the work. The Evidence is the
+  what would show it wrong, in that order and in one field: "`sync()` is the only
+  writer of `cursor`. Wrong if a second writer exists." The screen splits it at
+  `Wrong if` and shows the second half on its own, since it is the part the author
+  answers. Not a second description of the work. The Evidence is the
   observations that bear on it, one line each: what was run or read, what it showed,
   and which way it cuts. The screen marks a node with a Hypothesis (⚑) and names
   those nodes when the author accepts the tree, so keep it for what is both
   important and open to question: an ordinary choice the check settles is not one.
   What you built, the steps you took and every test you ran belong in the Approach
   and the commit, not here.
+- **`Ask:` is for a question to the author that you could not settle and did not
+  need to**: you chose, the work went on, and they may want it the other way. One
+  sentence, the question first and your choice after it. It is not a raise (a raise
+  blocks the task) and not evidence (it is not an observation). The screen shows it in
+  red beside the node and counts it with the assumptions.
+- **The Determination is the verdict and nothing else**: what you found, in one
+  sentence, which is what the author reads under the node. The hand-off ("Next, check
+  that …") belongs in the next node's Approach, and caveats in a Hypothesis or an Ask,
+  not in prose here or in the Summary where nothing looks for them.
 - **A node's Approach and Hypothesis are concise, clear and stand alone.** A session,
   the critic and the TUI each read one node without the rest of the tree, so say the thing
   itself: the file, function, fault and check by name. "Fix what W13.3 found", "as in
