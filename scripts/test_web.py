@@ -456,6 +456,8 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W1", name="", goal="x"))[0], 400)
         self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W1", name="x", goal="  "))[0], 400)
         self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W99", name="x", goal="x"))[0], 404)
+        self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W1", name="x", goal="a\n## Log\nb"))[0], 409)
+        self.assertEqual(dfs_tree.load("W1")["goal"], "Hits above 90%.\n\nWhy: cost.")
 
     def test_an_open_node_is_edited_and_a_determined_one_is_refused(self):
         status, data, _ = self.call("POST", "/api/edit_node", dict(task="W1", node="W1.3", title=" Check  churn ", approach="Run it twice."))

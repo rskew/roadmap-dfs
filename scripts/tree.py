@@ -216,6 +216,9 @@ def home_path(task):
 
 # ── parsing ──────────────────────────────────────────────────────────────────
 
+SECTION_HEAD = re.compile(r"^## (\w[\w ]*)\s*$")
+
+
 def split_sections(text):
     """(title line, {section name: body text}, [section names in order])."""
     title, sections, order, cur = "", {}, [], None
@@ -223,7 +226,7 @@ def split_sections(text):
         if cur is None and line.startswith("# ") and not title:
             title = line
             continue
-        m = re.match(r"^## (\w[\w ]*)\s*$", line)
+        m = SECTION_HEAD.match(line)
         if m:
             cur = m.group(1).strip()
             sections[cur] = []
@@ -609,13 +612,19 @@ def create_task(name, goal="", todos=(), task=None):
 def edit_task(task, name, goal):
     """Change a task's name and Goal, the author's words, in the part that holds the Goal
     (the title line and the `## Goal` section; nothing else in the file moves). A blank
-    goal is refused rather than written as an empty section. ValueError says what is wrong."""
+    goal is refused rather than written as an empty section, and so is one with a line the
+    parser reads as a section heading (`## Why`), which would split the file. ValueError
+    says what is wrong."""
     name = " ".join((name or "").split())
     goal = (goal or "").strip()
     if not name:
         raise ValueError("a task needs a name")
     if not goal:
         raise ValueError("a task needs a goal")
+    for line in goal.splitlines():
+        if SECTION_HEAD.match(line):
+            raise ValueError("a goal cannot hold a line like %r: it would start a new section "
+                             "in the task file" % line.strip())
     if not exists(task):
         raise FileNotFoundError(part_path(task))
     p = home_path(task)

@@ -602,6 +602,19 @@ class Check(InARepo):
         with self.assertRaises(FileNotFoundError):
             dfs_tree.edit_task("W9", "name", "goal")
 
+    def test_a_goal_with_a_section_heading_line_is_refused_and_the_file_is_untouched(self):
+        self.write(task(node(1, "confirmed"), self.LOG))
+        path = dfs_tree.part_path("W1")
+        before = path.read_bytes()
+        for goal in ("Why\n\n## Why not\nbecause", "x\n## Log\ny", "## Tree"):
+            with self.assertRaises(ValueError):
+                dfs_tree.edit_task("W1", "name", goal)
+            self.assertEqual(path.read_bytes(), before)
+        dfs_tree.edit_task("W1", "name", "A ## in the middle\n### Sub\n## Why?")
+        t = dfs_tree.load("W1")
+        self.assertEqual(t["goal"], "A ## in the middle\n### Sub\n## Why?")
+        self.assertEqual(t["order"], ["Goal", "Tree", "Log"])
+
     def test_an_edited_node_changes_its_title_and_approach_only_while_undetermined(self):
         self.write(task(node(1, "confirmed", extra="Approach: done.\nDetermination: Confirmed: ok.\n")
                         + node(2, parent=1, extra="Approach: old way,\n  wrapped on.\nHypothesis: it holds. Wrong if not.\n")
