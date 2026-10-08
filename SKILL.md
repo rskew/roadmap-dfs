@@ -199,6 +199,14 @@ still be answerable with the artefact gone, so the options and your recommendati
 written out in the raise itself. Skip it only for what has no shape to draw: a budget, a
 tooling bug, a choice between two wordings.
 
+**A node that changes what the user sees names a screenshot.** Save the picture beside the
+artefacts (`<scripts>/artefact_check.sh <page> --out .dfs/artefacts/<uuid>.png`, or any
+screenshot copied there under a uuid name) and write it into the node's Evidence or
+Determination as `![what it shows](.dfs/artefacts/<uuid>.png)`. The web page draws it in
+place and previews it under the task's Artefacts. Commit the picture with the node; one that
+shows the change working is worth more than a sentence saying it does. When no browser will
+start, say so in the Determination instead of leaving the claim unseen.
+
 Then stop. A raise blocks the task until it is answered.
 
 ## The budget

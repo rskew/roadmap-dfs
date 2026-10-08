@@ -65,3 +65,13 @@ How the author opens one is in the README, under "Raise artefacts".
 - Layout is stated, not solved: each box gives its own `left`/`top`/`width`/`height`
   and the connectors are hand-placed SVG. A layout engine's output is the thing
   nobody can see, which is what this whole mechanism exists to fix.
+
+## Screenshots
+
+A `.png` (`.jpg`, `.gif`, `.webp` or `.svg`) saved in `.dfs/artefacts/` is an artefact too, for
+work whose result is something to look at: a layout, a chart, a page before and after.
+Name it with a uuid like a page. Write it into the prose of a node or raise as
+`![what it shows](.dfs/artefacts/<uuid>.png)`; the web page draws it there (tap for full
+size) and previews it in the task's Artefacts section, served by the same sandboxed
+`/artefacts/<name>`. `artefact_check.sh <page> --out .dfs/artefacts/<uuid>.png` writes the
+checker's screenshot straight there. Keep them small: they are committed.
