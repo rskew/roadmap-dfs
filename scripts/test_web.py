@@ -297,6 +297,13 @@ class Web(unittest.TestCase):
             self.assertNotIn(old, index)
             self.assertNotIn(old, css)
 
+    def test_the_page_says_it_is_loading_until_the_first_draw_and_while_a_request_waits(self):
+        page = self.call("GET", "/")[1].decode()
+        self.assertRegex(page, r'<main id="view"[^>]*><p class="wait">Loading')
+        for part in ('id="loading"', 'id="stripe"', "function loading(", "aria-busy", "prefers-reduced-motion"):
+            self.assertIn(part, page)
+        self.assertIn("finally { loading(-1); }", page, "a failed request clears it too")
+
     def test_it_is_installable_a_manifest_icons_and_a_worker(self):
         status, m, _ = self.call("GET", "/manifest.json")
         self.assertEqual((status, m["display"], m["start_url"], m["scope"]), (200, "standalone", "/", "/"))

@@ -37,7 +37,16 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 #bar .iconbtn { margin-right: -10px; }
 #back[hidden], #live[hidden] { display: none; }
 @media (max-width: 899px) { #back, .desk { display: none; } }          /* the bottom bar has these */
-#live { font-size: var(--fs-label); color: var(--attention); letter-spacing: .08em; text-transform: uppercase; }
+#live, #loading { font-size: var(--fs-label); color: var(--attention); letter-spacing: .08em; text-transform: uppercase; }
+#loading { color: var(--muted); }
+#loading[hidden] { display: none; }
+/* a stripe slides under the header while a request is outstanding; it shows only after 250 ms */
+#stripe { position: absolute; left: 0; right: 0; bottom: -2px; height: var(--rule-strong); overflow: hidden; z-index: 1; opacity: 0; transition: opacity var(--ease); pointer-events: none; }
+#stripe::before { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 30%; background: var(--ink); animation: slide 1.1s ease-in-out infinite; }
+html[data-loading] #stripe { opacity: 1; }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+@media (prefers-reduced-motion: reduce) { #stripe::before { animation: none; width: 100%; } }
+#view .wait { color: var(--muted); }
 
 #layout { max-width: var(--page); margin: 0 auto; }
 #view { padding: var(--s3) var(--s4) 28px; min-width: 0; }
@@ -217,14 +226,16 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 </head>
 <body>
 <header id="bar">
+  <div id="stripe" aria-hidden="true"></div>
   <button class="textbtn" id="back" hidden>Back</button>
   <h1 id="title">{{project}}</h1>
+  <span id="loading" role="status" hidden>loading</span>
   <span id="live" hidden>reconnecting</span>
   <button class="iconbtn" id="theme" aria-label="Switch between light and dark"></button>
 </header>
 <nav id="tabs" aria-label="Navigate"></nav>
 <div id="layout">
-  <main id="view" aria-live="polite"></main>
+  <main id="view" aria-live="polite"><p class="wait">Loading…</p></main>
   <aside id="sheet" role="dialog" aria-label="Node" aria-modal="false"></aside>
 </div>
 <div id="scrim"></div>
@@ -245,12 +256,30 @@ let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}
 const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
+/* Loading: a request still outstanding after 250 ms shows "loading" and the stripe under the header
+   and marks #view busy, so a slow link reads as waiting and not as a page that has stopped. Fast
+   reads (the pushes and the polls) finish first and show nothing. */
+let PENDING = 0, loadT;
+function loading(delta) {
+  PENDING += delta;
+  clearTimeout(loadT);
+  if (PENDING <= 0) { PENDING = 0; setLoading(false); }
+  else if (!document.documentElement.dataset.loading) loadT = setTimeout(() => setLoading(true), 250);
+}
+function setLoading(on) {
+  if (on) document.documentElement.dataset.loading = "1"; else delete document.documentElement.dataset.loading;
+  $("#loading").hidden = !on;
+  $("#view").setAttribute("aria-busy", on ? "true" : "false");
+}
 async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  let j = {};
-  try { j = await r.json(); } catch (e) { /* not JSON */ }
-  if (!r.ok) throw new Error(j.error || ("error " + r.status));
-  return j;
+  loading(1);
+  try {
+    const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    let j = {};
+    try { j = await r.json(); } catch (e) { /* not JSON */ }
+    if (!r.ok) throw new Error(j.error || ("error " + r.status));
+    return j;
+  } finally { loading(-1); }
 }
 let toastT;
 function toast(msg, err) {

@@ -445,6 +445,29 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   },
 
   // A change made elsewhere (a chain, the terminal) reaches an open page by itself.
+  // A slow read shows "loading" and the stripe after a beat and clears them when it lands; a fast one shows nothing.
+  async loading(b) {
+    const ctx = await b.newContext({ ...PHONE });
+    const page = await ctx.newPage(); PAGES.push(page);
+    const errors = [];
+    page.on("pageerror", e => errors.push(String(e)));
+    let release;
+    const held = new Promise(r => { release = r; });
+    await page.route("**/api/state", async route => { await held; await route.continue(); });
+    await page.goto(URL_);
+    assert(/Loading/.test(await page.textContent("#view")), "the empty page says Loading");
+    await page.waitForFunction(() => !document.querySelector("#loading").hidden, null, { timeout: 3000 });
+    same(await page.getAttribute("#view", "aria-busy"), "true", "the view is busy");
+    await page.waitForFunction(() => getComputedStyle(document.querySelector("#stripe")).opacity === "1", null, { timeout: 3000 });
+    release();
+    await page.waitForSelector(".item");
+    await page.waitForFunction(() => document.querySelector("#loading").hidden, null, { timeout: 3000 });
+    same(await page.getAttribute("#view", "aria-busy"), "false", "the view is no longer busy");
+    assert(await page.evaluate(() => !document.documentElement.dataset.loading), "the stripe is gone");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   async live(b) {
     const { page, errors } = await open(b, PHONE);
     assert(!(await page.getAttribute(".item[data-id=W3]", "class")).includes("blocks"), "W3 is not blocked");

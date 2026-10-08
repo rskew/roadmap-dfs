@@ -183,6 +183,9 @@ class Flows(unittest.TestCase):
     def test_prose_is_drawn_as_markdown_and_stays_inert(self):
         self.flow("richtext")
 
+    def test_a_slow_read_shows_loading_and_clears_it(self):
+        self.flow("loading")
+
     def test_a_change_elsewhere_reaches_an_open_page(self):
         self.flow("live")
 
