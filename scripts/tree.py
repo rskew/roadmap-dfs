@@ -628,6 +628,48 @@ def edit_task(task, name, goal):
     return task
 
 
+def edit_node(task, nid, title, approach=""):
+    """Change the title and Approach of an open or parked node, in the part that holds it.
+    A confirmed or refuted node is history and is refused, as is one whose Approach was
+    shelved to the archive. An empty approach removes the field. Returns `nid`;
+    ValueError says what is wrong."""
+    title = " ".join((title or "").split())
+    approach = " ".join((approach or "").split())
+    if not title:
+        raise ValueError("a node needs a title")
+    parts = split_id(nid)
+    if not parts or parts[0] != task or not exists(task):
+        raise ValueError("no node %s in %s" % (nid, task))
+    p = part_path(task, parts[2])
+    t = parse(p.read_text(), task) if p.exists() else None
+    nd = by_id(t).get(nid) if t else None
+    if not nd:
+        raise ValueError("no node %s in %s" % (nid, task))
+    if nd["status"] not in ("open", "parked"):
+        raise ValueError("%s is %s, and a determined node is history: add a node instead"
+                         % (nid, nd["status"]))
+    if nd["fields"].get("Approach") == "archived.":
+        raise ValueError("%s's Approach is in the archive" % nid)
+    kept, last, at = [], None, None
+    for line in nd["raw"][1:]:
+        fm = FIELD_RE.match(line)
+        if fm:
+            last = field_name(fm.group(1))
+        if (fm and last == "Approach") or (not fm and last == "Approach" and line.strip()):
+            at = len(kept) if at is None else at       # the field, and any wrapped lines
+            continue
+        kept.append(line)
+    if at is None:                      # none yet: after Parent and Status, before the rest
+        at = next((i for i, l in enumerate(kept)
+                   if not re.match(r"(Parent|Status):", l)), len(kept))
+    if approach:
+        kept.insert(at, "Approach: %s" % approach)
+    nd["raw"] = ["### %s · %s" % (nid, title)] + kept
+    nd["title"] = title
+    p.write_text(render(t))
+    return nid
+
+
 def add_node(task, title, parent=None, approach=""):
     """Add an open node to this branch's part: the author's way of putting work in the
     tree between sessions. It takes the next number this branch has not used, so it

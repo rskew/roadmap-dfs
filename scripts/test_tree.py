@@ -602,6 +602,29 @@ class Check(InARepo):
         with self.assertRaises(FileNotFoundError):
             dfs_tree.edit_task("W9", "name", "goal")
 
+    def test_an_edited_node_changes_its_title_and_approach_only_while_undetermined(self):
+        self.write(task(node(1, "confirmed", extra="Approach: done.\nDetermination: Confirmed: ok.\n")
+                        + node(2, parent=1, extra="Approach: old way,\n  wrapped on.\nHypothesis: it holds. Wrong if not.\n")
+                        + node(3, "parked", parent=1) + node(4, parent=3, extra="Approach: archived.\n"), self.LOG))
+        self.commit()
+        dfs_tree.edit_node("W1", "W1.2", "  new   title ", "the\nnew way")
+        dfs_tree.edit_node("W1", "W1.3", "now with one", "added approach")
+        t = dfs_tree.by_id(dfs_tree.load("W1"))
+        self.assertEqual((t["W1.2"]["title"], t["W1.2"]["fields"]["Approach"]), ("new title", "the new way"))
+        self.assertEqual(t["W1.2"]["fields"]["Hypothesis"], "it holds. Wrong if not.")
+        self.assertEqual((t["W1.2"]["status"], t["W1.2"]["parent"]), ("open", "W1.1"))
+        self.assertEqual(t["W1.3"]["fields"]["Approach"], "added approach")
+        self.assertEqual(t["W1.3"]["raw"][1:4], ["Parent: W1.1", "Status: parked", "Approach: added approach"])
+        dfs_tree.edit_node("W1", "W1.3", "now with one", "")
+        self.assertNotIn("Approach", dfs_tree.by_id(dfs_tree.load("W1"))["W1.3"]["fields"])
+        self.assertEqual(dfs_tree.by_id(dfs_tree.load("W1"))["W1.1"]["raw"], t["W1.1"]["raw"])
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        for nid, title in (("W1.1", "x"), ("W1.4", "x"), ("W1.9", "x"), ("W1.2", " ")):
+            with self.assertRaises(ValueError, msg=nid):
+                dfs_tree.edit_node("W1", nid, title, "")
+
     def test_the_authors_words_stay_with_the_node(self):
         log = (self.LOG + "- 2026-09-25T09:10:00Z · raise · W1.1\n  Which way?\n"
                "- 2026-09-25T09:11:00Z · answer · 2026-09-25T09:10:00Z\n  The second.\n"

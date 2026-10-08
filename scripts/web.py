@@ -266,6 +266,8 @@ def task_json(task):
                 kind="node", key=nd["id"], id=nd["id"], title=nd["title"], status=st,
                 depth=row["depth"], kids=row["kids"],
                 parent=nd["parent"] or "", skim=skim_for(t, nd),
+                editable=st in ("open", "parked") and nd["fields"].get("Approach") != "archived.",
+                approach=nd["fields"].get("Approach", ""),
                 raises=[raise_json(r) for r in row["raises"]],
                 raises_below=row["raises_below"],
                 assumes=bool(f.get("Hypothesis")) and live, ask=bool(f.get("Ask")) and live,
@@ -378,6 +380,14 @@ def act(name, body):
         elif name == "edit_task":
             try:
                 dfs_tree.edit_task(task, need(body, "name", "a name"), need(body, "goal", "a goal"))
+            except (ValueError, dfs_paths.NoBranch) as e:
+                raise Refused(str(e), 409)
+        elif name == "edit_node":
+            nid = need(body, "node", "the node")
+            if nid not in nodes:
+                raise Refused("no node %s" % nid, 404)
+            try:
+                dfs_tree.edit_node(task, nid, need(body, "title", "a title"), body.get("approach") or "")
             except (ValueError, dfs_paths.NoBranch) as e:
                 raise Refused(str(e), 409)
         elif name == "add":

@@ -457,6 +457,16 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W1", name="x", goal="  "))[0], 400)
         self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W99", name="x", goal="x"))[0], 404)
 
+    def test_an_open_node_is_edited_and_a_determined_one_is_refused(self):
+        status, data, _ = self.call("POST", "/api/edit_node", dict(task="W1", node="W1.3", title=" Check  churn ", approach="Run it twice."))
+        self.assertEqual(status, 200)
+        row = next(r for r in data["task"]["rows"] if r.get("id") == "W1.3")
+        self.assertEqual((row["title"], row["approach"], row["editable"]), ("Check churn", "Run it twice.", True))
+        self.assertFalse(next(r for r in data["task"]["rows"] if r.get("id") == "W1.2")["editable"])
+        self.assertEqual(self.call("POST", "/api/edit_node", dict(task="W1", node="W1.2", title="x"))[0], 409)
+        self.assertEqual(self.call("POST", "/api/edit_node", dict(task="W1", node="W1.9", title="x"))[0], 404)
+        self.assertEqual(self.call("POST", "/api/edit_node", dict(task="W1", node="W1.3", title=""))[0], 400)
+
     def test_a_new_task_is_written_as_run_open_writes_it(self):
         status, data, _ = self.call("POST", "/api/new", dict(name="Cache the lookups", goal="Hits above 90%.", todos="profile it\nadd the cache\n"))
         self.assertEqual(status, 200)
