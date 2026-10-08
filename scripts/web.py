@@ -779,23 +779,29 @@ def main(argv=None):
         raise SystemExit("web: " + dfs_paths.missing_message())
     handle = serve(args.host, args.port, walk_enabled=not args.no_walk,
                    cert=args.cert, key=args.key, allow_hosts=args.allow_host)
-    print("roadmap web: " + handle.url)
-    if not handle.public:
-        print("  this machine only; --host 0.0.0.0 opens it to the network")
-    if handle.url.startswith("http:") and handle.public:
-        print("  to INSTALL it as an app, a browser wants https (or localhost): --cert/--key, "
-              "or see the README")
-    if handle.public:
-        print("  no login: anyone on this network can answer, correct and accept"
-              + (", and START AGENTS (the walk), which run with their permission prompts "
-                 "off. --no-walk removes that; --host 127.0.0.1 keeps it to this machine."
-                 if WALK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
+    # SIGTERM (kill, systemd, a container stop) and SIGHUP (the terminal closing) must reach
+    # `handle.stop()` too: each page turn runs in its own session, so only `Chats.close()`
+    # ends a turn in flight, and a server that dies by the default action leaves it running.
+    # Handlers go in inside the `try`, so a signal never lands between them and `finally`.
     try:
+        dfs_tui.end_on_signals()
+        print("roadmap web: " + handle.url)
+        if not handle.public:
+            print("  this machine only; --host 0.0.0.0 opens it to the network")
+        if handle.url.startswith("http:") and handle.public:
+            print("  to INSTALL it as an app, a browser wants https (or localhost): --cert/--key, "
+                  "or see the README")
+        if handle.public:
+            print("  no login: anyone on this network can answer, correct and accept"
+                  + (", and START AGENTS (the walk), which run with their permission prompts "
+                     "off. --no-walk removes that; --host 127.0.0.1 keeps it to this machine."
+                     if WALK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
         while handle.thread.is_alive():
             handle.thread.join(1)
     except KeyboardInterrupt:
         pass
-    handle.stop()
+    finally:
+        handle.stop()
     return 0
 
 

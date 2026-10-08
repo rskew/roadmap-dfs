@@ -112,16 +112,45 @@ def running_elsewhere(sid, own=()):
     return False
 
 
+class Running(set):
+    """The pids of the page turns in flight, each in its own session, with when each started (a
+    pid reused after its turn ended is not the turn). Once `end()` has run, no turn may start."""
+
+    def __init__(self):
+        super().__init__()
+        self.lock = threading.Lock()
+        self.starts = {}
+        self.closed = False
+
+    def end(self):
+        """Stop new turns and end the ones in flight, with everything they started."""
+        with self.lock:
+            self.closed = True
+            turns = [(p, self.starts.get(p)) for p in self]
+        for pid, start in turns:
+            st = ptyrelay._stat(pid)
+            if st and st[2] == start:
+                ptyrelay.stop_tree(pid)
+
+
 def run_turn(argv, message, cwd, env, timeout=None, running=None):
     """Run one turn and return its CompletedProcess. A turn that outlasts the timeout is ended
     with everything it started, not just the shell that began it (`subprocess.run` kills only
     that), and then TimeoutExpired is raised. `running`, a set, holds the turn's pid while it
     runs, so whoever ends the process can end the turn too (it is in its own session)."""
     timeout = timeout or TURN_TIMEOUT
-    proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, cwd=cwd, env=env, start_new_session=True)
-    if running is not None:
-        running.add(proc.pid)
+    def start():
+        return subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, cwd=cwd, env=env, start_new_session=True)
+    if running is None:
+        proc = start()
+    else:
+        with running.lock:      # started and recorded together, so `end()` cannot miss it
+            if running.closed:
+                raise OSError("the server is shutting down")
+            proc = start()
+            running.add(proc.pid)
+            running.starts[proc.pid] = (ptyrelay._stat(proc.pid) or (0, 0, None))[2]
     try:
         out, err = proc.communicate(message, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -130,7 +159,9 @@ def run_turn(argv, message, cwd, env, timeout=None, running=None):
         raise
     finally:
         if running is not None:
-            running.discard(proc.pid)
+            with running.lock:
+                running.discard(proc.pid)
+                running.starts.pop(proc.pid, None)
     return subprocess.CompletedProcess(argv, proc.returncode, out, err)
 
 
@@ -142,13 +173,12 @@ class Chats:
         self.busy = {}      # scope -> when its turn started
         self.pending = {}   # scope -> what was sent and has not reached the transcript yet
         self.notes = {}     # scope -> [errors], until the conversation moves on
-        self.running = set()    # pids of the page turns in flight, each in its own session
+        self.running = Running()    # pids of the page turns in flight, each in its own session
 
     def close(self):
         """End every page turn in flight, with everything it started: the server or screen is
         going, and a turn in its own session would otherwise run on past it."""
-        for pid in list(self.running):
-            ptyrelay.stop_tree(pid)
+        self.running.end()
 
     # ── the record: just the session id ────────────────────────────────────────────────
     def path(self, scope):

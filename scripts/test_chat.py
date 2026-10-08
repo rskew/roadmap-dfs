@@ -381,5 +381,13 @@ class TurnTimeout(unittest.TestCase):
             self.assertFalse(ptyrelay._running(p, (ptyrelay._stat(p) or (0, 0, None))[2]), p)
 
 
+    def test_a_turn_started_after_close_is_refused(self):
+        chats = dfs_chat.Chats()
+        chats.close()
+        with self.assertRaises(OSError):
+            dfs_chat.run_turn(["bash", "-c", "sleep 600"], "hi", None, dict(os.environ), running=chats.running)
+        self.assertEqual(chats.running, set())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
