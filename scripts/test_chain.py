@@ -55,6 +55,7 @@ Evidence:
 #   rminor     a review verdict of ok carrying a minor finding
 #   issue      a critic raise plus an issues verdict
 #   meddle     a critic that edits code and gives a verdict
+#   rmeddle    a review that edits code and gives a verdict of ok
 #   okbare     a critic ok that names no node (the plain `ok` recipe names W1.1)
 #   silent     a critic that changes nothing and gives no verdict
 #   noverdict  a critic that raises on W1.1 but gives no verdict
@@ -91,6 +92,7 @@ case "$recipe" in
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
            echo "one issue" | $T log W1 critic issues > /dev/null ;;
   meddle)  echo "critic was here" >> app.txt; $T log W1 critic ok < /dev/null > /dev/null ;;
+  rmeddle) echo "reviewer was here" >> app.txt; $T log W1 review ok < /dev/null > /dev/null ;;
   silent)  : ;;
   noverdict) echo "a note" | $T log W1 raise W1.1 > /dev/null ;;
   lower)   python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n"
@@ -223,10 +225,13 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (0, "blocked"), out)
         self.assertEqual(self.kinds_run()[-1], "critic")
 
-    def test_a_critic_that_changes_code_fails_the_chain(self):
-        rc, meta, out = self.run_chain("work,work,work,work,work,meddle", cap=7)
-        self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
-        self.assertIn("changed the working tree", out)
+    def test_a_critic_that_changes_code_is_noted_and_the_chain_carries_on(self):
+        # The tree cannot say whether the critic or the author (a chat session) made
+        # the change, so it is left for the next session to commit, not a stop.
+        rc, meta, out = self.run_chain("work,work,work,work,work,meddle,work", cap=7)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
+        self.assertEqual(self.kinds_run()[-2:], ["critic", "work"], out)
+        self.assertIn("changed outside .dfs/", out)
 
     def test_a_critic_that_changed_nothing_does_not_stop_the_chain(self):
         rc, meta, out = self.run_chain("work,work,work,work,work,silent,work,work", cap=8)
@@ -287,11 +292,17 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
         self.assertIn("implementation review is due", out)
 
-    def test_a_review_that_changes_code_fails_the_chain(self):
-        # The reviewer judges the implementation; like the critic, it may not touch it.
-        rc, meta, out = self.run_chain("confirm,meddle", cap=3)
+    def test_a_review_that_changes_code_is_noted_and_its_verdict_stands(self):
+        # As for the critic: the change may be the author's, so it is noted, not a stop.
+        rc, meta, out = self.run_chain("confirm,rmeddle", cap=3)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertIn("changed outside .dfs/", out)
+        self.assertIn("left for the next session to commit", (self.root / ".dfs" / "items" / "W1.md").read_text())
+
+    def test_a_review_that_changes_code_and_gives_no_verdict_still_fails_the_chain(self):
+        rc, meta, out = self.run_chain("confirm,code", cap=3)
         self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
-        self.assertIn("the review changed the working tree", out)
+        self.assertIn("gave no verdict", out)
 
     def test_review_issues_reopen_the_task_once_answered_and_the_fix_is_reviewed(self):
         rc, meta, out = self.run_chain("confirm,rissue", cap=3)

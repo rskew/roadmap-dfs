@@ -248,7 +248,7 @@ if [ "$MODE" = chat ]; then
     # work when that is where the talk goes. `new` is the old name, from when this was
     # only for scoping a new task. Scoping still stops where --open takes over, so a
     # task file is written from the author's words, in front of them.
-    default_chat_prompt="Read $DFS_ROADMAP_REL. Discuss the project with the author: its direction, the tasks on the roadmap and how they stand, what to do next, or new work they have in mind. Do not perform work or edit files unless the author explicitly asks. If the talk turns to a NEW task, ask what done looks like and why it is worth doing, then propose the Goal paragraph and a first linear chain of todo nodes, each one line — but do not create the task file; the author writes it with $DFS_SCRIPTS_REL/run.sh --open. Start by summarising the roadmap in a few lines and asking what the author wants to talk about."
+    default_chat_prompt="Read $DFS_ROADMAP_REL. Discuss the project with the author: its direction, the tasks on the roadmap and how they stand, what to do next, or new work they have in mind. Do not perform work or edit files unless the author explicitly asks. If the talk turns to a NEW task, ask what done looks like and why it is worth doing, then propose the Goal paragraph and a first linear chain of todo nodes, each one line. Ask the author before writing the task file; if they say yes, create it (the author can also write it with $DFS_SCRIPTS_REL/run.sh --open). Start by summarising the roadmap in a few lines and asking what the author wants to talk about."
     chat_subject="the project"
   elif [ -n "$ITEM" ]; then
     default_chat_prompt="Read $DFS_ROADMAP_REL and task $ITEM's parts, $DFS_ITEMS_REL/$ITEM.md and every file in $DFS_ITEMS_REL/$ITEM/, whichever exist. Discuss task $ITEM with the author. Do not perform the work, edit files or append to the task's log unless the author explicitly changes the task. $TREE_SUMMARY_ASK"
@@ -959,15 +959,18 @@ for i in $(seq 1 "$CAP"); do
   fi
 
   if [ "$kind" != work ]; then
-    # ⚠️ A critic or a reviewer judges; it does not work. Anything it changed outside
-    # .dfs/ is it doing the work it was meant to judge, and it must give a verdict.
+    # ⚠️ A critic or a reviewer judges; it does not work, and it must give a verdict.
+    # A change outside .dfs/ during its session is NOT a stop: the tree cannot say
+    # whether the session or the author (a chat session, an editor) made it, and
+    # stopping the walk for the author's own edit cost a finished task its review.
+    # It is said on the console and in the end entry, and left uncommitted for the
+    # next session to commit as the node's uncommitted work.
     fp_after="$(python3 "$HERE/state.py" --fingerprint --outside-dfs)"
     verdicts_after="$(python3 "$HERE/state.py" --verdicts "$ITEM" "$kind")"
+    outside_note=""
     if [ "$fp_after" != "$fp_before" ]; then
-      tree_log end "$kind" failed
-      stop_is failed
-      echo "dfs_run: the $kind changed the working tree outside .dfs/. Stopping — look at what it did before anything else runs."
-      exit 1
+      outside_note="; the working tree changed outside .dfs/ during it, left for the next session to commit"
+      echo "dfs_run: the $kind ran while the working tree changed outside .dfs/ (the $kind, or the author). Carrying on; the next session commits it."
     fi
     if [ "$verdicts_after" -le "$verdicts_before" ] \
        && [ "$(python3 "$HERE/state.py" --fingerprint)" = "$fp_tree_before" ]; then
@@ -1022,7 +1025,7 @@ for i in $(seq 1 "$CAP"); do
     fi
     silent=0
     [ "$kind" = critic ] && refused=0
-    tree_log end "$kind" ok "peak $peak"
+    tree_log end "$kind" ok "peak $peak$outside_note"
   else
     fp_after="$(python3 "$HERE/state.py" --fingerprint)"
     if [ "$fp_after" = "$fp_before" ]; then
