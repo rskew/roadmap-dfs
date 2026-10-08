@@ -1,10 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" style="--project: {{colour}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#f5f4ef" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171a1d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="{{colour}}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="{{project}}">
@@ -25,6 +24,7 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 
 /* the bar: a name, a way back, and the three colours as one thin line */
 #bar {
+  border-top: var(--s1) solid var(--project-mark);
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; align-items: center; gap: var(--s3);
   min-height: var(--bar); padding: 0 var(--s4); background: var(--paper); border-bottom: var(--rule) solid var(--line);
 }
@@ -241,7 +241,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 "use strict";
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-let PROJECT = {{project_json}};
+let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
 const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
@@ -710,11 +710,24 @@ $("#chat-form").addEventListener("submit", async ev => {
   catch (e) { toast(e.message, true); $("#chat-send").disabled = false; }
 });
 $("#chat-input").addEventListener("keydown", ev => { if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); } });
+function paintColour() {
+  document.documentElement.style.setProperty("--project", COLOUR);
+  $('meta[name="theme-color"]').setAttribute("content", COLOUR);
+}
 function renameForm() {
   form(`<h3>Project name</h3>
     <p class="muted" style="margin:0">Shown on this page and under the installed app's icon. Kept in <code>.dfs/title</code>, so it travels with the repo.</p>${isSecureContext ? "" : `<p class="muted" style="margin:0">${esc(NO_INSTALL)}</p>`}
-    <div><label for="pn">Name</label><input type="text" id="pn" name="title" value="${esc(PROJECT)}" maxlength="80" required autocomplete="off"></div>${buttons("Save")}`,
-    async fd => { const res = await api("/api/title", { title: fd.get("title") }); PROJECT = res.title; toast("Renamed."); S.sig = ""; await render(true); });
+    <div><label for="pn">Name</label><input type="text" id="pn" name="title" value="${esc(PROJECT)}" maxlength="80" required autocomplete="off"></div>
+    <div><label for="pc">Colour</label><input type="color" id="pc" name="colour" value="${COLOUR}"></div>
+    <label><input type="checkbox" id="pa" name="auto"${CHOSEN ? "" : " checked"}> Take the colour from the name</label>
+    <p class="muted" style="margin:0">Marks the top of this page, the browser's bar and the installed app, so projects are not mistaken for one another. Kept in <code>.dfs/theme</code>.</p>${buttons("Save")}`,
+    async fd => {
+      const res = await api("/api/title", { title: fd.get("title") }); PROJECT = res.title;
+      const auto = fd.get("auto") === "on", want = auto ? "" : fd.get("colour");
+      if (auto ? CHOSEN : (!CHOSEN || want !== COLOUR)) { const c = await api("/api/theme", { colour: want }); CHOSEN = c.chosen; }
+      const st = await api("/api/state"); COLOUR = st.colour; paintColour();
+      toast("Saved."); S.sig = ""; await render(true); });
+  $("#pc").addEventListener("input", () => { $("#pa").checked = false; });
 }
 function newTaskForm() {
   form(`<h3>Add a task</h3>

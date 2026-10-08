@@ -173,6 +173,10 @@ class Flows(unittest.TestCase):
         self.flow("rename")
         self.assertEqual((self.root / ".dfs" / "title").read_text(), "Gateway core\n")
 
+    def test_the_project_colour_is_chosen_in_the_dialog_and_writes_dfs_theme(self):
+        self.flow("colour")
+        self.assertEqual((self.root / ".dfs" / "theme").read_text(), "#aa3355\n")
+
     def test_artefacts_are_linked_and_sandboxed(self):
         self.flow("artefacts")
 

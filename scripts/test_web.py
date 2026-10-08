@@ -251,7 +251,7 @@ class Web(unittest.TestCase):
         status, raw, _ = self.call("GET", "/")
         page = raw.decode()
         self.assertIn("<title>My &lt;proj&gt; &quot;x&quot;</title>", page)
-        self.assertIn('let PROJECT = "My <proj> \\"x\\"";', page)
+        self.assertIn('let PROJECT = "My <proj> \\"x\\"", COLOUR', page)
         self.assertNotIn("{{", page)
         self.assertEqual(self.call("GET", "/manifest.json")[1]["name"], 'My <proj> "x"')
         status, body, _ = self.call("POST", "/api/title", dict(title="  Gateway   core  "))
@@ -260,6 +260,27 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("GET", "/manifest.json")[1]["name"], "Gateway core")
         for bad in ("", "   ", "x" * 81):
             self.assertEqual(self.call("POST", "/api/title", dict(title=bad))[0], 400, bad)
+
+    def test_the_project_colour_marks_the_page_and_the_app_and_is_choosable(self):
+        (self.root / ".dfs" / "title").write_text("Gateway\n")
+        made = dfs_paths.colour_from_name("Gateway")
+        page = self.call("GET", "/")[1].decode()
+        self.assertIn('style="--project: %s"' % made, page)
+        self.assertIn('<meta name="theme-color" content="%s">' % made, page)
+        self.assertIn('CHOSEN = false', page)
+        self.assertEqual(self.call("GET", "/manifest.json")[1]["theme_color"], made)
+        st = self.call("GET", "/api/state")[1]
+        self.assertEqual((st["colour"], st["colour_chosen"]), (made, False))
+        status, body, _ = self.call("POST", "/api/theme", dict(colour="#AA3355"))
+        self.assertEqual((status, body), (200, dict(colour="#aa3355", chosen=True)))
+        self.assertEqual((self.root / ".dfs" / "theme").read_text(), "#aa3355\n")
+        self.assertEqual(self.call("GET", "/manifest.json")[1]["theme_color"], "#aa3355")
+        self.assertIn("CHOSEN = true", self.call("GET", "/")[1].decode())
+        for bad in ("red", "#fff", None, 5):
+            self.assertEqual(self.call("POST", "/api/theme", dict(colour=bad))[0], 400, bad)
+        status, body, _ = self.call("POST", "/api/theme", dict(colour=""))
+        self.assertEqual((status, body), (200, dict(colour=made, chosen=False)))
+        self.assertFalse((self.root / ".dfs" / "theme").exists())
 
     def test_the_design_system_is_served_and_the_page_uses_it(self):
         status, css, r = self.call("GET", "/design.css")

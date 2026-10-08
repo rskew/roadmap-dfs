@@ -29,6 +29,11 @@
   --on-attention: #fff;    /* text on a solid attention surface (an error toast) */
   --scrim: rgba(60, 56, 48, .22);
 
+  /* the project's own colour: identity, never status. The server sets --project on <html>
+     (.dfs/theme, else made from the name); --project-mark is how it is drawn on the paper
+     (lightened in the dark theme so the stripe still shows). */
+  --project-mark: var(--project, var(--ink));
+
   /* type: five steps. Caps labels are tracked, and only ever small. */
   --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --fs-label: 12px;      /* caps labels, tags, counters */
@@ -58,6 +63,7 @@
     --attention: #dc7d70; --attention-wash: #402624;
     --assumption: #dcb455; --assumption-wash: #3b3219; --assumption-fill: #c9a043;
     --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
+    --project-mark: color-mix(in srgb, var(--project, var(--ink)) 55%, #fff);
     color-scheme: dark;
   }
 }
@@ -68,6 +74,7 @@
   --attention: #dc7d70; --attention-wash: #402624;
   --assumption: #dcb455; --assumption-wash: #3b3219; --assumption-fill: #c9a043;
   --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
+  --project-mark: color-mix(in srgb, var(--project, var(--ink)) 55%, #fff);
   color-scheme: dark;
 }
 

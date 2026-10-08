@@ -364,6 +364,21 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // The project's colour is chosen in the same dialog and lives in .dfs/theme: the bar's
+  // stripe and the browser's theme-color follow it at once.
+  async colour(b) {
+    const { page, errors } = await open(b, PHONE);
+    await page.click("[data-act=rename]"); await dialog(page);
+    assert(await page.isChecked("#pa"), "it follows the name until one is chosen");
+    await page.fill("#pc", "#aa3355");
+    assert(!(await page.isChecked("#pa")), "choosing a colour stops following the name");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => document.querySelector('meta[name=theme-color]').content === "#aa3355");
+    const stripe = await page.evaluate(() => getComputedStyle(document.querySelector("#bar")).borderTopColor);
+    same(stripe, "rgb(170, 51, 85)", "the bar wears it");
+    same(errors, [], "no page errors");
+  },
+
   // A new task from the floating button, and the title renamed by clicking it.
   async newtask(b) {
     const { page, errors } = await open(b, PHONE);

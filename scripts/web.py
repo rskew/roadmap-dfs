@@ -29,6 +29,10 @@ another website is refused (it must be JSON, which a page elsewhere cannot send 
 preflight this server never grants, and its `Origin` must be this server's own address).
 A TLS proxy's hostname is admitted by name, `--allow-host` or DFS_WEB_ALLOW_HOST, and no other.
 
+THE PROJECT'S COLOUR is `.dfs/theme` (`#rrggbb`), else one made from the name; it marks the
+bar, the browser's own bar and the installed app, so two projects are told apart. It is chosen
+in the same dialog as the name ("Rename project"), and `--project` in /design.css holds it.
+
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the
 page ("Rename project"). One server per project, each on its own `--port`, installs as its
@@ -94,6 +98,8 @@ def project_title():
 def index_html():
     name = project_title()
     return (INDEX.read_text().replace("{{project_json}}", json.dumps(name).replace("</", "<\\/"))
+            .replace("{{colour_chosen}}", "true" if dfs_paths.read_theme() else "false")
+            .replace("{{colour}}", dfs_paths.project_colour())
             .replace("{{project}}", html.escape(name))).encode()
 
 
@@ -116,7 +122,8 @@ def state_json():
             waiting_on=it.get("waiting_on") or "", blocked_by=it.get("blocked_by") or "",
             segment=it.get("segment", 0)))
     return dict(items=items, next_item=data.get("next_item"),
-                needs_you=sum(1 for i in items if i["needs_you"]))
+                needs_you=sum(1 for i in items if i["needs_you"]),
+                colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()))
 
 
 _commit_cache = {}
@@ -305,6 +312,22 @@ def set_title(body):
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.title_file()), e), 500)
     HUB.notify()
     return dict(title=name)
+
+
+def set_theme(body):
+    """Choose the project's colour (`#rrggbb`), or clear the choice with an empty string
+    so it follows the name again."""
+    value = body.get("colour")
+    if not isinstance(value, str):
+        raise Refused("a colour is needed")
+    try:
+        colour = dfs_paths.write_theme(value)
+    except ValueError as e:
+        raise Refused(str(e))
+    except OSError as e:
+        raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.theme_file()), e), 500)
+    HUB.notify()
+    return dict(colour=colour, chosen=bool(dfs_paths.read_theme()))
 
 
 def new_task(body):
@@ -622,6 +645,8 @@ class Handler(BaseHTTPRequestHandler):
             name = url.path[len("/api/"):]
             if name == "title":
                 return self.json(200, set_title(body))
+            if name == "theme":
+                return self.json(200, set_theme(body))
             if name == "new":
                 return self.json(200, new_task(body))
             if name.startswith("chat/"):
@@ -662,7 +687,7 @@ class Handler(BaseHTTPRequestHandler):
                           purpose="maskable")]
             return self.json(200, dict(name=project_title(), short_name=project_title()[:12], id="/", start_url="/",
                                        scope="/", display="standalone", orientation="portrait",
-                                       background_color="#f5f4ef", theme_color="#f5f4ef",
+                                       background_color="#f5f4ef", theme_color=dfs_paths.project_colour(),
                                        icons=icons))
         raise Refused("not found", 404)
 
