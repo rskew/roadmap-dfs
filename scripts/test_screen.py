@@ -45,6 +45,40 @@ def a_screen(items, **kw):
     return ui
 
 
+class ProjectColour(unittest.TestCase):
+    """The header leads with the project's name in the project's colour."""
+    def setUp(self):
+        self.look = dict(TUI.LOOK)
+        self.pairs = []
+        self._init_pair, self._color_pair = curses.init_pair, curses.color_pair
+        curses.init_pair = lambda n, fg, bg: self.pairs.append((n, fg, bg))
+        curses.color_pair = lambda n: n << 8
+
+    def tearDown(self):
+        curses.init_pair, curses.color_pair = self._init_pair, self._color_pair
+        TUI.LOOK.clear()
+        TUI.LOOK.update(self.look)
+
+    def test_the_cube_colour_nearest_to_an_rgb(self):
+        self.assertEqual(TUI.xterm256((0, 0, 0)), 16)
+        self.assertEqual(TUI.xterm256((255, 255, 255)), 231)
+        self.assertEqual(TUI.xterm256((255, 0, 0)), 196)
+
+    def test_a_terminal_below_256_colours_gets_bold_alone(self):
+        TUI.LOOK.clear()
+        self.assertEqual(TUI.project_attr("#aa3355", False), curses.A_BOLD)
+        self.assertEqual(self.pairs, [])
+
+    def test_a_dark_terminal_gets_it_lightened_and_the_pair_is_set_only_when_it_changes(self):
+        TUI.LOOK.clear()
+        TUI.LOOK["band"] = True
+        light = TUI.project_attr("#000000", True)
+        dark = TUI.project_attr("#000000", False)
+        TUI.project_attr("#000000", False)
+        self.assertEqual([p[1] for p in self.pairs], [16, TUI.xterm256((140, 140, 140))])
+        self.assertTrue(light & (TUI.PAIRS["project"] << 8) and dark & curses.A_BOLD)
+
+
 class Reselecting(unittest.TestCase):
     def test_the_cursor_follows_its_key(self):
         self.assertEqual(TUI.reselect(["W9", "W1", "W2"], "W1", 0), 1)

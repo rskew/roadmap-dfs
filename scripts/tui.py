@@ -1523,7 +1523,7 @@ def review_cell(it):
 # next to their editor; which is why it has to ask whether that background is light.
 # Pair numbers 1–3 are red, green and cyan everywhere in this file, as before.
 PAIRS = {"red": 1, "green": 2, "cyan": 3, "chrome": 4, "accent": 5, "sel": 6,
-         "selbar": 7, "amber": 8, "selred": 9, "selgreen": 10, "selcyan": 11}
+         "selbar": 7, "amber": 8, "selred": 9, "selgreen": 10, "selcyan": 11, "project": 12}
 LOOK = {}     # name -> attr, filled by `init_look`; empty (all 0) until then
 LIGHT = False  # the terminal's background, asked once before curses starts
 SIDE_AT = 150  # columns from which the activity column sits beside the tree
@@ -1618,6 +1618,27 @@ def init_look(light=False, coloured=True):
 
 def look(name):
     return LOOK.get(name, 0)
+
+
+def xterm256(rgb):
+    """The nearest colour in the 6x6x6 cube of the terminal's 256 (16 + 36r + 6g + b)."""
+    r, g, b = (min(5, round(c / 255 * 5)) for c in rgb)
+    return 16 + 36 * r + 6 * g + b
+
+
+def project_attr(colour, light, bold=curses.A_BOLD):
+    """The project's colour (`#rrggbb`) as a text attribute: its cube colour, lightened on
+    a dark terminal as the page does, so the name reads; bold alone when the terminal has
+    fewer than 256 colours. The pair is set again only when the colour changes."""
+    if LOOK.get("band") is not True:          # init_look's 256-colour branch
+        return bold
+    rgb = [int(colour[i:i + 2], 16) for i in (1, 3, 5)]
+    if not light:
+        rgb = [round(c * .45 + 255 * .55) for c in rgb]
+    if LOOK.get("project_rgb") != (tuple(rgb), light):
+        curses.init_pair(PAIRS["project"], xterm256(rgb), -1)
+        LOOK["project_rgb"] = (tuple(rgb), light)
+    return curses.color_pair(PAIRS["project"]) | bold
 
 
 def selected(attr):
@@ -2324,6 +2345,12 @@ class UI(WalkMixin):
         # raises, standing assumptions) is `need you` here, the same number `m`
         # filters to. The rest are at the top of `h`, and in metrics.py.
         mine = sum(1 for it in self.items if self.needs_you(it))
+        # ⚠️ The header leads with the PROJECT'S name, in its colour (`.dfs/theme`), not
+        # the word "roadmap": with two or three terminals open on different projects,
+        # that word was the same in all of them.
+        name = dfs_paths.project_title()
+        if len(name) > 24:
+            name = name[:23] + "…"
         groups = {"tasks": [(str(len(self.items)), 0), (" tasks", grey)],
                   "next": [("next ", grey), (nxt or "—", look("accent") if nxt else grey)],
                   "running": [(str(live), curses.color_pair(2)), (" running", grey)],
@@ -2335,12 +2362,12 @@ class UI(WalkMixin):
         # change what a key will do, the task count does not.
         room = w - len(right) - 2 - x
         for drop in ("tasks", "running", "next", "mine"):
-            width = len("roadmap") + sum(3 + sum(len(t) for t, _ in groups[g])
+            width = len(name) + sum(3 + sum(len(t) for t, _ in groups[g])
                                          for g in order)
             if width <= room or drop not in order:
                 continue
             order.remove(drop)
-        parts = [("roadmap", curses.A_BOLD)]
+        parts = [(name, project_attr(dfs_paths.project_colour(), LIGHT))]
         for g in order:
             parts += [("   ", 0)] + groups[g]
         self.clip = max(x + 8, w - len(right) - 2)
