@@ -640,7 +640,8 @@ def edit_task(task, name, goal):
 def edit_node(task, nid, title, approach=""):
     """Change the title and Approach of an open or parked node, in the part that holds it.
     A confirmed or refuted node is history and is refused, as is one whose Approach was
-    shelved to the archive. An empty approach removes the field. Returns `nid`;
+    shelved to the archive. The Approach is one paragraph: line breaks become spaces, as in
+    `add_node`. An empty approach removes the field. Returns `nid`;
     ValueError says what is wrong."""
     title = " ".join((title or "").split())
     approach = " ".join((approach or "").split())
@@ -657,7 +658,7 @@ def edit_node(task, nid, title, approach=""):
     if nd["status"] not in ("open", "parked"):
         raise ValueError("%s is %s, and a determined node is history: add a node instead"
                          % (nid, nd["status"]))
-    if nd["fields"].get("Approach") == "archived.":
+    if nd["fields"].get("Approach") == SHELF_STUB:
         raise ValueError("%s's Approach is in the archive" % nid)
     kept, last, at = [], None, None
     for line in nd["raw"][1:]:

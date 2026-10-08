@@ -615,6 +615,21 @@ class Check(InARepo):
         self.assertEqual(t["goal"], "A ## in the middle\n### Sub\n## Why?")
         self.assertEqual(t["order"], ["Goal", "Tree", "Log"])
 
+    def test_a_task_with_no_goal_section_gets_one_first_when_edited(self):
+        self.write(task(node(1), self.LOG).replace("## Goal\n\nMake it work.\n\n", ""))
+        self.assertNotIn("Goal", dfs_tree.load("W1")["order"])
+        dfs_tree.edit_task("W1", "name", "Now there is one.")
+        t = dfs_tree.load("W1")
+        self.assertEqual((t["goal"], t["order"]), ("Now there is one.", ["Goal", "Tree", "Log"]))
+
+    def test_an_approach_with_heading_like_lines_stays_one_line_in_its_node(self):
+        self.write(task(node(1), self.LOG))
+        dfs_tree.edit_node("W1", "W1.1", "t", "first\n## Log\n### W1.9 \u00b7 not a node\nlast")
+        t = dfs_tree.load("W1")
+        self.assertEqual(t["order"], ["Goal", "Tree", "Log"])
+        self.assertEqual([n["id"] for n in t["nodes"]], ["W1.1"])
+        self.assertEqual(t["nodes"][0]["fields"]["Approach"], "first ## Log ### W1.9 \u00b7 not a node last")
+
     def test_an_edited_node_changes_its_title_and_approach_only_while_undetermined(self):
         self.write(task(node(1, "confirmed", extra="Approach: done.\nDetermination: Confirmed: ok.\n")
                         + node(2, parent=1, extra="Approach: old way,\n  wrapped on.\nHypothesis: it holds. Wrong if not.\n")

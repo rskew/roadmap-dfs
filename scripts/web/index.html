@@ -757,7 +757,7 @@ function editNodeForm(id) {
   if (!r || !r.editable) return;
   form(`<h3>Edit ${esc(id)}</h3>
     <div><label for="et">Title</label><input type="text" id="et" name="title" value="${esc(r.title)}" required autocomplete="off"></div>
-    <div><label for="ea">Approach: what to do, where, and the check</label><textarea id="ea" name="approach">${esc(r.approach)}</textarea></div>${buttons("Save")}`,
+    <div><label for="ea">Approach: what to do, where, and the check (one paragraph; line breaks become spaces)</label><textarea id="ea" name="approach">${esc(r.approach)}</textarea></div>${buttons("Save")}`,
     async fd => wrote(await api("/api/edit_node", { task: S.task.id, node: id, title: fd.get("title"), approach: fd.get("approach") }), "Saved."));
 }
 function addForm(parent) {

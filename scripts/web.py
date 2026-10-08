@@ -266,7 +266,7 @@ def task_json(task):
                 kind="node", key=nd["id"], id=nd["id"], title=nd["title"], status=st,
                 depth=row["depth"], kids=row["kids"],
                 parent=nd["parent"] or "", skim=skim_for(t, nd),
-                editable=st in ("open", "parked") and nd["fields"].get("Approach") != "archived.",
+                editable=st in ("open", "parked") and nd["fields"].get("Approach") != dfs_tree.SHELF_STUB,
                 approach=nd["fields"].get("Approach", ""),
                 raises=[raise_json(r) for r in row["raises"]],
                 raises_below=row["raises_below"],
