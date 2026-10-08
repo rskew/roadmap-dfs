@@ -2338,7 +2338,7 @@ class UI(WalkMixin):
         dirty, staged = self.dirty
         warn = ""
         if staged:
-            warn = "%d STAGED " % staged
+            warn = "%d staged " % staged
         elif dirty:
             warn = "%d uncommitted " % dirty
         # The page this screen serves, as its port: enough to find it (the full address
@@ -2722,7 +2722,7 @@ class UI(WalkMixin):
                 group = head
                 out.append(("", 0))
                 out.append(("  " + head, look("chrome")))
-            title = art_title(ART_DIR / a["name"]) if a["exists"] else "MISSING"
+            title = art_title(ART_DIR / a["name"]) if a["exists"] else "missing"
             # A uuid plus `.html` is 41, and a name cut mid-extension reads as a
             # different file: it is the one column here that must not be truncated.
             label = "%s %-41s %s" % (">" if i == self.art_sel else " ",
@@ -3433,7 +3433,7 @@ class UI(WalkMixin):
                 if r["kind"] == "node":
                     return "%s %s" % (r["node"]["id"], r["node"]["title"])
                 if r["kind"] == "raise":
-                    return "RAISE " + r["raise_"]["body"]
+                    return "raise " + r["raise_"]["body"]
                 return "%s %s" % (r["name"], r.get("text", ""))
             return ([text(r) for r in self.tree_rows()], self.tree_sel,
                     lambda i: setattr(self, "tree_sel", i))
@@ -3579,7 +3579,7 @@ class UI(WalkMixin):
             out.append(("waiting on your answer: %s" % ", ".join(i["id"] for i in blocked),
                         curses.color_pair(1)))
         out.append(("", 0))
-        para("%d finished. The budget is SESSIONS over the whole walk; each chain is "
+        para("%d finished. The budget is sessions over the whole walk; each chain is "
              "given what is left, so it cannot overshoot." % done, grey)
         return out
 
@@ -3636,7 +3636,7 @@ class UI(WalkMixin):
             if row["kind"] == "raise":
                 r = row["raise_"]
                 on = (" on " + r["args"][0]) if r["args"] else " on the task"
-                out.append(("%s ● RAISE%s · %s — needs you" % (cursor, on, age(r["ts"])),
+                out.append(("%s ● raise%s · %s — needs you" % (cursor, on, age(r["ts"])),
                             red | curses.A_BOLD | (curses.A_REVERSE if sel else 0)))
                 for line in r["body"].splitlines():
                     para(line, indent="    ", hang="  ", rich=True)
@@ -3709,7 +3709,7 @@ class UI(WalkMixin):
             if row["key"] not in self.tree_open and not row["raises"]:
                 continue
             for r in row["raises"]:
-                out.append((inner + "RAISE · %s — needs you" % age(r["ts"]), red | curses.A_BOLD))
+                out.append((inner + "raise · %s — needs you" % age(r["ts"]), red | curses.A_BOLD))
                 for line in r["body"].splitlines():
                     para(line, indent=inner + "  ", hang="  ", rich=True)
             if row["key"] in self.tree_open:
@@ -3744,7 +3744,7 @@ class UI(WalkMixin):
         # footer is not worth walking /proc for.
         if it is not None and any(r["item"] == it["id"] for r in self.live()):
             enter = "⏎ (running)"
-        actions = [enter, "w walk" if not self.walk_on else "w STOP WALK", "n walk next",
+        actions = [enter, "w walk" if not self.walk_on else "w stop walk", "n walk next",
                    "r review", "c chat", "o open", "e edit", "[/] order",
                    "{/} branch", "b break", "3 log", "l last log", "L runs", "v art", "t todo",
                    "x agent"]
@@ -4236,11 +4236,11 @@ class UI(WalkMixin):
         spent = "%d/%d" % (self.walk_used(), self.walk_budget)
         held = self.walk_until - time.time()
         if held > 0:
-            return "● WALK HELD %s%s %s" % (walk_held_for(held), pin, spent)
+            return "● walk held %s%s %s" % (walk_held_for(held), pin, spent)
         run = self.walk_run()
         if run and run["live"]:
-            return "● WALK %s%s %s" % (run["item"], pin, spent)
-        return "● WALK%s %s" % (pin, spent)
+            return "● walk %s%s %s" % (run["item"], pin, spent)
+        return "● walk%s %s" % (pin, spent)
 
     def stop_chain(self, item):
         """Ctrl-C for a chain nobody has a terminal on.

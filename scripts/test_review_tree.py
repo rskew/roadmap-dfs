@@ -424,7 +424,7 @@ class Pane(unittest.TestCase):
         self.assertEqual(TUI.age(ts(30), now), "just now")
         self.ui.open_tree()
         text = "\n".join(l for l, *_ in self.ui.lines_tree(100))
-        self.assertIn("RAISE on the task ·", text)
+        self.assertIn("raise on the task ·", text)
         self.assertNotIn("2026-09-27T01:06:00Z", text)
 
     def test_the_goal_shows_above_the_tree_and_folds(self):
