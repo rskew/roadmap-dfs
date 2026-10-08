@@ -369,9 +369,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.fill("#ng", "Hits above 90%.");
     await page.fill("#nt", "profile it\nadd the cache");
     await page.click("dialog button[value=ok]");
-    await page.waitForFunction(() => /Cache the lookups/.test(document.body.textContent) && /profile it/.test(document.body.textContent) && /add the cache/.test(document.body.textContent), null, { timeout: 8000 });
-    await toList(page);
-    assert(await page.$(".item .goal:text('Cache the lookups')"), "and it is in the list");
+    await page.waitForFunction(() => [...document.querySelectorAll(".item .goal")].some(e => /Cache the lookups/.test(e.textContent)), null, { timeout: 8000 });
+    assert(!(await page.$(".row")), "creating the task leaves the list open, not the new task");
     // the title is the control: click it to rename
     await page.click("#title .rename"); await dialog(page);
     assert((await page.inputValue("#pn")).length > 0, "the form has the name");
