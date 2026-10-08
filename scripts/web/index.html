@@ -262,9 +262,8 @@ const wide = () => matchMedia("(min-width: 900px)").matches;
 let PENDING = 0, loadT;
 function loading(delta) {
   PENDING += delta;
-  clearTimeout(loadT);
-  if (PENDING <= 0) { PENDING = 0; setLoading(false); }
-  else if (!document.documentElement.dataset.loading) loadT = setTimeout(() => setLoading(true), 250);
+  if (PENDING <= 0) { PENDING = 0; clearTimeout(loadT); setLoading(false); }
+  else if (delta > 0 && PENDING === delta) loadT = setTimeout(() => setLoading(true), 250);   // the wait began now
 }
 function setLoading(on) {
   if (on) document.documentElement.dataset.loading = "1"; else delete document.documentElement.dataset.loading;

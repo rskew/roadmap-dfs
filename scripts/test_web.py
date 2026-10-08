@@ -298,6 +298,9 @@ class Web(unittest.TestCase):
             self.assertNotIn(old, css)
 
     def test_the_page_says_it_is_loading_until_the_first_draw_and_while_a_request_waits(self):
+        # Only the served text is checked here; the behaviour (the label after 250 ms, gone on landing,
+        # the error and Retry after a failed first load) is the browser flows loading and loadfail in
+        # test_ui.py, which are skipped when there is no playwright.
         page = self.call("GET", "/")[1].decode()
         self.assertRegex(page, r'<main id="view"[^>]*><p class="wait">Loading')
         for part in ('id="loading"', 'id="stripe"', "function loading(", "aria-busy", "prefers-reduced-motion"):
