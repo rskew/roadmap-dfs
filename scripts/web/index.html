@@ -335,7 +335,13 @@ async function render(force) {
     }
     chrome(r);
     refreshCount();
-  } catch (e) { toast(e.message, true); }
+  } catch (e) {
+    toast(e.message, true);
+    // Nothing has drawn yet, so "Loading…" would claim a wait that has ended: say what failed.
+    const wait = $("#view .wait");
+    if (mine === RENDERS && wait)
+      $("#view").innerHTML = `<p class="wait" role="alert">Could not load: ${esc(e.message)}</p><div class="actions top-actions"><button class="btn" data-act="retry">Retry</button></div>`;
+  }
 }
 async function refreshCount() {
   try {
@@ -817,6 +823,7 @@ document.addEventListener("click", e => {
   if (!b || b.disabled) return;
   const d = b.dataset;
   ({
+    retry: () => render(true),
     only: () => { S.only = d.v === "1"; drawTasks(); },
     task: () => go("t/" + d.id),
     asm: () => go(`t/${d.task}/${d.id}`),

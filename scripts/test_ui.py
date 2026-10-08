@@ -186,6 +186,9 @@ class Flows(unittest.TestCase):
     def test_a_slow_read_shows_loading_and_clears_it(self):
         self.flow("loading")
 
+    def test_a_first_load_that_fails_shows_the_error_and_a_retry_not_loading(self):
+        self.flow("loadfail")
+
     def test_a_change_elsewhere_reaches_an_open_page(self):
         self.flow("live")
 

@@ -444,7 +444,6 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
-  // A change made elsewhere (a chain, the terminal) reaches an open page by itself.
   // A slow read shows "loading" and the stripe after a beat and clears them when it lands; a fast one shows nothing.
   async loading(b) {
     const ctx = await b.newContext({ ...PHONE });
@@ -468,6 +467,27 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await ctx.close();
   },
 
+  // A first load that fails stops saying "Loading…": the page shows the error and a Retry that draws once the server answers.
+  async loadfail(b) {
+    const ctx = await b.newContext({ ...PHONE });
+    const page = await ctx.newPage(); PAGES.push(page);
+    let fail = true;
+    await page.route("**/api/state", async route => {
+      if (fail) await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "the roadmap is unreadable" }) });
+      else await route.continue();
+    });
+    await page.goto(URL_);
+    await page.waitForSelector("#view [data-act=retry]", { timeout: 3000 });
+    const text = await page.textContent("#view");
+    assert(!/Loading/.test(text), "the page no longer says Loading");
+    assert(text.includes("the roadmap is unreadable"), "it shows the error");
+    fail = false;
+    await page.click("[data-act=retry]");
+    await page.waitForSelector(".item", { timeout: 3000 });
+    await ctx.close();
+  },
+
+  // A change made elsewhere (a chain, the terminal) reaches an open page by itself.
   async live(b) {
     const { page, errors } = await open(b, PHONE);
     assert(!(await page.getAttribute(".item[data-id=W3]", "class")).includes("blocks"), "W3 is not blocked");

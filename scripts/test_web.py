@@ -303,6 +303,7 @@ class Web(unittest.TestCase):
         for part in ('id="loading"', 'id="stripe"', "function loading(", "aria-busy", "prefers-reduced-motion"):
             self.assertIn(part, page)
         self.assertIn("finally { loading(-1); }", page, "a failed request clears it too")
+        self.assertIn('data-act="retry"', page, "a failed first load offers a retry")
 
     def test_it_is_installable_a_manifest_icons_and_a_worker(self):
         status, m, _ = self.call("GET", "/manifest.json")
