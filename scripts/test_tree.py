@@ -316,10 +316,11 @@ class Check(InARepo):
                      "not `- <ts>"):
             self.assertIn(want, found)
 
-    def assumed(self, text, head=None, pages=None):
+    def assumed(self, text, head=None, pages=None, archive="", head_archive=""):
         pages = pages or {}
         read = lambda path: pages.get(path.name)   # noqa: E731
-        return " | ".join(dfs_check.check_assumptions("W1", text, head, read))
+        return " | ".join(dfs_check.check_assumptions("W1", text, head, read, archive,
+                                                      head_archive))
 
     PAGE = "<button>decide</button><script>b.addEventListener('click', f)</script>"
 
@@ -352,6 +353,15 @@ class Check(InARepo):
         again = old.replace("Wrong if not.", "Wrong if it breaks.")
         self.assertIn("W1.1 states a Hypothesis", self.assumed(again, head=old))
         self.assertIn("W1.1 states a Hypothesis", self.assumed(old))   # new in this commit
+
+    def test_a_hypothesis_shelved_since_head_is_not_judged_again(self):
+        arc = "**W1.1 Hypothesis**: It holds. Wrong if not.\n"
+        full = task(node(1, "confirmed", extra="Hypothesis: It holds. Wrong if not.\n"))
+        stub = task(node(1, "confirmed", extra="Hypothesis: archived.\n"))
+        self.assertEqual(self.assumed(stub, head=stub, archive=arc, head_archive=arc), "")
+        self.assertEqual(self.assumed(stub, head=full, archive=arc), "")
+        self.assertEqual(self.assumed(full, head=stub, archive=arc, head_archive=arc), "")
+        self.assertIn("W1.1 states a Hypothesis", self.assumed(stub, head=stub, archive=arc))
 
     def test_a_parked_or_refuted_hypothesis_is_moot_until_it_is_open_again(self):
         parked = task(node(1, "parked", extra="Hypothesis: It holds. Wrong if not.\n"))

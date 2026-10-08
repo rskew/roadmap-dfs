@@ -407,17 +407,21 @@ HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|to
                      r"pointer\w+|mouse\w+|focus|select)\s*=", re.I)
 
 
-def check_assumptions(task, text, head, read, archive=""):
+def check_assumptions(task, text, head, read, archive="", head_archive=""):
     """A Hypothesis must name an interactive artefact (`.dfs/artefacts/<name>.html`).
 
     Judged on a live node that is new in this commit, whose Hypothesis changed since
     HEAD, or that was parked at HEAD and is open again: a node already at HEAD with
     its Hypothesis unchanged is history and keeps the wording it was committed with.
     A parked or refuted node's assumption is moot (`dfs_tree.assumed`) and is not
-    judged. `read` gives a file's text as it will be committed (None when absent)."""
+    judged. `read` gives a file's text as it will be committed (None when absent).
+    HEAD's text is read with HEAD's archive (`head_archive`), as the current text is
+    with its own: a Hypothesis shelved since HEAD is the same Hypothesis."""
     bad = []
     t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
-    was = {nd["id"]: nd for nd in dfs_tree.parse(head, task)["nodes"]} if head else {}
+    was = ({nd["id"]: nd for nd in
+            dfs_tree.with_archive(dfs_tree.parse(head, task), head_archive)["nodes"]}
+           if head else {})
     for nd in t["nodes"]:
         h = (nd["fields"].get("Hypothesis") or "").strip()
         if not h or h == dfs_tree.SHELF_STUB or nd["status"] in ("parked", "refuted"):
@@ -533,7 +537,8 @@ def main() -> int:
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]
             fatal += ["%s: %s" % (rel, b)
-                      for b in check_assumptions(task, text, head, read, arc)]
+                      for b in check_assumptions(task, text, head, read, arc,
+                                                 at_head(arc_dir / tasks[task][tag]) or "")]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
                 fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, head)]
             now_tok = len(text) // 4
