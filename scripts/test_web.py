@@ -503,6 +503,11 @@ class Web(unittest.TestCase):
         self.assertEqual(w1["rev"], "rev 2")          # the raise and the assumption
         self.assertNotIn("2026-09-25T", w1["why"], "a timestamp is shown as an age")
 
+    def test_a_node_drawn_at_its_parents_column_says_it_is_a_chain_step(self):
+        rows = {r["key"]: r for r in self.task()["rows"] if r["kind"] == "node"}
+        self.assertEqual({k: (r["depth"], r["chain"]) for k, r in rows.items()},
+                         {"W1.1": (0, False), "W1.2": (0, True), "W1.3": (0, True)})
+
     def test_a_node_carries_its_skim_flags_and_card(self):
         rows = {r["key"]: r for r in self.task()["rows"]}
         n = rows["W1.2"]

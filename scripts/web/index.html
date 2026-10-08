@@ -530,7 +530,7 @@ function drawTask() {
       html += `<div class="${cls}" style="--d:${r.depth}">
         <button class="fold ${r.kids && !S.flagged ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
         <button class="main" data-act="node" data-id="${esc(r.id)}">
-          <div class="line"><span class="nid">${esc(r.id)}</span>${inline(r.title)}</div>
+          <div class="line"><span class="nid">${r.chain ? "↳ " : ""}${esc(r.id)}</span>${inline(r.title)}</div>
           ${chips ? `<div class="chips">${chips}</div>` : ""}
           ${r.skim ? `<div class="skim">${inline(r.skim)}</div>` : ""}</button></div>`;
     }

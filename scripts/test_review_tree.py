@@ -95,6 +95,18 @@ class Rows(unittest.TestCase):
         # A chain (W1.1 → W1.2 → W1.3) stays in one column: only a fork steps in.
         self.assertEqual([r["depth"] for r in rows], [0, 0, 0, 0, 0, 0, 0])
 
+    def test_a_lone_child_is_marked_as_a_chain_step_and_a_fork_or_a_root_is_not(self):
+        chain = {r["key"]: r["chain"] for r in TUI.tree_entries(tree()) if r["kind"] == "node"}
+        # W1.2 and W1.3 sit at their parent's column, so they say whose child they are;
+        # W1.1 and W1.4 have no parent.
+        self.assertEqual(chain, {"W1.1": False, "W1.2": True, "W1.3": True, "W1.4": False})
+        t = dfs_tree.parse(TREE.replace(
+            "### W1.4 · A refuted sibling\nStatus: refuted",
+            "### W1.4 · A refuted sibling\nParent: W1.2\nStatus: refuted"), "W1")
+        forked = {r["key"]: r["chain"] for r in TUI.tree_entries(t) if r["kind"] == "node"}
+        self.assertEqual(forked, {"W1.1": False, "W1.2": True, "W1.3": False, "W1.4": False},
+                         "two children step in, which already says they are children")
+
     def test_a_fork_steps_its_children_in_and_a_chain_does_not(self):
         t = dfs_tree.parse(TREE.replace(
             "### W1.4 · A refuted sibling\nStatus: refuted",
@@ -365,6 +377,25 @@ class Pane(unittest.TestCase):
         ui.tree_add("W1")
         self.assertEqual(added, [], "an empty answer to the warning adds nothing")
         self.assertEqual(ui.msg, "no node added")
+
+    def test_adding_under_the_cursor_node_puts_the_new_node_under_it(self):
+        ui = self.ui
+        ui.open_tree()
+        self.to("W1.3")
+        added = []
+        saved = TUI.dfs_tree.add_node
+        TUI.dfs_tree.add_node = lambda *a: added.append(a) or "W1.5"
+        self.addCleanup(setattr, TUI.dfs_tree, "add_node", saved)
+        answers = iter(["a title", ""])
+        ui.prompt = lambda label, default="": next(answers)
+        ui.tree_add("W1")
+        self.assertEqual(added, [("W1", "a title", "W1.3", "")])
+
+    def test_a_chain_step_is_drawn_with_the_mark_and_a_root_without(self):
+        self.ui.open_tree()
+        lines = [l for l, *_ in self.ui.lines_tree(100)]
+        self.assertTrue(any("↳W1.3" in l for l in lines), lines)
+        self.assertFalse(any("↳W1.1" in l or "↳W1.4" in l for l in lines))
 
     def test_H_lists_every_assumption_and_enter_goes_to_it_in_its_tree(self):
         ui = self.ui

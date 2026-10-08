@@ -191,7 +191,8 @@ def tree_entries(t, folded=(), flagged=False):
                       key=lambda n: n["n"])
 
     def walk(parent, d):
-        for nd in kids_of(parent):
+        sibs = kids_of(parent)
+        for nd in sibs:
             nid = nd["id"]
             st = ("pruned" if nid in pruned else
                   status[nid] if status[nid] != "open" or nid not in asleep
@@ -200,7 +201,10 @@ def tree_entries(t, folded=(), flagged=False):
             shut = nid in folded and bool(kids)
             below = (sum(len(on_node.get(k["id"], ()))
                          for k in dfs_tree.descendants(t, nid)) if shut else 0)
+            # ⚠️ `chain`: drawn at its parent's column, which reads as the parent's
+            # sibling, so "add under" looked like it had added beside. The row says it.
             out.append(dict(key=nid, kind="node", depth=d, node=nd, status=st,
+                            chain=parent is not None and len(sibs) == 1,
                             raises=on_node.get(nid, []), kids=len(kids),
                             folded=shut, raises_below=below,
                             assumes=nid in wants and bool(nd["fields"].get("Hypothesis")),
@@ -3683,8 +3687,8 @@ class UI(WalkMixin):
             below = above + ([2 + 2 * row["depth"]]
                              if row["kids"] and not row["folded"] else [])
             first = len(out)
-            head = "%s %s%s %s %s %s%s" % (cursor, pad, fold, nd["id"],
-                                           TREE_MARK.get(st, "?"), mark_up(nd["title"]), flag)
+            head = "%s %s%s %s%s %s %s%s" % (cursor, pad, fold, "↳" if row["chain"] else "",
+                                             nd["id"], TREE_MARK.get(st, "?"), mark_up(nd["title"]), flag)
             lead = len(cursor) + 1 + len(pad) + len(fold) + 1
             for line in (textwrap.wrap(
                     head, max(20, width - 2), subsequent_indent=" " * (lead + 2))):

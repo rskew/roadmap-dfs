@@ -269,7 +269,7 @@ def task_json(task):
             card = dfs_tui.node_card(t, dict(row, raises=[]), archive, commits.get(nd["id"], ()))
             rows.append(dict(
                 kind="node", key=nd["id"], id=nd["id"], title=nd["title"], status=st,
-                depth=row["depth"], kids=row["kids"],
+                depth=row["depth"], kids=row["kids"], chain=row["chain"],
                 parent=nd["parent"] or "", skim=skim_for(t, nd),
                 editable=st in ("open", "parked") and nd["fields"].get("Approach") != dfs_tree.SHELF_STUB,
                 approach=nd["fields"].get("Approach", ""),
