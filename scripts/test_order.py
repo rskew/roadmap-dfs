@@ -153,6 +153,16 @@ class Tree(unittest.TestCase):
             self.assertEqual(after[0][1], 0, "the first node is always a root")
 
 
+class TreeOf(unittest.TestCase):
+    def test_items_come_back_as_nodes_with_a_fence_for_every_segment_crossed(self):
+        items = [dict(id="W1", depth=0, segment=0), dict(id="W2", depth=1, segment=0),
+                 dict(id="W3", depth=0, segment=2)]
+        self.assertEqual(dfs_order.tree_of(items),
+                         [("W1", 0), ("W2", 1), (dfs_order.BREAK, 0), (dfs_order.BREAK, 0),
+                          ("W3", 0)], "a gap left by an emptied segment keeps its fence")
+        self.assertEqual(dfs_order.tree_of([]), [])
+
+
 class Breaks(unittest.TestCase):
     """⚠️ A fence across the forest: everything after it waits on everything before.
 

@@ -65,6 +65,7 @@ from urllib.parse import urlparse
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
+import order as dfs_order   # noqa: E402
 import state as dfs_state   # noqa: E402
 import tree as dfs_tree     # noqa: E402
 import tui as dfs_tui       # noqa: E402  (its view functions; nothing here starts curses)
@@ -357,6 +358,55 @@ def new_task(body):
             raise Refused(str(e), 409)
     HUB.notify()
     return dict(added=task)
+
+
+MOVES = {"up", "down", "out", "in", "break"}
+
+# Why a move that cannot be made cannot: the terminal's own words (tui.py reorder,
+# reparent, toggle_break), since it is the same rule refusing.
+MOVE_REFUSAL = {
+    "up": "is already first among its siblings", "down": "is already last among its siblings",
+    "out": "is already at the root",
+    "in": "has no sibling above it in this section to go under",
+}
+
+
+def reorder(body):
+    """Move one task in `.dfs/order.md`, as the terminal's `[` `]` `{` `}` `b` do.
+
+    The whole tree is read from the derivation, moved by `order.py`, and written whole
+    (`write_order`), so the fences survive. A move that cannot be made is a 409 saying
+    why, and the file is not touched.
+    """
+    item = need(body, "item", "the task")
+    move = body.get("move")
+    if move not in MOVES:
+        raise Refused("a move is one of %s" % ", ".join(sorted(MOVES)))
+    with LOCK:
+        items = dfs_state.full()["items"]
+        nodes = dfs_order.tree_of(items)
+        if dfs_order.index_of(nodes, item) is None:
+            raise Refused("no task %s" % item, 404)
+        if move == "break":
+            had = dfs_order.has_break_above(nodes, item)
+            after = dfs_order.break_toggled(nodes, item)
+            refusal = ("is nested — a break separates whole branches, never cuts one"
+                       if dict(nodes).get(item) else
+                       "is the first task — a break above it would gate nothing")
+        else:
+            after = {"up": lambda: dfs_order.moved(nodes, item, -1),
+                     "down": lambda: dfs_order.moved(nodes, item, 1),
+                     "out": lambda: dfs_order.outdented(nodes, item),
+                     "in": lambda: dfs_order.indented(nodes, item)}[move]()
+            refusal = MOVE_REFUSAL[move]
+        if after is None:
+            raise Refused("%s %s" % (item, refusal), 409)
+        try:
+            dfs_order.write_order(after)
+        except OSError as e:
+            raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.order()), e), 500)
+    HUB.notify()
+    return state_json()
 
 
 def act(name, body):
@@ -670,6 +720,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, set_theme(body))
             if name == "new":
                 return self.json(200, new_task(body))
+            if name == "order":
+                return self.json(200, reorder(body))
             if name.startswith("chat/"):
                 return self.json(200, chat_act(name, body))
             if name.startswith(("walk/", "chain/")):

@@ -550,6 +550,62 @@ class Web(unittest.TestCase):
         self.assertTrue(row["skim"].startswith("overruled by you:"))
         self.assertFalse(row["assumes"], "a refuted node's assumption is moot")
 
+    # ── reordering the task list ────────────────────────────────────────────────
+    def three_tasks(self):
+        for n in ("W2", "W3"):
+            (self.root / ".dfs" / "items" / (n + ".md")).write_text(
+                "# %s · Task %s\n\n## Goal\n\nGoal %s.\n\n## Tree\n\n## Log\n" % (n, n, n))
+
+    def ids(self, data):
+        return [i["id"] for i in data["items"]]
+
+    def order_file(self):
+        return (self.root / ".dfs" / "order.md").read_text()
+
+    def test_a_task_moves_among_its_siblings_and_the_order_is_written(self):
+        self.three_tasks()
+        status, data, _ = self.call("POST", "/api/order", dict(item="W3", move="up"))
+        self.assertEqual((status, self.ids(data)), (200, ["W1", "W3", "W2"]))
+        self.assertEqual(self.order_file().splitlines()[-3:], ["- W1", "- W3", "- W2"])
+        self.assertEqual(self.ids(self.call("GET", "/api/state")[1]), ["W1", "W3", "W2"])
+        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="down"))
+        self.assertEqual((status, self.ids(data)), (200, ["W3", "W1", "W2"]))
+
+    def test_a_task_goes_under_the_one_above_and_back_out(self):
+        self.three_tasks()
+        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="in"))
+        self.assertEqual([(i["id"], i["depth"]) for i in data["items"]],
+                         [("W1", 0), ("W2", 1), ("W3", 0)])
+        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="out"))
+        self.assertEqual([(i["id"], i["depth"]) for i in data["items"]],
+                         [("W1", 0), ("W2", 0), ("W3", 0)])
+
+    def test_a_break_is_added_and_taken_away_and_survives_other_moves(self):
+        self.three_tasks()
+        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="break"))
+        self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
+                         [("W1", 0), ("W2", 1), ("W3", 1)])
+        self.assertIn("---", self.order_file())
+        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="up"))
+        self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
+                         [("W1", 0), ("W3", 1), ("W2", 1)], "a move keeps the fence")
+        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
+        self.assertEqual({i["segment"] for i in data["items"]}, {0})
+        self.assertNotIn("---", self.order_file())
+
+    def test_a_move_that_cannot_be_made_is_refused_with_the_reason_and_writes_nothing(self):
+        self.three_tasks()
+        for item, move, why in (("W1", "up", "first"), ("W3", "down", "last"),
+                                ("W1", "out", "root"), ("W1", "in", "no sibling above"),
+                                ("W1", "break", "first task")):
+            status, data, _ = self.call("POST", "/api/order", dict(item=item, move=move))
+            self.assertEqual(status, 409, (item, move))
+            self.assertIn(why, data["error"])
+        self.assertFalse((self.root / ".dfs" / "order.md").exists())
+        self.assertEqual(self.call("POST", "/api/order", dict(item="W9", move="up"))[0], 404)
+        self.assertEqual(self.call("POST", "/api/order", dict(item="W1", move="sideways"))[0], 400)
+        self.assertEqual(self.call("POST", "/api/order", dict(move="up"))[0], 400)
+
     def test_a_tree_is_accepted_only_when_it_is_finished(self):
         self.assertEqual(self.call("POST", "/api/accept", dict(task="W1"))[0], 409)
         self.assertFalse(self.task()["acceptable"])

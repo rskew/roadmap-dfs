@@ -1905,22 +1905,8 @@ class UI(WalkMixin):
             self.scroll = 0         # a new item is read from its top
 
     def nodes(self):
-        """The tree as the screen is showing it, for `dfs_order` to move a node in.
-
-        ⚠️ THE FENCES GO BACK IN HERE. The derivation hands back items alone, each
-        carrying the SEGMENT it is in, and `write_order` writes the whole tree — so a
-        list built without the breaks would delete every fence in the file the first
-        time somebody pressed `[`. The segment numbers are what they are put back by,
-        including a gap left by a segment whose items have all been closed and
-        deleted, which is why the inner loop is a `while` and not an `if`.
-        """
-        out, seg = [], 0
-        for i in self.items:
-            while seg < i.get("segment", 0):
-                out.append((dfs_order.BREAK, 0))
-                seg += 1
-            out.append((i["id"], i["depth"]))
-        return out
+        """The tree as the screen is showing it, for `dfs_order` to move a node in."""
+        return dfs_order.tree_of(self.items)
 
     def list_rows(self):
         """The list as ROWS: every item, with a rule wherever a fence sits.

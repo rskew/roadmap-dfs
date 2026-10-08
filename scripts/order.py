@@ -240,6 +240,25 @@ def _replant(nodes, i, at, shift):
     return rest[:at] + cut + rest[at:]
 
 
+def tree_of(items):
+    """The tree as a screen shows it, in the shape `moved` and the rest work on.
+
+    ⚠️ THE FENCES GO BACK IN HERE. The derivation hands back items alone, each
+    carrying the SEGMENT it is in, and `write_order` writes the whole tree — so a
+    list built without the breaks would delete every fence in the file the first time
+    anything moved. The segment numbers are what they are put back by, including a gap
+    left by a segment whose items have all been closed and deleted, which is why the
+    inner loop is a `while` and not an `if`.
+    """
+    out, seg = [], 0
+    for i in items:
+        while seg < i.get("segment", 0):
+            out.append((BREAK, 0))
+            seg += 1
+        out.append((i["id"], i["depth"]))
+    return out
+
+
 def moved(nodes, item, step):
     """`nodes` with `item` moved one place among ITS SIBLINGS, or None if it cannot.
 
