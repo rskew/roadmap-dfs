@@ -69,6 +69,29 @@ def _running(pid, started):
     return bool(st and st[2] == started and st[1] != "Z")
 
 
+def finish(pid, gone):
+    """Wait up to GRACE seconds for the processes in `gone` ({pid: start time}) to stop, then
+    kill them and whatever else `pid` has started since, and wait for that to take."""
+    end = time.time() + GRACE
+    while time.time() < end and any(_running(p, t) for p, t in gone.items()):
+        time.sleep(0.05)
+    gone.update(tree_of(pid))
+    for p, t in gone.items():
+        if _running(p, t):
+            _try(os.kill, p, signal.SIGKILL)
+    end = time.time() + 1.0             # a kill is delivered, not instant
+    while time.time() < end and any(_running(p, t) for p, t in gone.items()):
+        time.sleep(0.02)
+
+
+def stop_tree(pid):
+    """End `pid` and everything it started: ask, wait, kill."""
+    gone = tree_of(pid)
+    for p in gone:
+        _try(os.kill, p, signal.SIGTERM)
+    finish(pid, gone)
+
+
 def _try(fn, *a):
     try:
         return fn(*a)
@@ -155,16 +178,7 @@ class Relay:
                 _try(os.kill, p, signal.SIGTERM)
 
         def reap():
-            end = time.time() + GRACE
-            while time.time() < end and any(_running(p, t) for p, t in gone.items()):
-                time.sleep(0.05)
-            gone.update(tree_of(pid))           # what it started while it was stopping
-            for p, t in gone.items():
-                if _running(p, t):
-                    _try(os.kill, p, signal.SIGKILL)
-            end = time.time() + 1.0             # a kill is delivered, not instant
-            while time.time() < end and any(_running(p, t) for p, t in gone.items()):
-                time.sleep(0.02)
+            finish(pid, gone)
         if wait:
             reap()
         else:

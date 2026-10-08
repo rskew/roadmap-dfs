@@ -19,6 +19,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
+import ptyrelay             # noqa: E402
 
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
@@ -336,6 +337,24 @@ class Chat(unittest.TestCase):
         with self.assertRaises(ValueError) as cm:
             self.chats.send("W1", "hi")
         self.assertIn("claude", str(cm.exception))
+
+
+class TurnTimeout(unittest.TestCase):
+    """A turn nobody is waiting on is ended with everything it started, not left running."""
+
+    def test_the_timeout_ends_what_the_turn_started(self):
+        pids = Path(tempfile.mkdtemp()) / "pids"
+        script = "echo $$ >> %s; setsid sh -c 'trap \"\" HUP TERM; echo $$ >> %s; exec sleep 600' & sleep 600" % (pids, pids)
+        ptyrelay.GRACE, grace = 0.3, ptyrelay.GRACE
+        try:
+            with self.assertRaises(subprocess.TimeoutExpired):
+                dfs_chat.run_turn(["bash", "-c", script], "hello", None, dict(os.environ), timeout=1.5)
+        finally:
+            ptyrelay.GRACE = grace
+        started = [int(x) for x in pids.read_text().split()]
+        self.assertEqual(len(started), 2)
+        for p in started:
+            self.assertFalse(ptyrelay._running(p, (ptyrelay._stat(p) or (0, 0, None))[2]), p)
 
 
 if __name__ == "__main__":
