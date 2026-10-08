@@ -472,9 +472,9 @@ function drawTask() {
       html += `<div class="${cls}" style="--d:${r.depth}">
         <button class="fold ${r.kids ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
         <button class="main" data-act="node" data-id="${esc(r.id)}">
-          <div class="line"><span class="nid">${esc(r.id)}</span>${esc(r.title)}</div>
+          <div class="line"><span class="nid">${esc(r.id)}</span>${inline(r.title)}</div>
           ${chips ? `<div class="chips">${chips}</div>` : ""}
-          ${r.skim ? `<div class="skim">${esc(r.skim)}</div>` : ""}</button></div>`;
+          ${r.skim ? `<div class="skim">${inline(r.skim)}</div>` : ""}</button></div>`;
     }
   }
   $("#view").className = ""; $("#view").innerHTML = html + `</div>`;
@@ -547,7 +547,7 @@ function drawSheet() {
   };
   const metaHtml = r.card.filter(([role]) => role === "meta").map(blockHtml).join("");
   const restHtml = r.card.filter(([role]) => role !== "meta").map(blockHtml).join("");
-  $("#sheet").innerHTML = `<div class="sheet-body"><div class="cap where">${i + 1} of ${rows.length}</div><h3>${esc(r.id)}  ${esc(r.title)}</h3>
+  $("#sheet").innerHTML = `<div class="sheet-body"><div class="cap where">${i + 1} of ${rows.length}</div><h3>${esc(r.id)}  ${inline(r.title)}</h3>
       ${metaHtml}${r.raises.map(x => raiseCard(x, "")).join("")}${restHtml}</div>
     <div class="sheet-actions">
       <button class="btn" data-act="correct" data-id="${esc(r.id)}">Refute/confirm</button>

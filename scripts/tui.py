@@ -800,6 +800,22 @@ def carry_marks(lines):
     return out
 
 
+def clip_marked(text, width):
+    """`text` as span marks, in `width` cells with an ellipsis when it is cut; a span
+    the cut leaves open is closed before the ellipsis."""
+    marked = mark_up(text)
+    if len(unmark(marked)) <= width:
+        return marked
+    keep, cells = "", 0
+    for ch in marked:
+        if cells >= max(0, width - 1) and not MARKS.match(ch):
+            break
+        keep += ch
+        cells += not MARKS.match(ch)
+    (closed, _), = carry_marks([(keep.rstrip(), 0)])
+    return closed + "…"
+
+
 def code_attr():
     accent = look("accent")
     return accent if accent & curses.A_COLOR else curses.A_UNDERLINE
@@ -3602,11 +3618,12 @@ class UI(WalkMixin):
                              if row["kids"] and not row["folded"] else [])
             first = len(out)
             head = "%s %s%s %s %s %s%s" % (cursor, pad, fold, nd["id"],
-                                           TREE_MARK.get(st, "?"), nd["title"], flag)
+                                           TREE_MARK.get(st, "?"), mark_up(nd["title"]), flag)
             lead = len(cursor) + 1 + len(pad) + len(fold) + 1
             for line in (textwrap.wrap(
                     head, max(20, width - 2), subsequent_indent=" " * (lead + 2))):
                 out.append((line, attr, below if len(out) > first else above))
+            out[first:] = carry_marks(out[first:])
             inner = " " * (lead + 2)
             room = max(20, width - len(inner) - 2)
             story = dfs_tree.story(t, nd["id"])
@@ -3617,22 +3634,22 @@ class UI(WalkMixin):
                 # determination they overruled.
                 if story["overruled"]:
                     why = (story["overruled"]["body"].strip().splitlines() or [""])[0]
-                    out.append((inner + clip("overruled by you: " + why, room),
+                    out.append((inner + clip_marked("overruled by you: " + why, room),
                                 red | curses.A_BOLD))
                 elif first_sentence(nd["fields"].get("Determination")):
-                    out.append((inner + clip(first_sentence(nd["fields"]["Determination"]),
-                                             room), look("chrome")))
+                    out.append((inner + clip_marked(first_sentence(nd["fields"]["Determination"]),
+                                                  room), look("chrome")))
                 if not getattr(self, "card_panel", False):
                     # With the node panel at the right the whole of it is there; without
                     # one the assumption and what would show it wrong are kept under the
                     # row, each on a line of its own and clipped with a visible mark.
                     if assumes:
                         assumption, wrong = dfs_tree.split_falsifier(assumes)
-                        out.append((inner + clip(assumption, room), look("amber")))
+                        out.append((inner + clip_marked(assumption, room), look("amber")))
                         if wrong:
-                            out.append((inner + clip("wrong if " + wrong, room), look("amber")))
+                            out.append((inner + clip_marked("wrong if " + wrong, room), look("amber")))
                     if asks:
-                        out.append((inner + clip("ask: " + asks, room), red))
+                        out.append((inner + clip_marked("ask: " + asks, room), red))
             if row["key"] not in self.tree_open and not row["raises"]:
                 continue
             for r in row["raises"]:
@@ -3786,7 +3803,7 @@ class UI(WalkMixin):
             # that mark is drawn — a band across the column and the accent bar where
             # the `>` was, so the row keeps its own colour instead of inverting.
             if attr & curses.A_REVERSE and LOOK.get("band"):
-                self.put(y, 1, text.ljust(main - 2), selected(attr))
+                self.put(y, 1, text + " " * (main - 2 - len(unmark(text))), selected(attr))
                 if text.startswith(">"):
                     self.put(y, 1, BAR, look("selbar"))
                 continue
@@ -3796,7 +3813,7 @@ class UI(WalkMixin):
             # selected row, whose band is the cursor.
             if len(line) > 2 and not attr & curses.A_REVERSE:
                 for c in line[2]:
-                    if c >= len(text) or text[c] == " ":
+                    if c >= len(unmark(text)) or unmark(text)[c] == " ":
                         self.put(y, 1 + c, "│", look("chrome"))
         self.clip = None
         if side:

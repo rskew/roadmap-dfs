@@ -797,6 +797,42 @@ class ACardDrawsItsMarkdown(unittest.TestCase):
                          "one two three four five six seven eight nine")
 
 
+class ATreeRowDrawsItsMarkdown(unittest.TestCase):
+    """A node's title and the verdict skimmed under it were drawn with their backticks."""
+
+    def lines(self, sel):
+        text = TREE.replace("### W1.2 · step 2\nStatus: confirmed\nDetermination: step 2 is done.",
+                            "### W1.2 · `--rev` with no pin\nStatus: confirmed\n"
+                            "Determination: `agent.py` pins **it**.")
+        ui = a_screen([item("W1")], pane="item", focus="tree" if sel else "list", tree_open=set())
+        ui.tree_of = lambda task: (TUI.dfs_tree.parse(text, "W1"), "", {})
+        ui.status_attr = lambda status: 0
+        ui._tree_cache = {}
+        ui.tree_item = "W1"
+        ui.tree_sel = 2 if sel else 0
+        return ui.lines_tree(100)
+
+    def test_the_title_and_the_skim_show_no_backticks_and_draw_the_span_as_a_run(self):
+        ui = a_screen([item("W1")])
+        ui.scr = ADoneTaskRecedesInTheList.Rec()
+        lines = self.lines(False)
+        row = next(l for l in lines if "W1.2" in l[0])
+        skim = lines[lines.index(row) + 1]
+        for text, attr, *_ in (row, skim):
+            self.assertNotIn("`", text)
+            self.assertNotIn("**", text)
+            ui.put(0, 0, text, attr)
+        runs = {t: a for _, _, t, a in ui.scr.puts}
+        self.assertTrue(runs["--rev"] & curses.A_UNDERLINE, "title code is set apart")
+        self.assertTrue(runs["agent.py"] & curses.A_UNDERLINE, "skim code is set apart")
+        self.assertTrue(runs["it"] & curses.A_BOLD, "skim bold is bold")
+
+    def test_a_clipped_skim_closes_its_span(self):
+        text = TUI.clip_marked("go `a very long span of code` now", 12)
+        self.assertEqual(TUI.unmark(text), "go a very l…")
+        self.assertEqual(text.count(TUI.CODE_ON), text.count(TUI.CODE_OFF))
+
+
 if __name__ == "__main__":
     curses.color_pair = lambda n: 0       # no initscr here; attrs are opaque
     unittest.main()
