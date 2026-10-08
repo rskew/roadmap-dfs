@@ -71,6 +71,11 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 /* a finished task recedes whole, so the open ones are what the eye lands on */
 .item.done .iid, .item.done .goal { color: var(--muted); font-weight: 400; }
 .item .st.done::before { content: "\2713\00a0"; }
+/* and takes one line, not three: the goal is cut to a single line with the status after it, no why under it */
+.item.done { padding-top: var(--s2); padding-bottom: var(--s2); }
+.item.done .body { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; }
+.item.done .goal { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.done .meta { flex: none; margin-top: 0; flex-wrap: nowrap; }
 .item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
 .break { margin: 18px 0 6px; display: flex; align-items: center; gap: var(--s3); }
 .break::after { content: ""; flex: 1; border-top: var(--rule) solid var(--line); }
@@ -426,12 +431,12 @@ function drawTasks() {
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     html += `<button class="item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" style="--ind:${Math.min(it.depth, 3) * 14}px">
       <span class="iid">${esc(it.id)}</span>
-      <span><span class="goal">${esc(it.goal)}</span>
+      <span class="body"><span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.waiting_on ? `<span class="tag">waiting on ${esc(it.waiting_on)}</span>` : ""}
           ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}</span></span>
-      ${it.status !== "open" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}</button>`;
+      ${it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}</button>`;
   }
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;

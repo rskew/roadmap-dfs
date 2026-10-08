@@ -94,6 +94,11 @@ const FLOWS = {
     const name = fs.readFileSync(path.join(DIR, ".dfs", "title"), "utf8").trim();
     same(await page.title(), name, "the tab is named after the project");
     assert((await page.textContent("#title")).startsWith(name), "so is the header");
+    // A done task is one line: its goal is cut, not wrapped, and no why sits under it.
+    for (const row of await page.$$(".item.done")) {
+      same(await row.$eval(".goal", g => getComputedStyle(g).whiteSpace), "nowrap", "a done task's goal is one line");
+      assert(!(await row.$(".why")), "a done task has no why line");
+    }
     await page.click("[data-act=only][data-v='1']");
     const ids = await page.$$eval(".item", a => a.map(x => x.dataset.id));
     same(ids, ["W2", "W4", "W9"], "needs you: the ones that wait on the author");
