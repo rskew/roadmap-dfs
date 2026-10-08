@@ -68,10 +68,12 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   `Wrong if` and shows the second half on its own, since it is the part the author
   answers. Not a second description of the work. The Evidence is the
   observations that bear on it, one line each: what was run or read, what it showed,
-  and which way it cuts. When the assumption is easier to judge by looking (the two
-  designs side by side, the data the claim rests on), draw an artefact for it (see
-  Raising) and name its path in the Hypothesis or the Ask: the author meets the
-  picture where the assumption is. The screen marks a node with a Hypothesis (⚑) and names
+  and which way it cuts. **A Hypothesis names an interactive artefact**, as
+  `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself (see Raising): a page the
+  author can operate, with the options to switch between, the inputs to move and the
+  evidence to open, so that it explains the assumption and lets them decide whether
+  it holds. `check.py` refuses a commit that adds a Hypothesis naming no such page, or
+  one with nothing on it to change. A node with no assumption needs none. The screen marks a node with a Hypothesis (⚑) and names
   those nodes when the author accepts the tree, so keep it for what is both
   important and open to question: an ordinary choice the check settles is not one.
   What you built, the steps you took and every test you ran belong in the Approach
@@ -186,8 +188,11 @@ the work to, what you would do, and the strongest case against it>
 EOF
 ```
 
-**Reach for an artefact whenever a picture would let the author decide, or check, faster
-than prose can.** Wiring and data flow, before and after, two or three options set side
+**A Hypothesis always has an interactive artefact; a raise reaches for one whenever a
+picture would let the author decide, or check, faster than prose can.** The page for an
+assumption starts from `<scripts>/../templates/_TEMPLATE_ASSUMPTION.html`: it states the
+assumption, lets the reader change what it depends on, shows what follows, and says what
+would make it wrong. A page the reader can only look at does not meet the rule. Wiring and data flow, before and after, two or three options set side
 by side on the same axes, a sequence of what ran and what it showed, a layout, measured
 results as a chart or a table: if you would otherwise be describing a shape in words, draw
 it. It is one self-contained HTML page in `.dfs/artefacts/`, checked with

@@ -1,0 +1,76 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>The assumption, in a sentence</title>
+<!--
+  An assumption artefact: the page a node's Hypothesis names. Copy this file to
+  .dfs/artefacts/<uuid>.html, keep it SELF-CONTAINED (no CDN, no fetches: the web page
+  serves it sandboxed, with scripts allowed and the network off), and check it with
+      <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
+  It must be INTERACTIVE: a <script> and a control the reader changes (a button, input,
+  select or details), because check.py refuses a Hypothesis whose page has none. The
+  page explains the assumption and lets the author decide it; the Hypothesis itself
+  still says it in words, since the node must read without the page.
+-->
+<style>
+  body { margin: 0; padding: 28px 32px; background: #fbfaf7; color: #1a1a1a;
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 6px 12px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff;
+            padding: 10px 14px; min-height: 3em; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; }
+  label { display: block; margin: 8px 0 2px; }
+  input[type="range"] { width: 100%; }
+</style>
+
+<h1>The assumption, in a sentence</h1>
+<p class="lede">What the work takes to be true, and the decision it rests on. The node's
+  Hypothesis says the same in words.</p>
+
+<h2>If it holds, or if it does not</h2>
+<div class="choices" role="group" aria-label="Which way the assumption goes">
+  <button type="button" data-case="holds" aria-pressed="true">It holds</button>
+  <button type="button" data-case="fails" aria-pressed="false">It does not</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+
+<h2>The input it depends on</h2>
+<label for="knob">How many of them: <output id="knob-out">3</output></label>
+<input id="knob" type="range" min="1" max="10" value="3">
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The observation that refutes it, stated the way the Hypothesis states it.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>One line per observation, and which way it cuts.</p>
+</details>
+
+<script>
+  // Replace these with what each case means for THIS assumption; the parts of the
+  // page above stay as they are.
+  var cases = {
+    holds: function (n) { return 'With ' + n + ' of them, the work goes ahead as planned.'; },
+    fails: function (n) { return 'With ' + n + ' of them, the work takes the parked alternative.'; }
+  };
+  var chosen = 'holds';
+  var knob = document.getElementById('knob');
+  function show() {
+    document.getElementById('knob-out').textContent = knob.value;
+    document.getElementById('result').textContent = cases[chosen](knob.value);
+    document.querySelectorAll('[data-case]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.case === chosen));
+    });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { chosen = b.dataset.case; show(); });
+  });
+  knob.addEventListener('input', show);
+  show();
+</script>

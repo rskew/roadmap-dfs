@@ -58,6 +58,20 @@ the raise, and a diagram is an aid, never the carrier.
 
 How the author opens one is in the README, under "Raise artefacts".
 
+## An assumption's artefact
+
+Every node that states a Hypothesis names one, as `.dfs/artefacts/<uuid>.html` inside the
+Hypothesis, and `check.py` refuses a commit that adds a Hypothesis without it. Its job
+is different from a raise's picture: it explains the assumption and lets the author
+decide it, so it has to be **interactive**, a page they operate and not one they read.
+Start from `templates/_TEMPLATE_ASSUMPTION.html`. Give the reader the thing the
+assumption turns on to change (the options to switch between, the input to move, the
+evidence to open) and show what follows from each setting, ending on what would show the
+assumption wrong. The rest of this file (self-contained, checked, screenshot read once)
+applies unchanged. What `check.py` tests is only that the page exists and has a
+`<script>` and a control (`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`);
+that the controls tell the reader something is for the screenshot and the author.
+
 ## Conventions the checker relies on
 
 - Every box carries `data-node="<name>"`. That is how overlaps get reported by name

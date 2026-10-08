@@ -1,0 +1,109 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Is "a script and a control" a fair test of an interactive artefact?</title>
+<!--
+  Assumption artefact for W21.2: check.py calls a page interactive when it contains a
+  <script> and one of <input>, <button>, <select>, <textarea>, <details>. Tick what a
+  page has and see whether check.py lets it through and whether a reader could really
+  operate it, then judge whether the gap matters.
+-->
+<style>
+  body { margin: 0; padding: 28px 32px; background: #fbfaf7; color: #1a1a1a;
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 680px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 16px; color: #444; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 6px 12px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  label { display: block; margin: 4px 0; }
+  .box { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px;
+         margin: 0 0 10px; }
+  .row { display: flex; gap: 10px; align-items: baseline; }
+  .tag { font-weight: 600; min-width: 130px; }
+  .ok { color: #1b6b2f; }
+  .no { color: #b3261e; }
+  .gap { border-left: 4px solid #b3261e; padding: 2px 12px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; }
+</style>
+
+<h1>Is "a script and a control" a fair test?</h1>
+<p class="lede">check.py refuses a Hypothesis unless the page it names has a
+  &lt;script&gt; and an input, button, select, textarea or details. Pick a kind of page,
+  or tick what a page has, and compare what check.py says with whether a reader can
+  operate it.</p>
+
+<h2>A page like this</h2>
+<div class="presets" role="group" aria-label="Example pages">
+  <button type="button" data-p="good" aria-pressed="true">Options switcher</button>
+  <button type="button" data-p="static" aria-pressed="false">Static diagram</button>
+  <button type="button" data-p="decor" aria-pressed="false">Decorative button</button>
+  <button type="button" data-p="css" aria-pressed="false">CSS-only tabs</button>
+  <button type="button" data-p="built" aria-pressed="false">Controls built by script</button>
+</div>
+
+<h2>What it has</h2>
+<div class="box">
+  <label><input type="checkbox" id="script"> a &lt;script&gt; tag</label>
+  <label><input type="checkbox" id="control"> a literal input, button, select, textarea or details</label>
+  <label><input type="checkbox" id="wired"> a control that changes what the page shows</label>
+</div>
+
+<h2>The verdict</h2>
+<div class="box">
+  <div class="row"><span class="tag">check.py</span><span id="says"></span></div>
+  <div class="row"><span class="tag">a reader</span><span id="reader"></span></div>
+</div>
+<p class="gap" id="gap"></p>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">An author writes a page that passes and gives the reader nothing to
+  change (the decorative button), or a page the reader can operate that is refused (CSS
+  tabs, controls built by script). Both are possible here, so the test is a floor, not a
+  proof: the screenshot and the author are what judge whether the controls say anything.</p>
+
+<script>
+  var presets = {
+    good:   { script: true,  control: true,  wired: true },
+    static: { script: false, control: false, wired: false },
+    decor:  { script: true,  control: true,  wired: false },
+    css:    { script: false, control: true,  wired: true },
+    built:  { script: true,  control: false, wired: true }
+  };
+  var ids = ['script', 'control', 'wired'];
+  function el(id) { return document.getElementById(id); }
+  function show() {
+    var s = el('script').checked, c = el('control').checked, w = el('wired').checked;
+    var passes = s && c;
+    var says = el('says'), reader = el('reader');
+    says.textContent = passes ? 'lets it through' : 'refuses it';
+    says.className = passes ? 'ok' : 'no';
+    reader.textContent = w ? 'can operate it' : 'can only look at it';
+    reader.className = w ? 'ok' : 'no';
+    el('gap').textContent = passes === w
+      ? 'check.py and the reader agree.'
+      : passes
+        ? 'check.py is too lenient here: the page has a control that does nothing.'
+        : 'check.py is too strict here: the reader can operate this page and it is refused.';
+  }
+  function pick(name) {
+    ids.forEach(function (id) { el(id).checked = presets[name][id]; });
+    document.querySelectorAll('[data-p]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.p === name));
+    });
+    show();
+  }
+  document.querySelectorAll('[data-p]').forEach(function (b) {
+    b.addEventListener('click', function () { pick(b.dataset.p); });
+  });
+  ids.forEach(function (id) {
+    el(id).addEventListener('change', function () {
+      document.querySelectorAll('[data-p]').forEach(function (b) {
+        b.setAttribute('aria-pressed', 'false');
+      });
+      show();
+    });
+  });
+  pick('good');
+</script>
