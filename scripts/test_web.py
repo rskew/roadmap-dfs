@@ -249,6 +249,24 @@ class Web(unittest.TestCase):
         self.assertEqual(arts[0]["title"], "shot-1.png")
         self.assertEqual(self.call("GET", "/artefacts/shot-1.png")[2].getheader("Content-Type"), "image/png")
 
+    def test_prose_draws_a_named_screenshot_and_links_a_named_page(self):
+        """rich() in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's rich()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("const ART_RE"):src.index("/* Prose is markdown")]
+        js = ("const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;');"
+              "const S = {task: {artefacts: [{file:'s.png',title:'s.png',kind:'image'},"
+              "{file:'m.html',title:'The map',kind:'page'}]}};" + body +
+              "console.log(JSON.stringify([rich('a ![the bar](.dfs/artefacts/s.png) b'),"
+              "rich('.dfs/artefacts/m.html'), rich('artefacts/gone.png <i>'), rich('![x](artefacts/s.png')]))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(out[0], 'a <a class="shot" href="/artefacts/s.png" target="_blank" rel="noopener">'
+                                 '<img src="/artefacts/s.png" alt="the bar" loading="lazy"></a> b')
+        self.assertIn('<a class="art" href="/artefacts/m.html"', out[1])
+        self.assertEqual(out[2:], ["artefacts/gone.png &lt;i>", "![x](artefacts/s.png"])
+
     def test_the_name_starts_from_git_then_the_file_is_the_name(self):
         subprocess.run(["git", "remote", "add", "origin", "git@github.com:acme/payments-api.git"],
                        cwd=self.root, check=True)
