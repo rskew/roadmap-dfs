@@ -236,6 +236,19 @@ class Web(unittest.TestCase):
                          [("0a1b2c.html", "How the limiter is wired", True),
                           ("standing-map.html", "The standing map", False)])
 
+    def test_a_task_lists_screenshots_as_images_beside_the_pages(self):
+        self.put_artefact()
+        d = self.root / ".dfs" / "artefacts"
+        for n in ("shot-1.png", "other.svg", "_scratch.png", ".hidden.png", "notes.txt"):
+            (d / n).write_bytes(b"x")
+        dfs_tree.append_log("W1", "raise", (), "Looks like ![the bar](.dfs/artefacts/shot-1.png) not gone.png.")
+        arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
+        self.assertEqual([(a["file"], a["kind"], a["named"]) for a in arts],
+                         [("shot-1.png", "image", True), ("0a1b2c.html", "page", False),
+                          ("other.svg", "image", False)])
+        self.assertEqual(arts[0]["title"], "shot-1.png")
+        self.assertEqual(self.call("GET", "/artefacts/shot-1.png")[2].getheader("Content-Type"), "image/png")
+
     def test_the_name_starts_from_git_then_the_file_is_the_name(self):
         subprocess.run(["git", "remote", "add", "origin", "git@github.com:acme/payments-api.git"],
                        cwd=self.root, check=True)
