@@ -210,14 +210,18 @@ pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper
 ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } ul.md li, ol.md li { margin: 0 0 2px; overflow-wrap: anywhere; }
 .msg pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
 #chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
-#chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: 30dvh; resize: none; }
+#chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: calc(var(--vvh, 100dvh) * .3); resize: none; }
 #chat-form .btn { flex: none; }
 
 /* A keyboard shrinks the VISUAL viewport and may leave the layout one as it was: the dialogs
    are fitted to the visual one (--vvh, --vvt, set below), their fields scroll, and the row of
    actions sticks to the bottom of what is left, so nothing you press is ever under the keys. */
 #form[open], #chat[open] { top: var(--vvt, 0px); bottom: calc(100dvh - var(--vvt, 0px) - var(--vvh, 100dvh)); max-height: var(--vvh, 100dvh); }
-#chat { height: min(var(--vvh, 100dvh), 900px); }
+/* The chat is placed from the visual viewport alone (top and height, no bottom): a bottom
+   taken from 100dvh is wrong wherever dvh and the viewport the browser fits disagree, and
+   the over-constrained box then drifts under the keys. Wider than 900px it is centred. */
+#chat[open] { bottom: auto; margin-block: 0; height: min(var(--vvh, 100dvh), 900px);
+  top: calc(var(--vvt, 0px) + max(0px, (var(--vvh, 100dvh) - 900px) / 2)); }
 #form form { max-height: var(--vvh, 100dvh); overflow-y: auto; overscroll-behavior: contain; }
 #form .row-btns { position: sticky; bottom: calc(-1 * var(--s4)); margin-bottom: calc(-1 * var(--s4)); padding: var(--s2) 0 var(--s4); background: var(--panel); }
 @media (min-width: 900px) {
@@ -713,8 +717,15 @@ function form(html, onsubmit) {
 }
 (function () {                          // the visual viewport is what the keyboard leaves
   const vv = window.visualViewport; if (!vv) return;
-  const fit = () => { const s = document.documentElement.style; s.setProperty("--vvh", vv.height + "px"); s.setProperty("--vvt", vv.offsetTop + "px"); };
+  const fit = () => {
+    const log = $("#chat-log"), end = log && log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    const s = document.documentElement.style; s.setProperty("--vvh", vv.height + "px"); s.setProperty("--vvt", vv.offsetTop + "px");
+    if (end) log.scrollTop = log.scrollHeight;       // the newest message stays in view above the input
+  };
   vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); fit();
+  // a phone moves the viewport while the keyboard slides, and not always with an event for the last frame
+  const settle = () => { for (const ms of [100, 300, 600]) setTimeout(fit, ms); };
+  document.addEventListener("focusin", settle); document.addEventListener("focusout", settle);
 })();
 const buttons = (ok, danger) => `<div class="row-btns"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn ${danger ? "danger" : "primary"}" value="ok">${ok}</button></div>`;
 let VERDICT = {};
