@@ -23,6 +23,7 @@ import tty
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
+GRACE = 2.0                 # seconds a closed agent has to stop before it is killed
 
 
 def _winsize(fd):
@@ -30,6 +31,42 @@ def _winsize(fd):
         return fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8)
     except OSError:
         return struct.pack("HHHH", 40, 120, 0, 0)
+
+
+def _stat(pid):
+    """(ppid, state, start time) of a process from /proc, or None if there is no such process."""
+    try:
+        raw = open("/proc/%d/stat" % pid).read()
+    except OSError:
+        return None
+    f = raw[raw.rindex(")") + 2:].split()       # after the command name, which may hold spaces
+    return int(f[1]), f[0], f[19]
+
+
+def tree_of(pid):
+    """{pid: start time} of `pid` and everything it started that is still running, found by
+    parent links in /proc. A process that moved itself to another session is still in it; one
+    that was already re-parented to init is not."""
+    kids = {}
+    for name in os.listdir("/proc"):
+        if name.isdigit():
+            st = _stat(int(name))
+            if st:
+                kids.setdefault(st[0], []).append(int(name))
+    found, todo = {}, [pid]
+    while todo:
+        p = todo.pop()
+        st = _stat(p)
+        if st and p not in found:
+            found[p] = st[2]
+            todo += kids.get(p, [])
+    return found
+
+
+def _running(pid, started):
+    """Whether this very process (not a later one with the pid) is still running, not a zombie."""
+    st = _stat(pid)
+    return bool(st and st[2] == started and st[1] != "Z")
 
 
 def _try(fn, *a):
@@ -102,19 +139,36 @@ class Relay:
         except ChildProcessError:
             self.rc = 0
 
-    def close(self):
-        """End it: hang up on it, and make sure."""
+    def close(self, wait=False):
+        """End it, and everything it started: hang up on the agent and ask the rest to stop,
+        then kill what is still there after GRACE seconds. With `wait` it returns when none of
+        them is left (a process that is exiting cannot finish a thread it left behind), else
+        that is done in the background."""
         pid = self.pid
         if not self.live:
             return
         self.closing = True
+        gone = tree_of(pid)
         _try(os.kill, pid, signal.SIGHUP)
+        for p in gone:
+            if p != pid:
+                _try(os.kill, p, signal.SIGTERM)
 
         def reap():
-            time.sleep(2)
-            if self.fd is not None:
-                _try(os.kill, pid, signal.SIGKILL)
-        threading.Thread(target=reap, daemon=True).start()
+            end = time.time() + GRACE
+            while time.time() < end and any(_running(p, t) for p, t in gone.items()):
+                time.sleep(0.05)
+            gone.update(tree_of(pid))           # what it started while it was stopping
+            for p, t in gone.items():
+                if _running(p, t):
+                    _try(os.kill, p, signal.SIGKILL)
+            end = time.time() + 1.0             # a kill is delivered, not instant
+            while time.time() < end and any(_running(p, t) for p, t in gone.items()):
+                time.sleep(0.02)
+        if wait:
+            reap()
+        else:
+            threading.Thread(target=reap, daemon=True).start()
 
     # ── typing into it ─────────────────────────────────────────────────────────────────
     def send(self, text):
@@ -222,15 +276,21 @@ class ChatHost:
                 r = self.relays[scope] = Relay().start(argv, env=env, cwd=cwd)
             return r
 
-    def close(self, scope):
+    def close(self, scope, wait=False):
         with self.lock:
             r = self.relays.pop(scope, None)
         if r is not None:
-            r.close()
+            r.close(wait)
 
     def close_all(self):
-        for scope in list(self.relays):
-            self.close(scope)
+        """End every chat and return when they are gone: this is what the screen does as it exits."""
+        with self.lock:
+            relays, self.relays = list(self.relays.values()), {}
+        threads = [threading.Thread(target=r.close, args=(True,)) for r in relays]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
     def live_scopes(self):
         with self.lock:

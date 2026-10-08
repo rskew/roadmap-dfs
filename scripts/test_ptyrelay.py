@@ -130,6 +130,50 @@ class Looking(unittest.TestCase):
         self.assertEqual(self.result, [False])
 
 
+class Leaving(unittest.TestCase):
+    """Ending a chat leaves nothing of it running: not what the agent started, not an agent
+    that ignores hangup, not when the screen exits straight after."""
+
+    def setUp(self):
+        self.pids = Path(tempfile.mkdtemp()) / "pids"
+        self.addCleanup(self.sweep)
+        ptyrelay.GRACE, self.grace = 0.3, ptyrelay.GRACE
+        self.addCleanup(setattr, ptyrelay, "GRACE", self.grace)
+
+    def sweep(self):
+        for p in self.started():
+            try:
+                os.kill(p, 9)
+            except OSError:
+                pass
+
+    def started(self):
+        return [int(x) for x in self.pids.read_text().split()] if self.pids.exists() else []
+
+    def gone(self, pid):
+        return not ptyrelay._running(pid, (ptyrelay._stat(pid) or (0, 0, None))[2])
+
+    def agent(self, helper):
+        """An agent that records its own pid and its helper's, and ignores hangup."""
+        return ["bash", "-c", "trap '' HUP; echo $$ >> %s\n%s\necho ready; sleep 600" % (self.pids, helper)]
+
+    def test_close_ends_what_the_agent_started_even_in_its_own_session(self):
+        helper = "setsid sh -c 'trap \"\" HUP TERM; echo $$ >> %s; exec sleep 600' &" % self.pids
+        relay = ptyrelay.Relay().start(self.agent(helper))
+        self.assertTrue(until(lambda: len(self.started()) == 2))
+        relay.close(wait=True)
+        self.assertTrue(all(self.gone(p) for p in self.started()), self.started())
+
+    def test_close_all_returns_only_when_they_are_gone(self):
+        host = ptyrelay.ChatHost()
+        host.ensure("W1", lambda: (self.agent("true"), None, None))
+        host.ensure("project", lambda: (self.agent("true"), None, None))
+        self.assertTrue(until(lambda: len(self.started()) == 2))
+        host.close_all()
+        self.assertTrue(all(self.gone(p) for p in self.started()), self.started())
+        self.assertEqual(host.live_scopes(), [])
+
+
 class Hosting(unittest.TestCase):
     def test_many_run_at_once_one_per_scope_and_a_dead_one_is_started_again(self):
         host = ptyrelay.ChatHost()
