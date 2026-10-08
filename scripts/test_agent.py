@@ -7,7 +7,7 @@ GitHub failure is the end of the response body (`404: Not Found)`) and names nei
 url nor the revision. The 404 below is nix 2.24.10's real output for a wrong revision,
 captured with `nix flake metadata github:nixos/nixpkgs/<a revision that does not exist>`.
 
-Run:  python3 roadmap-dfs/scripts/test_agent.py
+Run:  python3 test_agent.py   (from this directory), or python3 -m unittest test_agent
 """
 import contextlib
 import importlib.util
@@ -45,17 +45,24 @@ RATE_LIMIT = """error: unable to download 'https://api.github.com/repos/NixOS/ni
 
 
 def run_agent(stderr, arg="--rev"):
-    """agent.main() with a `nix` that fails printing `stderr`, and no pin: (rc, its stderr)."""
-    def failing_nix(*args, **kw):
-        raise subprocess.CalledProcessError(1, ["nix", *args], output="", stderr=stderr)
-
+    """agent.main() with no pin and a `nix` that fails printing `stderr`: (rc, its stderr).
+    The fake is a script run in place of the `nix` command, so `--rev` goes through the
+    real streamed nix() call, which is where the cause was lost. (Run with `sh`, since
+    a temp directory may be mounted noexec.)"""
+    real_popen = subprocess.Popen
     err = io.StringIO()
-    with tempfile.TemporaryDirectory() as t, \
-            mock.patch.object(AGENT, "nix", failing_nix), \
-            mock.patch.object(AGENT, "pin_path", lambda: Path(t, "agent-nixpkgs.rev")), \
-            mock.patch.object(sys, "argv", ["agent.py", arg]), \
-            contextlib.redirect_stderr(err):
-        rc = AGENT.main()
+    with tempfile.TemporaryDirectory() as t:
+        script = Path(t, "nix")
+        script.write_text("cat >&2 <<'EOF'\n%sEOF\nexit 1\n" % stderr)
+
+        def popen(args, *a, **kw):
+            return real_popen(["/bin/sh", str(script), *args[1:]] if args[0] == "nix" else args, *a, **kw)
+
+        with mock.patch.object(subprocess, "Popen", popen), \
+                mock.patch.object(AGENT, "pin_path", lambda: Path(t, "agent-nixpkgs.rev")), \
+                mock.patch.object(sys, "argv", ["agent.py", arg]), \
+                contextlib.redirect_stderr(err):
+            rc = AGENT.main()
     return rc, err.getvalue()
 
 
@@ -63,7 +70,7 @@ class FailedFetch(unittest.TestCase):
     def line(self, stderr, arg="--rev"):
         rc, err = run_agent(stderr, arg)
         self.assertEqual(rc, 1, err)
-        return err.splitlines()[0]
+        return next(ln for ln in err.splitlines() if ln.startswith("dfs_agent:"))
 
     def test_a_404_names_the_url_with_its_whole_revision(self):
         line = self.line(NOT_FOUND)
@@ -79,6 +86,14 @@ class FailedFetch(unittest.TestCase):
 
     def test_the_update_path_says_the_same(self):
         self.assertIn("HTTP error 403", self.line(RATE_LIMIT, "--update"))
+
+    def test_nix_output_still_reaches_the_watcher(self):
+        _, err = run_agent(NOT_FOUND)
+        self.assertIn("response body:", err.split("dfs_agent:")[0])
+
+    def test_a_body_ending_in_a_paren_keeps_all_but_nixs_own(self):
+        self.assertIn("(x))", self.line("error: unable to download 'u': HTTP error 500\n\n"
+                                        "       response body:\n\n       oops (x)))\n"))
 
     def test_stderr_with_no_error_clause_keeps_its_last_line(self):
         self.assertIn("something odd", self.line("a\nsomething odd\n"))

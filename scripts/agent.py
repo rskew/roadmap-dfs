@@ -25,6 +25,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -57,13 +58,42 @@ def write_pin(rev):
 
 
 def nix(*args, timeout=NIX_TIMEOUT, stream=False):
-    """Run nix and return its stdout. `stream` lets its stderr through to whoever is
-    watching instead of capturing it: a caller with a terminal (`--rev`, from a key
-    pressed in the screen) should see nix working or failing, not a blank wait."""
+    """Run nix and return its stdout. `stream` also passes its stderr through, line by
+    line, to whoever is watching: a caller with a terminal (`--rev`, from a key pressed
+    in the screen) should see nix working or failing, not a blank wait. The stderr is
+    kept either way, so the CalledProcessError names the cause for `reason()`; leaving
+    it unconnected (`stderr=None`) made that error say only "exit status 1"."""
     env = dict(os.environ, NIXPKGS_ALLOW_UNFREE="1")
-    return subprocess.run(["nix", *args], stdout=subprocess.PIPE,
-                          stderr=None if stream else subprocess.PIPE, text=True,
-                          timeout=timeout, env=env, check=True).stdout
+    if not stream:
+        return subprocess.run(["nix", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                              text=True, timeout=timeout, env=env, check=True).stdout
+    proc = subprocess.Popen(["nix", *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env=env)
+    out, err = [], []
+
+    def tee():
+        for line in proc.stderr:
+            err.append(line)
+            sys.stderr.write(line)
+            sys.stderr.flush()
+
+    readers = [threading.Thread(target=tee, daemon=True),
+               threading.Thread(target=lambda: out.append(proc.stdout.read()), daemon=True)]
+    for r in readers:
+        r.start()
+    try:
+        proc.wait(timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+        for r in readers:
+            r.join()
+        raise subprocess.TimeoutExpired(proc.args, timeout, "".join(out), "".join(err))
+    for r in readers:
+        r.join()
+    if proc.returncode:
+        raise subprocess.CalledProcessError(proc.returncode, proc.args, "".join(out), "".join(err))
+    return "".join(out)
 
 
 def resolve(*flags, **kw):
@@ -118,7 +148,7 @@ def reason(detail):
     i = errs[-1]
     out = lines[i][lines[i].rindex("error:"):]
     if lines[i + 1:i + 2] == ["response body:"] and i + 2 < len(lines):
-        out += " — " + lines[i + 2].rstrip(")")[:160]
+        out += " — " + lines[i + 2].removesuffix(")")[:160]
     return out
 
 
