@@ -606,6 +606,28 @@ def create_task(name, goal="", todos=(), task=None):
     return task
 
 
+def edit_task(task, name, goal):
+    """Change a task's name and Goal, the author's words, in the part that holds the Goal
+    (the title line and the `## Goal` section; nothing else in the file moves). A blank
+    goal is refused rather than written as an empty section. ValueError says what is wrong."""
+    name = " ".join((name or "").split())
+    goal = (goal or "").strip()
+    if not name:
+        raise ValueError("a task needs a name")
+    if not goal:
+        raise ValueError("a task needs a goal")
+    if not exists(task):
+        raise FileNotFoundError(part_path(task))
+    p = home_path(task)
+    t = parse(p.read_text(), task)
+    t["title"] = "# %s · %s" % (re.match(r"#\s*(\S+)", t["title"] or "# " + task).group(1), name)
+    if "Goal" not in t["order"]:
+        t["order"].insert(0, "Goal")
+    t["sections"]["Goal"] = goal
+    p.write_text(render(t))
+    return task
+
+
 def add_node(task, title, parent=None, approach=""):
     """Add an open node to this branch's part: the author's way of putting work in the
     tree between sessions. It takes the next number this branch has not used, so it

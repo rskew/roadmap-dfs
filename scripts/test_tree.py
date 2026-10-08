@@ -582,6 +582,26 @@ class Check(InARepo):
         with self.assertRaises(ValueError):
             dfs_tree.add_node("W1", "   ")
 
+    def test_an_edited_task_changes_its_name_and_goal_and_nothing_else(self):
+        self.write(task(node(1, "confirmed"), self.LOG))
+        self.commit()
+        before = dfs_tree.load("W1")
+        dfs_tree.edit_task("W1", "  A  new   name ", "Line one.\n\nLine two.\n")
+        t = dfs_tree.load("W1")
+        self.assertEqual((t["name"], t["goal"]), ("A new name", "Line one.\n\nLine two."))
+        self.assertEqual(t["title"], "# W1 \u00b7 A new name")
+        self.assertEqual([n["raw"] for n in t["nodes"]], [n["raw"] for n in before["nodes"]])
+        self.assertEqual([e["text"] for e in t["log"]], [e["text"] for e in before["log"]])
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        with self.assertRaises(ValueError):
+            dfs_tree.edit_task("W1", "  ", "goal")
+        with self.assertRaises(ValueError):
+            dfs_tree.edit_task("W1", "name", " \n")
+        with self.assertRaises(FileNotFoundError):
+            dfs_tree.edit_task("W9", "name", "goal")
+
     def test_the_authors_words_stay_with_the_node(self):
         log = (self.LOG + "- 2026-09-25T09:10:00Z · raise · W1.1\n  Which way?\n"
                "- 2026-09-25T09:11:00Z · answer · 2026-09-25T09:10:00Z\n  The second.\n"

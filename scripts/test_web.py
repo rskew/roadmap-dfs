@@ -446,6 +446,17 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/add", dict(task="W1", parent="W1.9", title="x"))[0], 400)
         self.assertEqual(self.call("POST", "/api/add", dict(task="W1", title=""))[0], 400)
 
+    def test_a_task_is_edited_in_its_name_and_goal(self):
+        before = dfs_tree.load("W1")
+        status, data, _ = self.call("POST", "/api/edit_task", dict(task="W1", name=" Faster  lookups ", goal="Hits above 90%.\n\nWhy: cost."))
+        self.assertEqual(status, 200)
+        self.assertEqual((data["task"]["name"], data["task"]["goal_text"]), ("Faster lookups", "Hits above 90%.\n\nWhy: cost."))
+        t = dfs_tree.load("W1")
+        self.assertEqual([n["raw"] for n in t["nodes"]], [n["raw"] for n in before["nodes"]])
+        self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W1", name="", goal="x"))[0], 400)
+        self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W1", name="x", goal="  "))[0], 400)
+        self.assertEqual(self.call("POST", "/api/edit_task", dict(task="W99", name="x", goal="x"))[0], 404)
+
     def test_a_new_task_is_written_as_run_open_writes_it(self):
         status, data, _ = self.call("POST", "/api/new", dict(name="Cache the lookups", goal="Hits above 90%.", todos="profile it\nadd the cache\n"))
         self.assertEqual(status, 200)

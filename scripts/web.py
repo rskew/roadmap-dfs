@@ -279,6 +279,7 @@ def task_json(task):
         assumed.append(dict(task=task, id=nid, title=nodes[nid]["title"],
                             assumption=assumption, wrong=wrong, ask=f.get("Ask", "")))
     return dict(id=task, goal=t["name"] or (t["goal"].splitlines() or [""])[0],
+                name=t["name"], goal_text=t["goal"],
                 artefacts=artefacts_for("\n".join(strings(t))),
                 status=status, why=humanize(why), accepted=accepted,
                 acceptable=status == "done" and not accepted, rows=rows, assumed=assumed,
@@ -374,6 +375,11 @@ def act(name, body):
             if not (dfs_tree.status_of(t)[0] == "done" and not dfs_tree.accepted(t)):
                 raise Refused("%s is not a finished tree waiting to be accepted" % task, 409)
             dfs_tree.append_log(task, "accept")
+        elif name == "edit_task":
+            try:
+                dfs_tree.edit_task(task, need(body, "name", "a name"), need(body, "goal", "a goal"))
+            except (ValueError, dfs_paths.NoBranch) as e:
+                raise Refused(str(e), 409)
         elif name == "add":
             parent = body.get("parent") or None
             if parent and parent not in nodes:
