@@ -282,7 +282,7 @@ class Pane(unittest.TestCase):
         ui.focus = "list"
         ui.sel, ui.agent, ui._sel_row = 0, "claude", None
         ui.tree_sel, ui.tree_item = 0, None
-        ui.tree_folded, ui.tree_open = set(), set()
+        ui.tree_folded, ui.tree_open, ui.tree_flagged = set(), set(), False
         ui.walk_on = False
         ui.data = {"items": [dict(id="W1", goal="Make the thing.", status="blocked",
                                   why="open raise")]}
@@ -449,6 +449,21 @@ class Pane(unittest.TestCase):
         ui.act(ord(" "))
         self.assertEqual(ui.scroll, 19, "space is a page when the list has the keys")
         self.assertEqual(ui.tree_folded, {"W1.1"})
+
+    def test_p_shows_only_the_nodes_that_want_the_author(self):
+        ui = self.ui
+        ui.open_tree()
+        self.to("W1.3")
+        ui.act(ord("p"))
+        text = "\n".join(l for l, *_ in ui.lines_tree(100))
+        self.assertIn("W1.3 ", text)
+        self.assertNotIn("The first slice", text, "a done node with nothing to ask is hidden")
+        self.assertIn("p shows every node", text)
+        self.assertEqual(ui.tree_row()["key"], "W1.3", "the cursor stays on its row")
+        ui.act(ord("p"))
+        text = "\n".join(l for l, *_ in ui.lines_tree(100))
+        self.assertIn("The first slice", text)
+        self.assertFalse(ui.tree_flagged)
 
     def test_a_answers_the_raise_on_the_node_under_the_cursor(self):
         ui = self.ui

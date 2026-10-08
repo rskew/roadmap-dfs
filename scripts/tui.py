@@ -675,6 +675,7 @@ KEYS = [
     ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
     ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
+    ("tree", "p", ord("p"), "flagged", "show only the ⚑ assumptions, asks and raises, or every node"),
     ("tree", "a", ord("a"), "answer", "answer the raise here"),
     ("tree", "n  N", ord("n"), "next-flag", "next, previous raise, ⚑ or ask in the tree"),
     ("tree", "^d  ^u", 4, "card-scroll", "scroll the node panel at the right"),
@@ -1783,6 +1784,7 @@ class UI(WalkMixin):
         self.tree_sel = 0
         self.tree_item = None       # the item the cursor was placed on
         self.tree_folded = set()
+        self.tree_flagged = False   # `p`: only the nodes that want the author
         self.tree_open = set()
         self._tree_cache = {}       # task -> (mtimes, tree, archive text, commits)
 
@@ -3178,7 +3180,17 @@ class UI(WalkMixin):
         if it is None:
             return []
         t, _, _ = self.tree_of(it["id"])
-        return tree_entries(t, self.tree_folded)
+        return tree_entries(t, self.tree_folded, self.tree_flagged)
+
+    def toggle_flagged(self):
+        """`p`: the tree as only the nodes that want the author, or all of it. The
+        cursor stays on its row when the row survives, else it goes to the top."""
+        row = self.tree_row()
+        self.tree_flagged = not self.tree_flagged
+        keys = [r["key"] for r in self.tree_rows()]
+        self.tree_sel = keys.index(row["key"]) if row and row["key"] in keys else 0
+        self.msg = ("only ⚑ assumptions, asks and raises — p shows every node"
+                    if self.tree_flagged else "every node")
 
     def tree_jump_flag(self, step):
         """Move the cursor to the next (or previous) row that wants the author: an open
@@ -3587,7 +3599,7 @@ class UI(WalkMixin):
         if self.tree_item != it["id"]:
             self.tree_item, self.tree_sel = it["id"], 0
         t, archive, commits = self.tree_of(it["id"])
-        rows = tree_entries(t, self.tree_folded)
+        rows = tree_entries(t, self.tree_folded, self.tree_flagged)
         self.tree_sel = max(0, min(self.tree_sel, len(rows) - 1))
         para("%s — %s" % (it["id"], it["goal"]), curses.A_BOLD)
         out.append((it["why"], self.status_attr(it["status"])))
@@ -3597,6 +3609,9 @@ class UI(WalkMixin):
         out.append(("sessions %d of %d since the author spoke · critic in %d"
                     % (it.get("sessions", 0), 10, max(5 - it.get("since_critic", 0), 0)),
                     look("chrome")))
+        if self.tree_flagged:
+            out.append(("only ⚑ assumptions, asks and raises · p shows every node",
+                        curses.A_BOLD))
         out.append(("", 0))
         if not rows:
             out.append(("no nodes yet", look("chrome")))
@@ -3751,7 +3766,7 @@ class UI(WalkMixin):
         elif self.pane == "runs":
             actions, nav = ["⏎ open", "esc back"], ["↑↓/jk run"]
         elif self.tree_focused():
-            actions = ["⏎ open", "n next ⚑", "space fold", "i add", "a answer", "f correct"]
+            actions = ["⏎ open", "n next ⚑", "p flagged", "space fold", "i add", "a answer", "f correct"]
             if it is not None and it["status"] == "done" and self.tree_acceptable(it):
                 actions.append("A accept")
             actions += ["R terminal review", "c chat", "tab items"]
@@ -4579,6 +4594,8 @@ class UI(WalkMixin):
                 self.open_tree()
             else:
                 self.scroll = 0
+        elif ch == ord("p") and self.tree_focused():
+            self.toggle_flagged()
         elif ch == ord(" ") and self.tree_focused():
             row = self.tree_row()
             if row and row["kind"] == "section":

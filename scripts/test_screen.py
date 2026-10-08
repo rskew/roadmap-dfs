@@ -39,6 +39,7 @@ def a_screen(items, **kw):
     ui.keys_from, ui.last_search = ("item", "list"), ""
     ui.runs, ui.chains, ui.open_run = [], [], None
     ui.tree_item, ui.tree_folded, ui.tree_open = None, set(), set()
+    ui.tree_flagged = False
     ui._sel_row = ui._list_y = None
     ui.draw = lambda: None
     ui.__dict__.update(kw)

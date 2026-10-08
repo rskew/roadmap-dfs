@@ -217,6 +217,7 @@ class TheLogPaneKeepsUp(unittest.TestCase):
         ui = self.ui
         ui.pane = "item"
         ui.tree_item, ui.tree_sel, ui.tree_folded, ui.tree_open = None, 0, set(), set()
+        ui.tree_flagged = False
         ui._tree_cache = {}
         ui.events = [(0.0, "run", "$ run.sh W1 5")]
         ui.scr = Screen(h=30, w=170)
