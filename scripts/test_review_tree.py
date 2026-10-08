@@ -170,6 +170,12 @@ class Rows(unittest.TestCase):
         self.assertTrue(rows["section:W1:Goal"]["open_default"])
         self.assertFalse(rows["section:W1:Background"]["open_default"])
 
+    def test_the_reviewer_notes_are_listed_folded(self):
+        noted = TREE.replace("## Log\n", "## Log\n\n- 2026-09-27T02:00:00Z · review · ok\n"
+                             "  A minor wording to read.\n", 1)
+        rows = {r["key"]: r for r in TUI.tree_entries(dfs_tree.parse(noted, "W1"))}
+        self.assertFalse(rows["section:W1:Notes"]["open_default"])
+
     def test_a_missing_section_has_no_row(self):
         t = dfs_tree.parse(TREE.replace("## Background\n\nWhy this came up, at length.\n\n",
                                         ""), "W1")

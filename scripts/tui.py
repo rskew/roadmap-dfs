@@ -162,9 +162,10 @@ def tree_entries(t, folded=()):
     if held:
         # ⚠️ WHAT THE REVIEW SAID ON ITS WAY TO `ok`. A reviewer's minor findings and a
         # critic's remarks live in the log body and the skill tells the author to read
-        # them when they accept, but nothing on the screen did.
+        # them when they accept, but nothing on the screen did. Listed folded: they can
+        # run long, and the accept prompt counts them for the author who wants to read.
         out.append(dict(key="section:%s:Notes" % t["task"], kind="section", depth=0,
-                        name="Reviewer and critic notes", open_default=True,
+                        name="Reviewer and critic notes", open_default=False,
                         text="\n".join("%s %s:\n%s\n" % (k, v, body)
                                        for k, _ts, v, body in held)))
     for r in dfs_tree.open_raises(t):
