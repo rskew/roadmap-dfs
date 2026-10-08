@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""What `agent.py` says when nix cannot fetch nixpkgs.
+
+A walk started from the page runs `run.sh`, which asks `agent.py --rev` for the pinned
+revision; when nix failed, the only trace was the LAST line of its stderr, which for a
+GitHub failure is the end of the response body (`404: Not Found)`) and names neither the
+url nor the revision. The 404 below is nix 2.24.10's real output for a wrong revision,
+captured with `nix flake metadata github:nixos/nixpkgs/<a revision that does not exist>`.
+
+Run:  python3 roadmap-dfs/scripts/test_agent.py
+"""
+import contextlib
+import importlib.util
+import io
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+HERE = Path(__file__).resolve().parent
+SPEC = importlib.util.spec_from_file_location("dfs_agent", HERE / "agent.py")
+AGENT = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(AGENT)
+REV = "5156dc3a037c40890ff64f84d435fc2f97c6f68b"
+
+NOT_FOUND = """unpacking 'github:nixos/nixpkgs/%(r)s' into the Git cache...
+error:
+       … while fetching the input 'github:nixos/nixpkgs/%(r)s'
+
+       error: Failed to open archive (Source threw exception: error: unable to download 'https://github.com/nixos/nixpkgs/archive/%(r)s.tar.gz': HTTP error 404
+
+              response body:
+
+              404: Not Found)
+""" % {"r": REV}
+
+RATE_LIMIT = """error: unable to download 'https://api.github.com/repos/NixOS/nixpkgs/commits/HEAD': HTTP error 403
+
+       response body:
+
+       {"message":"API rate limit exceeded for 203.0.113.9.","documentation_url":"https://docs.github.com"}
+"""
+
+
+def run_agent(stderr, arg="--rev"):
+    """agent.main() with a `nix` that fails printing `stderr`, and no pin: (rc, its stderr)."""
+    def failing_nix(*args, **kw):
+        raise subprocess.CalledProcessError(1, ["nix", *args], output="", stderr=stderr)
+
+    err = io.StringIO()
+    with tempfile.TemporaryDirectory() as t, \
+            mock.patch.object(AGENT, "nix", failing_nix), \
+            mock.patch.object(AGENT, "pin_path", lambda: Path(t, "agent-nixpkgs.rev")), \
+            mock.patch.object(sys, "argv", ["agent.py", arg]), \
+            contextlib.redirect_stderr(err):
+        rc = AGENT.main()
+    return rc, err.getvalue()
+
+
+class FailedFetch(unittest.TestCase):
+    def line(self, stderr, arg="--rev"):
+        rc, err = run_agent(stderr, arg)
+        self.assertEqual(rc, 1, err)
+        return err.splitlines()[0]
+
+    def test_a_404_names_the_url_with_its_whole_revision(self):
+        line = self.line(NOT_FOUND)
+        self.assertIn("unable to download", line)
+        self.assertIn(REV, line)
+        self.assertIn("HTTP error 404", line)
+
+    def test_a_rate_limit_shows_the_error_and_not_only_its_json_body(self):
+        line = self.line(RATE_LIMIT)
+        self.assertTrue(line.startswith("dfs_agent: --rev failed: error: unable to download"), line)
+        self.assertIn("HTTP error 403", line)
+        self.assertIn("API rate limit exceeded", line)
+
+    def test_the_update_path_says_the_same(self):
+        self.assertIn("HTTP error 403", self.line(RATE_LIMIT, "--update"))
+
+    def test_stderr_with_no_error_clause_keeps_its_last_line(self):
+        self.assertIn("something odd", self.line("a\nsomething odd\n"))
+
+
+if __name__ == "__main__":
+    unittest.main()

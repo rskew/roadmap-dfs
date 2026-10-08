@@ -106,6 +106,22 @@ def update():
     return "claude-code %s -> %s" % (old_v or "unpinned", new_v)
 
 
+def reason(detail):
+    """The cause in nix's stderr, on one line. Its LAST line is the end of a response
+    body (`404: Not Found)`, or GitHub's `{"message":"API rate limit exceeded"...}`),
+    which names neither the url nor the revision that failed; the cause is the last
+    `error:` clause, with the first line of the body after it."""
+    lines = [ln.strip() for ln in str(detail).strip().splitlines() if ln.strip()]
+    errs = [i for i, ln in enumerate(lines) if "error:" in ln]
+    if not errs:
+        return lines[-1] if lines else ""
+    i = errs[-1]
+    out = lines[i][lines[i].rindex("error:"):]
+    if lines[i + 1:i + 2] == ["response body:"] and i + 2 < len(lines):
+        out += " — " + lines[i + 2].rstrip(")")[:160]
+    return out
+
+
 def main():
     arg = sys.argv[1] if len(sys.argv) > 1 else ""
     try:
@@ -119,8 +135,7 @@ def main():
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError,
             ValueError, KeyError) as e:
         detail = getattr(e, "stderr", None) or str(e)
-        lines = [ln for ln in str(detail).strip().splitlines() if ln.strip()]
-        print("dfs_agent: %s failed: %s" % (arg, lines[-1] if lines else e), file=sys.stderr)
+        print("dfs_agent: %s failed: %s" % (arg, reason(detail) or e), file=sys.stderr)
         if arg == "--rev":
             print("dfs_agent: set AGENT_NIXPKGS_REV=<rev> (or the agent's own command, "
                   "CLAUDE_CMD and the like) to skip asking nix", file=sys.stderr)
