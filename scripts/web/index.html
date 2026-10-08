@@ -488,7 +488,10 @@ function rich(text) {
 }
 /* Prose is markdown as the task files and chat replies write it: fenced blocks, `code`, **bold**,
    [text](https://url) and "-"/"1." lists. Text is escaped before any markup is added, so nothing
-   the file holds can become an element; the markup that comes out is only what is made here. */
+   the file holds can become an element; the markup that comes out is only what is made here.
+   Known limits, kept for simplicity: nothing nests (a `code` span inside **bold** or inside a link's
+   text is not drawn as one); a link's URL ends at its first ")", so one with parentheses is cut; and
+   md() splits on every triple backtick, so a stray inline one flips the rest of the text into a block. */
 function inline(text) {
   return String(text).split(/(`[^`\n]+`)/).map((part, i) => i % 2
     ? `<code>${esc(part.slice(1, -1))}</code>`
