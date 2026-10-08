@@ -261,7 +261,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, node: null, sig: "", dirty: false };
+const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, flagged: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
 /* Loading: a request still outstanding after 250 ms shows "loading" and the stripe under the header
@@ -322,7 +322,7 @@ async function render(force) {
       [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk")]);
       if (mine !== RENDERS) return;
       S.node = r.node;
-      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + (S.walk && S.walk.pinned);
+      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned);
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
     } else if (r.view === "assumptions") {
@@ -486,7 +486,11 @@ function drawTasks() {
 }
 
 /* ── one task ───────────────────────────────────────────────────────────────── */
+// A node the author is there for: an open raise, an assumption or an ask.
+const wantsYou = r => r.raises.length > 0 || r.assumes || r.ask;
 function visibleRows(t) {
+  // Flagged only: the other nodes go, and with them the folds (one on a dropped node would hide a flagged one below it).
+  if (S.flagged) return t.rows.filter(r => r.kind !== "node" || wantsYou(r));
   const folded = S.folded[t.id] || new Set(), byId = {};
   t.rows.forEach(r => { if (r.kind === "node") byId[r.id] = r; });
   const hidden = r => { let p = r.parent; while (p && byId[p]) { if (folded.has(p)) return true; p = byId[p].parent; } return false; };
@@ -500,6 +504,7 @@ function drawTask() {
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>
       <button class="btn" data-act="edittask">Edit task</button>
+      <button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button>
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
       ${S.walk && S.walk.enabled && S.walk.candidates.some(c => c.id === t.id) ? `<button class="btn" data-act="walkhere" data-item="${esc(t.id)}">${S.walk.pinned === t.id ? "Walk goes here next" : "Walk here next"}</button>` : ""}
@@ -523,7 +528,7 @@ function drawTask() {
         r.answered ? `<span class="tag">answered</span>` : "",
         ["refuted", "parked", "dormant", "pruned"].includes(r.status) ? `<span class="tag ${r.status === "refuted" ? "red" : ""}">${esc(r.status)}</span>` : ""].join("");
       html += `<div class="${cls}" style="--d:${r.depth}">
-        <button class="fold ${r.kids ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
+        <button class="fold ${r.kids && !S.flagged ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
         <button class="main" data-act="node" data-id="${esc(r.id)}">
           <div class="line"><span class="nid">${esc(r.id)}</span>${inline(r.title)}</div>
           ${chips ? `<div class="chips">${chips}</div>` : ""}
@@ -851,6 +856,7 @@ document.addEventListener("click", e => {
   const d = b.dataset;
   ({
     retry: () => render(true),
+    flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
     only: () => { S.only = d.v === "1"; drawTasks(); },
     task: () => go("t/" + d.id),
     asm: () => go(`t/${d.task}/${d.id}`),

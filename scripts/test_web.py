@@ -267,6 +267,24 @@ class Web(unittest.TestCase):
         self.assertIn('<a class="art" href="/artefacts/m.html"', out[1])
         self.assertEqual(out[2:], ["artefacts/gone.png &lt;i>", "![x](artefacts/s.png"])
 
+    def test_flagged_only_keeps_the_nodes_that_want_the_author(self):
+        """visibleRows() in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's visibleRows()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("// A node the author is there for"):src.index("function drawTask() {")]
+        js = ("const S = {folded: {T: new Set(['a'])}, flagged: false};" + body +
+              "const row = (id, p, o) => Object.assign({kind:'node', id, parent:p, raises:[], assumes:false, ask:false}, o);"
+              "const t = {id:'T', rows: [{kind:'section'}, row('a',''), row('b','a',{assumes:true}),"
+              "row('c','a',{raises:[1]}), row('d','',{ask:true}), row('e','')]};"
+              "const ids = () => visibleRows(t).map(r => r.id || r.kind);"
+              "const off = ids(); S.flagged = true;"
+              "console.log(JSON.stringify([off, ids()]))")
+        off, on = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(off, ["section", "a", "d", "e"], "folded a hides b and c")
+        self.assertEqual(on, ["section", "b", "c", "d"], "folds are ignored; a and e are dropped")
+
     def test_the_artefacts_section_previews_the_named_and_only_links_the_rest(self):
         """artefactsHtml() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
