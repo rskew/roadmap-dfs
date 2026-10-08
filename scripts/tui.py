@@ -4894,6 +4894,19 @@ def start_web(ui):
     return handle
 
 
+def end_on_signals():
+    """A SIGTERM, or the SIGHUP of a dropped terminal, ends the screen the way quitting does, so
+    `main`'s `finally` still closes the chats (their agents are not hung up on by anyone else
+    when the screen is killed: they hold the other end of their own ptys)."""
+    def end(signum, frame):
+        raise SystemExit(128 + signum)
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        try:
+            signal.signal(sig, end)
+        except ValueError:          # not the main thread: a test is
+            pass
+
+
 def main(stdscr):
     # ncurses defaults ESCDELAY to 1000ms: having read an ESC byte it waits that
     # long for the rest of a possible escape sequence (an arrow key is ESC [ A)
@@ -4914,6 +4927,7 @@ def main(stdscr):
         coloured = False
     init_look(LIGHT, coloured)
     ui = UI(stdscr)
+    end_on_signals()
     # From here and not UI(): the tests build a UI of their own, and one that went to
     # the network and rewrote a pin every time it was constructed would be a test of nix.
     ui.agent_update = start_agent_update()

@@ -902,6 +902,46 @@ class ATreeRowDrawsItsMarkdown(unittest.TestCase):
         self.assertEqual(text.count(TUI.CODE_ON), text.count(TUI.CODE_OFF))
 
 
+class KilledWithChatsRunning(unittest.TestCase):
+    """A screen that is sent SIGTERM or SIGHUP leaves no chat's agent behind."""
+
+    CHILD = r"""
+import importlib.util, signal, sys, time
+sys.path.insert(0, %(here)r)
+spec = importlib.util.spec_from_file_location("dfs_tui", %(tui)r)
+tui = importlib.util.module_from_spec(spec); spec.loader.exec_module(tui)
+import ptyrelay
+tui.end_on_signals()
+host = ptyrelay.ChatHost()
+try:
+    host.ensure("W1", lambda: (["bash", "-c", "trap '' HUP TERM; echo $$ > %(pid)s; sleep 600"], None, None))
+    print("up", flush=True)
+    time.sleep(60)
+finally:
+    host.close_all()
+"""
+
+    def test_the_agents_go_with_it(self):
+        import os, signal as sg, subprocess, tempfile, time
+        for sig in (sg.SIGTERM, sg.SIGHUP):
+            pid_file = Path(tempfile.mkdtemp()) / "agent"
+            code = self.CHILD % dict(here=str(HERE), tui=str(HERE / "tui.py"), pid=str(pid_file))
+            proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+            self.assertEqual(proc.stdout.readline().strip(), "up")
+            end = time.time() + 5
+            while not pid_file.exists() and time.time() < end:
+                time.sleep(0.05)
+            agent = int(pid_file.read_text())
+            proc.send_signal(sig)
+            self.assertEqual(proc.wait(timeout=15), 128 + sig)
+            try:
+                os.kill(agent, 0)
+                state = open("/proc/%d/stat" % agent).read().rsplit(")", 1)[1].split()[0]
+            except (OSError, IndexError):
+                state = "Z"
+            self.assertEqual(state, "Z", "the agent outlived the screen after %s" % sig.name)
+
+
 if __name__ == "__main__":
     curses.color_pair = lambda n: 0       # no initscr here; attrs are opaque
     unittest.main()
