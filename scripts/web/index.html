@@ -125,6 +125,12 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 details.sec.arts .body { white-space: normal; }
 .arts ul { margin: 0 0 var(--s2); padding: 0; list-style: none; } .arts li a.art { display: flex; align-items: center; min-height: var(--hit); }
 .arts .sub { margin: 6px 0 2px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s3); margin-bottom: var(--s3); }
+a.tile { display: block; color: inherit; text-decoration: none; }
+a.tile .thumb { display: block; position: relative; aspect-ratio: 3 / 2; overflow: hidden; border: var(--rule) solid var(--line); background: var(--faint); }
+a.tile .thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+a.tile .thumb iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; pointer-events: none; background: #fff; }
+a.tile .name { display: block; margin-top: var(--s1); font-size: var(--fs-small); overflow-wrap: anywhere; }
 a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max-width: 100%; height: auto; border: var(--rule) solid var(--line); }
 
 /* the tree: a column of hairlines; the left rule says what the node came to */
@@ -525,6 +531,7 @@ function drawTask() {
     }
   }
   $("#view").className = ""; $("#view").innerHTML = html + `</div>`;
+  if (thumbScale) document.querySelectorAll("#view .thumb").forEach(el => thumbScale.observe(el));
 }
 /* An artefact named in prose (`.dfs/artefacts/<name>.html`, or the localhost URL older raises carry)
    becomes a link to the page this server serves, when the task has it; a screenshot (`<name>.png`, or
@@ -574,13 +581,24 @@ function md(raw) {
     : lists(part.replace(i > 0 ? /^\n/ : /^$/, "").replace(i < parts.length - 1 ? /\n$/ : /^$/, ""))).join("");
 }
 const hasBlock = html => /<(pre|ul|ol)[ >]/.test(html);
+/* The artefacts a task names are previewed: a screenshot as itself, a page as its first screen in a
+   sandboxed frame scaled to the card (the server's CSP holds it to no network, as when opened), tap for the
+   whole. The rest of the project's are links only, so a closed list loads nothing. */
+const THUMB_W = 1200;
+const thumbScale = typeof ResizeObserver === "function"
+  ? new ResizeObserver(es => es.forEach(e => { const f = e.target.querySelector("iframe"); if (f) f.style.transform = `scale(${e.contentRect.width / THUMB_W})`; }))
+  : null;
 function artefactsHtml(t) {
   const arts = t.artefacts || [];
   if (!arts.length) return "";
   const mine = arts.filter(a => a.named), others = arts.filter(a => !a.named);
-  const li = a => `<li><a class="art" href="/artefacts/${esc(a.file)}" target="_blank" rel="noopener">${esc(a.title)}</a></li>`;
+  const href = a => `/artefacts/${esc(a.file)}`;
+  const li = a => `<li><a class="art" href="${href(a)}" target="_blank" rel="noopener">${esc(a.title)}</a></li>`;
+  const card = a => `<a class="tile" href="${href(a)}" target="_blank" rel="noopener"><span class="thumb">${a.kind === "image"
+    ? `<img src="${href(a)}" alt="" loading="lazy">`
+    : `<iframe src="${href(a)}" title="${esc(a.title)}" tabindex="-1" loading="lazy" scrolling="no" width="${THUMB_W}" height="${THUMB_W * 2 / 3}"></iframe>`}</span><span class="name">${esc(a.title)}</span></a>`;
   return `<details class="sec arts" ${mine.length ? "open" : ""}><summary class="cap">Artefacts${mine.length ? " " + mine.length : ""}</summary><div class="body">
-    ${mine.length ? `<ul>${mine.map(li).join("")}</ul>` : ""}
+    ${mine.length ? `<div class="tiles">${mine.map(card).join("")}</div>` : ""}
     ${others.length ? `<div class="cap sub">${mine.length ? "Also in this project" : "In this project"}</div><ul>${others.map(li).join("")}</ul>` : ""}</div></details>`;
 }
 function raiseCard(r, where) {

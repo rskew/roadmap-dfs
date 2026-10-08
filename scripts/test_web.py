@@ -267,6 +267,24 @@ class Web(unittest.TestCase):
         self.assertIn('<a class="art" href="/artefacts/m.html"', out[1])
         self.assertEqual(out[2:], ["artefacts/gone.png &lt;i>", "![x](artefacts/s.png"])
 
+    def test_the_artefacts_section_previews_the_named_and_only_links_the_rest(self):
+        """artefactsHtml() in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's artefactsHtml()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("const THUMB_W"):src.index("function raiseCard")]
+        js = ("const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;');"
+              + body + "console.log(artefactsHtml({artefacts: ["
+              "{file:'s.png',title:'s.png',kind:'image',named:true},"
+              "{file:'m.html',title:'The <map>',kind:'page',named:true},"
+              "{file:'o.html',title:'Other',kind:'page',named:false}]}))")
+        out = subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout
+        self.assertIn('<img src="/artefacts/s.png"', out)
+        self.assertIn('<iframe src="/artefacts/m.html" title="The &lt;map>"', out)
+        self.assertEqual(out.count("<iframe"), 1)
+        self.assertIn('<li><a class="art" href="/artefacts/o.html"', out)
+
     def test_the_name_starts_from_git_then_the_file_is_the_name(self):
         subprocess.run(["git", "remote", "add", "origin", "git@github.com:acme/payments-api.git"],
                        cwd=self.root, check=True)
