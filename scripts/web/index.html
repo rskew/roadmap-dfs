@@ -297,11 +297,11 @@ async function render(force) {
     } else if (r.view === "chats") {
       const [list, state] = await Promise.all([api("/api/chats"), api("/api/state")]);
       if (mine !== RENDERS) return;
-      S.chats = list.chats; S.state = state; S.node = null; drawChats();
+      S.chats = list.chats; S.state = state; syncColour(state); S.node = null; drawChats();
     } else {
       const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk")]);
       if (mine !== RENDERS) return;
-      S.state = state; S.walk = walk;
+      S.state = state; S.walk = walk; syncColour(state);
       S.node = null; drawTasks();
     }
     chrome(r);
@@ -710,6 +710,13 @@ $("#chat-form").addEventListener("submit", async ev => {
   catch (e) { toast(e.message, true); $("#chat-send").disabled = false; }
 });
 $("#chat-input").addEventListener("keydown", ev => { if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); } });
+// The colour can change under an open page (another tab, `.dfs/theme` by hand, a rename
+// that moves the one made from the name): the state says what it is now.
+function syncColour(state) {
+  if (state.colour && (state.colour !== COLOUR || state.colour_chosen !== CHOSEN)) {
+    COLOUR = state.colour; CHOSEN = state.colour_chosen; paintColour();
+  }
+}
 function paintColour() {
   document.documentElement.style.setProperty("--project", COLOUR);
   $('meta[name="theme-color"]').setAttribute("content", COLOUR);

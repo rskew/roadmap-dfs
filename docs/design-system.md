@@ -22,7 +22,9 @@ One more colour is not a meaning but a name: **`--project`**, the project's own 
 (`.dfs/theme`, else made from its name), set by the server on `<html>`. It marks which
 project this is (the stripe along the top of the bar, the browser's `theme-color`, the
 installed app) and is never used for status or text. `--project-mark` is how it is drawn:
-as it is on paper, lightened in the dark theme so it still shows.
+as it is on paper, lightened in the dark theme so it still shows. The `theme-color` meta is
+the project colour in both themes, not the paper of the dark one, so the browser bar tells
+projects apart.
 Everything else is paper, panel, ink, muted and two rules. Square corners, no shadows, no
 icons but the theme switch. The one flourish is the two-pixel line of the three, under the bar.
 
