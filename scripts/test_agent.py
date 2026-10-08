@@ -15,6 +15,7 @@ import io
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -97,6 +98,29 @@ class FailedFetch(unittest.TestCase):
 
     def test_stderr_with_no_error_clause_keeps_its_last_line(self):
         self.assertIn("something odd", self.line("a\nsomething odd\n"))
+
+    def test_a_trailing_warning_does_not_replace_the_fetch_failure(self):
+        line = self.line(RATE_LIMIT + "warning: retrying after an error: later\n")
+        self.assertIn("HTTP error 403", line)
+
+    def test_a_timeout_does_not_wait_on_a_child_holding_the_pipes(self):
+        # nix killed, but something it started still has stderr open: the readers
+        # never see EOF, and an unbounded join would block far past the timeout.
+        real_popen = subprocess.Popen
+        with tempfile.TemporaryDirectory() as t:
+            script = Path(t, "nix")
+            script.write_text("sleep 4 &\nsleep 4\n")
+
+            def popen(args, *a, **kw):
+                return real_popen(["/bin/sh", str(script)], *a, **kw)
+
+            began = time.time()
+            with mock.patch.object(subprocess, "Popen", popen), \
+                    mock.patch.object(AGENT, "NIX_JOIN", 0.2), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    AGENT.nix("x", timeout=0.3, stream=True)
+            self.assertLess(time.time() - began, 2)
 
 
 if __name__ == "__main__":

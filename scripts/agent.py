@@ -33,6 +33,7 @@ import paths as dfs_paths  # noqa: E402
 
 NIXPKGS = "github:nixos/nixpkgs"
 REV_LEN = 40
+NIX_JOIN = 5       # seconds to wait for nix's pipes to close once it is killed
 NIX_TIMEOUT = 900  # a first build of a new revision is a download, not a compile
 
 
@@ -87,7 +88,7 @@ def nix(*args, timeout=NIX_TIMEOUT, stream=False):
         proc.kill()
         proc.wait()
         for r in readers:
-            r.join()
+            r.join(NIX_JOIN)    # a grandchild holding the pipes open must not outlast the timeout
         raise subprocess.TimeoutExpired(proc.args, timeout, "".join(out), "".join(err))
     for r in readers:
         r.join()
@@ -142,7 +143,9 @@ def reason(detail):
     which names neither the url nor the revision that failed; the cause is the last
     `error:` clause, with the first line of the body after it."""
     lines = [ln.strip() for ln in str(detail).strip().splitlines() if ln.strip()]
-    errs = [i for i, ln in enumerate(lines) if "error:" in ln]
+    # A line that STARTS `error:` is nix's; a trailing `warning: ... error: ...` is not.
+    errs = ([i for i, ln in enumerate(lines) if ln.startswith("error:")]
+            or [i for i, ln in enumerate(lines) if "error:" in ln])
     if not errs:
         return lines[-1] if lines else ""
     i = errs[-1]
