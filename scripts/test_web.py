@@ -75,6 +75,7 @@ class Web(unittest.TestCase):
         dfs_web.WALK.update(enabled=True, walker=self.fake)
 
     def tearDown(self):
+        dfs_web.ALLOW_HOSTS.clear()
         dfs_web.WALK.update(enabled=True, walker=None)
         self.fake.restore()
         self.server.shutdown()
@@ -121,6 +122,26 @@ class Web(unittest.TestCase):
             self.assertEqual(status == 200, ok, host)
             if not ok:
                 self.assertEqual(status, 421)
+
+    def test_a_tls_proxys_name_is_answered_on_loopback_only_when_allowed(self):
+        def ask(host, method="GET", path="/manifest.json", origin=None):
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+            conn.putrequest(method, path, skip_host=True)
+            conn.putheader("Host", host)
+            if method == "POST":
+                conn.putheader("Content-Type", "application/json")
+                conn.putheader("Content-Length", "2")
+                conn.putheader("Origin", origin)
+            conn.endheaders(b"{}" if method == "POST" else None)
+            return conn.getresponse().status
+        name = "phone.tail1234.ts.net"
+        self.assertEqual(ask(name), 421)
+        dfs_web.ALLOW_HOSTS.update(["phone.tail1234.ts.net"])
+        self.assertEqual(ask(name), 200)
+        self.assertEqual(ask(name.upper()), 200, "host names are not case-sensitive")
+        self.assertEqual(ask("evil.example"), 421, "only the named host is added")
+        self.assertEqual(ask(name, "POST", "/api/nope", "https://" + name), 400, "same origin passes the write guard")
+        self.assertEqual(ask(name, "POST", "/api/nope", "https://evil.example"), 403)
 
     def test_chat_goes_through_the_page_and_is_off_with_the_walk(self):
         import stat

@@ -33,7 +33,8 @@ directory's) the first time it is asked for and the name from then on; it is edi
 page ("Rename project"). One server per project, each on its own `--port`, installs as its
 own app. AS AN APP, without the browser bar: iPhone's Share, Add to Home Screen works over
 http; Android's Install needs https (or localhost), which means `--cert`/`--key` here, or a
-TLS proxy such as `tailscale serve`. The worker it installs caches nothing.
+TLS proxy such as `tailscale serve` (bind 127.0.0.1 and name the proxy's hostname with
+`--allow-host`, or the Host check refuses it). The worker it installs caches nothing.
 CHAT (`chat.py`, a button on a task and on the list) talks about a task or the project with claude,
 READ-ONLY (Read, Grep, Glob) when the page runs the turn; when a screen serves the page the chats are
 agents that screen keeps running in the background. The Chats tab lists them all. It starts agents, so
@@ -595,7 +596,7 @@ class Handler(BaseHTTPRequestHandler):
             return True
         host = self.headers.get("Host", "")
         name = host[1:host.index("]")] if host.startswith("[") and "]" in host else host.rsplit(":", 1)[0] if host.count(":") == 1 else host
-        return name in LOOPBACK
+        return name in LOOPBACK or name.lower() in ALLOW_HOSTS
 
     def handle_any(self, method):
         url = urlparse(self.path)
@@ -678,6 +679,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
+ALLOW_HOSTS = set()      # names besides loopback a loopback-bound server answers to: a TLS proxy's
 
 
 def default_host():
@@ -716,6 +718,10 @@ def main(argv=None):
     ap.add_argument("--no-walk", action="store_true",
                     help="no walk controls: the page can read and write the roadmap but "
                          "cannot start an agent")
+    ap.add_argument("--allow-host", action="append", default=[], metavar="NAME",
+                    help="a hostname a TLS proxy in front of this loopback server forwards "
+                         "(e.g. the ts.net name `tailscale serve` gives); repeatable, or "
+                         "DFS_WEB_ALLOW_HOST, comma-separated")
     ap.add_argument("--cert", help="a TLS certificate (PEM): serve https, which an installed "
                                    "app needs on any address but localhost")
     ap.add_argument("--key", help="the certificate's private key (PEM)")
@@ -724,8 +730,9 @@ def main(argv=None):
         raise SystemExit("web: --cert and --key go together")
     if not dfs_paths.has_roadmap():
         raise SystemExit("web: " + dfs_paths.missing_message())
+    names = args.allow_host + os.environ.get("DFS_WEB_ALLOW_HOST", "").split(",")
     handle = serve(args.host, args.port, walk_enabled=not args.no_walk,
-                   cert=args.cert, key=args.key)
+                   cert=args.cert, key=args.key, allow_hosts=names)
     print("roadmap web: " + handle.url)
     if not handle.public:
         print("  this machine only; --host 0.0.0.0 opens it to the network")
@@ -758,13 +765,15 @@ class Handle:
         self.server.server_close()
 
 
-def serve(host, port, walker=None, walk_enabled=True, tries=1, cert=None, key=None):
+def serve(host, port, walker=None, walk_enabled=True, tries=1, cert=None, key=None, allow_hosts=()):
     """Start the page's server on threads of this process and return its `Handle`.
 
     `walker` is the walk the page controls: none, and it makes its own (`walker.Walker`);
     the terminal screen passes its own, so the page and the screen share ONE walk.
     `tries` > 1 takes the next free port when `port` is in use (one screen per project)."""
     WALK["enabled"] = walk_enabled
+    ALLOW_HOSTS.clear()
+    ALLOW_HOSTS.update(n.strip().lower() for n in allow_hosts if n.strip())
     if walker is not None:
         WALK["walker"] = walker
     server, last = None, None
