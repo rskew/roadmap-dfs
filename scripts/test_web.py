@@ -323,6 +323,15 @@ class Web(unittest.TestCase):
             self.assertNotIn(old, index)
             self.assertNotIn(old, css)
 
+    def test_the_dfs_mark_is_the_first_thing_in_the_bar_drawn_in_ink(self):
+        index = self.call("GET", "/")[1].decode()
+        bar = index[index.index('<header id="bar">'):index.index("</header>")]
+        mark = bar.index('class="mark"')
+        self.assertLess(mark, bar.index('id="back"'))
+        self.assertLess(mark, bar.index('id="title"'))
+        css = self.call("GET", "/design.css")[1].decode()
+        self.assertRegex(css, r"\.mark \{[^}]*fill: var\(--ink\)")
+
     def test_the_page_says_it_is_loading_until_the_first_draw_and_while_a_request_waits(self):
         # Only the served text is checked here; the behaviour (the label after 250 ms, gone on landing,
         # the error and Retry after a failed first load) is the browser flows loading and loadfail in

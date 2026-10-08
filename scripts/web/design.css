@@ -5,7 +5,7 @@
        settled     (blue)    what is decided, confirmed, done
        attention   (red)     what waits on you: a raise, a blocker, a refusal
        assumption  (amber)   what rests on a choice nobody could settle: yours to review
-   Square corners, no shadows, no icons but the theme switch; the one flourish is a
+   Square corners, no shadows, no icons but the theme switch and the dfs mark; the one flourish is a
    two-pixel line of the three, under the bar. Everything below is a token or is built from
    tokens, so a change to the system is a change in this file. docs/design-system.md says
    why; /design shows it, in either theme. */
@@ -106,6 +106,8 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 .iconbtn { width: var(--hit); height: var(--hit); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
 .iconbtn:hover, .iconbtn:focus-visible { color: var(--ink); }
 .iconbtn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+/* the dfs mark, top left of the bar: the app icon's four shapes in ink, not a pressed thing */
+.mark { flex: none; width: 24px; height: 24px; fill: var(--ink); }
 /* a link in prose: blue, underlined, as big as its words */
 a.art, .link { color: var(--settled); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: var(--rule); }
 

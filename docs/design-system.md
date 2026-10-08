@@ -26,7 +26,7 @@ as it is on paper, lightened in the dark theme so it still shows. The `theme-col
 the project colour in both themes, not the paper of the dark one, so the browser bar tells
 projects apart.
 Everything else is paper, panel, ink, muted and two rules. Square corners, no shadows, no
-icons but the theme switch. The one flourish is the two-pixel line of the three, under the bar.
+icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes in ink, top left of the bar). The one flourish is the two-pixel line of the three, under the bar.
 
 ## Tokens
 
@@ -45,7 +45,7 @@ icons but the theme switch. The one flourish is the two-pixel line of the three,
 ## Components
 
 `.btn` (default, `.primary` the one thing the screen wants done, `.danger`), `.textbtn`,
-`.textlink`, `.iconbtn` (the theme switch only), `a.art` / `.link` (a link in prose), `.tag`
+`.textlink`, `.iconbtn` (the theme switch only), `.mark` (the dfs mark, in the bar), `a.art` / `.link` (a link in prose), `.tag`
 (plain, `.settled`, `.attention`, `.assumption`), `.field`, `.seg` (a choice of one among
 few), `details.sec` (a ruled row that opens), `.raise` (attention card), `.asm` (assumption
 block), `.actions`, `dialog`, `#toast`.

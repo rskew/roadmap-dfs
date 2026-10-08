@@ -22,7 +22,7 @@ try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark"
 :root { --bar: 56px; --tabs: 52px; --col: 880px; --page: 1180px; }
 body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 
-/* the bar: a name, a way back, and the three colours as one thin line */
+/* the bar: the mark, a name, a way back, and the three colours as one thin line */
 #bar {
   border-top: var(--s1) solid var(--project-mark);
   position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; align-items: center; gap: var(--s3);
@@ -227,6 +227,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 <body>
 <header id="bar">
   <div id="stripe" aria-hidden="true"></div>
+  <svg class="mark" viewBox="24 24 144 144" role="img" aria-label="dfs"><rect x="27" y="27" width="50" height="11"/><circle cx="119" cy="65" r="38"/><rect x="27" y="111" width="69" height="54"/><rect x="104" y="134" width="61" height="11"/></svg>
   <button class="textbtn" id="back" hidden>Back</button>
   <h1 id="title">{{project}}</h1>
   <span id="loading" role="status" hidden>loading</span>
