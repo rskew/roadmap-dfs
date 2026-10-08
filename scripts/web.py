@@ -730,9 +730,8 @@ def main(argv=None):
         raise SystemExit("web: --cert and --key go together")
     if not dfs_paths.has_roadmap():
         raise SystemExit("web: " + dfs_paths.missing_message())
-    names = args.allow_host + os.environ.get("DFS_WEB_ALLOW_HOST", "").split(",")
     handle = serve(args.host, args.port, walk_enabled=not args.no_walk,
-                   cert=args.cert, key=args.key, allow_hosts=names)
+                   cert=args.cert, key=args.key, allow_hosts=args.allow_host)
     print("roadmap web: " + handle.url)
     if not handle.public:
         print("  this machine only; --host 0.0.0.0 opens it to the network")
@@ -770,10 +769,13 @@ def serve(host, port, walker=None, walk_enabled=True, tries=1, cert=None, key=No
 
     `walker` is the walk the page controls: none, and it makes its own (`walker.Walker`);
     the terminal screen passes its own, so the page and the screen share ONE walk.
-    `tries` > 1 takes the next free port when `port` is in use (one screen per project)."""
+    `tries` > 1 takes the next free port when `port` is in use (one screen per project).
+    `allow_hosts` adds to DFS_WEB_ALLOW_HOST (comma-separated), which the terminal screen's page
+    takes by that alone."""
     WALK["enabled"] = walk_enabled
     ALLOW_HOSTS.clear()
-    ALLOW_HOSTS.update(n.strip().lower() for n in allow_hosts if n.strip())
+    names = list(allow_hosts) + os.environ.get("DFS_WEB_ALLOW_HOST", "").split(",")
+    ALLOW_HOSTS.update(n.strip().lower() for n in names if n.strip())
     if walker is not None:
         WALK["walker"] = walker
     server, last = None, None

@@ -143,6 +143,32 @@ class Web(unittest.TestCase):
         self.assertEqual(ask(name, "POST", "/api/nope", "https://" + name), 400, "same origin passes the write guard")
         self.assertEqual(ask(name, "POST", "/api/nope", "https://evil.example"), 403)
 
+    def test_serve_takes_allowed_hosts_from_the_environment(self):
+        def status(handle, host):
+            conn = http.client.HTTPConnection("127.0.0.1", int(handle.url.rsplit(":", 1)[1].strip("/")), timeout=10)
+            conn.putrequest("GET", "/manifest.json", skip_host=True)
+            conn.putheader("Host", host)
+            conn.endheaders()
+            return conn.getresponse().status
+        saved = os.environ.get("DFS_WEB_ALLOW_HOST")
+        try:
+            os.environ["DFS_WEB_ALLOW_HOST"] = "phone.tail1234.ts.net, other.ts.net"
+            handle = dfs_web.serve("127.0.0.1", 0, walk_enabled=False, allow_hosts=["flag.ts.net"])
+            try:
+                self.assertEqual([status(handle, h) for h in ("phone.tail1234.ts.net", "other.ts.net", "flag.ts.net", "evil.example")],
+                                 [200, 200, 200, 421])
+            finally:
+                handle.stop()
+            os.environ.pop("DFS_WEB_ALLOW_HOST")
+            handle = dfs_web.serve("127.0.0.1", 0, walk_enabled=False)
+            try:
+                self.assertEqual(status(handle, "phone.tail1234.ts.net"), 421, "unset adds nothing")
+            finally:
+                handle.stop()
+        finally:
+            if saved is not None:
+                os.environ["DFS_WEB_ALLOW_HOST"] = saved
+
     def test_chat_goes_through_the_page_and_is_off_with_the_walk(self):
         import stat
         import time as _t

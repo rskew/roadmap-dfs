@@ -31,4 +31,5 @@ python3 scripts/web.py --host 0.0.0.0 --cert cert.pem --key key.pem
 ```
 
 A self-signed certificate the phone does not trust will not do: Chrome refuses to install
-from it. `--allow-host` can be given more than once, or as DFS_WEB_ALLOW_HOST, comma-separated.
+from it. `--allow-host` can be given more than once, or as DFS_WEB_ALLOW_HOST, comma-separated;
+the page the terminal screen serves takes it only as DFS_WEB_ALLOW_HOST.
