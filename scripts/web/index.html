@@ -153,12 +153,12 @@ details.sec.arts .body { white-space: normal; }
 .sheet-body h4 { margin: 20px 0 var(--s1); font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); text-transform: uppercase; color: var(--muted); }
 .sheet-body .raise h4 { margin: 0 0 var(--s2); }
 .sheet-body h4.amber { color: var(--assumption); } .sheet-body h4.red { color: var(--attention); }
-.sheet-body p { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: var(--measure); }
-.sheet-body p.amber { color: var(--assumption); }
-.sheet-body p.plus { color: var(--settled); } .sheet-body p.minus { color: var(--attention); }
-.sheet-body p.plus::before { content: "For \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
-.sheet-body p.minus::before { content: "Against \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
-.sheet-body p.red { color: var(--attention); } .sheet-body p.dim { color: var(--muted); }
+.sheet-body p, .sheet-body div.p { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: var(--measure); }
+.sheet-body .amber { color: var(--assumption); }
+.sheet-body .plus { color: var(--settled); } .sheet-body .minus { color: var(--attention); }
+.sheet-body .plus::before { content: "For \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+.sheet-body .minus::before { content: "Against \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+.sheet-body .red { color: var(--attention); } .sheet-body .dim { color: var(--muted); }
 .sheet-body .raise { margin: var(--s3) 0; }
 .sheet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 
@@ -175,6 +175,8 @@ details.sec.arts .body { white-space: normal; }
 .msg.you { padding: var(--s2) var(--s3); background: var(--sel); border-left: var(--rule-status) solid var(--ink); }
 .msg.error { padding: var(--s2) var(--s3); background: var(--attention-wash); border-left: var(--rule-status) solid var(--attention); }
 .msg.wait { color: var(--muted); }
+pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
+ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } ul.md li, ol.md li { margin: 0 0 2px; overflow-wrap: anywhere; }
 .msg pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
 #chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 #chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: 30dvh; resize: none; }
@@ -440,7 +442,7 @@ function visibleRows(t) {
 }
 function drawTask() {
   const t = S.task, folded = S.folded[t.id] || new Set();
-  let html = `<div class="head"><h2>${esc(t.goal)}</h2>
+  let html = `<div class="head"><h2>${inline(t.goal)}</h2>
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p></div>
     <div class="actions">
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
@@ -454,7 +456,7 @@ function drawTask() {
       // The Goal is a tap away on any width: open, it is a screen of its own above the
       // tree, and the tree is what this page is for. The summary and notes stay open.
       const open = r.open && !/^Goal/.test(r.name);
-      html += `<details class="sec" ${open ? "open" : ""}><summary class="cap">${esc(r.name)}</summary><div class="body">${rich(r.text.trim())}</div></details>`;
+      html += `<details class="sec" ${open ? "open" : ""}><summary class="cap">${esc(r.name)}</summary><div class="body">${md(r.text.trim())}</div></details>`;
     } else if (r.kind === "raise") {
       html += raiseCard(r, "on the task");
     } else {
@@ -484,6 +486,36 @@ function rich(text) {
   return esc(text).replace(/(?:https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/|(?:\.dfs\/)?artefacts\/)([0-9A-Za-z][0-9A-Za-z._-]*\.html)/g,
     (m, name) => have.has(name) ? `<a class="art" href="/artefacts/${name}" target="_blank" rel="noopener">${esc(have.get(name))}</a>` : m);
 }
+/* Prose is markdown as the task files and chat replies write it: fenced blocks, `code`, **bold**,
+   [text](https://url) and "-"/"1." lists. Text is escaped before any markup is added, so nothing
+   the file holds can become an element; the markup that comes out is only what is made here. */
+function inline(text) {
+  return String(text).split(/(`[^`\n]+`)/).map((part, i) => i % 2
+    ? `<code>${esc(part.slice(1, -1))}</code>`
+    : rich(part).replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+        .replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)"<]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')).join("");
+}
+function lists(text) {                   // list lines become <ul>/<ol>; the rest is inline text, newlines kept
+  const out = []; let open = "";
+  const close = () => { if (open) out.push(`</${open}>`); open = ""; };
+  text.split("\n").forEach((line, i, all) => {
+    const m = line.match(/^\s*(?:([-*])|\d+[.)])\s+(\S.*)$/);
+    if (m) {
+      const tag = m[1] ? "ul" : "ol";
+      if (open !== tag) { close(); open = tag; out.push(`<${tag} class="md">`); }
+      out.push(`<li>${inline(m[2])}</li>`);
+    } else { close(); out.push(inline(line) + (i < all.length - 1 ? "\n" : "")); }
+  });
+  close();
+  return out.join("");
+}
+function md(raw) {
+  const parts = String(raw).split(/```[^\n]*\n?/);
+  return parts.map((part, i) => i % 2
+    ? `<pre>${esc(part.replace(/\n$/, ""))}</pre>`
+    : lists(part.replace(i > 0 ? /^\n/ : /^$/, "").replace(i < parts.length - 1 ? /\n$/ : /^$/, ""))).join("");
+}
+const hasBlock = html => /<(pre|ul|ol)[ >]/.test(html);
 function artefactsHtml(t) {
   const arts = t.artefacts || [];
   if (!arts.length) return "";
@@ -495,7 +527,7 @@ function artefactsHtml(t) {
 }
 function raiseCard(r, where) {
   return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you</h4>
-    <div class="text">${rich(r.body)}</div>
+    <div class="text">${md(r.body)}</div>
     <div class="actions"><button class="btn primary" data-act="answer" data-ts="${esc(r.ts)}">Answer</button></div></div>`;
 }
 
@@ -510,7 +542,8 @@ function drawSheet() {
       return `<h4 class="${cls}">${esc(text)}</h4>`;
     }
     if (role === "meta") return `<div class="meta">${esc(text)}</div>`;
-    return `<p class="${esc(role)}">${rich(text.replace(/^[+−] /, ""))}</p>`;
+    const html = md(text.replace(/^[+−] /, ""));
+    return hasBlock(html) ? `<div class="p ${esc(role)}">${html}</div>` : `<p class="${esc(role)}">${html}</p>`;
   };
   const metaHtml = r.card.filter(([role]) => role === "meta").map(blockHtml).join("");
   const restHtml = r.card.filter(([role]) => role !== "meta").map(blockHtml).join("");
@@ -619,11 +652,6 @@ function correctForm(id) {
 /* ── chat: basic, read-only, one agent turn at a time ──────────────────────────────── */
 const chatOn = () => !!(S.walk && S.walk.enabled);
 const CHAT = { scope: null, busyT: null, last: "" };
-function md(raw) {                      // fences, `code` and **bold**: all a chat reply needs
-  return String(raw).split(/```[^\n]*\n?/).map((part, i) => i % 2
-    ? `<pre>${esc(part.replace(/\n$/, ""))}</pre>`
-    : rich(part).replace(/`([^`\n]+)`/g, "<code>$1</code>").replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")).join("");
-}
 function chatDraw(st) {
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { you: "You", agent: "Agent", error: "Not answered" };

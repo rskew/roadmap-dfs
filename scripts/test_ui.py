@@ -176,6 +176,9 @@ class Flows(unittest.TestCase):
     def test_artefacts_are_linked_and_sandboxed(self):
         self.flow("artefacts")
 
+    def test_prose_is_drawn_as_markdown_and_stays_inert(self):
+        self.flow("richtext")
+
     def test_a_change_elsewhere_reaches_an_open_page(self):
         self.flow("live")
 

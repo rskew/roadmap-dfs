@@ -394,6 +394,32 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // Prose is markdown: `code`, **bold**, links, lists and fences are drawn in a section and a node's
+  // card, and what the file holds can never become an element of the page.
+  async richtext(b) {
+    const f = path.join(DIR, ".dfs", "items", "W9.md");
+    let t = fs.readFileSync(f, "utf8");
+    t = t.replace("## Background\n\n", "## Background\n\nRead `journal_mode` and **both** [docs](https://example.com/x?a=1&b=2) <script>window.hacked=1</script>\n- first `item`\n- second\n```sh\nsqlite3 a.db '.mode'\n```\n");
+    t = t.replace("Create a sessions table", "Create a `sessions` table, **not** a file per session,");
+    fs.writeFileSync(f, t);
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    const bg = page.locator("details.sec", { hasText: "Background" });
+    if (!(await bg.getAttribute("open"))?.toString().length && (await bg.evaluate(e => !e.open))) await bg.locator("summary").click();
+    same(await bg.locator(".body code").first().textContent(), "journal_mode", "inline code");
+    same(await bg.locator(".body b").first().textContent(), "both", "bold");
+    same(await bg.locator(".body a[href^='https://example.com']").getAttribute("href"), "https://example.com/x?a=1&b=2", "link");
+    same(await bg.locator(".body ul.md li").count(), 2, "list items");
+    same(await bg.locator(".body pre").textContent(), "sqlite3 a.db '.mode'", "fenced block");
+    assert((await bg.textContent()).includes("<script>window.hacked=1</script>"), "markup in the text is shown, not run");
+    assert(!(await page.evaluate(() => window.hacked || document.querySelector("#view script"))), "and never becomes an element");
+    await page.click("text=Choose the SQLite journal mode");
+    await page.waitForSelector("#sheet.open, #sheet .sheet-body");
+    same(await page.locator("#sheet .sheet-body code").first().textContent(), "sessions", "the card draws inline code");
+    same(await page.locator("#sheet .sheet-body b").first().textContent(), "not", "and bold");
+    same(errors, [], "no page errors");
+  },
+
   // A change made elsewhere (a chain, the terminal) reaches an open page by itself.
   async live(b) {
     const { page, errors } = await open(b, PHONE);
