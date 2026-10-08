@@ -267,6 +267,9 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("GET", "/apple-touch-icon.png")[0], 200)
         self.assertNotIn("caches.open", raw.decode(), "the worker caches nothing")
         self.assertEqual(self.call("GET", "/web/index.html")[0], 404, "only the listed files are served")
+        page = self.call("GET", "/")[1].decode()
+        self.assertIn("!isSecureContext && /Android/", page, "an Android page on plain http says why Install is missing")
+        self.assertIn("--allow-host", (HERE.parent / "README.md").read_text(), "the README names the https route")
 
     def task(self):
         return self.call("GET", "/api/task/W1")[1]
