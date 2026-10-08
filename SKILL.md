@@ -73,9 +73,10 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   author can operate, with the options to switch between, the inputs to move and the
   evidence to open, so that it explains the assumption and lets them decide whether
   it holds. `check.py` refuses a commit that adds a Hypothesis naming no such page, or
-  one with no control a handler answers. A node with no assumption needs none. The screen marks a node with a Hypothesis (⚑) and names
-  those nodes when the author accepts the tree, so keep it for what is both
-  important and open to question: an ordinary choice the check settles is not one.
+  one with no control a handler answers. A node with no assumption needs none. The
+  screen marks a node with a Hypothesis (⚑) and names those nodes when the author
+  accepts the tree, so keep it for what is both important and open to question: an
+  ordinary choice the check settles is not one.
   What you built, the steps you took and every test you ran belong in the Approach
   and the commit, not here.
 - **`Ask:` is for a question to the author that you could not settle and did not
@@ -192,8 +193,10 @@ EOF
 picture would let the author decide, or check, faster than prose can.** The page for an
 assumption starts from `<scripts>/../templates/_TEMPLATE_ASSUMPTION.html`: it states the
 assumption, lets the reader change what it depends on, shows what follows, and says what
-would make it wrong. A page the reader can only look at does not meet the rule. Wiring and data flow, before and after, two or three options set side
-by side on the same axes, a sequence of what ran and what it showed, a layout, measured
+would make it wrong. A page the reader can only look at does not meet the rule.
+
+Wiring and data flow, before and after, two or three options set side by side on the
+same axes, a sequence of what ran and what it showed, a layout, measured
 results as a chart or a table: if you would otherwise be describing a shape in words, draw
 it. It is one self-contained HTML page in `.dfs/artefacts/`, checked with
 `<scripts>/artefact_check.sh` and its screenshot looked at. Name it in the raise by its

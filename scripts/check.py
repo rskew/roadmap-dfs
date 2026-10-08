@@ -36,7 +36,8 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a live node, new in this commit or with its Hypothesis changed, that states a
       Hypothesis naming no interactive artefact: a `.dfs/artefacts/<name>.html` that
       exists and has an input, button, select, textarea or details with a handler
-      (addEventListener or onclick and the like) answering it (`check_assumptions`). A node already at HEAD is judged as committed
+      (addEventListener or onclick and the like) answering it (`check_assumptions`).
+      A node already at HEAD is judged as committed
     - a task file or an archive HEAD holds, deleted (the limit case of the two
       rules above; a staged rename is followed, not refused). A task retired on
       purpose is the author's rewrite of history, committed with --no-verify
@@ -400,7 +401,7 @@ def check_history(task, text, head, archive=""):
 # and a handler that answers it: a looked-at picture is a raise's artefact, not an
 # assumption's, and a button nothing listens to is a picture. A floor, not a proof of
 # a good page: the author's reading of the page is what judges that.
-ARTEFACT_REF = re.compile(r"\.dfs/artefacts/([\w.-]+\.html)\b")
+ARTEFACT_REF = re.compile(r"\.dfs/artefacts/([\w.-]+\.html)(?![\w-]|\.\w)")
 _TAGS = "input|button|select|textarea|details"
 CONTROL = re.compile(r"<(?:%s)\b|createElement\(\s*['\"](?:%s)['\"]" % (_TAGS, _TAGS), re.I)
 HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|toggle|key\w+|"

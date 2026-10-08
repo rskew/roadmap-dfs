@@ -343,6 +343,21 @@ class Check(InARepo):
                      "b.addEventListener('click', f)</script>"):
             self.assertEqual(self.assumed(hyp(art), pages={"a1.html": page}), "", page)
         self.assertIn("names no artefact", self.assumed(hyp(".dfs/artefacts/../x.html")))
+        # a sentence's full stop after the name is not part of it; a longer name is another file
+        self.assertEqual(self.assumed(hyp(art + "."), pages={"a1.html": self.PAGE}), "")
+        self.assertIn("names no artefact", self.assumed(hyp(art + ".bak"),
+                                                         pages={"a1.html": self.PAGE}))
+
+    def test_one_usable_artefact_among_several_is_enough(self):
+        def hyp(*refs):
+            return task(node(1, extra="Hypothesis: It holds. Wrong if it breaks. %s\n" % " ".join(refs)))
+        a, b = ".dfs/artefacts/a1.html", ".dfs/artefacts/b2.html"
+        pages = {"a1.html": "<p>static</p>", "b2.html": self.PAGE}
+        self.assertEqual(self.assumed(hyp(a, b), pages=pages), "")
+        self.assertEqual(self.assumed(hyp(b, a), pages=pages), "")
+        found = self.assumed(hyp(a, ".dfs/artefacts/c3.html"), pages=pages)
+        self.assertIn("a1.html is not interactive", found)
+        self.assertIn("c3.html does not exist", found)
 
     def test_a_node_with_no_hypothesis_needs_no_artefact(self):
         self.assertEqual(self.assumed(task(node(1, extra="Ask: which one?\n"))), "")

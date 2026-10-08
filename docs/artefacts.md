@@ -70,8 +70,8 @@ evidence to open) and show what follows from each setting, ending on what would 
 assumption wrong. The rest of this file (self-contained, checked, screenshot read once)
 applies unchanged. What `check.py` tests is only that the page exists, has a control
 (`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`) and a handler that
-answers it (`addEventListener`, or an `onclick`-style attribute); that the controls tell
-the reader something is for the screenshot and the author.
+answers it (`addEventListener`, or an `onclick`-style attribute). It does not judge that
+the controls tell the reader anything; the screenshot and the author do.
 
 ## Conventions the checker relies on
 
