@@ -62,7 +62,7 @@
     --settled: #a5c2e6; --settled-wash: #2a4766;
     --attention: #f5a094; --attention-wash: #6a2e28;
     --assumption: #ecc96f; --assumption-wash: #54430f; --assumption-fill: #c9a043;
-    --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
+    --on-attention: #171a1d; --scrim: rgba(0, 0, 0, .55);
     --project-mark: color-mix(in srgb, var(--project, var(--ink)) 55%, #fff);
     color-scheme: dark;
   }
@@ -73,7 +73,7 @@
   --settled: #a5c2e6; --settled-wash: #2a4766;
   --attention: #f5a094; --attention-wash: #6a2e28;
   --assumption: #ecc96f; --assumption-wash: #54430f; --assumption-fill: #c9a043;
-  --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
+  --on-attention: #171a1d; --scrim: rgba(0, 0, 0, .55);
   --project-mark: color-mix(in srgb, var(--project, var(--ink)) 55%, #fff);
   color-scheme: dark;
 }
