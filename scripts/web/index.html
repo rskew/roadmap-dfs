@@ -866,7 +866,7 @@ function addForm(parent) {
     ${dead ? `<p class="warn">${esc(parent)} is ${esc(p.status)}, so a node under it is pruned too.</p>` : ""}
     <div><label for="t">Title</label><input type="text" id="t" name="title" required autocomplete="off"></div>
     <div><label for="a">Approach, optional: what to do, where, and the check</label><textarea id="a" name="approach"></textarea></div>${buttons("Add")}`,
-    async fd => { const res = await api("/api/add", { task: S.task.id, parent: parent || null, title: fd.get("title"), approach: fd.get("approach") }); await wrote(res, "Added " + res.added + "."); go(`t/${S.task.id}/${res.added}`, true); });
+    async fd => { const res = await api("/api/add", { task: S.task.id, parent: parent || null, title: fd.get("title"), approach: fd.get("approach") }); await wrote(res, "Added " + res.added + "."); });
 }
 function acceptForm() {
   const a = S.task.assumed;
