@@ -317,10 +317,13 @@ class ChatHost:
             stale = [s for s, r in self.relays.items() if not r.live]
             idle = [s for s, r in self.relays.items() if r.live and not r.attached and r.outbox.empty()
                     and now - max(r.started, r.last_out) > limit]
+            # Taken out of the table while the lock is held, so a message that arrives after this
+            # starts a new chat (resuming the conversation) rather than going to one being closed.
+            closing = [self.relays.pop(s) for s in idle]
             for s in stale:
                 del self.relays[s]
-        for s in idle:
-            self.close(s)
+        for r in closing:
+            r.close()
         return idle
 
     def live_scopes(self):

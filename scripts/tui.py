@@ -4903,9 +4903,13 @@ CHAT_IDLE = float(os.environ.get("DFS_CHAT_IDLE", 30 * 60))
 
 def end_on_signals():
     """A SIGTERM, or the SIGHUP of a dropped terminal, ends the screen the way quitting does, so
-    `main`'s `finally` still closes the chats (their agents are not hung up on by anyone else
-    when the screen is killed: they hold the other end of their own ptys)."""
+    `main`'s `finally` still closes the chats. When the screen dies the kernel hangs up on the
+    agents' ptys, but an agent that ignores hangup, and the helpers it started, only end because
+    this handler lets `close_all` find and end them. Once the exit has begun, further signals
+    are ignored so they cannot abandon that."""
     def end(signum, frame):
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            signal.signal(sig, signal.SIG_IGN)
         raise SystemExit(128 + signum)
     for sig in (signal.SIGTERM, signal.SIGHUP):
         try:
@@ -4942,10 +4946,12 @@ def main(stdscr):
     try:
         ui.loop()
     finally:
-        if ui.web is not None:
-            ui.web.stop()
-        if ui.chat_host is not None:
-            ui.chat_host.close_all()        # the chats run for as long as this screen does
+        try:
+            if ui.web is not None:
+                ui.web.stop()           # ends the page's turns in flight too
+        finally:
+            if ui.chat_host is not None:
+                ui.chat_host.close_all()        # the chats run for as long as this screen does
 
 
 if __name__ == "__main__":

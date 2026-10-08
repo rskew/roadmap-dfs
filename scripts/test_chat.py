@@ -356,6 +356,30 @@ class TurnTimeout(unittest.TestCase):
         for p in started:
             self.assertFalse(ptyrelay._running(p, (ptyrelay._stat(p) or (0, 0, None))[2]), p)
 
+    def test_closing_the_chats_ends_a_turn_in_flight(self):
+        import threading, time
+        pids = Path(tempfile.mkdtemp()) / "pids"
+        script = "echo $$ >> %s; setsid sh -c 'trap \"\" HUP TERM; echo $$ >> %s; exec sleep 600' & sleep 600" % (pids, pids)
+        chats = dfs_chat.Chats()
+        ptyrelay.GRACE, grace = 0.3, ptyrelay.GRACE
+        try:
+            t = threading.Thread(target=lambda: dfs_chat.run_turn(["bash", "-c", script], "hi", None,
+                                                                  dict(os.environ), timeout=60,
+                                                                  running=chats.running))
+            t.start()
+            end = time.time() + 5
+            while time.time() < end and not (pids.exists() and len(pids.read_text().split()) == 2):
+                time.sleep(0.05)
+            self.assertEqual(len(chats.running), 1)
+            chats.close()
+            t.join(10)
+        finally:
+            ptyrelay.GRACE = grace
+        self.assertFalse(t.is_alive())
+        self.assertEqual(chats.running, set())
+        for p in [int(x) for x in pids.read_text().split()]:
+            self.assertFalse(ptyrelay._running(p, (ptyrelay._stat(p) or (0, 0, None))[2]), p)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

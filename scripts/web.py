@@ -809,6 +809,8 @@ class Handle:
         self._stop.set()
         self.server.shutdown()
         self.server.server_close()
+        if CHAT["chats"] is not None:
+            CHAT["chats"].close()       # page turns run in their own sessions: nothing else reaches them
 
 
 def serve(host, port, walker=None, walk_enabled=True, tries=1, cert=None, key=None, allow_hosts=()):

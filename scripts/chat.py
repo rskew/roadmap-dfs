@@ -112,19 +112,25 @@ def running_elsewhere(sid, own=()):
     return False
 
 
-def run_turn(argv, message, cwd, env, timeout=None):
+def run_turn(argv, message, cwd, env, timeout=None, running=None):
     """Run one turn and return its CompletedProcess. A turn that outlasts the timeout is ended
     with everything it started, not just the shell that began it (`subprocess.run` kills only
-    that), and then TimeoutExpired is raised."""
+    that), and then TimeoutExpired is raised. `running`, a set, holds the turn's pid while it
+    runs, so whoever ends the process can end the turn too (it is in its own session)."""
     timeout = timeout or TURN_TIMEOUT
     proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, cwd=cwd, env=env, start_new_session=True)
+    if running is not None:
+        running.add(proc.pid)
     try:
         out, err = proc.communicate(message, timeout=timeout)
     except subprocess.TimeoutExpired:
         ptyrelay.stop_tree(proc.pid)
         proc.communicate()
         raise
+    finally:
+        if running is not None:
+            running.discard(proc.pid)
     return subprocess.CompletedProcess(argv, proc.returncode, out, err)
 
 
@@ -136,6 +142,13 @@ class Chats:
         self.busy = {}      # scope -> when its turn started
         self.pending = {}   # scope -> what was sent and has not reached the transcript yet
         self.notes = {}     # scope -> [errors], until the conversation moves on
+        self.running = set()    # pids of the page turns in flight, each in its own session
+
+    def close(self):
+        """End every page turn in flight, with everything it started: the server or screen is
+        going, and a turn in its own session would otherwise run on past it."""
+        for pid in list(self.running):
+            ptyrelay.stop_tree(pid)
 
     # ── the record: just the session id ────────────────────────────────────────────────
     def path(self, scope):
@@ -233,7 +246,8 @@ class Chats:
                 p = dfs_context.transcript_path(sid, "claude")
                 if p and os.path.exists(p):
                     env["CHAT_RESUME"] = "1"
-            r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env)
+            r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
+                         running=self.running)
             out = {}
             try:
                 out = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
