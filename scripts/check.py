@@ -33,6 +33,10 @@ edited log line or a rewritten determination erases what the author reviews. So:
       (`tree.py shelve`). The archive is then the only copy, so it only grows,
       at its end: HEAD's nonblank lines must open it, in order, since a line's
       heading is the nearest one above it
+    - a live node, new in this commit or with its Hypothesis changed, that states a
+      Hypothesis naming no interactive artefact: a `.dfs/artefacts/<name>.html` that
+      exists and has an input, button, select, textarea or details with a handler
+      (addEventListener or onclick and the like) answering it (`check_assumptions`). A node already at HEAD is judged as committed
     - a task file or an archive HEAD holds, deleted (the limit case of the two
       rules above; a staged rename is followed, not refused). A task retired on
       purpose is the author's rewrite of history, committed with --no-verify
@@ -391,6 +395,61 @@ def check_history(task, text, head, archive=""):
     return bad
 
 
+# An assumption's artefact is named by its path inside the Hypothesis; the name has no
+# slash, so it cannot leave `.dfs/artefacts`. Interactive is the page having a control
+# and a handler that answers it: a looked-at picture is a raise's artefact, not an
+# assumption's, and a button nothing listens to is a picture. A floor, not a proof of
+# a good page: the author's reading of the page is what judges that.
+ARTEFACT_REF = re.compile(r"\.dfs/artefacts/([\w.-]+\.html)\b")
+_TAGS = "input|button|select|textarea|details"
+CONTROL = re.compile(r"<(?:%s)\b|createElement\(\s*['\"](?:%s)['\"]" % (_TAGS, _TAGS), re.I)
+HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|toggle|key\w+|"
+                     r"pointer\w+|mouse\w+|focus|select)\s*=", re.I)
+
+
+def check_assumptions(task, text, head, read, archive=""):
+    """A Hypothesis must name an interactive artefact (`.dfs/artefacts/<name>.html`).
+
+    Judged on a live node that is new in this commit, whose Hypothesis changed since
+    HEAD, or that was parked at HEAD and is open again: a node already at HEAD with
+    its Hypothesis unchanged is history and keeps the wording it was committed with.
+    A parked or refuted node's assumption is moot (`dfs_tree.assumed`) and is not
+    judged. `read` gives a file's text as it will be committed (None when absent)."""
+    bad = []
+    t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
+    was = {nd["id"]: nd for nd in dfs_tree.parse(head, task)["nodes"]} if head else {}
+    for nd in t["nodes"]:
+        h = (nd["fields"].get("Hypothesis") or "").strip()
+        if not h or h == dfs_tree.SHELF_STUB or nd["status"] in ("parked", "refuted"):
+            continue
+        old = was.get(nd["id"])
+        if old and (old["fields"].get("Hypothesis") or "").strip() == h \
+                and old["status"] not in ("parked", "refuted"):
+            continue
+        names = ARTEFACT_REF.findall(h)
+        if not names:
+            bad.append("%s states a Hypothesis and names no artefact. Draw an interactive "
+                       "page that explains the assumption and lets the author decide it, "
+                       "and name it in the Hypothesis as `.dfs/artefacts/<uuid>.html` "
+                       "(templates/_TEMPLATE_ASSUMPTION.html)" % nd["id"])
+            continue
+        why = []
+        for name in names:
+            page = read(dfs_paths.artefacts() / name)
+            if page is None:
+                why.append("%s does not exist" % name)
+            elif not CONTROL.search(page) or not HANDLER.search(page):
+                why.append("%s is not interactive (it needs an <input>, <button>, <select>, "
+                           "<textarea> or <details> and a handler that answers it: "
+                           "addEventListener or an onclick-style attribute)" % name)
+            else:
+                break
+        else:
+            bad.append("%s names no usable artefact for its Hypothesis: %s"
+                       % (nd["id"], "; ".join(why)))
+    return bad
+
+
 # A node that points at another instead of saying the thing. SKILL.md: a session, the
 # critic and the screen each read ONE node without the rest of the tree.
 BACKREF = re.compile(r"^\s*(see|as in|same as|as for|fix what|the other|per|like)\b|"
@@ -473,6 +532,8 @@ def main() -> int:
             head = at_head(path)
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]
+            fatal += ["%s: %s" % (rel, b)
+                      for b in check_assumptions(task, text, head, read, arc)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
                 fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, head)]
             now_tok = len(text) // 4

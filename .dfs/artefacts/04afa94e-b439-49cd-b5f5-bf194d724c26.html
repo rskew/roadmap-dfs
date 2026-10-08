@@ -1,9 +1,10 @@
 <!doctype html>
 <meta charset="utf-8">
-<title>Is "a script and a control" a fair test of an interactive artefact?</title>
+<title>Is "a control and a handler" a fair test of an interactive artefact?</title>
 <!--
-  Assumption artefact for W21.2: check.py calls a page interactive when it contains a
-  <script> and one of <input>, <button>, <select>, <textarea>, <details>. Tick what a
+  Assumption artefact for W21.2: check.py calls a page interactive when it contains one of
+  <input>, <button>, <select>, <textarea>, <details> (or creates one) and a handler
+  (addEventListener, or an onclick-style attribute). Tick what a
   page has and see whether check.py lets it through and whether a reader could really
   operate it, then judge whether the gap matters.
 -->
@@ -28,9 +29,9 @@
   .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; }
 </style>
 
-<h1>Is "a script and a control" a fair test?</h1>
-<p class="lede">check.py refuses a Hypothesis unless the page it names has a
-  &lt;script&gt; and an input, button, select, textarea or details. Pick a kind of page,
+<h1>Is "a control and a handler" a fair test?</h1>
+<p class="lede">check.py refuses a Hypothesis unless the page it names has an
+  input, button, select, textarea or details and a handler that answers it. Pick a kind of page,
   or tick what a page has, and compare what check.py says with whether a reader can
   operate it.</p>
 
@@ -38,16 +39,16 @@
 <div class="presets" role="group" aria-label="Example pages">
   <button type="button" data-p="good" aria-pressed="true">Options switcher</button>
   <button type="button" data-p="static" aria-pressed="false">Static diagram</button>
-  <button type="button" data-p="decor" aria-pressed="false">Decorative button</button>
+  <button type="button" data-p="decor" aria-pressed="false">Handler that changes nothing</button>
   <button type="button" data-p="css" aria-pressed="false">CSS-only tabs</button>
-  <button type="button" data-p="built" aria-pressed="false">Controls built by script</button>
+  <button type="button" data-p="plain" aria-pressed="false">Button nothing listens to</button>
 </div>
 
 <h2>What it has</h2>
 <div class="box">
-  <label><input type="checkbox" id="script"> a &lt;script&gt; tag</label>
-  <label><input type="checkbox" id="control"> a literal input, button, select, textarea or details</label>
-  <label><input type="checkbox" id="wired"> a control that changes what the page shows</label>
+  <label><input type="checkbox" id="control"> an input, button, select, textarea or details</label>
+  <label><input type="checkbox" id="handler"> a handler on it (addEventListener or onclick)</label>
+  <label><input type="checkbox" id="wired"> an answer the reader sees change</label>
 </div>
 
 <h2>The verdict</h2>
@@ -59,23 +60,24 @@
 
 <h2>What would show it wrong</h2>
 <p class="wrong">An author writes a page that passes and gives the reader nothing to
-  change (the decorative button), or a page the reader can operate that is refused (CSS
-  tabs, controls built by script). Both are possible here, so the test is a floor, not a
-  proof: the screenshot and the author are what judge whether the controls say anything.</p>
+  change (a handler that changes nothing), or a page the reader can operate that is refused
+  (CSS-only tabs, which have no handler). Both are possible here, so the test is a
+  floor, not a proof: the screenshot and the author are what judge whether the controls
+  say anything.</p>
 
 <script>
   var presets = {
-    good:   { script: true,  control: true,  wired: true },
-    static: { script: false, control: false, wired: false },
-    decor:  { script: true,  control: true,  wired: false },
-    css:    { script: false, control: true,  wired: true },
-    built:  { script: true,  control: false, wired: true }
+    good:   { control: true,  handler: true,  wired: true },
+    static: { control: false, handler: false, wired: false },
+    decor:  { control: true,  handler: true,  wired: false },
+    css:    { control: true,  handler: false, wired: true },
+    plain:  { control: true,  handler: false, wired: false }
   };
-  var ids = ['script', 'control', 'wired'];
+  var ids = ['control', 'handler', 'wired'];
   function el(id) { return document.getElementById(id); }
   function show() {
-    var s = el('script').checked, c = el('control').checked, w = el('wired').checked;
-    var passes = s && c;
+    var c = el('control').checked, h = el('handler').checked, w = el('wired').checked;
+    var passes = c && h;
     var says = el('says'), reader = el('reader');
     says.textContent = passes ? 'lets it through' : 'refuses it';
     says.className = passes ? 'ok' : 'no';
@@ -84,7 +86,7 @@
     el('gap').textContent = passes === w
       ? 'check.py and the reader agree.'
       : passes
-        ? 'check.py is too lenient here: the page has a control that does nothing.'
+        ? 'check.py is too lenient here: the page has a handler that changes nothing.'
         : 'check.py is too strict here: the reader can operate this page and it is refused.';
   }
   function pick(name) {

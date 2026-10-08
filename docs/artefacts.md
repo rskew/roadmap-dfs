@@ -68,9 +68,10 @@ Start from `templates/_TEMPLATE_ASSUMPTION.html`. Give the reader the thing the
 assumption turns on to change (the options to switch between, the input to move, the
 evidence to open) and show what follows from each setting, ending on what would show the
 assumption wrong. The rest of this file (self-contained, checked, screenshot read once)
-applies unchanged. What `check.py` tests is only that the page exists and has a
-`<script>` and a control (`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`);
-that the controls tell the reader something is for the screenshot and the author.
+applies unchanged. What `check.py` tests is only that the page exists, has a control
+(`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`) and a handler that
+answers it (`addEventListener`, or an `onclick`-style attribute); that the controls tell
+the reader something is for the screenshot and the author.
 
 ## Conventions the checker relies on
 

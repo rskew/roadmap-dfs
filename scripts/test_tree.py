@@ -316,6 +316,51 @@ class Check(InARepo):
                      "not `- <ts>"):
             self.assertIn(want, found)
 
+    def assumed(self, text, head=None, pages=None):
+        pages = pages or {}
+        read = lambda path: pages.get(path.name)   # noqa: E731
+        return " | ".join(dfs_check.check_assumptions("W1", text, head, read))
+
+    PAGE = "<button>decide</button><script>b.addEventListener('click', f)</script>"
+
+    def test_a_hypothesis_must_name_an_interactive_artefact(self):
+        def hyp(ref):
+            return task(node(1, extra="Hypothesis: It holds. Wrong if it breaks. %s\n" % ref))
+        art = ".dfs/artefacts/a1.html"
+        self.assertIn("names no artefact", self.assumed(hyp("")))
+        self.assertIn("a1.html does not exist", self.assumed(hyp(art)))
+        self.assertIn("not interactive", self.assumed(hyp(art), pages={"a1.html": "<p>hi</p>"}))
+        for page in ("<script>x()</script><p>no control</p>",
+                     "<button>a button nothing listens to</button><script>x()</script>",
+                     "<script>b.addEventListener('click', f)</script><p>no control</p>"):
+            self.assertIn("not interactive", self.assumed(hyp(art), pages={"a1.html": page}),
+                          page)
+        self.assertEqual(self.assumed(hyp(art), pages={"a1.html": self.PAGE}), "")
+        for page in ("<details>x</details><script>d.addEventListener('toggle', f)</script>",
+                     "<button onclick=\"go()\">x</button>",
+                     "<script>var b = document.createElement('button');"
+                     "b.addEventListener('click', f)</script>"):
+            self.assertEqual(self.assumed(hyp(art), pages={"a1.html": page}), "", page)
+        self.assertIn("names no artefact", self.assumed(hyp(".dfs/artefacts/../x.html")))
+
+    def test_a_node_with_no_hypothesis_needs_no_artefact(self):
+        self.assertEqual(self.assumed(task(node(1, extra="Ask: which one?\n"))), "")
+
+    def test_only_a_new_or_changed_hypothesis_is_judged(self):
+        old = task(node(1, "confirmed", extra="Hypothesis: It holds. Wrong if not.\n"))
+        self.assertEqual(self.assumed(old, head=old), "")
+        again = old.replace("Wrong if not.", "Wrong if it breaks.")
+        self.assertIn("W1.1 states a Hypothesis", self.assumed(again, head=old))
+        self.assertIn("W1.1 states a Hypothesis", self.assumed(old))   # new in this commit
+
+    def test_a_parked_or_refuted_hypothesis_is_moot_until_it_is_open_again(self):
+        parked = task(node(1, "parked", extra="Hypothesis: It holds. Wrong if not.\n"))
+        self.assertEqual(self.assumed(parked), "")
+        self.assertEqual(self.assumed(task(node(1, "refuted", extra=(
+            "Hypothesis: It holds. Wrong if not.\n")))), "")
+        reopened = parked.replace("Status: parked", "Status: open")
+        self.assertIn("W1.1 states a Hypothesis", self.assumed(reopened, head=parked))
+
     def test_a_determined_node_is_history(self):
         head = task(node(1, "confirmed", extra="Evidence:\n- for: it ran\nDetermination: yes\n"))
         edited = head.replace("Determination: yes", "Determination: no")

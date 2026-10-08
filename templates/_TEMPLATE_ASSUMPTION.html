@@ -6,8 +6,9 @@
   .dfs/artefacts/<uuid>.html, keep it SELF-CONTAINED (no CDN, no fetches: the web page
   serves it sandboxed, with scripts allowed and the network off), and check it with
       <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
-  It must be INTERACTIVE: a <script> and a control the reader changes (a button, input,
-  select or details), because check.py refuses a Hypothesis whose page has none. The
+  It must be INTERACTIVE: a control the reader changes (a button, input, select or
+  details) and a handler on it (addEventListener or onclick), because check.py refuses a
+  Hypothesis whose page has none. The
   page explains the assumption and lets the author decide it; the Hypothesis itself
   still says it in words, since the node must read without the page.
 -->

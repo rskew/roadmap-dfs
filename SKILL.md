@@ -73,7 +73,7 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   author can operate, with the options to switch between, the inputs to move and the
   evidence to open, so that it explains the assumption and lets them decide whether
   it holds. `check.py` refuses a commit that adds a Hypothesis naming no such page, or
-  one with nothing on it to change. A node with no assumption needs none. The screen marks a node with a Hypothesis (⚑) and names
+  one with no control a handler answers. A node with no assumption needs none. The screen marks a node with a Hypothesis (⚑) and names
   those nodes when the author accepts the tree, so keep it for what is both
   important and open to question: an ordinary choice the check settles is not one.
   What you built, the steps you took and every test you ran belong in the Approach
