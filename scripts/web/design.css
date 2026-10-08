@@ -57,22 +57,22 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #171a1d; --panel: #1e2226; --sel: #262b30; --ink: #e9e7e1; --muted: #a3a7ae;
+    --paper: #171a1d; --panel: #1e2226; --sel: #262b30; --ink: #e9e7e1; --muted: #bcc0c7;
     --line: #353a40; --faint: #272b30;
-    --settled: #86a8cf; --settled-wash: #223548;
-    --attention: #dc7d70; --attention-wash: #402624;
-    --assumption: #dcb455; --assumption-wash: #3b3219; --assumption-fill: #c9a043;
+    --settled: #a5c2e6; --settled-wash: #2a4766;
+    --attention: #f5a094; --attention-wash: #6a2e28;
+    --assumption: #ecc96f; --assumption-wash: #54430f; --assumption-fill: #c9a043;
     --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
     --project-mark: color-mix(in srgb, var(--project, var(--ink)) 55%, #fff);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #171a1d; --panel: #1e2226; --sel: #262b30; --ink: #e9e7e1; --muted: #a3a7ae;
+  --paper: #171a1d; --panel: #1e2226; --sel: #262b30; --ink: #e9e7e1; --muted: #bcc0c7;
   --line: #353a40; --faint: #272b30;
-  --settled: #86a8cf; --settled-wash: #223548;
-  --attention: #dc7d70; --attention-wash: #402624;
-  --assumption: #dcb455; --assumption-wash: #3b3219; --assumption-fill: #c9a043;
+  --settled: #a5c2e6; --settled-wash: #2a4766;
+  --attention: #f5a094; --attention-wash: #6a2e28;
+  --assumption: #ecc96f; --assumption-wash: #54430f; --assumption-fill: #c9a043;
   --on-attention: #fff; --scrim: rgba(0, 0, 0, .55);
   --project-mark: color-mix(in srgb, var(--project, var(--ink)) 55%, #fff);
   color-scheme: dark;
