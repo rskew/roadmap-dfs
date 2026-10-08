@@ -725,6 +725,48 @@ class AnAssumptionStandsOut(unittest.TestCase):
         self.assertEqual(len(said), 1, said)
 
 
+class ADoneTaskRecedesInTheList(unittest.TestCase):
+    """The list told a finished task from an open one by the colour of one word."""
+
+    class Rec:
+        def __init__(self):
+            self.puts = []
+
+        def getmaxyx(self):
+            return (24, 100)
+
+        def addstr(self, y, x, text, attr=0):
+            self.puts.append((y, x, text, attr))
+
+    def draw(self):
+        items = [item("W1", status="done"), item("W2", status="open"),
+                 item("W3", status="done")]
+        ui = a_screen(items, sel=2, list_scroll=0)
+        ui.scr = self.Rec()
+        ui.run_tag = lambda iid: ("", 0)
+        ui.list_rows = lambda: [("item", n) for n in range(3)]
+        ui.status_attr = lambda status: 7
+        saved = dict(TUI.LOOK)
+        TUI.LOOK.clear()
+        TUI.LOOK.update(chrome=curses.A_DIM)
+        try:
+            ui.draw_list(0, 10)
+        finally:
+            TUI.LOOK.clear()
+            TUI.LOOK.update(saved)
+        return ui.scr.puts
+
+    def test_the_whole_row_is_dim_and_the_status_says_done_with_a_tick(self):
+        puts = self.draw()
+        row = lambda y: [p for p in puts if p[0] == y]
+        done, open_ = row(0)[0], row(1)[0]
+        self.assertTrue(done[3] & curses.A_DIM, "a done row is drawn dim")
+        self.assertFalse(open_[3] & curses.A_DIM, "an open row is not")
+        self.assertIn("✓ done", [p[2].strip() for p in row(0)])
+        self.assertIn("open", [p[2].strip() for p in row(1)])
+        self.assertFalse(row(2)[0][3] & curses.A_DIM, "the cursor row keeps its band")
+
+
 if __name__ == "__main__":
     curses.color_pair = lambda n: 0       # no initscr here; attrs are opaque
     unittest.main()

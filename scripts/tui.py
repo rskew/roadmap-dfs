@@ -2332,11 +2332,19 @@ class UI(WalkMixin):
             # one. An item whose branch an ancestor is holding reads "↳W10" — the
             # question to go and answer — because "open" would be true and useless.
             state = row_state(it)
+            if state == "done":
+                state = "✓ done"
             rev = revs[it["id"]]
             cell = ("  " * it["depth"]) + it["id"]
             line = "%s %s %s %s%s%s" % (marker, cell.ljust(idw), state.ljust(statw),
                                         rev.ljust(revw), tag.ljust(tagw), it["goal"])
             band = attr & curses.A_REVERSE
+            # ⚠️ A DONE row recedes whole (id, goal and all), not just its status
+            # word: that one word's colour was the only thing telling a finished
+            # task from an open one, and it is lost in a list of forty. The cursor
+            # row keeps its band so it is still the one that is found.
+            if it["status"] == "done" and not band:
+                attr = look("chrome")
             self.put(y, 0, line.ljust(self.main_w() - 1), selected(attr) if band else attr)
             if band and LOOK.get("band"):
                 self.put(y, 0, BAR, look("selbar"))
@@ -2347,7 +2355,7 @@ class UI(WalkMixin):
                 # the selected row's status sitting one column right of every other
                 # row's, the hand-written offset the id column above is measured to
                 # avoid. The tag is the same distance further on.
-                st_at = (look("chrome") if state != it["status"]
+                st_at = (look("chrome") if state not in (it["status"], "✓ done")
                          else self.status_attr(it["status"]))
                 self.put(y, 3 + idw, state.ljust(statw), st_at)
                 # ⚠️ Every later column is measured off the one before it, never
