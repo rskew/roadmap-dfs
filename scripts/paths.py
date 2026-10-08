@@ -27,6 +27,8 @@ down.
     eval "$(python3 <this file> --sh)"   # the same answers, for the shell
     python3 <this file> --require       # exit 0 if this directory has a roadmap
 """
+import colorsys
+import hashlib
 import os
 import re
 import shlex
@@ -141,6 +143,50 @@ def write_title(name: str) -> str:
     title_file().parent.mkdir(parents=True, exist_ok=True)
     title_file().write_text(name + "\n")
     return name
+
+
+def theme_file() -> Path:
+    return state() / "theme"
+
+
+def read_theme() -> str:
+    """The colour `.dfs/theme` holds as `#rrggbb`, "" when there is none or it is not one."""
+    try:
+        v = (theme_file().read_text().strip().splitlines() or [""])[0].strip().lower()
+    except OSError:
+        return ""
+    return v if re.fullmatch(r"#[0-9a-f]{6}", v) else ""
+
+
+def write_theme(value: str) -> str:
+    """Choose the project's colour, `#rrggbb`; an empty value clears the choice so the
+    colour follows the name again. Returns the colour now in force."""
+    v = str(value or "").strip().lower()
+    if not v:
+        try:
+            theme_file().unlink()
+        except FileNotFoundError:
+            pass
+        return project_colour()
+    if not re.fullmatch(r"#[0-9a-f]{6}", v):
+        raise ValueError("a colour is #rrggbb")
+    theme_file().parent.mkdir(parents=True, exist_ok=True)
+    theme_file().write_text(v + "\n")
+    return v
+
+
+def colour_from_name(name: str) -> str:
+    """A colour for a name: its hash picks the hue, and lightness and saturation are fixed
+    so white text reads on it. The same name is always the same colour."""
+    h = int(hashlib.sha256(name.encode()).hexdigest()[:8], 16) % 360
+    r, g, b = colorsys.hls_to_rgb(h / 360, .28, .55)
+    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def project_colour() -> str:
+    """The project's colour: the one chosen in `.dfs/theme`, else one made from its name
+    (not written, so a project that never chose follows its name when renamed)."""
+    return read_theme() or colour_from_name(project_title())
 
 
 def git_project_name() -> str:
