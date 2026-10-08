@@ -76,6 +76,10 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 .break::after { content: ""; flex: 1; border-top: var(--rule) solid var(--line); }
 .hint { color: var(--muted); padding: 28px 0; }
 p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
+/* Add a task floats at the bottom right, clear of the tab bar; the gap keeps the last row from hiding under it */
+.fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; min-height: 52px; padding: 0 var(--s5); }
+.fab-gap { height: 72px; }
+.top-actions { margin: var(--s2) 0 0; }
 
 /* the walk */
 .walk { margin: 6px 0 10px; border-bottom: var(--rule) solid var(--line); }
@@ -202,6 +206,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   .sheet-nav button { min-height: var(--hit); }
   #scrim { display: none !important; }
   #toast { top: auto; bottom: var(--s5); }
+  .fab { bottom: var(--s5); right: var(--s5); }
 }
 </style>
 </head>
@@ -404,13 +409,14 @@ function drawChats() {
         <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}<span class="muted">${esc(ago(c.updated))}</span></span>
         ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button>`).join("");
   $("#view").className = "col";
-  $("#view").innerHTML = `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up.</p>`
-    + (rows || `<p class="hint">No conversations yet.</p>`)
-    + `<p class="foot"><button class="textlink" data-act="chat" data-scope="project">Chat about the project</button></p>`;
+  $("#view").innerHTML = `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project">Chat about the project</button></div>`
+    + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up.</p>`
+    + (rows || `<p class="hint">No conversations yet.</p>`);
 }
 function drawTasks() {
   const items = S.state.items.filter(i => !S.only || i.needs_you);
-  let seg = 0, html = walkHtml() + `<div class="filters" role="group" aria-label="Filter">
+  let seg = 0, html = (chatOn() ? `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project">Chat about the project</button></div>` : "")
+    + walkHtml() + `<div class="filters" role="group" aria-label="Filter">
     <button data-act="only" data-v="0" aria-pressed="${!S.only}">All</button>
     <button data-act="only" data-v="1" aria-pressed="${S.only}">Needs you ${S.state.needs_you}</button></div>`;
   for (const it of S.state.items) {
@@ -428,8 +434,7 @@ function drawTasks() {
       ${it.status !== "open" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}</button>`;
   }
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
-  html += `<div class="actions"><button class="btn primary" data-act="newtask">Add a task</button></div>`;
-  html += `<p class="foot">${chatOn() ? `<button class="textlink" data-act="chat" data-scope="project">Chat about the project</button>` : ""}</p>`;
+  html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
   $("#view").className = "col"; $("#view").innerHTML = html;
 }
 

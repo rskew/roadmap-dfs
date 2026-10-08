@@ -359,11 +359,13 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
-  // A new task from the bottom of the list, and the title renamed by clicking it.
+  // A new task from the floating button, and the title renamed by clicking it.
   async newtask(b) {
     const { page, errors } = await open(b, PHONE);
-    const btn = await page.$eval("[data-act=newtask]", e => { const r = e.getBoundingClientRect(); return { h: r.height, after: r.top > document.querySelector(".item:last-of-type").getBoundingClientRect().top }; });
-    assert(btn.h >= 44 && btn.after, "the button is tap-sized and below the items");
+    const btn = await page.$eval("[data-act=newtask]", e => { const r = e.getBoundingClientRect(), t = document.querySelector("#tabs").getBoundingClientRect(); return { h: r.height, fixed: getComputedStyle(e).position === "fixed", right: innerWidth - r.right, aboveTabs: r.bottom <= t.top, low: r.top > innerHeight / 2 }; });
+    assert(btn.h >= 44 && btn.fixed && btn.right < 40 && btn.aboveTabs && btn.low, "the button is tap-sized and floats at the bottom right, above the tab bar");
+    const chat = await page.$eval("[data-act=chat][data-scope=project]", e => e.getBoundingClientRect().top);
+    assert(chat < (await page.$eval(".item", e => e.getBoundingClientRect().top)), "project chat is above the task list");
     await page.click("[data-act=newtask]"); await dialog(page);
     await page.fill("#nn", "Cache the lookups");
     await page.fill("#ng", "Hits above 90%.");
