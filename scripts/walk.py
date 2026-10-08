@@ -118,6 +118,26 @@ WALK_HOLD = 3600                # the fallback when the reset time is unparseabl
 WALK_START_GRACE = 15           # seconds — see `walk_tick`
 
 
+def chain_cause(rundir):
+    """`: <why>` from the last `dfs_agent:` line in a run's console, else nothing.
+
+    A chain that dies before its `meta.json` (`run.sh` exits 2 when `agent.py --rev`
+    cannot resolve nixpkgs) leaves its cause only in `console.log`, which neither the
+    screen's message line nor the page reads; the walk's stop reason is where it shows."""
+    try:
+        with open(os.path.join(rundir, "console.log"), "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            fh.seek(max(0, fh.tell() - 8192))
+            tail = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    lines = [l[len("dfs_agent:"):].strip() for l in tail.splitlines()
+             if l.startswith("dfs_agent:")]
+    # `agent.py` follows the failure with a hint line; the failure is the first of them.
+    failed = [l for l in lines if " failed: " in l]
+    return ": " + (failed or lines)[-1] if lines else ""
+
+
 def walk_decide(stop, moved, next_item):
     """What the walk does after a chain ends, as `(action, why)`.
 
@@ -273,7 +293,8 @@ class WalkMixin:
                 # progress, not a death — and the difference is how long it has had.
                 if time.time() - self.walk_started < WALK_START_GRACE:
                     return
-                self.walk_off("the chain it started is no longer on the box")
+                self.walk_off("the chain it started is no longer on the box"
+                              + chain_cause(self.walk_dir))
                 return
             if run["live"]:
                 return

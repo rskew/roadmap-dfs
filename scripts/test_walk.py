@@ -215,6 +215,29 @@ class Ticking(unittest.TestCase):
         self.assertEqual(ui.walk_content, {"a", "b", "new"},
                          "records what the trees say, to compare against")
 
+    def test_a_chain_that_died_before_its_meta_says_why(self):
+        # run.sh exits 2 when `agent.py --rev` cannot fetch nixpkgs, before any
+        # meta.json: the walk sees no chain, and the cause is only in console.log.
+        import tempfile
+        d = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, d)
+        cause = ("--rev failed: error: unable to download "
+                 "'https://api.github.com/repos/nixos/nixpkgs/commits/" + "a" * 40 +
+                 "': HTTP error 404 \u2014 404: Not Found")
+        Path(d, "console.log").write_text(
+            "$ run.sh W7\n\ndfs_agent: " + cause + "\ndfs_agent: set AGENT_NIXPKGS_REV=<rev>\n")
+        ui = self.ui(walk_dir=d, walk_started=time.time() - 60)
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertFalse(ui.walk_on)
+        self.assertIn(cause, ui.walk_note)
+        self.assertIn(cause, ui.msg)
+        # No console, or none of ours: the old reason, unchanged.
+        ui = self.ui(walk_dir=d + "/nope", walk_started=time.time() - 60)
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual(ui.walk_note, "the chain it started is no longer on the box")
+
     def test_it_holds_without_starting_anything(self):
         ui = self.ui(walk_until=time.time() + 600, walk_dir="/runs/mine")
         self.live(ui, [])
