@@ -33,8 +33,8 @@ icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes
 - **Colour**: `--paper --panel --sel --ink --muted --line --faint` and the three meanings
   (`--settled --attention --assumption`, each `-wash`; `--assumption-fill`). Text is held to
   4.5 to 1 on the surface it is used on, in both themes; `/design` prints the ratios.
-- **Type**, five steps: `--fs-label 12` (caps labels, tags), `--fs-control 13` (caps on a
-  control), `--fs-small 15`, `--fs-body 17`, `--fs-title 22`. Caps are tracked and only ever
+- **Type**, five steps: `--fs-label 12` (labels, tags), `--fs-control 13` (labels on a
+  control), `--fs-small 15`, `--fs-body 17`, `--fs-title 22`. Labels are tracked and only ever
   small. The font is the system's own.
 - **Space**, a 4px base: `--s1 … --s6` = 4 8 12 16 24 32.
 - **Rules**: `--rule 1` (a rule), `--rule-strong 2` (the current tab, the flourish),

@@ -37,7 +37,7 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 #bar .iconbtn { margin-right: -10px; }
 #back[hidden], #live[hidden] { display: none; }
 @media (max-width: 899px) { #back, .desk { display: none; } }          /* the bottom bar has these */
-#live, #loading { font-size: var(--fs-label); color: var(--attention); letter-spacing: .08em; text-transform: uppercase; }
+#live, #loading { font-size: var(--fs-label); color: var(--attention); letter-spacing: .08em; }
 #loading { color: var(--muted); }
 #loading[hidden] { display: none; }
 /* a stripe slides under the header while a request is outstanding; it shows only after 250 ms */
@@ -58,14 +58,14 @@ html[data-loading] #stripe { opacity: 1; }
   height: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--paper); border-top: var(--rule) solid var(--line);
 }
-#tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--s2); font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border-top: var(--rule-strong) solid transparent; margin-top: -1px; }
+#tabs button { flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--s2); font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; color: var(--muted); border-top: var(--rule-strong) solid transparent; margin-top: -1px; }
 #tabs button[aria-current="page"] { color: var(--ink); border-top-color: var(--ink); }
 .count { font-variant-numeric: tabular-nums; color: var(--assumption); }
 .count[hidden] { display: none; }
 
 /* the task list: ruled, with ids in a column */
 .filters { display: flex; gap: 22px; margin: var(--s1) 0 6px; border-bottom: var(--rule) solid var(--line); }
-.filters button { min-height: var(--hit); min-width: var(--hit); padding: 0 var(--s1); font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); border-bottom: var(--rule-strong) solid transparent; margin-bottom: -1px; }
+.filters button { min-height: var(--hit); min-width: var(--hit); padding: 0 var(--s1); font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; color: var(--muted); border-bottom: var(--rule-strong) solid transparent; margin-bottom: -1px; }
 .filters button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
 .item { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 var(--s3); width: 100%; padding: var(--s4) 0; padding-left: calc(var(--ind, 0px) + var(--gx, 0px)); border-bottom: var(--rule) solid var(--line); }
 .item.tint { margin: 0 -10px; width: calc(100% + 20px); --gx: 10px; padding-right: 10px; }
@@ -75,7 +75,7 @@ html[data-loading] #stripe { opacity: 1; }
 .item .iid { font-weight: 600; letter-spacing: .03em; }
 .item .goal { font-weight: 500; overflow-wrap: anywhere; }
 .item .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin-top: 6px; font-size: var(--fs-control); }
-.item .st { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.item .st { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
 .item .st.done { color: var(--settled); } .item .st.blocked { color: var(--attention); }
 /* a finished task recedes whole, so the open ones are what the eye lands on */
 .item.done .iid, .item.done .goal { color: var(--muted); font-weight: 400; }
@@ -113,7 +113,7 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 .walk .line2 { color: var(--muted); font-size: var(--fs-small); margin: 0 0 6px; }
 .walk .row2 { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0; }
 .walk .row2.act { margin-bottom: 14px; }
-.walk label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.walk label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
 .walk .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
 .walk .chain span:first-child { overflow-wrap: anywhere; }
 .walk details { margin-top: 6px; }
@@ -172,7 +172,7 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .sheet-nav, .sheet-actions { flex: none; }
 /* the node's own bar, at the bottom: Back leftmost, Next where the right thumb rests */
 .sheet-nav { display: grid; grid-template-columns: repeat(4, 1fr); border-top: var(--rule) solid var(--line); }
-.sheet-nav button { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; text-align: center; }
+.sheet-nav button { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-align: center; }
 .sheet-nav button + button { border-left: var(--rule) solid var(--faint); }
 .sheet-nav button[data-act=next] { font-weight: 700; color: var(--ink); background: var(--sel); }
 .sheet-nav button:disabled { color: var(--muted); opacity: .45; cursor: default; background: none; }
@@ -181,14 +181,14 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4) var(--s4) 20px; overscroll-behavior: contain; }
 .sheet-body h3 { margin: 0 0 2px; font-size: var(--fs-title); line-height: 1.25; font-weight: 500; overflow-wrap: anywhere; }
 .sheet-body .meta { color: var(--muted); font-size: 14px; letter-spacing: .04em; margin-bottom: var(--s1); }
-.sheet-body h4 { margin: 20px 0 var(--s1); font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); text-transform: uppercase; color: var(--muted); }
+.sheet-body h4 { margin: 20px 0 var(--s1); font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); color: var(--muted); }
 .sheet-body .raise h4 { margin: 0 0 var(--s2); }
 .sheet-body h4.amber { color: var(--assumption); } .sheet-body h4.red { color: var(--attention); }
 .sheet-body p, .sheet-body div.p { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-width: var(--measure); }
 .sheet-body .amber { color: var(--assumption); }
 .sheet-body .plus { color: var(--settled); } .sheet-body .minus { color: var(--attention); }
-.sheet-body .plus::before { content: "For \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
-.sheet-body .minus::before { content: "Against \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; }
+.sheet-body .plus::before { content: "For \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; }
+.sheet-body .minus::before { content: "Against \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; }
 .sheet-body .red { color: var(--attention); } .sheet-body .dim { color: var(--muted); }
 .sheet-body .raise { margin: var(--s3) 0; }
 .sheet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
