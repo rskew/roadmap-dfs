@@ -767,6 +767,36 @@ class ADoneTaskRecedesInTheList(unittest.TestCase):
         self.assertFalse(row(2)[0][3] & curses.A_DIM, "the cursor row keeps its band")
 
 
+class ACardDrawsItsMarkdown(unittest.TestCase):
+    """`code` and **bold** in a card were drawn with their markers."""
+
+    def ui(self):
+        ui = a_screen([item("W1")])
+        ui.scr = ADoneTaskRecedesInTheList.Rec()
+        return ui
+
+    def test_the_markers_go_and_the_spans_are_drawn_as_runs(self):
+        ui = self.ui()
+        (text, attr), = ui.card_lines(80, [("text", "Run `scripts/x.py` and **both** `**`.")])
+        ui.put(0, 0, text, attr)
+        runs = {t: a for _, _, t, a in ui.scr.puts}
+        self.assertEqual("".join(t for _, _, t, _ in ui.scr.puts), "  Run scripts/x.py and both **.")
+        self.assertTrue(runs["both"] & curses.A_BOLD, "bold is bold")
+        self.assertTrue(runs["scripts/x.py"] & curses.A_UNDERLINE, "code is set apart (no colour here)")
+        self.assertFalse(runs["  Run "] & (curses.A_BOLD | curses.A_UNDERLINE), "the rest is plain")
+
+    def test_a_span_the_wrap_splits_is_closed_and_reopened(self):
+        ui = self.ui()
+        lines = ui.card_lines(24, [("text", "one **two three four five six seven eight** nine")])
+        self.assertGreater(len(lines), 2)
+        for text, _ in lines:
+            ons = sum(text.count(m) for m in (TUI.BOLD_ON, TUI.CODE_ON))
+            offs = sum(text.count(m) for m in (TUI.BOLD_OFF, TUI.CODE_OFF))
+            self.assertEqual(ons, offs, text)
+        self.assertEqual(" ".join(TUI.unmark(t).strip() for t, _ in lines),
+                         "one two three four five six seven eight nine")
+
+
 if __name__ == "__main__":
     curses.color_pair = lambda n: 0       # no initscr here; attrs are opaque
     unittest.main()

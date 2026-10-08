@@ -760,6 +760,51 @@ def printable(text):
     return CONTROL.sub(" ", strip_ansi(text).replace("\t", "    "))
 
 
+# ── inline markdown in a card ──────────────────────────────────────────────────
+#
+# A card's prose is markdown as the task files write it: `code` and **bold**. The
+# lines are wrapped as text (`para(..., rich=True)`) and each carries ONE attribute, so
+# the spans travel as four private-use characters that `put` turns into runs: wrapping then sees them as
+# characters (a line may break a few columns early, never late) and the markers the
+# author typed are never drawn.
+
+BOLD_ON, BOLD_OFF, CODE_ON, CODE_OFF = "\ue000", "\ue001", "\ue002", "\ue003"
+MARKS = re.compile("[\ue000-\ue003]")
+SPAN = re.compile(r"`([^`\n]+)`|\*\*([^*\n]+)\*\*")
+
+
+def mark_up(text):
+    """`text` with `code` and **bold** as span marks. Code is cut out first, so a
+    `**` inside it stays a literal; nothing nests."""
+    return SPAN.sub(lambda m: (CODE_ON + m.group(1) + CODE_OFF) if m.group(1) is not None
+                    else BOLD_ON + m.group(2) + BOLD_OFF, str(text))
+
+
+def unmark(text):
+    """The cells `text` takes on the screen: its span marks taken out."""
+    return MARKS.sub("", text)
+
+
+def carry_marks(lines):
+    """Wrapped `(text, attr)` lines whose spans each close on their own line: a span
+    the wrap split is closed at the end of one line and reopened on the next."""
+    out, open_ = [], ""
+    for text, attr, *rest in lines:
+        text = open_ + text
+        open_ = ""
+        for m in MARKS.findall(text):
+            open_ = m if m in (BOLD_ON, CODE_ON) else ""
+        if open_:
+            text += BOLD_OFF if open_ == BOLD_ON else CODE_OFF
+        out.append((text, attr, *rest))
+    return out
+
+
+def code_attr():
+    accent = look("accent")
+    return accent if accent & curses.A_COLOR else curses.A_UNDERLINE
+
+
 # ── codex's two log shapes ─────────────────────────────────────────────────────
 #
 # ⚠️ **CLAUDE WRITES ONE OBJECT AND CODEX WRITES JSONL**, and until 2026-09-17 this
@@ -2177,11 +2222,32 @@ class UI(WalkMixin):
         edge = min(w - 1, getattr(self, "clip", None) or w - 1)
         if y < 0 or y >= h or x >= edge:
             return
-        text = printable(text)[: max(0, edge - x)]
+        text = printable(text)
+        if MARKS.search(text):
+            return self.put_marked(y, x, text, attr, edge)
+        text = text[: max(0, edge - x)]
         try:
             self.scr.addstr(y, x, text, attr)
         except curses.error:
             pass
+
+    def put_marked(self, y, x, text, attr, edge):
+        """A line with span marks, drawn as runs: bold adds A_BOLD, code takes the accent."""
+        run = attr
+        for part in re.split("([\ue000-\ue003])", text):
+            if part == BOLD_ON:
+                run = attr | curses.A_BOLD
+            elif part == CODE_ON:
+                run = (attr & ~curses.A_COLOR) | code_attr()
+            elif part in (BOLD_OFF, CODE_OFF):
+                run = attr
+            elif part and x < edge:
+                part = part[: edge - x]
+                try:
+                    self.scr.addstr(y, x, part, run)
+                except curses.error:
+                    pass
+                x += len(part)
 
     def puts(self, y, x, parts):
         """Several (text, attr) runs on one row, left to right; returns where it ended."""
@@ -2371,7 +2437,7 @@ class UI(WalkMixin):
         w = max(20, width - 2)
         out = []
 
-        def para(text, attr=0, indent="", hang=None):
+        def para(text, attr=0, indent="", hang=None, rich=False):
             """Wrap, with the continuation lines visibly continuations.
 
             A wrapped `Options:` field whose second line starts at the same column
@@ -2381,10 +2447,13 @@ class UI(WalkMixin):
             approving anything.
             """
             body = indent if hang is None else indent + hang
-            for line in textwrap.wrap(text, w - len(indent),
+            first = len(out)
+            for line in textwrap.wrap(mark_up(text) if rich else text, w - len(indent),
                                       initial_indent=indent,
                                       subsequent_indent=body) or [indent]:
                 out.append((line, attr))
+            if rich:
+                out[first:] = carry_marks(out[first:])
         return out, para
 
     def card_lines(self, width, blocks, indent=""):
@@ -2404,7 +2473,7 @@ class UI(WalkMixin):
             for line in (text or "").splitlines() or [""]:
                 para(line, attrs.get(role, 0),
                      indent=indent + ("" if role in ("head", "meta") else "  "),
-                     hang="  " if role in ("plus", "minus") else "")
+                     hang="  " if role in ("plus", "minus") else "", rich=True)
         return out
 
     def log_wrap(self, width, text, attr, hang="      "):
@@ -3487,7 +3556,7 @@ class UI(WalkMixin):
                 if shown:
                     for line in prose_blocks(row["text"]):
                         para(line, indent="    ", hang="  " if re.match(
-                            r"^\s*([-*+]|\d+[.)])\s", line) else "")
+                            r"^\s*([-*+]|\d+[.)])\s", line) else "", rich=True)
                     out.append(("", 0))
                 continue
             if row["kind"] == "raise":
@@ -3496,7 +3565,7 @@ class UI(WalkMixin):
                 out.append(("%s ● RAISE%s · %s — needs you" % (cursor, on, age(r["ts"])),
                             red | curses.A_BOLD | (curses.A_REVERSE if sel else 0)))
                 for line in r["body"].splitlines():
-                    para(line, indent="    ", hang="  ")
+                    para(line, indent="    ", hang="  ", rich=True)
                 continue
             nd, st = row["node"], row["status"]
             fold = ("▸" if row["folded"] else "▾") if row["kids"] else " "
@@ -3569,7 +3638,7 @@ class UI(WalkMixin):
             for r in row["raises"]:
                 out.append((inner + "RAISE · %s — needs you" % age(r["ts"]), red | curses.A_BOLD))
                 for line in r["body"].splitlines():
-                    para(line, indent=inner + "  ", hang="  ")
+                    para(line, indent=inner + "  ", hang="  ", rich=True)
             if row["key"] in self.tree_open:
                 # The same card the panel draws (minus its heading, which is the row).
                 card = node_card(t, dict(row, raises=[]), archive, commits.get(nd["id"], ()))
@@ -3809,7 +3878,7 @@ class UI(WalkMixin):
             out.append((row["name"], curses.A_BOLD))
             out.append(("", 0))
             for line in prose_blocks(row["text"]):
-                para(line, 0, indent="", hang="  " if re.match(r"^\s*([-*+]|\d+[.)])\s", line) else "")
+                para(line, 0, indent="", hang="  " if re.match(r"^\s*([-*+]|\d+[.)])\s", line) else "", rich=True)
         else:
             r = row["raise_"]
             out.append(("raise%s · %s — needs you" % (
@@ -3817,7 +3886,7 @@ class UI(WalkMixin):
                         curses.color_pair(1) | curses.A_BOLD))
             out.append(("", 0))
             for line in r["body"].splitlines():
-                para(line, 0, indent="", hang="  ")
+                para(line, 0, indent="", hang="  ", rich=True)
         return out
 
     def draw_card(self, x0, top, bottom, w):
