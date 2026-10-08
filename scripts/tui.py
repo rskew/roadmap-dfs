@@ -128,7 +128,7 @@ def prose_blocks(text):
     return out
 
 
-def tree_entries(t, folded=()):
+def tree_entries(t, folded=(), flagged=False):
     """The pane's rows, in order: the task's own raises, then the nodes depth-first.
 
     A node in `folded` keeps its row and hides its descendants. A raise on a node
@@ -140,7 +140,15 @@ def tree_entries(t, folded=()):
     ⚠️ A fold must not hide a raise. The first tree this pane was tried on had its
     one open raise on W13.26, four levels under W13.8, and folding W13.8 took the
     only thing the author was there to answer off the screen. So a folded row
-    carries `raises_below`, the count of open raises it is hiding."""
+    carries `raises_below`, the count of open raises it is hiding.
+
+    `flagged` keeps only the nodes that want the author (an assumption, an ask, an
+    open raise on the node) and drops the rest, ancestors included. Folds are off
+    then (a fold on a dropped row would hide a flagged node below it) and a kept
+    node's `kids` is 0, so no row shows a fold mark. Sections and the task's own
+    raises stay."""
+    if flagged:
+        folded = ()
     status, pruned = dfs_tree.effective(t)
     asleep = dfs_tree.dormant(t)
     nodes = dfs_tree.by_id(t)
@@ -197,6 +205,11 @@ def tree_entries(t, folded=()):
                             folded=shut, raises_below=below,
                             assumes=nid in wants and bool(nd["fields"].get("Hypothesis")),
                             asks=nid in wants and bool(nd["fields"].get("Ask"))))
+            if flagged:
+                if on_node.get(nid) or out[-1]["assumes"] or out[-1]["asks"]:
+                    out[-1]["kids"] = 0
+                else:
+                    out.pop()
             if nid not in folded:
                 # ⚠️ INDENT ONLY AT A FORK. `--open` makes every todo the child of the
                 # one before, so a twenty-step task was a staircase forty columns

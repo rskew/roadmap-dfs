@@ -194,6 +194,21 @@ class Rows(unittest.TestCase):
                          ["2026-09-27T01:05:00Z"])
         self.assertEqual(rows["W1.1"]["raises"], [])
 
+    def test_flagged_keeps_only_the_nodes_that_want_the_author(self):
+        t = dfs_tree.parse(TREE.replace(
+            "### W1.2 · Under the first\nParent: W1.1\nStatus: confirmed\n",
+            "### W1.2 · Under the first\nParent: W1.1\nStatus: open\n"
+            "Hypothesis: it is so. Wrong if it is not.\n"), "W1")
+        rows = TUI.tree_entries(t, {"W1.1"}, flagged=True)
+        nodes = [r for r in rows if r["kind"] == "node"]
+        # W1.2 (assumption) and W1.3 (open raise) stay; W1.1 and W1.4 go, and the
+        # fold on the dropped W1.1 does not hide what is under it.
+        self.assertEqual([r["key"] for r in nodes], ["W1.2", "W1.3"])
+        self.assertEqual([r["kids"] for r in nodes], [0, 0])
+        self.assertEqual([r["key"] for r in rows if r["kind"] != "node"],
+                         ["section:W1:Goal", "section:W1:Background",
+                          "raise:2026-09-27T01:06:00Z"])
+
     def test_a_fold_hides_the_descendants_and_keeps_the_row(self):
         rows = TUI.tree_entries(tree(), {"W1.1"})
         self.assertEqual([r["key"] for r in rows if r["kind"] == "node"],
