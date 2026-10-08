@@ -144,6 +144,7 @@ def tree_entries(t, folded=()):
     status, pruned = dfs_tree.effective(t)
     asleep = dfs_tree.dormant(t)
     nodes = dfs_tree.by_id(t)
+    wants = set(dfs_tree.assumed(t))        # not refuted, pruned, or ruled on by the author
     on_node, out = {}, []
     sections = dict(t["sections"])
     order = TREE_SECTIONS
@@ -193,7 +194,9 @@ def tree_entries(t, folded=()):
                          for k in dfs_tree.descendants(t, nid)) if shut else 0)
             out.append(dict(key=nid, kind="node", depth=d, node=nd, status=st,
                             raises=on_node.get(nid, []), kids=len(kids),
-                            folded=shut, raises_below=below))
+                            folded=shut, raises_below=below,
+                            assumes=nid in wants and bool(nd["fields"].get("Hypothesis")),
+                            asks=nid in wants and bool(nd["fields"].get("Ask"))))
             if nid not in folded:
                 # ⚠️ INDENT ONLY AT A FORK. `--open` makes every todo the child of the
                 # one before, so a twenty-step task was a staircase forty columns
@@ -3175,9 +3178,7 @@ class UI(WalkMixin):
                 return True
             if r["kind"] != "node":
                 return False
-            f = r["node"]["fields"]
-            return bool(r["raises"] or (r["status"] not in ("refuted", "pruned")
-                                        and (f.get("Hypothesis") or f.get("Ask"))))
+            return bool(r["raises"] or r["assumes"] or r["asks"])
         for k in range(1, len(rows) + 1):
             i = (self.tree_sel + step * k) % len(rows)
             if wants(rows[i]):
@@ -3623,9 +3624,7 @@ class UI(WalkMixin):
             nd, st = row["node"], row["status"]
             fold = ("▸" if row["folded"] else "▾") if row["kids"] else " "
             flag = "  ● raise" if row["raises"] else ""
-            live_node = st not in ("refuted", "pruned")
-            assumes = nd["fields"].get("Hypothesis") if live_node else ""
-            asks = nd["fields"].get("Ask") if live_node else ""
+            assumes, asks = row["assumes"], row["asks"]
             if assumes:
                 flag += "  ⚑ assumption"
             if asks:
@@ -3681,12 +3680,12 @@ class UI(WalkMixin):
                     # one the assumption and what would show it wrong are kept under the
                     # row, each on a line of its own and clipped with a visible mark.
                     if assumes:
-                        assumption, wrong = dfs_tree.split_falsifier(assumes)
+                        assumption, wrong = dfs_tree.split_falsifier(nd["fields"]["Hypothesis"])
                         out.append((inner + clip_marked(assumption, room), look("amber")))
                         if wrong:
                             out.append((inner + clip_marked("wrong if " + wrong, room), look("amber")))
                     if asks:
-                        out.append((inner + clip_marked("ask: " + asks, room), red))
+                        out.append((inner + clip_marked("ask: " + nd["fields"]["Ask"], room), red))
             if row["key"] not in self.tree_open and not row["raises"]:
                 continue
             for r in row["raises"]:

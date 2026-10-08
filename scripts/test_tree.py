@@ -678,6 +678,14 @@ class Check(InARepo):
         self.write(task(node(1, extra="Ask: Should it warn or fail?\n"), self.LOG))
         self.assertEqual(dfs_tree.assumed(dfs_tree.load("W1")), ["W1.1"])
 
+    def test_a_node_the_author_has_ruled_on_is_no_longer_flagged(self):
+        """Confirmed or refuted by the author's correction, the assumption is answered."""
+        hyp = "Hypothesis: it holds. Wrong if it leaks.\n"
+        for verdict in ("confirmed", "refuted"):
+            self.write(task(node(1, "confirmed", extra=hyp) + node(2, "confirmed", extra=hyp),
+                            self.LOG + "- 2026-09-25T09:12:00Z · correct · W1.1 · %s\n  Seen.\n" % verdict))
+            self.assertEqual(dfs_tree.assumed(dfs_tree.load("W1")), ["W1.2"], verdict)
+
     def test_a_node_that_points_instead_of_saying_gets_a_note_not_a_refusal(self):
         text = task(node(1, "open", extra="Approach: Fix what W1.0 found\n")
                     + node(2, "open", extra="Approach: In src/cache.py get_or_set, take a "

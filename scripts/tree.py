@@ -1018,11 +1018,15 @@ def accepted(t):
 def assumed(t):
     """The live nodes that rest on an assumption (they state a Hypothesis) or put a
     question to the author (they state an Ask), in tree order. Most nodes only say
-    something was done and are neither. A refuted or pruned node's assumption is moot."""
+    something was done and are neither. A refuted or pruned node's assumption is moot,
+    and so is one the author has ruled on: a correction at the node, confirmed or
+    refuted, is their answer to what it assumed, so it no longer asks to be looked at."""
     status, pruned = effective(t)
+    ruled = {c["node"] for c in corrections(t) if c["disp"] in DETERMINED}
     return [nd["id"] for nd in sorted(t["nodes"], key=order_key)
             if (nd["fields"].get("Hypothesis") or nd["fields"].get("Ask"))
-            and status[nd["id"]] != "refuted" and nd["id"] not in pruned]
+            and status[nd["id"]] != "refuted" and nd["id"] not in pruned
+            and nd["id"] not in ruled]
 
 
 def split_falsifier(text):

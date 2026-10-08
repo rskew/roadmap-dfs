@@ -780,6 +780,14 @@ class AnAssumptionStandsOut(unittest.TestCase):
         self.assertNotIn("⚑", plain[0])
         self.assertFalse(plain[1] & 7000, plain)
 
+    def test_the_author_confirming_it_clears_the_flag(self):
+        text = TREE.replace("### W1.2 · step 2\nStatus: confirmed\n",
+                            "### W1.2 · step 2\nStatus: confirmed\nHypothesis: %s.\n" % self.HYP)
+        text += "\n- 2026-09-25T09:12:00Z · correct · W1.2 · confirmed\n  Yes.\n"
+        t = TUI.dfs_tree.parse(text, "W1")
+        row = next(r for r in TUI.tree_entries(t) if r.get("key") == "W1.2")
+        self.assertFalse(row["assumes"] or row["asks"], row)
+
     def test_opened_it_is_not_said_twice_in_a_row(self):
         said = [l[0] for l in self.lines(open_it=True) if self.HYP in l[0]]
         self.assertEqual(len(said), 1, said)

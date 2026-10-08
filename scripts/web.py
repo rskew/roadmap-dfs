@@ -258,7 +258,6 @@ def task_json(task):
         else:
             nd, st = row["node"], row["status"]
             f = nd["fields"]
-            live = st not in ("refuted", "pruned")
             story = dfs_tree.story(t, nd["id"])
             # Without the raises: the page draws those itself, with the Answer button.
             card = dfs_tui.node_card(t, dict(row, raises=[]), archive, commits.get(nd["id"], ()))
@@ -270,7 +269,7 @@ def task_json(task):
                 approach=nd["fields"].get("Approach", ""),
                 raises=[raise_json(r) for r in row["raises"]],
                 raises_below=row["raises_below"],
-                assumes=bool(f.get("Hypothesis")) and live, ask=bool(f.get("Ask")) and live,
+                assumes=row["assumes"], ask=row["asks"],
                 answered=bool(story["answered"]), overruled=bool(story["overruled"]),
                 card=plain(card[1:])))      # [1:]: the heading is the row
     nodes = dfs_tree.by_id(t)
