@@ -27,6 +27,7 @@ trust. Bound to loopback, a request whose `Host` is not a loopback name is refus
 page on another site can point its own name at 127.0.0.1: DNS rebinding), a write from
 another website is refused (it must be JSON, which a page elsewhere cannot send without a
 preflight this server never grants, and its `Origin` must be this server's own address).
+A TLS proxy's hostname is admitted by name, `--allow-host` or DFS_WEB_ALLOW_HOST, and no other.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the

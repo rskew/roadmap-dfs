@@ -295,6 +295,7 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("GET", "/web/index.html")[0], 404, "only the listed files are served")
         page = self.call("GET", "/")[1].decode()
         self.assertIn("!isSecureContext && /Android/", page, "an Android page on plain http says why Install is missing")
+        self.assertIn("isSecureContext ? \"\" : `<p class=\"muted\" style=\"margin:0\">${esc(NO_INSTALL)}</p>`", page, "the project-name dialog repeats the note")
         self.assertIn("--allow-host", (HERE.parent / "README.md").read_text(), "the README names the https route")
 
     def task(self):
