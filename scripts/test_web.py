@@ -282,6 +282,32 @@ class Web(unittest.TestCase):
         self.assertEqual((status, body), (200, dict(colour=made, chosen=False)))
         self.assertFalse((self.root / ".dfs" / "theme").exists())
 
+    def test_the_dark_washes_stay_visible_and_their_text_readable(self):
+        import re
+        css = (Path(dfs_web.__file__).parent / "web" / "design.css").read_text()
+        media = css[css.index("prefers-color-scheme: dark"):css.index(':root[data-theme="dark"]')]
+        switch = css[css.index(':root[data-theme="dark"]'):]
+        def block(text):
+            return dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", text[:text.index("}")]))
+        dark = block(media)
+        self.assertEqual(dark, block(switch), "the two dark blocks must carry the same colours")
+
+        def lum(h):
+            c = [int(h[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+            c = [x / 12.92 if x <= .03928 else ((x + .055) / 1.055) ** 2.4 for x in c]
+            return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
+
+        def ratio(a, b):
+            hi, lo = sorted((lum(dark[a]), lum(dark[b])), reverse=True)
+            return (hi + .05) / (lo + .05)
+        for kind in ("settled", "attention", "assumption"):
+            wash = "--%s-wash" % kind
+            self.assertGreaterEqual(ratio(wash, "--paper"), 1.6, wash + " against the page")
+            self.assertGreaterEqual(ratio("--" + kind, wash), 4.5, kind + " mark on its wash")
+            self.assertGreaterEqual(ratio("--muted", wash), 4.5, "muted text on " + wash)
+            self.assertGreaterEqual(ratio("--ink", wash), 4.5, "ink on " + wash)
+        self.assertGreaterEqual(ratio("--on-attention", "--attention"), 4.5, "error toast text")
+
     def test_the_design_system_is_served_and_the_page_uses_it(self):
         status, css, r = self.call("GET", "/design.css")
         self.assertEqual((status, r.getheader("Content-Type")), (200, "text/css; charset=utf-8"))
