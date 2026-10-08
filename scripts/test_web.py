@@ -285,6 +285,30 @@ class Web(unittest.TestCase):
         self.assertEqual(off, ["section", "a", "d", "e"], "folded a hides b and c")
         self.assertEqual(on, ["section", "b", "c", "d"], "folds are ignored; a and e are dropped")
 
+    def test_reorder_swaps_the_rows_for_ones_that_carry_moves(self):
+        """drawTasks() in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function drawTasks() {"):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '';"
+              "const view = {}; const $ = s => s === '#view' ? view : null;"
+              "const row = (id, segment) => ({id, goal: 'g', depth: 0, status: 'open', segment, raises: 0,"
+              " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
+              "const S = {only: false, reorder: false, moved: null,"
+              " state: {needs_you: 0, items: [row('W1', 0), row('W2', 1)]}};" + body +
+              "drawTasks(); const off = view.innerHTML; S.reorder = true; drawTasks();"
+              "console.log(JSON.stringify([off, view.innerHTML]))")
+        off, on = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertNotIn("data-act=\"move\"", off)
+        self.assertEqual(off.count('<button class="item'), 2, "a row is one button to open the task")
+        self.assertNotIn('<button class="item', on, "a row holding buttons is not itself a button")
+        for move in ("up", "down", "out", "in", "break"):
+            self.assertEqual(on.count('data-move="%s"' % move), 2, move)
+        self.assertEqual(on.count("Remove break"), 1, "only W2 sits behind a fence")
+        self.assertIn('aria-pressed="true">Reorder', on)
+
     def test_the_artefacts_section_previews_the_named_and_only_links_the_rest(self):
         """artefactsHtml() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")

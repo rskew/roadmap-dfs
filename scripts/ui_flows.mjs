@@ -379,6 +379,30 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // Reorder: the list's Reorder switch gives each row tap-sized moves, a move writes order.md and
+  // redraws the list, a move that cannot be made says why, and switching it off restores the rows.
+  async reorder(b) {
+    const { page, errors } = await open(b, PHONE);
+    const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
+    const before = await ids();
+    assert(before.length >= 3 && !(await page.$(".moves")), "the list has no moves until Reorder is on");
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".moves");
+    same(await page.$$eval(".moves .btn", es => es.filter(e => e.getBoundingClientRect().height < 44).length), 0, "every move is tap-sized");
+    assert(!(await page.$("button.item")), "a row is not a button while the moves are on it");
+    await page.click(`[data-act=move][data-move=down][data-id=${before[0]}]`);
+    await page.waitForFunction(first => document.querySelector(".item .iid").textContent.trim() !== first, before[0], { timeout: 8000 });
+    assert(fs.existsSync(path.join(DIR, ".dfs", "order.md")), "the move is written to order.md");
+    const after = await ids();
+    assert(after.indexOf(before[0]) > 0, "the moved task is no longer first");
+    await page.click(`[data-act=move][data-move=up][data-id=${after[0]}]`);
+    await page.waitForSelector("#toast.err");
+    assert((await page.textContent("#toast")).includes("first"), "a refused move says why");
+    await page.click("[data-act=reorder]");
+    assert(await page.$("button.item") && !(await page.$(".moves")), "switching Reorder off restores the rows");
+    same(errors, [], "no page errors");
+  },
+
   // A new task from the floating button, and the title renamed by clicking it.
   async newtask(b) {
     const { page, errors } = await open(b, PHONE);

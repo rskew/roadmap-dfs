@@ -160,6 +160,9 @@ class Flows(unittest.TestCase):
     def test_a_new_task_from_the_bottom_of_the_list_and_the_title_is_the_rename(self):
         self.flow("newtask")
 
+    def test_reordering_the_task_list_writes_order_md(self):
+        self.flow("reorder")
+
     def test_a_forms_buttons_clear_the_keyboard(self):
         self.flow("keyboard")
 

@@ -86,6 +86,12 @@ html[data-loading] #stripe { opacity: 1; }
 .item.done .goal { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item.done .meta { flex: none; margin-top: 0; flex-wrap: nowrap; }
 .item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
+/* Reorder: the row stops being one button (its controls are buttons too) and grows a strip of moves under its text */
+.item.reorder { cursor: default; }
+.item.reorder:active { background: none; }
+.item.reorder.moved { background: var(--sel); }
+.moves { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
+.moves .btn { min-width: var(--hit); padding: 0 var(--s3); }
 .break { margin: 18px 0 6px; display: flex; align-items: center; gap: var(--s3); }
 .break::after { content: ""; flex: 1; border-top: var(--rule) solid var(--line); }
 .hint { color: var(--muted); padding: 28px 0; }
@@ -261,7 +267,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, flagged: false, node: null, sig: "", dirty: false };
+const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, reorder: false, moved: null, flagged: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
 /* Loading: a request still outstanding after 250 ms shows "loading" and the stripe under the header
@@ -465,24 +471,39 @@ function drawTasks() {
   let seg = 0, html = (chatOn() ? `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project">Chat about the project</button></div>` : "")
     + walkHtml() + `<div class="filters" role="group" aria-label="Filter">
     <button data-act="only" data-v="0" aria-pressed="${!S.only}">All</button>
-    <button data-act="only" data-v="1" aria-pressed="${S.only}">Needs you ${S.state.needs_you}</button></div>`;
+    <button data-act="only" data-v="1" aria-pressed="${S.only}">Needs you ${S.state.needs_you}</button>
+    <button data-act="reorder" aria-pressed="${S.reorder}">Reorder</button></div>`;
   for (const it of S.state.items) {
-    if (it.segment > seg && !S.only) html += `<div class="break cap">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
+    const fenced = it.segment > seg && !S.only;
+    if (fenced) html += `<div class="break cap">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
     seg = it.segment;
     if (S.only && !it.needs_you) continue;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
-    html += `<button class="item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" style="--ind:${Math.min(it.depth, 3) * 14}px">
-      <span class="iid">${esc(it.id)}</span>
+    const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}`;
+    const inner = `<span class="iid">${esc(it.id)}</span>
       <span class="body"><span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.waiting_on ? `<span class="tag">waiting on ${esc(it.waiting_on)}</span>` : ""}
           ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}</span></span>
-      ${it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}</button>`;
+      ${it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}`;
+    const style = `--ind:${Math.min(it.depth, 3) * 14}px`;
+    if (S.reorder) {
+      const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
+      html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
+        <span class="moves">${mv("up", "Up", "Move up")}${mv("down", "Down", "Move down")}${mv("out", "Out", "Move out of its parent:")}${mv("in", "In", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}</span></div>`;
+    } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
   }
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
   $("#view").className = "col"; $("#view").innerHTML = html;
+  const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
+  if (row) row.scrollIntoView({ block: "nearest" });
+}
+// One tap, one move: the server writes order.md and answers with the new list, which is drawn at once.
+async function moveTask(id, move) {
+  try { S.state = await api("/api/order", { item: id, move }); S.moved = id; drawTasks(); }
+  catch (e) { toast(e.message, true); }
 }
 
 /* ── one task ───────────────────────────────────────────────────────────────── */
@@ -857,7 +878,9 @@ document.addEventListener("click", e => {
   ({
     retry: () => render(true),
     flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
-    only: () => { S.only = d.v === "1"; drawTasks(); },
+    only: () => { S.only = d.v === "1"; if (S.only) S.reorder = false; drawTasks(); },
+    reorder: () => { S.reorder = !S.reorder; S.moved = null; if (S.reorder) S.only = false; drawTasks(); },
+    move: () => moveTask(d.id, d.move),
     task: () => go("t/" + d.id),
     asm: () => go(`t/${d.task}/${d.id}`),
     node: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
