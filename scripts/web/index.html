@@ -68,6 +68,9 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 .item .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin-top: 6px; font-size: var(--fs-control); }
 .item .st { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 .item .st.done { color: var(--settled); } .item .st.blocked { color: var(--attention); }
+/* a finished task recedes whole, so the open ones are what the eye lands on */
+.item.done .iid, .item.done .goal { color: var(--muted); font-weight: 400; }
+.item .st.done::before { content: "\2713\00a0"; }
 .item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
 .break { margin: 18px 0 6px; display: flex; align-items: center; gap: var(--s3); }
 .break::after { content: ""; flex: 1; border-top: var(--rule) solid var(--line); }
@@ -413,7 +416,7 @@ function drawTasks() {
     seg = it.segment;
     if (S.only && !it.needs_you) continue;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
-    html += `<button class="item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}" data-act="task" data-id="${esc(it.id)}" style="--ind:${Math.min(it.depth, 3) * 14}px">
+    html += `<button class="item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" style="--ind:${Math.min(it.depth, 3) * 14}px">
       <span class="iid">${esc(it.id)}</span>
       <span><span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
