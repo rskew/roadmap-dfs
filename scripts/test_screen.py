@@ -63,20 +63,46 @@ class ProjectColour(unittest.TestCase):
         self.assertEqual(TUI.xterm256((0, 0, 0)), 16)
         self.assertEqual(TUI.xterm256((255, 255, 255)), 231)
         self.assertEqual(TUI.xterm256((255, 0, 0)), 196)
+        self.assertEqual(TUI.xterm256((100, 100, 100)), 16 + 36 + 6 + 1)   # 95 is the step
 
     def test_a_terminal_below_256_colours_gets_bold_alone(self):
         TUI.LOOK.clear()
         self.assertEqual(TUI.project_attr("#aa3355", False), curses.A_BOLD)
         self.assertEqual(self.pairs, [])
 
-    def test_a_dark_terminal_gets_it_lightened_and_the_pair_is_set_only_when_it_changes(self):
+    def test_the_pair_is_set_only_when_the_colour_changes(self):
         TUI.LOOK.clear()
         TUI.LOOK["band"] = True
-        light = TUI.project_attr("#000000", True)
-        dark = TUI.project_attr("#000000", False)
-        TUI.project_attr("#000000", False)
-        self.assertEqual([p[1] for p in self.pairs], [16, TUI.xterm256((140, 140, 140))])
+        light = TUI.project_attr("#ff0000", True)
+        dark = TUI.project_attr("#ff0000", False)
+        TUI.project_attr("#ff0000", False)
+        TUI.project_attr("#ee1111", False)       # the same hue at another lightness
+        self.assertEqual(len(self.pairs), 2)
         self.assertTrue(light & (TUI.PAIRS["project"] << 8) and dark & curses.A_BOLD)
+
+    def test_a_chosen_red_stays_red_on_either_terminal(self):
+        TUI.LOOK.clear()
+        TUI.LOOK["band"] = True
+        for light in (True, False):
+            self.pairs.clear()
+            TUI.LOOK.pop("project_rgb", None)
+            TUI.project_attr("#ff0000", light)
+            n = self.pairs[0][1] - 16
+            r, g, b = n // 36, n // 6 % 6, n % 6
+            self.assertTrue(r > g and r > b, (light, n))
+
+    def test_the_hues_of_the_auto_colours_stay_apart_on_the_terminal(self):
+        from paths import colour_from_name
+        TUI.LOOK.clear()
+        TUI.LOOK["band"] = True
+        for light, at_least in ((True, 12), (False, 12)):
+            seen = set()
+            for h in range(2000):                # names hash to hues, so many names
+                TUI.LOOK.pop("project_rgb", None)
+                self.pairs.clear()
+                TUI.project_attr(colour_from_name("project %d" % h), light)
+                seen.add(self.pairs[0][1])
+            self.assertGreaterEqual(len(seen), at_least, light)
 
 
 class Reselecting(unittest.TestCase):

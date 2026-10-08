@@ -47,6 +47,7 @@ Run:  python3 <scripts>/tui.py
 """
 import calendar
 import collections
+import colorsys
 import curses
 import glob
 import importlib.util
@@ -1620,24 +1621,32 @@ def look(name):
     return LOOK.get(name, 0)
 
 
+XTERM_LEVELS = (0, 95, 135, 175, 215, 255)     # what the cube's six steps really are
+
+
 def xterm256(rgb):
-    """The nearest colour in the 6x6x6 cube of the terminal's 256 (16 + 36r + 6g + b)."""
-    r, g, b = (min(5, round(c / 255 * 5)) for c in rgb)
+    """The nearest colour in the 6x6x6 cube of the terminal's 256 (16 + 36r + 6g + b),
+    by the cube's real levels, which are not evenly spaced."""
+    r, g, b = (min(range(6), key=lambda i: abs(XTERM_LEVELS[i] - c)) for c in rgb)
     return 16 + 36 * r + 6 * g + b
 
 
 def project_attr(colour, light, bold=curses.A_BOLD):
-    """The project's colour (`#rrggbb`) as a text attribute: its cube colour, lightened on
-    a dark terminal as the page does, so the name reads; bold alone when the terminal has
-    fewer than 256 colours. The pair is set again only when the colour changes."""
+    """The project's colour (`#rrggbb`) as a text attribute: its HUE at a fixed lightness
+    that reads on this terminal (dark on a light one, light on a dark one), snapped to
+    the cube; bold alone when the terminal has fewer than 256 colours.
+
+    ⚠️ Not the colour itself, lightened: a name's colour is dark so white text reads on
+    it, and blending that toward white (or snapping it to the cube) left six muted
+    shades for every hue. Fixed lightness and full saturation keep 12 (light) and 24
+    (dark) apart. The pair is set again only when the colour changes."""
     if LOOK.get("band") is not True:          # init_look's 256-colour branch
         return bold
-    rgb = [int(colour[i:i + 2], 16) for i in (1, 3, 5)]
-    if not light:
-        rgb = [round(c * .45 + 255 * .55) for c in rgb]
-    if LOOK.get("project_rgb") != (tuple(rgb), light):
+    h = colorsys.rgb_to_hls(*(int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)))[0]
+    rgb = tuple(round(c * 255) for c in colorsys.hls_to_rgb(h, .3 if light else .65, 1))
+    if LOOK.get("project_rgb") != (rgb, light):
         curses.init_pair(PAIRS["project"], xterm256(rgb), -1)
-        LOOK["project_rgb"] = (tuple(rgb), light)
+        LOOK["project_rgb"] = (rgb, light)
     return curses.color_pair(PAIRS["project"]) | bold
 
 
