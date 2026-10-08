@@ -36,7 +36,8 @@ def _winsize(fd):
 def _stat(pid):
     """(ppid, state, start time) of a process from /proc, or None if there is no such process."""
     try:
-        raw = open("/proc/%d/stat" % pid).read()
+        with open("/proc/%d/stat" % pid) as f:
+            raw = f.read()
     except OSError:
         return None
     f = raw[raw.rindex(")") + 2:].split()       # after the command name, which may hold spaces
@@ -305,6 +306,22 @@ class ChatHost:
             t.start()
         for t in threads:
             t.join()
+
+    def reap_idle(self, limit, now=None):
+        """Close the chats nobody has used for `limit` seconds and forget the ones that ended:
+        no output from the agent, nothing waiting to be typed, and no terminal attached. Their
+        conversation is in the agent's own transcript, so the next message starts the chat again
+        where it was. Returns the scopes closed."""
+        now = now or time.time()
+        with self.lock:
+            stale = [s for s, r in self.relays.items() if not r.live]
+            idle = [s for s, r in self.relays.items() if r.live and not r.attached and r.outbox.empty()
+                    and now - max(r.started, r.last_out) > limit]
+            for s in stale:
+                del self.relays[s]
+        for s in idle:
+            self.close(s)
+        return idle
 
     def live_scopes(self):
         with self.lock:

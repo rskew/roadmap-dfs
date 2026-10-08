@@ -174,6 +174,28 @@ class Leaving(unittest.TestCase):
         self.assertEqual(host.live_scopes(), [])
 
 
+class Idling(unittest.TestCase):
+    def test_only_a_chat_nobody_is_using_is_closed_and_a_dead_one_is_forgotten(self):
+        host = ptyrelay.ChatHost()
+        self.addCleanup(host.close_all)
+        mk = lambda: (["bash", "-c", "echo ready; sleep 30"], None, None)
+        quiet, busy, looked, dead = (host.ensure(n, mk) for n in ("quiet", "busy", "looked", "dead"))
+        self.assertTrue(until(lambda: all(r.first_out for r in (quiet, busy, looked, dead))))
+        looked.attached = True
+        dead.close(wait=True)
+        later = time.time() + 100
+        busy.last_out = later - 1
+        self.assertEqual(host.reap_idle(60, now=later), ["quiet"])
+        self.assertFalse(quiet.live)
+        self.assertTrue(busy.live and looked.live)
+        self.assertEqual(sorted(host.relays), ["busy", "looked"])
+        self.assertNotIn("dead", host.relays)
+        busy.outbox.put("typed, not yet sent")
+        self.assertEqual(host.reap_idle(60, now=later + 1000), [], "a chat with something waiting is not idle")
+        looked.attached = False
+        self.assertEqual(host.reap_idle(60, now=later + 1000), ["looked"])
+
+
 class Hosting(unittest.TestCase):
     def test_many_run_at_once_one_per_scope_and_a_dead_one_is_started_again(self):
         host = ptyrelay.ChatHost()

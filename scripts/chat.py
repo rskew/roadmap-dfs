@@ -12,7 +12,9 @@ With the terminal screen serving the page, a chat started on the page is an inte
 screen runs in the BACKGROUND (ptyrelay.py): any number at once, one per task and one for the project,
 none of them on the screen unless you ask. The page types into them and reads them from the
 transcript; the screen's `c` attaches to the running one (ctrl-] leaves it running). They end with
-the screen, or with "New chat". With no screen (web.py alone) the page runs its own turns. A claude
+the screen (quit, SIGTERM or SIGHUP), with "New chat", or after DFS_CHAT_IDLE seconds (30 minutes) with
+nobody using them; the conversation stays, and the next message resumes it. Ending one ends everything
+the agent started, not only the agent. With no screen (web.py alone) the page runs its own turns. A claude
 running on the session in some OTHER terminal would tangle it, so then the page does not send.
 
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
