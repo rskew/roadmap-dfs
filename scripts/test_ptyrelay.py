@@ -197,6 +197,74 @@ class Idling(unittest.TestCase):
         self.assertFalse(looked.send("too late"), "a closed chat takes no message")
 
 
+class Recording(unittest.TestCase):
+    """A chat nobody is attached to leaves a record: what happened to it, and its last words."""
+
+    def setUp(self):
+        self.log = Path(tempfile.mkdtemp()) / "log"
+        self.log.write_text("")
+        self.env = dict(os.environ, LOG=str(self.log))
+        self.said = []
+
+    def start(self, script=AGENT):
+        r = ptyrelay.Relay(lambda t, d="": self.said.append((t, d))).start(["bash", "-c", script], env=self.env)
+        self.addCleanup(r.close)
+        return r
+
+    def has(self, needle):
+        return any(needle in t or needle in d for t, d in self.said)
+
+    def test_start_a_message_its_typing_and_the_exit_are_recorded_with_its_last_output(self):
+        r = self.start()
+        self.assertTrue(until(lambda: self.has("start pid=")))
+        r.send("hello")
+        self.assertTrue(until(lambda: self.has("queued")))
+        self.assertTrue(until(lambda: self.has("typed 5 characters")))
+        r.send("quit")
+        self.assertTrue(until(lambda: self.has("exit rc=3")))
+        self.assertTrue(self.has("nobody closed it"))
+        self.assertTrue(self.has("heard: hello"))       # the agent's last words, beneath the exit
+        self.assertFalse(r.send("late"))
+        self.assertTrue(self.has("refused: the agent is not running"))
+
+    def test_a_message_the_agent_died_before_taking_is_logged_as_dropped(self):
+        r = self.start("sleep 0.3; exit 4")
+        r.send("too late")
+        self.assertTrue(until(lambda: self.has("exit rc=4")))
+        self.assertTrue(until(lambda: self.has("dropped")))
+
+    def test_a_close_says_who_closed_it(self):
+        r = self.start()
+        self.assertTrue(until(lambda: r.first_out))
+        r.close(why="idle 1800s")
+        self.assertTrue(until(lambda: self.has("exit signal 15")))
+        self.assertTrue(self.has("closed: idle 1800s"))
+
+    def test_silence_after_a_message_is_logged_once_with_the_last_screen(self):
+        old = ptyrelay.STALL
+        ptyrelay.STALL = 1.0
+        self.addCleanup(setattr, ptyrelay, "STALL", old)
+        r = self.start("echo ready; cat >/dev/null")          # takes the message and says nothing
+        r.send("anyone there")
+        self.assertTrue(until(lambda: self.has("quiet for"), 20))
+        self.assertTrue(self.has("bytes of output since it was typed"))
+        self.assertTrue(self.has("ready"))
+        time.sleep(1.5)
+        self.assertEqual(sum("quiet for" in t for t, _ in self.said), 1)
+
+    def test_the_host_binds_each_chat_to_its_scope_and_writes_the_files(self):
+        root = tempfile.mkdtemp()
+        old = os.environ.get("DFS_RUN_DIR")
+        os.environ["DFS_RUN_DIR"] = root
+        self.addCleanup(lambda: os.environ.pop("DFS_RUN_DIR") if old is None else os.environ.update(DFS_RUN_DIR=old))
+        host = ptyrelay.ChatHost()
+        host.ensure("project", lambda: (["bash", "-c", AGENT], self.env, None))
+        host.close("project", wait=True, why="new chat")
+        f = Path(root) / "chat" / "project.log"
+        self.assertTrue(until(lambda: f.exists() and "closed: new chat" in f.read_text()))
+        self.assertIn("start pid=", f.read_text())
+
+
 class Hosting(unittest.TestCase):
     def test_many_run_at_once_one_per_scope_and_a_dead_one_is_started_again(self):
         host = ptyrelay.ChatHost()

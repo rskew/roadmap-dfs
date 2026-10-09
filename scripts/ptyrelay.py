@@ -20,9 +20,13 @@ import threading
 import time
 import tty
 
+import chatlog
+
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
+TAIL = 16384                # bytes of the agent's last output kept, for the log
+STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a message before the log says so
 
 
 def _winsize(fd):
@@ -40,7 +44,13 @@ def _try(fn, *a):
 
 
 class Relay:
-    def __init__(self):
+    def __init__(self, log=None):
+        self.log = log or (lambda text, detail="": None)    # the chat's record: chatlog.log, bound to a scope
+        self.tail = bytearray()     # the last TAIL bytes the agent wrote
+        self.typed_at = 0.0         # when the last message went in, until the quiet after it is logged
+        self.typed_out = 0          # bytes of output at that moment
+        self.total_out = 0
+        self.why = ""               # who closed it
         self.fd = None
         self.pid = None
         self.rc = None
@@ -73,10 +83,13 @@ class Relay:
                 os.write(2, ("cannot run %s: %s\n" % (argv[0], e.strerror or e)).encode())
             os._exit(127)
         self.pid, self.fd, self.started = pid, master, time.time()
+        self.log("start pid=%d cwd=%s argv=%s" % (pid, cwd or os.getcwd(), " ".join(
+            a if len(a) <= 60 else a[:57] + "..." for a in argv)))
         rows, cols = size or (40, 120)
         _try(fcntl.ioctl, master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         threading.Thread(target=self._pump, daemon=True).start()
         threading.Thread(target=self._typist, daemon=True).start()
+        threading.Thread(target=self._watch, daemon=True).start()
         return self
 
     def _pump(self):
@@ -91,6 +104,9 @@ class Relay:
             now = time.time()
             self.first_out = self.first_out or now
             self.last_out = now
+            self.total_out += len(data)
+            self.tail += data
+            del self.tail[:-TAIL]
             if self.attached and self.out_fd is not None:
                 _try(os.write, self.out_fd, data)
         with self.lock:
@@ -101,8 +117,24 @@ class Relay:
             self.rc = os.waitstatus_to_exitcode(status)
         except ChildProcessError:
             self.rc = 0
+        how = "signal %d" % -self.rc if self.rc < 0 else "rc=%d" % self.rc
+        self.log("exit %s after %ds, %ds since its last output%s" % (
+            how, time.time() - self.started, time.time() - self.last_out if self.last_out else -1,
+            " (closed: %s)" % self.why if self.why else " (nobody closed it)"),
+            chatlog.screen_text(self.tail))
 
-    def close(self, wait=False):
+    def _watch(self):
+        """Say so in the log when a message has gone in and the agent then says nothing for STALL
+        seconds: finished, or stuck at a dialog, or hung, which the last screen tells apart."""
+        while self.live:
+            time.sleep(0.5)
+            if self.typed_at and STALL > 0 and time.time() - max(self.typed_at, self.last_out) > STALL:
+                self.log("quiet for %ds after a message; %d bytes of output since it was typed" % (
+                    time.time() - max(self.typed_at, self.last_out), self.total_out - self.typed_out),
+                    chatlog.screen_text(self.tail))
+                self.typed_at = 0.0
+
+    def close(self, wait=False, why=""):
         """End it as ctrl-c ends a claude in a terminal: ask it to stop with SIGTERM, which has it
         stop what it started, and make sure with SIGKILL after a grace. `wait` blocks until it is
         gone, for a process that is about to exit (a daemon thread would not outlive it)."""
@@ -110,6 +142,8 @@ class Relay:
         if not self.live:
             return
         self.closing = True
+        self.why = why or "closed"
+        self.log("close (%s): SIGTERM" % self.why)
         _try(os.kill, pid, signal.SIGTERM)
 
         def reap():
@@ -117,6 +151,7 @@ class Relay:
             while self.fd is not None and time.time() < end:
                 time.sleep(0.05)
             if self.fd is not None:
+                self.log("close (%s): still running after 2s, SIGKILL" % self.why)
                 _try(os.kill, pid, signal.SIGKILL)
         if wait:
             reap()
@@ -132,8 +167,10 @@ class Relay:
         fresh agent to be ready, and does not block the caller. False if it is not running."""
         with self.lock:             # agrees with `ChatHost.reap_idle`'s close, which holds it
             if not self.live:
+                self.log("message of %d characters refused: the agent is not running" % len(text))
                 return False
             self.outbox.put(text)
+            self.log("message of %d characters queued (%d waiting)" % (len(text), self.outbox.qsize()))
             return True
 
     def _typist(self):
@@ -142,14 +179,20 @@ class Relay:
                 text = self.outbox.get(timeout=0.5)
             except queue.Empty:
                 continue
-            end = time.time() + READY_TIMEOUT      # not before the agent has drawn itself and settled
+            waited = time.time()
+            end = waited + READY_TIMEOUT      # not before the agent has drawn itself and settled
             while self.live and time.time() < end and (not self.first_out or time.time() - self.last_out < QUIET):
                 time.sleep(0.1)
             with self.lock:
                 fd = self.fd
                 if fd is None:
+                    self.log("message of %d characters dropped: the agent ended before it was typed" % len(text))
                     return
                 _try(os.write, fd, b"\x1b[200~" + text.encode() + b"\x1b[201~")
+                self.typed_at, self.typed_out = time.time(), self.total_out
+            self.log("typed %d characters after %.1fs wait (%s)" % (
+                len(text), time.time() - waited, "settled" if time.time() - waited < READY_TIMEOUT
+                else "the agent had not settled in %ds, typed anyway" % READY_TIMEOUT))
             time.sleep(0.15)
             with self.lock:
                 if self.fd is not None:
@@ -215,9 +258,10 @@ class Relay:
 class ChatHost:
     """The chats that are running, by scope: a task's id, or `project`."""
 
-    def __init__(self):
+    def __init__(self, log=chatlog.log):
         self.lock = threading.Lock()
         self.relays = {}
+        self.log = log              # log(scope, text, detail): where each chat's record goes
 
     def get(self, scope):
         with self.lock:
@@ -230,21 +274,21 @@ class ChatHost:
             r = self.relays.get(scope)
             if r is None or not r.live:
                 argv, env, cwd = make()
-                r = self.relays[scope] = Relay().start(argv, env=env, cwd=cwd)
+                r = self.relays[scope] = Relay(lambda t, d="": self.log(scope, t, d)).start(argv, env=env, cwd=cwd)
             return r
 
-    def close(self, scope, wait=False):
+    def close(self, scope, wait=False, why="closed"):
         with self.lock:
             r = self.relays.pop(scope, None)
         if r is not None:
-            r.close(wait)
+            r.close(wait, why)
 
     def close_all(self):
         """End every chat and wait: this is the screen's exit, which would take the SIGKILL
         backstop with it."""
         with self.lock:
             relays, self.relays = list(self.relays.values()), {}
-        threads = [threading.Thread(target=r.close, args=(True,)) for r in relays]
+        threads = [threading.Thread(target=r.close, args=(True, "the screen ended")) for r in relays]
         for t in threads:
             t.start()
         for t in threads:
@@ -265,7 +309,7 @@ class ChatHost:
                 with r.lock:        # a message queued or a terminal attached meanwhile keeps it
                     if not r.attached and r.outbox.empty() and now - max(r.started, r.last_out) > limit:
                         del self.relays[s]
-                        r.close()
+                        r.close(why="idle %ds, limit %ds" % (now - max(r.started, r.last_out), limit))
                         closed.append(s)
         return closed
 
