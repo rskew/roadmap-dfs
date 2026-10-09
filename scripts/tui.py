@@ -2229,6 +2229,8 @@ class UI(WalkMixin):
         self.agent_update_tick()
         self.drain_commands()
         self.walk_tick()
+        if self.chat_host is not None and CHAT_IDLE > 0:
+            self.chat_host.reap_idle(CHAT_IDLE)
         sig = watch_signature()
         was_live = {r["dir"] for r in self.chains if r["live"]}
         if sig == self.sig:
@@ -4861,6 +4863,11 @@ class UiWalker:
 
     def snapshot(self, data=None):
         return self.ui.walk_snapshot()
+
+
+# Seconds a background chat may sit without a word before the screen ends its agent (0: never).
+# The conversation is kept; the next message to it, from the page or `c`, resumes it.
+CHAT_IDLE = float(os.environ.get("DFS_CHAT_IDLE", 30 * 60))
 
 
 def start_web(ui):

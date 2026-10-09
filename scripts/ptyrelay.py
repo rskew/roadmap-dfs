@@ -130,10 +130,11 @@ class Relay:
     def send(self, text):
         """Queue `text` to be typed into the agent, as a paste and then enter. It waits for a
         fresh agent to be ready, and does not block the caller. False if it is not running."""
-        if not self.live:
-            return False
-        self.outbox.put(text)
-        return True
+        with self.lock:             # agrees with `ChatHost.reap_idle`'s close, which holds it
+            if not self.live:
+                return False
+            self.outbox.put(text)
+            return True
 
     def _typist(self):
         while self.live:
@@ -248,6 +249,25 @@ class ChatHost:
             t.start()
         for t in threads:
             t.join()
+
+    def reap_idle(self, limit, now=None):
+        """Close the chats nobody has used for `limit` seconds and forget the ones that ended:
+        no output from the agent, nothing waiting to be typed, and no terminal attached. Their
+        conversation is in the agent's own transcript, so the next message starts the chat again
+        where it was. Returns the scopes closed."""
+        now = now or time.time()
+        closed = []
+        with self.lock:
+            for s, r in list(self.relays.items()):
+                if not r.live:
+                    del self.relays[s]
+                    continue
+                with r.lock:        # a message queued or a terminal attached meanwhile keeps it
+                    if not r.attached and r.outbox.empty() and now - max(r.started, r.last_out) > limit:
+                        del self.relays[s]
+                        r.close()
+                        closed.append(s)
+        return closed
 
     def live_scopes(self):
         with self.lock:

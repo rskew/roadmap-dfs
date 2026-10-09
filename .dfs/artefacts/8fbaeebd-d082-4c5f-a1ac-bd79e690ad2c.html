@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>W17: is resuming a closed idle chat lossless?</title>
+<style>
+  body { margin: 0; padding: 28px 32px; background: #fbfaf7; color: #1a1a1a;
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 680px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 6px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 4em; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; }
+</style>
+<h1>Is resuming a closed idle chat lossless?</h1>
+<p class="lede">The screen closes a background chat with no output for 30 minutes, nothing queued and
+  no terminal attached. Pick what the chat held when it was closed.</p>
+<h2>What the idle chat held</h2>
+<div class="choices" role="group" aria-label="What the chat held">
+  <button type="button" data-case="plain" aria-pressed="true">Only the conversation</button>
+  <button type="button" data-case="prompt" aria-pressed="false">An unanswered permission prompt</button>
+  <button type="button" data-case="typed" aria-pressed="false">A half-typed line</button>
+  <button type="button" data-case="scroll" aria-pressed="false">Scrollback of an attached screen</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+<h2>What would show it wrong</h2>
+<p class="wrong">A resumed chat lacks something the live one had. Only the conversation is in the
+  transcript, so the last three cases lose it; the idle test (no output for 30 minutes, nothing
+  queued, not attached) makes the first two unlikely and the third impossible.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>The screen's <code>c</code> already resumes a closed chat from its transcript. Not run with a real claude.</p>
+</details>
+<script>
+  var cases = {
+    plain: 'Resumed from the transcript: the same conversation, nothing lost.',
+    prompt: 'Lost: the prompt is not in the transcript. It is unlikely, since a chat waiting on a prompt would be silent for 30 minutes, which is a chat nobody answered.',
+    typed: 'Lost: a half-typed line lives in the terminal, not the transcript. Typing goes through the page or an attached screen, so an idle unattached chat has none.',
+    scroll: 'Not applicable: a chat with a terminal attached is never closed as idle.'
+  };
+  var chosen = 'plain';
+  function show() {
+    document.getElementById('result').textContent = cases[chosen];
+    document.querySelectorAll('[data-case]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.case === chosen));
+    });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { chosen = b.dataset.case; show(); });
+  });
+  show();
+</script>

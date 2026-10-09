@@ -33,3 +33,8 @@ python3 scripts/web.py --host 0.0.0.0 --cert cert.pem --key key.pem
 A self-signed certificate the phone does not trust will not do: Chrome refuses to install
 from it. `--allow-host` can be given more than once, or as DFS_WEB_ALLOW_HOST, comma-separated;
 the page the terminal screen serves takes it only as DFS_WEB_ALLOW_HOST.
+
+A chat the terminal screen runs in the background is ended (its conversation is kept, and the
+next message resumes it) after DFS_CHAT_IDLE seconds without output, default 1800; 0 never ends
+one. Quitting the screen ends the chats with SIGTERM, as ctrl-c ends a claude in a terminal, and
+waits for them.
