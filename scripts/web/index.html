@@ -156,10 +156,11 @@ a.tile .thumb iframe { position: absolute; top: 0; left: 0; border: 0; transform
 a.tile .name { display: block; margin-top: var(--s1); font-size: var(--fs-small); overflow-wrap: anywhere; }
 a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max-width: 100%; height: auto; border: var(--rule) solid var(--line); }
 
-/* the tree: a column of hairlines; the left rule says what the node came to */
+/* the tree: a column of hairlines; the left rule says what the node came to. --i is the row's indent in half
+   steps: siblings share a column and a child, a chain step included, is always right of its parent. */
 .tree { margin-top: var(--s2); }
-.row { display: flex; align-items: stretch; margin-left: calc(var(--d, 0) * 12px); border-bottom: var(--rule) solid var(--faint); }
-@media (min-width: 600px) { .row { margin-left: calc(var(--d, 0) * 20px); } }
+.row { display: flex; align-items: stretch; margin-left: calc(var(--i, 0) * 6px); border-bottom: var(--rule) solid var(--faint); }
+@media (min-width: 600px) { .row { margin-left: calc(var(--i, 0) * 10px); } }
 .row .fold { flex: 0 0 40px; min-height: 56px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 20px; }
 .row .fold.none { visibility: hidden; }
 .row .main { flex: 1; min-width: 0; padding: var(--s3) 6px var(--s3) 14px; border-left: var(--rule-status) solid var(--st, var(--line)); }
@@ -660,7 +661,7 @@ function drawTask() {
         r.ask ? `<span class="tag attention">ask</span>` : "",
         r.answered ? `<span class="tag">answered</span>` : "",
         ["refuted", "parked", "dormant", "pruned"].includes(r.status) ? `<span class="tag ${r.status === "refuted" ? "red" : ""}">${esc(r.status)}</span>` : ""].join("");
-      html += `<div class="${cls}" style="--d:${r.depth}">
+      html += `<div class="${cls}" style="--i:${r.indent}">
         <button class="fold ${r.kids && !S.flagged ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
         <button class="main" data-act="node" data-id="${esc(r.id)}">
           <div class="line"><span class="nid">${r.chain ? "↳ " : ""}${esc(r.id)}</span>${inline(r.title)}</div>
@@ -869,7 +870,7 @@ function answerForm(ts) {
 function correctForm(id) {
   const r = S.task.rows.find(x => x.key === id);
   const i = S.task.rows.indexOf(r); let under = 0;
-  for (let j = i + 1; j < S.task.rows.length && S.task.rows[j].kind === "node" && S.task.rows[j].depth > r.depth; j++) under++;
+  for (let j = i + 1; j < S.task.rows.length && S.task.rows[j].kind === "node" && S.task.rows[j].indent > r.indent; j++) under++;
   const sub = under ? `its ${under} sub-step${under === 1 ? "" : "s"}` : "what is under it";
   const be = under > 1 ? "are" : "is";
   VERDICT = {

@@ -142,6 +142,26 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A child is drawn right of its parent, a chain step included, and siblings share a left edge.
+  async indent(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    const left = await page.$$eval(".row", rows => rows.map(r => ({ id: r.querySelector(".nid").textContent.replace("↳", "").trim(), x: r.getBoundingClientRect().left })));
+    const tree = await (await page.request.get(URL_ + "/api/task/W9")).json();
+    const nodes = tree.rows.filter(r => r.kind === "node");
+    const x = Object.fromEntries(left.map(l => [l.id, l.x]));
+    let kids = 0, sibs = 0;
+    for (const n of nodes) {
+      if (!n.parent || x[n.parent] === undefined || x[n.id] === undefined) continue;
+      assert(x[n.id] > x[n.parent], `${n.id} is drawn right of its parent ${n.parent}`); kids++;
+      for (const m of nodes) if (m.parent === n.parent && x[m.id] !== undefined) { same(x[m.id], x[n.id], `${m.id} and ${n.id} share a column`); sibs++; }
+    }
+    assert(kids > 0, "the fixture has a child to check");
+    await page.evaluate(() => document.querySelector(".tree").scrollIntoView());
+    if (process.env.DFS_UI_SHOT) await page.screenshot({ path: process.env.DFS_UI_SHOT });
+    same(errors, [], "no page errors");
+  },
+
   // Each screen's page scroll is kept: Back to the list, and a reload, land where the reader was.
   async scroll_memory(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true });

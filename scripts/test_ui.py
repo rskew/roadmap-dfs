@@ -281,6 +281,9 @@ class Flows(unittest.TestCase):
         finally:
             dfs_runs.pid_is_chain = real
 
+    def test_a_child_is_drawn_right_of_its_parent_and_siblings_share_a_column(self):
+        self.flow("indent")
+
     def test_a_change_elsewhere_reaches_an_open_page(self):
         self.flow("live")
 
