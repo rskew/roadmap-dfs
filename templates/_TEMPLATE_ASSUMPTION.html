@@ -42,6 +42,10 @@
 </div>
 <div class="result" id="result" aria-live="polite"></div>
 
+<div class="choices">
+  <button type="button" id="answer">Send as my answer</button>
+</div>
+
 <h2>The input it depends on</h2>
 <label for="knob">How many of them: <output id="knob-out">3</output></label>
 <input id="knob" type="range" min="1" max="10" value="3">
@@ -73,5 +77,11 @@
     b.addEventListener('click', function () { chosen = b.dataset.case; show(); });
   });
   knob.addEventListener('input', show);
+  // When the raise this page belongs to is open in the web page's answer form, this fills the form with
+  // the result; the author reads and edits it there, and nothing is recorded until they press Record.
+  // Opened alone, there is no form to hear it and nothing happens.
+  document.getElementById('answer').addEventListener('click', function () {
+    parent.postMessage({ dfs: 'answer', body: document.getElementById('result').textContent }, '*');
+  });
   show();
 </script>

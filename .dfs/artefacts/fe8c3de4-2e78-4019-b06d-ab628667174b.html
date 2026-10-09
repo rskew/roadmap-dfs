@@ -1,0 +1,98 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Can a finished artefact answer a raise?</title>
+<style>
+  body { margin: 0; padding: 28px 32px; background: #fbfaf7; color: #1a1a1a;
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 680px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 6px 12px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .box { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; margin: 0 0 10px; }
+  .box p { margin: 4px 0; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+  input[type="text"] { font: inherit; padding: 5px 8px; border: 1.5px solid #333; border-radius: 6px; flex: 1; min-width: 200px; }
+  .log { font-family: ui-monospace, Menlo, monospace; font-size: 13px; min-height: 2.6em; }
+  .log div { padding: 2px 0; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  .muted { color: #555; font-size: 13px; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; }
+</style>
+
+<h1>Can a finished artefact answer a raise?</h1>
+<p class="lede">Today nothing a reader does on an artefact is kept: the page is sandboxed with no
+  network and no storage, and the only record is an answer typed into the web page. Pick a way
+  to let a finished page count as the answer, then try sending something from the page.</p>
+
+<h2>The way it is wired</h2>
+<div class="choices" role="group" aria-label="The wiring">
+  <button type="button" data-way="none" aria-pressed="false">Today: nothing kept</button>
+  <button type="button" data-way="form" aria-pressed="true">Page hands text to the answer form</button>
+  <button type="button" data-way="post" aria-pressed="false">Page posts to the server</button>
+</div>
+<div class="box" id="way" aria-live="polite"></div>
+
+<h2>Try it: the page sends its result</h2>
+<div class="row">
+  <input type="text" id="said" aria-label="What the page sends" value="Option B: ship it behind a flag.">
+  <button type="button" id="send">Send as my answer</button>
+</div>
+<div class="box" id="form">
+  <p class="muted">The web page's answer form (outside the artefact):</p>
+  <div class="row">
+    <input type="text" id="body" aria-label="Answer form text" disabled>
+    <button type="button" id="record" disabled>Record answer</button>
+  </div>
+</div>
+<div class="box log" id="log" aria-label="The task's log"></div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The author needs the page's own state kept apart from the answer text, to
+  reopen the page where they left it; or a message from the sandboxed frame cannot be told
+  from another frame's.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>web.py serves artefacts GET-only with <code>sandbox allow-scripts; default-src 'none'</code>,
+    so a page has no fetch, no storage and no way to answer. The existing answer is an
+    <code>answer</code> log entry written by <code>/api/answer</code> from the form.</p>
+</details>
+
+<script>
+  var ways = {
+    none: 'Nothing the reader does on the page is kept. They read it, then type an answer into the form themselves. The log holds only that text.',
+    form: 'The page sends its result to the web page that holds it. The text lands in the answer form, where the author reads it, edits it and presses Record. The log holds the author’s words; a page cannot answer alone.',
+    post: 'The page posts straight to the server, which records the answer. One step fewer, but the page was written by an agent: it can answer its own raise as the author, with no one reading it.'
+  };
+  var way = 'form', entries = [];
+  function el(id) { return document.getElementById(id); }
+  function draw() {
+    el('way').textContent = ways[way];
+    document.querySelectorAll('[data-way]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.way === way));
+    });
+    el('send').disabled = way === 'none';
+    el('log').innerHTML = entries.length
+      ? entries.map(function (e) { return '<div>answer · ' + e + '</div>'; }).join('')
+      : '<div class="muted">no answer yet</div>';
+  }
+  document.querySelectorAll('[data-way]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      way = b.dataset.way; el('body').value = ''; el('body').disabled = true; el('record').disabled = true; draw();
+    });
+  });
+  el('send').addEventListener('click', function () {
+    var text = el('said').value;
+    if (way === 'form') { el('body').value = text; el('body').disabled = false; el('record').disabled = false; }
+    else if (way === 'post') { entries.push(text); }
+    draw();
+  });
+  el('record').addEventListener('click', function () {
+    entries.push(el('body').value); el('body').value = ''; el('body').disabled = true; el('record').disabled = true; draw();
+  });
+  draw();
+</script>

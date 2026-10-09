@@ -73,6 +73,18 @@ applies unchanged. What `check.py` tests is only that the page exists, has a con
 answers it (`addEventListener`, or an `onclick`-style attribute). It does not judge that
 the controls tell the reader anything; the screenshot and the author do.
 
+## What a reader does on a page, and answering with it
+
+A page is served sandboxed (no network, no storage, no way to `/api`), so nothing the
+reader does on it is kept: the only record of a decision is the `answer` entry in the
+task's log. A page can still hand its result to the web page. When the author taps
+Answer on a raise that names the page, the answer form opens with the page beside it, and
+`parent.postMessage({dfs: "answer", body: "<text>"}, "*")` from the page puts `body` in
+the form's text box. The author reads it, edits it and presses Record, and the log gets
+their words; the page cannot answer by itself, and the form hears only the frame it
+opened. The template's "Send as my answer" button does this with the result on the page.
+Opened alone, or from the terminal, there is no form and the message is ignored.
+
 ## Conventions the checker relies on
 
 - Every box carries `data-node="<name>"`. That is how overlaps get reported by name

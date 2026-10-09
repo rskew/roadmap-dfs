@@ -160,6 +160,7 @@ dialog::backdrop { background: var(--scrim); }
 dialog form { display: flex; flex-direction: column; gap: var(--s3); padding: 20px; }
 dialog h3 { margin: 0; font-size: var(--fs-title); font-weight: 500; line-height: 1.25; }
 dialog .quote { max-height: 40dvh; overflow: auto; padding: 10px var(--s3); border: var(--rule) solid var(--line); background: var(--paper); white-space: pre-wrap; font-size: var(--fs-small); }
+dialog .answerpage { width: 100%; height: 40dvh; border: var(--rule) solid var(--line); background: #fff; }
 dialog .row-btns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 10px; }
 dialog .row-btns .btn { white-space: nowrap; padding-left: var(--s2); padding-right: var(--s2); }
 dialog ul { margin: 0; padding-left: 1.1em; }

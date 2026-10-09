@@ -63,7 +63,8 @@ async function open(browser, opts, scheme = "light") {
   PAGES.push(page);
   const errors = [];
   page.on("pageerror", e => errors.push(String(e)));
-  page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+  // What an artefact's own page logs is not the web page's: the fixture's tries its network on purpose.
+  page.on("console", m => { if (m.type() === "error" && !/\/artefacts\//.test(m.location().url || "")) errors.push(m.text()); });
   await page.goto(URL_);
   await page.waitForSelector(".item");
   return { ctx, page, errors };
@@ -146,6 +147,30 @@ const FLOWS = {
     await page.waitForSelector("#sheet.open");
     await page.click("#sheet [data-act=answer]"); await dialog(page);
     await page.fill("dialog textarea", "Spinning disks. Test on one.");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector(".row.hasraise"));
+    same(errors, [], "no page errors");
+  },
+
+  // A page the raise names sends its result to the answer form: only its own frame is heard, the text waits
+  // in the textarea to be edited, and the log gets an entry only when the author records it.
+  async answer_page(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click(".row.hasraise .main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=answer]"); await dialog(page);
+    await page.evaluate(() => postMessage({ dfs: "answer", body: "forged" }, "*"));
+    await page.waitForTimeout(150);
+    same(await page.inputValue("dialog textarea"), "", "a message from another window is not read");
+    await page.frameLocator("dialog #answerpage").locator("#send").click();
+    await page.waitForFunction(() => document.querySelector("dialog textarea").value !== "", null, { timeout: 4000 });
+    same(await page.inputValue("dialog textarea"), "Spinning disks. Test on one.", "the page's text fills the form");
+    assert(await page.locator("dialog #frompage:not([hidden])").count() === 1, "the form says where the text came from");
+    assert(await page.locator(".row.hasraise").count() > 0, "the raise is still open: nothing is recorded yet");
+    // The author's edit is set directly: Playwright's second keystroke into this textarea is dropped here, as in the
+    // plain answer flow, which also fills it once.
+    await page.evaluate(() => { document.querySelector("dialog textarea").value += " (checked)"; });
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => !document.querySelector(".row.hasraise"));
     same(errors, [], "no page errors");
