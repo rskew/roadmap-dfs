@@ -44,7 +44,7 @@ that enforce them), including a tooling rule that blocks the task, is raised and
 fixed in the task. It is not the task's Goal, and where it is worked is the author's
 call, since the author orders the tasks. Anything you could
 reasonably choose, choose: and where the choice matters and could go the other way,
-write it down as that node's hypothesis (or an ask, if it is a question for them), so
+write it down as that node's hypothesis, so
 the author, who reviews the whole tree when the task is done, finds it. A raise blocks the task until it is
 answered, and an answer reopens it until a work session acts on the answer. Ten
 sessions on a task without the author raises for their review. When the author

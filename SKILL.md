@@ -44,7 +44,6 @@ Evidence:
 - for: <only with a Hypothesis: an observation that bears on it, and what it shows>
 - against: <the same>
 Determination: <the verdict, in one sentence: what you found, and so the status>
-Ask: <only when there is one: a question only the author can answer, that the work does not wait on>
 Corrects: <only on a node carrying out a correction or backtrack: its ts>
 ```
 
@@ -79,14 +78,13 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   ordinary choice the check settles is not one.
   What you built, the steps you took and every test you ran belong in the Approach
   and the commit, not here.
-- **`Ask:` is for a question to the author that you could not settle and did not
-  need to**: you chose, the work went on, and they may want it the other way. One
-  sentence, the question first and your choice after it. It is not a raise (a raise
-  blocks the task) and not evidence (it is not an observation). The screen shows it in
-  red beside the node and counts it with the assumptions.
+- **A choice the author may want made the other way is a Hypothesis**, never an `Ask:`:
+  you chose, the work went on, and the assumption is written with its `Wrong if`, its
+  Evidence and its artefact so that it can be refuted. `check.py` refuses a node that
+  adds or changes an `Ask:`. An `Ask:` already committed stays as it is.
 - **The Determination is the verdict and nothing else**: what you found, in one
   sentence, which is what the author reads under the node. The hand-off ("Next, check
-  that …") belongs in the next node's Approach, and caveats in a Hypothesis or an Ask,
+  that …") belongs in the next node's Approach, and caveats in a Hypothesis,
   not in prose here or in the Summary where nothing looks for them.
 - **A node's Approach and Hypothesis are concise, clear and stand alone.** A session,
   the critic and the TUI each read one node without the rest of the tree, so say the thing

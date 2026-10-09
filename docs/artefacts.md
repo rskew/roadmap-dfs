@@ -62,7 +62,7 @@ box (`overflow-x: auto`) rather than widening the page, and says so in its capti
    catches what no assertion does (a diagram that is legible and still says the
    wrong thing), and reading it costs context, so not on every iteration.
 4. Reference it by its path, `.dfs/artefacts/<uuid>.html`, in the raise (or the
-   Hypothesis, Ask or Summary it belongs to). The web page makes that path an `<a>` with the
+   Hypothesis or Summary it belongs to). The web page makes that path an `<a>` with the
    relative href `artefacts/<uuid>.html` (the text is read in the page, which serves it
    there), as it does a bare `<uuid>.html` naming a file the task has, and lists every artefact a task names under the
    task; the screen's `v` pane lists them too. The older form,

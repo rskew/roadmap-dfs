@@ -22,7 +22,6 @@ Each task is one file, `.dfs/items/<task>.md`:
     - for: <an observation bearing on an assumption>
     - against: <an observation bearing on an assumption>
     Determination: <what was concluded, and so where the work goes next>
-    Ask: <optional: a question only the author can answer, that the work does not wait on>
     Corrects: <the ts of the author's `correct` entry this node carries out>
 
     ## Log
