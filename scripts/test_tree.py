@@ -362,6 +362,31 @@ class Check(InARepo):
     def test_a_node_with_no_hypothesis_needs_no_artefact(self):
         self.assertEqual(self.assumed(task(node(1, extra="Ask: which one?\n"))), "")
 
+    def asks(self, text, head=None):
+        return " | ".join(dfs_check.check_no_new_ask("W1", text, head))
+
+    def test_a_new_or_changed_ask_is_refused_and_points_to_hypothesis(self):
+        asked = task(node(1, extra="Ask: which one?\n"))
+        found = self.asks(asked)
+        self.assertIn("W1.1 adds an Ask", found)
+        self.assertIn("Hypothesis", found)
+        self.assertIn("W1.1 adds an Ask", self.asks(task(node(1, extra="Ask: other?\n")), asked))
+        self.assertIn("W1.2 adds an Ask", self.asks(task(node(1) + node(2, extra="Ask: x?\n")),
+                                                     task(node(1))))
+
+    def test_an_ask_already_committed_stays_and_may_be_deleted(self):
+        asked = task(node(1, "confirmed", extra="Ask: which one?\n"))
+        self.assertEqual(self.asks(asked, asked), "")
+        self.assertEqual(self.asks(task(node(1, "confirmed")), asked), "")
+
+    def test_a_hypothesis_is_not_an_ask(self):
+        self.assertEqual(self.asks(task(node(1, extra="Hypothesis: It holds. Wrong if not.\n"))), "")
+
+    def test_the_skill_no_longer_offers_ask(self):
+        skill = (Path(__file__).resolve().parent.parent / "SKILL.md").read_text()
+        self.assertNotIn("\nAsk:", skill, "the node template must not list an Ask field")
+        self.assertIn("never an `Ask:`", skill)
+
     def test_only_a_new_or_changed_hypothesis_is_judged(self):
         old = task(node(1, "confirmed", extra="Hypothesis: It holds. Wrong if not.\n"))
         self.assertEqual(self.assumed(old, head=old), "")
