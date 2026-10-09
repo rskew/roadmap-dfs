@@ -195,6 +195,9 @@ class Flows(unittest.TestCase):
     def test_all_in_the_bar_leaves_reorder(self):
         self.flow("allleavesreorder")
 
+    def test_a_task_says_if_a_chain_is_running_on_it_and_if_it_is_next(self):
+        self.flow("walktags")
+
     def test_the_lists_bar_buttons_work_from_chats(self):
         self.flow("barfromchats")
 

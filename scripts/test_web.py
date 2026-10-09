@@ -650,14 +650,15 @@ class Web(unittest.TestCase):
     def test_the_walks_pin_is_the_next_task_while_it_is_open_and_the_order_otherwise(self):
         self.fake.pin("W2")
         self.fake.next_item = "W1"
-        rows = lambda s2: dict(items=[dict(id="W1", status="open"), dict(id="W2", status=s2)],
-                               next_item="W1")
-        self.assertEqual(dfs_web.walk_marks(rows("open"))[1], "W2")
-        self.assertEqual(dfs_web.walk_marks(rows("done"))[1], "W1")
+        self.assertEqual(self.call("GET", "/api/walk")[1]["next"], "W2")
+        self.fake.world_items[1]["status"] = "done"
+        self.assertEqual(self.call("GET", "/api/walk")[1]["next"], "W1")
 
     def test_with_the_walk_off_the_rows_still_say_what_runs_and_what_is_next(self):
         dfs_web.WALK.update(enabled=False)
         self.assertEqual(dfs_web.walk_marks(dict(items=[], next_item="W4")), ({}, "W4"))
+        walk = self.call("GET", "/api/walk")[1]
+        self.assertEqual((walk["enabled"], walk["live"]), (False, []))
 
     def test_a_node_drawn_at_its_parents_column_says_it_is_a_chain_step(self):
         rows = {r["key"]: r for r in self.task()["rows"] if r["kind"] == "node"}
@@ -855,7 +856,7 @@ class Web(unittest.TestCase):
     def test_with_the_walk_off_the_page_can_still_read_and_write_but_not_start_agents(self):
         dfs_web.WALK["enabled"] = False
         status, snap, _ = self.call("GET", "/api/walk")
-        self.assertEqual((status, snap), (200, dict(enabled=False)))
+        self.assertEqual((status, snap), (200, dict(enabled=False, live=[], next=None)))
         self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=3))[0], 403)
         self.assertEqual(self.fake.started_chains, [])
         self.assertEqual(self.call("GET", "/api/state")[0], 200)

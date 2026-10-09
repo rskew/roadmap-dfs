@@ -546,7 +546,10 @@ class WalkMixin:
         items = list(self.items)
         auto = self.data.get("next_item")
         goal = next((i["goal"] for i in items if i["id"] == auto), "")
+        # The task the walk takes next: its pin while that task is open, else the order's answer.
+        pin_open = any(i["id"] == self.walk_next and i["status"] == "open" for i in items)
         return dict(
+            next=self.walk_next if pin_open else auto,
             on=self.walk_on, budget=self.walk_budget, used=self.walk_used(),
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS),

@@ -354,7 +354,7 @@ async function render(force) {
       [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk")]);
       if (mine !== RENDERS) return;
       S.node = r.node;
-      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned);
+      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + JSON.stringify(walkOf(r.task));
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
     } else if (r.view === "chats") {
@@ -487,6 +487,10 @@ function drawChats() {
     + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up.</p>`
     + (rows || `<p class="hint">No conversations yet.</p>`);
 }
+// Which task a chain is running on, and which the walk takes next: the same two tags on the list row and on the task's own screen.
+const walkTags = it => (it.running ? `<span class="tag settled">running ${esc(it.running)}</span>` : "") + (it.next ? `<span class="tag settled">next</span>` : "");
+// The task screen has no list row, so it reads the same two facts from the walk it fetches beside the task.
+const walkOf = id => ({ running: ((S.walk && S.walk.live) || []).filter(c => c.item === id).map(c => c.progress)[0] || "", next: !!S.walk && S.walk.next === id });
 function drawTasks() {
   const items = S.state.items.filter(i => !S.only || i.needs_you);
   let seg = 0, html = walkHtml();
@@ -500,6 +504,7 @@ function drawTasks() {
     const inner = `<span class="iid">${esc(it.id)}</span>
       <span class="body"><span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
+          ${walkTags(it)}
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}
           ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted edits, not on ${esc(it.base)}</span>` : ""}
@@ -539,7 +544,8 @@ function visibleRows(t) {
 function drawTask() {
   const t = S.task, folded = S.folded[t.id] || new Set();
   let html = `<div class="head"><h2>${inline(t.goal)}</h2>
-    <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p></div>
+    <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
+    ${(tags => tags ? `<p class="walktags">${tags}</p>` : "")(walkTags(walkOf(t.id)))}</div>
     <div class="actions">
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>

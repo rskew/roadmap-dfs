@@ -570,6 +570,36 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // A task a chain is running on says so, and so does the one the walk takes next: on its list row and on its own screen.
+  async walktags(b) {
+    const ctx = await b.newContext({ ...PHONE });
+    const page = await ctx.newPage(); PAGES.push(page);
+    const errors = [];
+    page.on("pageerror", e => errors.push(String(e)));
+    await page.route("**/api/state", async route => {
+      const body = await (await route.fetch()).json();
+      for (const it of body.items) { it.running = it.id === "W3" ? "run 2/5" : ""; it.next = it.id === "W2"; }
+      await route.fulfill({ json: body });
+    });
+    await page.route("**/api/walk", async route => {
+      const body = await (await route.fetch()).json();
+      await route.fulfill({ json: { ...body, enabled: true, live: [{ item: "W3", progress: "run 2/5" }], next: "W2" } });
+    });
+    await page.goto(URL_);
+    await page.waitForSelector(".item");
+    const tags = id => page.$$eval(`.item[data-id=${id}] .tag`, els => els.map(e => e.textContent));
+    assert((await tags("W3")).includes("running run 2/5"), "the running task's row says so");
+    assert((await tags("W2")).includes("next"), "the next task's row says so");
+    assert(!(await tags("W3")).includes("next") && !(await tags("W2")).some(t => /^running/.test(t)), "and no other row does");
+    await page.click(".item[data-id=W3]");
+    await page.waitForSelector(".walktags");
+    same(await page.textContent(".walktags"), "running run 2/5", "the task's own screen says it is running");
+    await page.goto(URL_ + "/#/t/W2");
+    await page.waitForFunction(() => document.querySelector(".walktags")?.textContent === "next");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // A new task from the floating button, and the title renamed by clicking it.
   async newtask(b) {
     const { page, errors } = await open(b, PHONE);

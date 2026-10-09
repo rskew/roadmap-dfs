@@ -113,17 +113,12 @@ def needs_you(it):
 
 def walk_marks(data):
     """Which task a work chain is running on now (item -> its progress), and which the walk
-    takes next: its pin while that task is open, else the order's answer. What the rows
-    say beside the terminal's running and next columns."""
+    takes next. What the rows say beside the terminal's running and next columns."""
     if WALK["enabled"]:
         snap = walker().snapshot()
-        running = {c["item"]: c["progress"] for c in snap["live"]}
-        pinned, auto = snap["pinned"], snap["auto"]
-    else:
-        running = {r["item"]: dfs_runs.progress(r) for r in dfs_runs.live_runs("work")}
-        pinned, auto = None, data.get("next_item")
-    pin_open = any(i["id"] == pinned and i["status"] == "open" for i in data["items"])
-    return running, (pinned if pin_open else auto)
+        return {c["item"]: c["progress"] for c in snap["live"]}, snap["next"]
+    return ({r["item"]: dfs_runs.progress(r) for r in dfs_runs.live_runs("work")},
+            data.get("next_item"))
 
 
 def state_json():
@@ -597,8 +592,11 @@ def chat_act(name, body=None, scope=None):
 
 
 def walk_json():
-    snap = walker().snapshot() if WALK["enabled"] else {}
-    return dict(snap, enabled=WALK["enabled"])
+    if WALK["enabled"]:
+        return dict(walker().snapshot(), enabled=True)
+    # Off, the page still shows which task a chain is on and which is next, from the files.
+    running, nxt = walk_marks(dfs_state.full())
+    return dict(enabled=False, next=nxt, live=[dict(item=i, progress=p) for i, p in running.items()])
 
 
 def walk_act(name, body):
