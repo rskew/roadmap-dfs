@@ -603,6 +603,9 @@ class HeadlessWalk(WalkMixin):
     def chat_close(self, scope):
         pass
 
+    def chat_interrupt(self, scope):
+        return False
+
     def __init__(self, on_change=None):
         self.lock = threading.RLock()
         self.on_change = on_change or (lambda: None)

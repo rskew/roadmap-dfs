@@ -23,6 +23,7 @@ import chat as dfs_chat     # noqa: E402
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
 echo "$@" >> "$CHAT_STUB_LOG"
+[ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo "boom: not logged in" >&2; exit 1; }
 sid=""; prev=""; prompt=""
 for a in "$@"; do
@@ -56,11 +57,12 @@ class Chat(unittest.TestCase):
         self.stub.write_text(STUB)
         self.stub.chmod(self.stub.stat().st_mode | stat.S_IEXEC)
         self.log = self.root / "stub.log"
-        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "HOME", "DFS_RUN_DIR")}
+        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "CHAT_STUB_SLEEP", "HOME", "DFS_RUN_DIR")}
         os.environ.update(CLAUDE_CMD=str(self.stub), CHAT_STUB_LOG=str(self.log), HOME=str(self.root / "home"),
                           DFS_RUN_DIR=str(self.root / ".dfs" / "runs"))     # the chat logs are this project's, not the real one's
         (self.root / "home").mkdir()
         os.environ.pop("CHAT_STUB_FAIL", None)
+        os.environ.pop("CHAT_STUB_SLEEP", None)
         self._wr = dfs_paths.work_root
         dfs_paths.work_root = lambda: self.root
         dfs_paths._TAG_CACHE.clear()
@@ -88,6 +90,30 @@ class Chat(unittest.TestCase):
 
     def calls(self):
         return self.log.read_text().splitlines()
+
+    def test_stop_ends_a_turn_that_is_answering_and_the_conversation_goes_on(self):
+        os.environ["CHAT_STUB_SLEEP"] = "60"
+        self.chats.send("W1", "a long one")
+        end = time.time() + 10
+        while not (self.log.exists() and "started" in self.log.read_text()) and time.time() < end:
+            time.sleep(0.05)
+        self.assertTrue(self.chats.state("W1")["busy"])
+        t0 = time.time()
+        self.chats.interrupt("W1")
+        st = self.settle("W1")
+        self.assertLess(time.time() - t0, 20, "the turn ended at once, not at its timeout")
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "note"], "stopped is not an error: %s" % st["messages"])
+        self.assertTrue(self.chats.sid("W1"), "the first turn's session is kept, so the conversation survives a stop")
+        os.environ.pop("CHAT_STUB_SLEEP")
+        self.chats.send("W1", "and now?")
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"]][-2:], ["you", "agent"])
+        self.assertNotIn("note", [m["role"] for m in st["messages"]], "the note goes once it moves on")
+
+    def test_stop_with_nothing_answering_changes_nothing(self):
+        st = self.chats.interrupt("W1")
+        self.assertFalse(st["busy"])
+        self.assertEqual(st["messages"], [])
 
     def test_a_turn_is_answered_and_kept(self):
         st = self.chats.send("W1", "Where is the work?")

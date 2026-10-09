@@ -26,6 +26,7 @@ walk (`--no-walk`): a server that may not start agents does not chat either.
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -42,20 +43,31 @@ import uuid
 from walk import agent_file, read_agent   # noqa: E402
 
 
-def run_turn(argv, message, cwd, env):
+def signal_turn(p, sig):
+    """Signal a turn's whole process group: whatever the agent started holds its output open, and
+    the turn would not end until that did too."""
+    try:
+        os.killpg(p.pid, sig)
+    except OSError:
+        pass
+
+
+def run_turn(argv, message, cwd, env, on_start=None):
     """`subprocess.run` with the agent's end done as ctrl-c would: on a timeout it is sent
     SIGTERM (run.sh execs the agent, so this is the agent, which stops what it started) and
     SIGKILLed only if it has not gone after a grace. `run` itself would SIGKILL at once."""
     p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                         text=True, cwd=cwd, env=env)
+                         text=True, cwd=cwd, env=env, start_new_session=True)
+    if on_start:
+        on_start(p)         # so a Stop from the page has the process to end
     try:
         out, err = p.communicate(message, timeout=TURN_TIMEOUT)
     except subprocess.TimeoutExpired as e:
-        p.terminate()
+        signal_turn(p, signal.SIGTERM)
         try:
             out, err = p.communicate(timeout=TURN_GRACE)
         except subprocess.TimeoutExpired:
-            p.kill()
+            signal_turn(p, signal.SIGKILL)
             out, err = p.communicate()
         e.output, e.stderr = out, err      # what the agent had said, for the log of a hang
         raise
@@ -145,6 +157,9 @@ class Chats:
         self.busy = {}      # scope -> when its turn started
         self.pending = {}   # scope -> what was sent and has not reached the transcript yet
         self.notes = {}     # scope -> [errors], until the conversation moves on
+        self.procs = {}     # scope -> the process of its headless turn, while it runs
+        self.stopped = set()    # scopes whose running turn the author has just stopped
+        self.stops = {}     # scope -> the message whose turn was stopped, until the conversation moves on
 
     # ── the record: just the session id ────────────────────────────────────────────────
     def path(self, scope):
@@ -180,6 +195,8 @@ class Chats:
             elif pending:
                 self.pending.pop(scope, None)
             messages += [dict(role="error", text=t) for t in self.notes.get(scope, [])]
+            if scope in self.stops:
+                messages.append(dict(role="note", text="Stopped before it answered."))
             started = self.busy.get(scope)
             w = self.walker()
             live = bool(w and w.chat_live(scope))
@@ -209,6 +226,7 @@ class Chats:
                 chatlog.log(scope, "page: message of %d characters handed to the screen's chat" % len(message))
                 self.pending[scope] = message
                 self.notes.pop(scope, None)
+                self.stops.pop(scope, None)
                 self.on_change()
                 return self.state(scope)
             if scope in self.busy:
@@ -222,10 +240,49 @@ class Chats:
                                  "close it and send from here")
             self.pending[scope] = message
             self.notes.pop(scope, None)
+            self.stops.pop(scope, None)
             self.busy[scope] = time.time()
         threading.Thread(target=self.turn, args=(scope, message, sid), daemon=True).start()
         self.on_change()
         return self.state(scope)
+
+    def interrupt(self, scope):
+        """Stop pressed: end what the chat is doing and leave the conversation as it is. The screen's
+        chat (a background agent) is sent claude's interrupt key; a headless turn's process is ended
+        as ctrl-c would, and the turn then says it was interrupted rather than that it failed."""
+        self.check(scope)
+        w = self.walker()
+        with self.lock:
+            if scope in self.busy:
+                chatlog.log(scope, "page: stop, ending the turn (%ds in)" % (time.time() - self.busy[scope]))
+                self.stopped.add(scope)
+                self.end_turn(scope)
+            elif w and w.chat_interrupt(scope):
+                chatlog.log(scope, "page: stop, interrupt sent to the screen's chat")
+            else:
+                chatlog.log(scope, "page: stop, nothing was answering")
+        self.on_change()
+        return self.state(scope)
+
+    def end_turn(self, scope):
+        """Stop the headless turn's process if it has started (else `started` does as it does)."""
+        p = self.procs.get(scope)
+        if p is None or p.poll() is not None:
+            return
+        signal_turn(p, signal.SIGTERM)      # run.sh execs the agent, so this is the agent, which stops what it started
+
+        def reap():
+            try:
+                p.wait(TURN_GRACE)
+            except subprocess.TimeoutExpired:
+                signal_turn(p, signal.SIGKILL)
+        threading.Thread(target=reap, daemon=True).start()
+
+    def started(self, scope, p):
+        with self.lock:
+            self.procs[scope] = p
+            if scope in self.stopped:       # Stop was pressed before the process existed
+                self.end_turn(scope)
 
     def argv(self):
         return [str(dfs_paths.SCRIPTS / "run.sh")]
@@ -242,14 +299,18 @@ class Chats:
             env.pop("RUNDIR", None)
             env.pop("CHAT_SID", None)
             env.pop("CHAT_RESUME", None)
+            if not new_sid:
+                # chosen here, not by run.sh, so a first turn that is stopped still has its session
+                new_sid = str(uuid.uuid4())
+            env["CHAT_SID"] = new_sid
             if sid:
-                env["CHAT_SID"] = sid
                 # Resume only a session that has a transcript: one the screen made and the
                 # author left at once has none, and `--resume` would refuse it.
                 p = dfs_context.transcript_path(sid, "claude")
                 if p and os.path.exists(p):
                     env["CHAT_RESUME"] = "1"
-            r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env)
+            r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
+                         on_start=lambda p: self.started(scope, p))
             rc = r.returncode
             out = {}
             try:
@@ -268,14 +329,22 @@ class Chats:
             error = "could not start the agent: %s" % e
         except Exception as e:      # the turn's thread would die unseen, and the page wait forever
             error = "the turn failed: %s: %s" % (type(e).__name__, e)
+        with self.lock:
+            stopped = scope in self.stopped
+        if stopped:
+            error = ""      # ended on purpose: not a failure, whatever the killed agent left behind
         chatlog.log(scope, "turn: %s after %ds, rc=%s, session %s" % (
-            "FAILED" if error else "answered", time.time() - began, rc, new_sid or "(none)"),
+            "STOPPED" if stopped else "FAILED" if error else "answered", time.time() - began, rc, new_sid or "(none)"),
             (error + "\n" + said) if said else error)
         with self.lock:
             if new_sid and new_sid != sid:
                 self.save_sid(scope, new_sid)
             if error:
                 self.notes[scope] = [error]
+            if stopped:
+                self.stops[scope] = True
+            self.stopped.discard(scope)
+            self.procs.pop(scope, None)
             self.busy.pop(scope, None)
         self.on_change()
 
@@ -348,6 +417,7 @@ class Chats:
                 pass
             self.pending.pop(scope, None)
             self.notes.pop(scope, None)
+            self.stops.pop(scope, None)
         self.on_change()
         return self.state(scope)
 
