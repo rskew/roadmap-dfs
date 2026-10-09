@@ -169,7 +169,7 @@ def tree_entries(t, folded=(), flagged=False):
     for name, shown in order:
         if (sections.get(name) or "").strip():
             out.append(dict(key="section:%s:%s" % (t["task"], name), kind="section",
-                            depth=0, name=name, text=sections[name],
+                            depth=0, indent=0, name=name, text=sections[name],
                             open_default=shown))
     held = [] if dfs_tree.accepted(t) else dfs_tree.notes(t)
     if held:
@@ -177,7 +177,7 @@ def tree_entries(t, folded=(), flagged=False):
         # critic's remarks live in the log body and the skill tells the author to read
         # them when they accept, but nothing on the screen did. Listed folded: they can
         # run long, and the accept prompt counts them for the author who wants to read.
-        out.append(dict(key="section:%s:Notes" % t["task"], kind="section", depth=0,
+        out.append(dict(key="section:%s:Notes" % t["task"], kind="section", depth=0, indent=0,
                         name="Reviewer and critic notes", open_default=False,
                         text="\n".join("%s %s:\n%s\n" % (k, v, body)
                                        for k, _ts, v, body in held)))
@@ -186,14 +186,14 @@ def tree_entries(t, folded=(), flagged=False):
         if nid in nodes:
             on_node.setdefault(nid, []).append(r)
         else:
-            out.append(dict(key="raise:" + r["ts"], kind="raise", depth=0, raise_=r))
+            out.append(dict(key="raise:" + r["ts"], kind="raise", depth=0, indent=0, raise_=r))
 
     def kids_of(parent):
         return sorted((n for n in t["nodes"]
                        if (n["parent"] if n["parent"] in nodes else None) == parent),
                       key=lambda n: n["n"])
 
-    def walk(parent, d, ind):
+    def walk(parent, d, ind, forks):
         sibs = kids_of(parent)
         for nd in sibs:
             nid = nd["id"]
@@ -207,6 +207,7 @@ def tree_entries(t, folded=(), flagged=False):
             # ⚠️ `chain`: drawn at its parent's column, which reads as the parent's
             # sibling, so "add under" looked like it had added beside. The row says it.
             out.append(dict(key=nid, kind="node", depth=d, indent=min(ind, TREE_INDENT_CAP),
+                            guides=forks,
                             node=nd, status=st,
                             chain=parent is not None and len(sibs) == 1,
                             raises=on_node.get(nid, []), kids=len(kids),
@@ -230,8 +231,9 @@ def tree_entries(t, folded=(), flagged=False):
                 # half steps) puts a fork's child two past its parent and an only
                 # child one past, capped so a long chain stays narrow. `depth` is
                 # the fork count and keeps its meaning; a surface draws from `indent`.
-                walk(nid, d + (1 if len(kids) > 1 else 0), ind + (2 if len(kids) > 1 else 1))
-    walk(None, 0, 0)
+                walk(nid, d + (1 if len(kids) > 1 else 0), ind + (2 if len(kids) > 1 else 1),
+                     forks + (min(ind, TREE_INDENT_CAP),) if len(kids) > 1 else forks)
+    walk(None, 0, 0, ())
     return out
 
 
@@ -3649,7 +3651,7 @@ class UI(WalkMixin):
                 self._sel_end = len(out) - 1
             sel = focused and i == self.tree_sel
             cursor = ">" if sel else " "
-            pad = "  " * row["depth"]
+            pad = " " * row["indent"]
             if sel:
                 self._sel_row = len(out)
             if row["kind"] == "section":
@@ -3698,8 +3700,8 @@ class UI(WalkMixin):
             # be read as siblings or not without counting spaces. Below the header
             # an unfolded parent's own column joins in, running its glyph down to
             # the children.
-            above = [2 + 2 * k for k in range(row["depth"])]
-            below = above + ([2 + 2 * row["depth"]]
+            above = [2 + g for g in row["guides"]]
+            below = above + ([2 + row["indent"]]
                              if row["kids"] and not row["folded"] else [])
             first = len(out)
             head = "%s %s%s %s%s %s %s%s" % (cursor, pad, fold, "↳" if row["chain"] else "",

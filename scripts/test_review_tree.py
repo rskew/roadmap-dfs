@@ -11,6 +11,7 @@ says, and that each write lands in the task's Log exactly as the author typed it
 
 Run:  python3 roadmap-dfs/scripts/test_review_tree.py
 """
+import re
 import importlib.util
 import sys
 import unittest
@@ -413,6 +414,22 @@ class Pane(unittest.TestCase):
         lines = [l for l, *_ in self.ui.lines_tree(100)]
         self.assertTrue(any("↳W1.3" in l for l in lines), lines)
         self.assertFalse(any("↳W1.1" in l or "↳W1.4" in l for l in lines))
+
+    def test_a_chain_step_is_drawn_one_column_right_of_its_parent_and_siblings_in_one_column(self):
+        # W1.1 → W1.2, which forks to W1.3 and W1.4 (the fork steps in two columns).
+        t = dfs_tree.parse(TREE.replace(
+            "### W1.4 · A refuted sibling\nStatus: refuted",
+            "### W1.4 · A refuted sibling\nParent: W1.2\nStatus: refuted"), "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        self.ui.open_tree()
+        col = {}
+        for line, *_ in self.ui.lines_tree(100):
+            m = re.search(r"↳?(W1\.\d)\b", line)
+            if m and m.group(1) not in col:
+                col[m.group(1)] = m.start(1)
+        self.assertEqual(col["W1.2"] - col["W1.1"], 1 + 1, "one column of indent, one for its mark")
+        self.assertEqual(col["W1.3"], col["W1.4"])
+        self.assertGreater(col["W1.3"], col["W1.2"])
 
     def test_H_lists_every_assumption_and_enter_goes_to_it_in_its_tree(self):
         ui = self.ui
