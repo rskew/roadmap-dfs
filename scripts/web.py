@@ -453,11 +453,7 @@ def artefact_state(page, body=None):
     answered = None
     if body is not None:
         with LOCK:
-            if "state" in body:
-                f.parent.mkdir(parents=True, exist_ok=True)
-                tmp = f.with_suffix(".tmp")
-                tmp.write_text(json.dumps(body["state"]))
-                tmp.replace(f)
+            found = None
             if "answer" in body:
                 text = body["answer"]
                 if not isinstance(text, str) or not text.strip():
@@ -465,6 +461,12 @@ def artefact_state(page, body=None):
                 found = answering_raise(page)
                 if not found:
                     raise Refused("no open raise names this page to answer with", 409)
+            if "state" in body:
+                f.parent.mkdir(parents=True, exist_ok=True)
+                tmp = f.with_suffix(".tmp")
+                tmp.write_text(json.dumps(body["state"]))
+                tmp.replace(f)
+            if found:
                 task, r = found
                 dfs_tree.append_log(task, "answer", [r["ts"]], text.strip())
                 answered = dict(task=task, ts=r["ts"])
@@ -717,7 +719,10 @@ class Handler(BaseHTTPRequestHandler):
             if method != "GET":
                 if self.headers.get("Origin") not in (None, "", "null") and not self.same_origin():
                     raise Refused("that request came from another site", 403)
-                n = int(self.headers.get("Content-Length") or 0)
+                try:
+                    n = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    raise Refused("Content-Length is not a number")
                 if n > MAX_BODY:
                     raise Refused("too large", 413)
                 try:
@@ -727,6 +732,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict):
                     raise Refused("that is not JSON")
             return self.json(200, artefact_state(page, body), cors)
+        except (ValueError, dfs_paths.NoBranch) as e:
+            return self.json(409, dict(error=str(e)), cors)
         except Refused as e:
             return self.json(e.status, dict(error=str(e)), cors)
 

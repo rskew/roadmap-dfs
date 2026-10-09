@@ -277,6 +277,15 @@ class Web(unittest.TestCase):
         self.assertNotIn(ts, [r["ts"] for r in dfs_tree.open_raises(dfs_tree.load("W1"))])
         self.assertEqual(self.page_call("POST", "0a1b2c.html", {"answer": "Again."})[0], 409)
 
+    def test_a_refused_answer_leaves_the_kept_state_and_a_bad_length_says_why(self):
+        self.put_artefact()
+        self.page_call("POST", "0a1b2c.html", {"state": {"pick": "A"}})
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", {"state": {"pick": "B"}, "answer": "Mine."})[0], 409)
+        self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["state"], {"pick": "A"})
+        status, data, r = self.call("POST", "/artefact-state/0a1b2c.html", "{}", ctype="text/plain",
+                                    headers={"Content-Length": "many"})
+        self.assertEqual((status, r.getheader("Access-Control-Allow-Origin")), (400, "*"))
+
     def test_a_raise_that_names_no_answering_page_is_answered_by_no_page(self):
         self.put_artefact()
         dfs_tree.append_log("W1", "raise", (), "Which design? See .dfs/artefacts/0a1b2c.html")

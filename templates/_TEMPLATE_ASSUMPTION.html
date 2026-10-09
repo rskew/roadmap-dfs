@@ -72,7 +72,7 @@
     holds: function (n) { return 'With ' + n + ' of them, the work goes ahead as planned.'; },
     fails: function (n) { return 'With ' + n + ' of them, the work takes the parked alternative.'; }
   };
-  var chosen = 'holds';
+  var chosen = 'holds', touched = false;
   var knob = document.getElementById('knob');
 
   // The server this page came from keeps what the reader chose, so the page opens as they
@@ -97,9 +97,9 @@
     });
   }
   document.querySelectorAll('[data-case]').forEach(function (b) {
-    b.addEventListener('click', function () { chosen = b.dataset.case; show(); keep(); });
+    b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
   });
-  knob.addEventListener('input', function () { show(); keep(); });
+  knob.addEventListener('input', function () { touched = true; show(); keep(); });
   // The answer is the text the author reads on the page: make it say the decision.
   var send = document.getElementById('answer');
   send.addEventListener('click', function () {
@@ -112,7 +112,7 @@
   });
   show();
   call('GET').then(function (j) {
-    if (j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
     document.getElementById('answerbox').hidden = !j.raise;
   }).catch(function () {});
 </script>

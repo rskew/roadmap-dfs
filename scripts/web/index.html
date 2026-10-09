@@ -644,7 +644,7 @@ function md(raw) {
 }
 const hasBlock = html => /<(pre|ul|ol)[ >]/.test(html);
 /* The artefacts a task names are previewed: a screenshot as itself, a page as its first screen in a
-   sandboxed frame scaled to the card (the server's CSP holds it to no network, as when opened), tap for the
+   sandboxed frame scaled to the card (the server's CSP holds it to its own state route, as when opened), tap for the
    whole. */
 const THUMB_W = 1200;
 const thumbScale = typeof ResizeObserver === "function"
