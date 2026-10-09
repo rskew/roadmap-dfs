@@ -661,6 +661,44 @@ class Check(InARepo):
         with self.assertRaises(ValueError):
             dfs_tree.delete_task("W1")
 
+    def test_a_deleted_node_takes_its_subtree_and_leaves_a_delete_entry_the_guard_accepts(self):
+        log = ("- 2026-09-25T09:00:00Z · session · work\n"
+               "- 2026-09-25T09:01:00Z · correct · W1.2 · refuted\n  wrong\n")
+        self.write(task(node(1, "confirmed") + node(2, "confirmed", parent=1, extra="Evidence:\n- for: ran\n")
+                        + node(3, parent=2) + node(4, "parked", parent=1), log))
+        self.commit()
+        self.assertEqual(dfs_tree.delete_node("W1", "W1.2"), ["W1.2", "W1.3"])
+        t = dfs_tree.load("W1")
+        self.assertEqual(list(dfs_tree.by_id(t)), ["W1.1", "W1.4"])
+        entry = [e for e in t["log"] if e["kind"] == "delete"][0]
+        self.assertEqual(entry["args"], ["W1.2", "W1.3"])
+        self.assertIn("### W1.2 · step 2", entry["body"])
+        self.assertIn("- for: ran", entry["body"])
+        self.assertEqual(dfs_tree.next_node_id(t, ""), "W1.5")
+        self.assertEqual(dfs_tree.corrections(t), [])   # the correction has nothing left to settle
+        subprocess.run("git add -A .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        with self.assertRaises(ValueError):
+            dfs_tree.delete_node("W1", "W1.2")
+        dfs_tree.delete_node("W1", "W1.4")
+        self.assertEqual(dfs_tree.next_node_id(dfs_tree.load("W1"), ""), "W1.5")
+
+    def test_a_node_an_open_raise_names_is_not_deleted(self):
+        self.write(task(node(1) + node(2, parent=1), "- 2026-09-25T09:03:00Z · raise · W1.2\n  which?\n"))
+        with self.assertRaises(ValueError) as c:
+            dfs_tree.delete_node("W1", "W1.1")
+        self.assertIn("answer it first", str(c.exception))
+        self.assertEqual(list(dfs_tree.by_id(dfs_tree.load("W1"))), ["W1.1", "W1.2"])
+
+    def test_a_node_removed_with_no_delete_entry_is_still_refused(self):
+        self.write(task(node(1) + node(2)))
+        self.commit()
+        self.write(task(node(1)))
+        code, out = self.run_check()
+        self.assertEqual(code, 1, out)
+        self.assertIn("node W1.2 was removed", out)
+
     def test_a_task_that_is_not_there_is_refused_and_a_plain_delete_still_is(self):
         with self.assertRaises(ValueError):
             dfs_tree.delete_task("W9")

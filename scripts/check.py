@@ -258,6 +258,7 @@ def check_shape(task, text, archive="", tag="", whole=None):
     if not re.match(r"^# %s(?![\w@.-])" % re.escape(task), t["title"] or ""):
         bad.append("its heading is %r, which does not name %s" % (t["title"], task))
     seen, nums = set(), {nd["id"]: nd for nd in w["nodes"]}
+    gone = dfs_tree.deleted_ids(w)
     for nd in t["nodes"]:
         if nd["id"] in seen:
             bad.append("node %s is defined twice" % nd["id"])
@@ -291,7 +292,7 @@ def check_shape(task, text, archive="", tag="", whole=None):
         if e["kind"] == "answer" and (not e["args"] or e["args"][0] not in raises):
             bad.append("the answer at %s names no raise" % e["ts"])
         if e["kind"] in ("correct", "backtrack"):
-            if not e["args"] or e["args"][0] not in nums:
+            if not e["args"] or (e["args"][0] not in nums and e["args"][0] not in gone):
                 bad.append("the %s at %s names no node" % (
                     "correction" if e["kind"] == "correct" else "backtrack", e["ts"]))
             elif e["kind"] == "correct" and len(e["args"]) > 1 \
@@ -369,7 +370,10 @@ def check_history(task, text, head, archive=""):
     for nd in was["nodes"]:
         cur = now_nodes.get(nd["id"])
         if cur is None:
-            bad.append("node %s was removed; a node is history — refute it instead"
+            if nd["id"] in dfs_tree.deleted_ids(now):
+                continue
+            bad.append("node %s was removed; a node is history — refute it instead, or "
+                       "delete it with a `delete` entry naming it (`tree.py` delete_node)"
                        % nd["id"])
             continue
         if nd["status"] not in dfs_tree.DETERMINED:

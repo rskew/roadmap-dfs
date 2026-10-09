@@ -101,7 +101,7 @@ DETERMINED = ("confirmed", "refuted")
 # Who writes each kind is a convention the checker enforces only by shape; the
 # runner, the agent, the critic and the author's passes each append their own.
 KINDS = ("session", "end", "raise", "answer", "critic", "review", "correct", "backtrack",
-         "accept")
+         "accept", "delete")
 FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determination",
           "Ask", "Corrects")
 # Old names still read, as the field they became: determined nodes are history, so
@@ -432,8 +432,14 @@ def ensure_part(task):
 def next_node_id(t, tag=None):
     """One past the highest number `tag` (default this branch's) has used in `t`."""
     tag = dfs_paths.branch_tag() if tag is None else tag
-    return node_id(t["task"], max((nd["n"] for nd in t["nodes"] if nd.get("tag", "") == tag),
-                                  default=0) + 1, tag)
+    used = [nd["n"] for nd in t["nodes"] if nd.get("tag", "") == tag]
+    used += [split_id(i)[1] for i in deleted_ids(t) if split_id(i) and split_id(i)[2] == tag]
+    return node_id(t["task"], max(used, default=0) + 1, tag)
+
+
+def deleted_ids(t):
+    """The node ids the author has deleted (`delete_node`), which no number is reused for."""
+    return {a for e in t["log"] if e["kind"] == "delete" for a in e["args"]}
 
 
 def log_cutoff(log):
@@ -717,6 +723,43 @@ def delete_task(task):
     return [str(src.relative_to(state)) for src, _ in moves]
 
 
+def delete_node(task, nid):
+    """Delete a node and everything under it, whatever its status, from the part that holds
+    it. The author's `delete` log entry names every id removed and carries their text
+    verbatim, so the file still says what was cut, and `check.py` lets a node leave only
+    under such an entry. Refused: an unknown node, one a branch other than this one owns,
+    one with a descendant in another part, and one an unanswered raise names (answer it
+    first). Returns the ids removed, the node first; ValueError says what is wrong."""
+    parts = split_id(nid)
+    if not parts or parts[0] != task or not exists(task):
+        raise ValueError("no node %s in %s" % (nid, task))
+    whole = load(task)
+    if nid not in by_id(whole):
+        raise ValueError("no node %s in %s" % (nid, task))
+    if parts[2] != dfs_paths.branch_tag():
+        raise ValueError("%s belongs to the part of branch %s, which only that branch writes"
+                         % (nid, parts[2]))
+    p = part_path(task, parts[2])
+    t = parse(p.read_text(), task)
+    mine = by_id(t)
+    cut = [nid] + [nd["id"] for nd in descendants(whole, nid)]
+    if any(i not in mine for i in cut):
+        raise ValueError("%s has nodes under it in another branch's part; delete those first"
+                         % nid)
+    named = [e for e in open_raises(whole) if e["args"] and e["args"][0] in cut]
+    if named:
+        raise ValueError("the raise at %s names %s; answer it first" % (named[0]["ts"], named[0]["args"][0]))
+    body = "\n\n".join("\n".join(mine[i]["raw"]) for i in cut)
+    t["nodes"] = [nd for nd in t["nodes"] if nd["id"] not in cut]
+    latest = max((e["ts"] for e in whole["log"]), default="")
+    ts = now_ts()
+    if ts <= latest:
+        ts = _ts_after(latest)
+    t["log"].append(make_entry(ts, "delete", cut, body))
+    p.write_text(render(t))
+    return cut
+
+
 def edit_node(task, nid, title, approach=""):
     """Change the title and Approach of an open or parked node, in the part that holds it.
     A confirmed or refuted node is history and is refused, as is one whose Approach was
@@ -842,6 +885,7 @@ def corrections(t):
     has carried it out. A backtrack's `disp` is "backtrack"."""
     carried = {nd["fields"].get("Corrects") for nd in t["nodes"]}
     now = {nd["id"]: nd["status"] for nd in t["nodes"]}
+    gone = deleted_ids(t)
     out = []
     for e in t["log"]:
         if e["kind"] not in ("correct", "backtrack") or not e["args"]:
@@ -849,6 +893,8 @@ def corrections(t):
         disp = ("backtrack" if e["kind"] == "backtrack" else
                 e["args"][1] if len(e["args"]) > 1 else "refuted")
         node = e["args"][0]
+        if node in gone:
+            continue   # the node was deleted: nothing is left for a correction to settle
         # `keeps`: confirming what already stands confirmed only adds the author's words;
         # nothing under it was built on a wrong verdict, so nothing is pruned.
         kept = keeps(disp, now.get(node))
