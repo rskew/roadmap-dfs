@@ -246,6 +246,15 @@ class Recording(unittest.TestCase):
         self.assertFalse(r.send("late"))
         self.assertTrue(self.has("refused: the agent is not running"))
 
+    def test_an_agent_that_never_wrote_says_no_output_and_a_bare_close_says_closed(self):
+        r = self.start("sleep 30")
+        self.assertTrue(until(lambda: self.has("start pid=")))
+        r.close(wait=True)
+        self.assertTrue(until(lambda: self.has("exit signal")))
+        line = [t for t, _ in self.said if t.startswith("exit ")][0]
+        self.assertIn("no output (closed)", line)
+        self.assertNotIn("-1s", line)
+
     def test_a_message_the_agent_died_before_taking_is_logged_as_dropped(self):
         r = self.start("sleep 0.3; exit 4")
         r.send("too late")

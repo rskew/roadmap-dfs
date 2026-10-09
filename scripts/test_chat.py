@@ -167,6 +167,7 @@ class Chat(unittest.TestCase):
             with self.assertRaises(ValueError) as cm:
                 self.chats.send("W1", "hi")
             self.assertIn("another terminal has this conversation open", str(cm.exception))
+            self.assertIn("message refused, another terminal has session", self.record("W1"))
         finally:
             screen.kill()
             screen.wait()

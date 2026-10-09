@@ -118,9 +118,10 @@ class Relay:
         except ChildProcessError:
             self.rc = 0
         how = "signal %d" % -self.rc if self.rc < 0 else "rc=%d" % self.rc
-        self.log("exit %s after %ds, %ds since its last output%s" % (
-            how, time.time() - self.started, time.time() - self.last_out if self.last_out else -1,
-            " (closed: %s)" % self.why if self.why else " (nobody closed it)"),
+        self.log("exit %s after %ds, %s%s" % (
+            how, time.time() - self.started,
+            "%ds since its last output" % (time.time() - self.last_out) if self.last_out else "no output",
+            " (closed)" if self.why == "closed" else " (closed: %s)" % self.why if self.why else " (nobody closed it)"),
             chatlog.screen_text(self.tail))
 
     def _watch(self):

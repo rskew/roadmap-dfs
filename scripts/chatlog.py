@@ -44,7 +44,7 @@ def log(scope, text, detail=""):
                 os.replace(p, p.with_name(p.name + ".1"))
         except OSError:
             pass
-        lines = [time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()) + " " + text.replace("\n", " ")]
+        lines = [time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + " " + text.replace("\n", " ")]
         lines += ["    | " + ln for ln in detail.splitlines()] if detail else []
         with open(p, "a") as fh:
             fh.write("\n".join(lines) + "\n")
