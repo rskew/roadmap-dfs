@@ -1,0 +1,80 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W46: sibling or child, by indentation</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 14px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .tree { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 6px 0; }
+  .r { display: flex; align-items: center; min-height: 32px; border-bottom: 1px solid #eee; font-size: 15px; }
+  .r:last-child { border-bottom: 0; }
+  .r span.id { font-weight: 600; margin-right: 8px; white-space: nowrap; }
+  .r.fork span.id { color: #7a4b00; }
+  .pad { flex: 0 0 auto; }
+  .note { margin: 10px 0 0; padding: 8px 12px; border-left: 4px solid #555; background: #f2f0ea; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  label { display: block; margin: 8px 0 2px; }
+  input[type="range"] { width: 100%; min-height: 44px; }
+</style>
+<h1>Sibling or child, by indentation</h1>
+<p class="lede">Two forks' children (<b>A</b>, <b>B</b>) and a chain under <b>A</b>. Which rows are
+  siblings and which are children? Pick a rule and read the tree.</p>
+<div class="choices" role="group" aria-label="Indent rule">
+  <button type="button" data-rule="fork" aria-pressed="false">Now: step in only at a fork</button>
+  <button type="button" data-rule="half" aria-pressed="true">Chain step in half a step</button>
+  <button type="button" data-rule="full" aria-pressed="false">Every child a full step</button>
+</div>
+<div class="tree" id="tree" aria-live="polite"></div>
+<div class="note" id="note"></div>
+<h2>How long the chain under A is</h2>
+<label for="len">Steps in the chain: <output id="len-out">3</output> (the page caps the indent at 8 steps)</label>
+<input id="len" type="range" min="1" max="12" value="3">
+<h2>What would show it wrong</h2>
+<p class="wrong">The author still cannot tell a chain step from a sibling with half-step indents, or finds the
+  half-step jagged: then the full-step tree (capped) or a connector rail replaces it.</p>
+<script>
+  var rule = 'half', len = 3, STEP = 18;
+  function rows(n) {
+    // [id, depth, parent-kind] with the true tree; the rule decides the offset
+    var out = [['W1', 0, 'root'], ['W1.1', 1, 'fork'], ['W1.2', 1, 'fork']];
+    var kids = []; // under W1.1
+    for (var i = 0; i < n; i++) kids.push(['W1.1.' + (i + 1), 2 + i, 'chain']);
+    return [out[0], out[1]].concat(kids, [out[2]]);
+  }
+  function offset(r) {            // in half steps
+    if (rule === 'full') return Math.min(r[1], 8) * 2;
+    var isChain = r[2] === 'chain', forkDepth = 0;
+    if (rule === 'fork') return r[1] <= 1 ? r[1] * 2 : 2;
+    // half: fork step = 2 units, chain step = 1 unit
+    return Math.min(2 + (r[1] - 2 + (r[2] === 'chain' ? 1 : 0)) , 16) * (r[1] ? 1 : 0);
+  }
+  var notes = {
+    fork: 'The chain steps sit in A\'s column, the same column as B: a chain step reads as a sibling of A and B.',
+    half: 'A and B share a column; each chain step is a little to the right of the row above it, so a child is never level with its parent.',
+    full: 'True tree: a child is always right of its parent, but a twelve-step chain is a staircase (here capped, after which steps read level).'
+  };
+  function show() {
+    document.getElementById('len-out').textContent = len;
+    var h = '';
+    rows(len).forEach(function (r) {
+      h += '<div class="r' + (r[2] === 'fork' ? ' fork' : '') + '" data-node="' + r[0] + '"><span class="pad" style="width:' +
+        (offset(r) * STEP / 2) + 'px"></span><span class="id">' + (r[2] === 'chain' ? '↳ ' : '') + r[0] + '</span><span>' +
+        (r[0] === 'W1' ? 'the task' : r[2] === 'fork' ? 'an alternative' : 'the next step') + '</span></div>';
+    });
+    document.getElementById('tree').innerHTML = h;
+    document.getElementById('note').textContent = notes[rule];
+    document.querySelectorAll('[data-rule]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.rule === rule)); });
+  }
+  document.querySelectorAll('[data-rule]').forEach(function (b) {
+    b.addEventListener('click', function () { rule = b.dataset.rule; show(); });
+  });
+  document.getElementById('len').addEventListener('input', function (e) { len = +e.target.value; show(); });
+  show();
+</script>
