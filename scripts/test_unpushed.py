@@ -52,6 +52,30 @@ class Unpushed(unittest.TestCase):
         self.git("update-ref", "refs/remotes/origin/main", "HEAD")
         self.assertEqual(dfs_tree.unpushed(self.root, ttl=0), (set(), {}))
 
+    def test_master_is_found_when_origin_has_no_main(self):
+        self.git("init", "-q")
+        self.commit("W1.1: pushed")
+        self.git("update-ref", "refs/remotes/origin/master", "HEAD")
+        self.commit("W1.2: not pushed")
+        self.assertEqual(dfs_tree.default_ref(self.root), "origin/master")
+        self.assertEqual(dfs_tree.unpushed(self.root, ttl=0), (set(self.git("rev-list", "-1", "HEAD").split()), {"W1": 1}))
+
+    def test_origin_head_beats_the_guesses(self):
+        self.git("init", "-q")
+        self.commit("W1.1: pushed")
+        for b in ("main", "trunk"):
+            self.git("update-ref", "refs/remotes/origin/" + b, "HEAD")
+        self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+        self.assertEqual(dfs_tree.default_ref(self.root), "origin/trunk")
+
+    def test_init_default_branch_names_it(self):
+        self.git("init", "-q")
+        self.commit("W1.1: pushed")
+        self.git("update-ref", "refs/remotes/origin/develop", "HEAD")
+        self.assertIsNone(dfs_tree.default_ref(self.root))
+        self.git("config", "init.defaultBranch", "develop")
+        self.assertEqual(dfs_tree.default_ref(self.root), "origin/develop")
+
     def test_the_list_cell_is_blank_at_zero(self):
         self.assertEqual(dfs_tui.ahead_cell({"ahead": 0}), "")
         self.assertEqual(dfs_tui.ahead_cell({}), "")

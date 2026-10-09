@@ -1098,20 +1098,45 @@ def node_commits(task, cwd=None):
 _unpushed_seen = {}
 
 
+def _git_out(cwd, *args):
+    try:
+        r = subprocess.run(["git", *args], capture_output=True, text=True, cwd=cwd)
+    except OSError:
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def default_ref(cwd=None):
+    """The remote ref the default branch is on, as `origin/main` or `origin/master`, or
+    None when there is none to compare with. Read from git: where `origin/HEAD` points,
+    else `init.defaultBranch`, else whichever of `main` and `master` origin has."""
+    cwd = str(cwd or dfs_paths.work_root())
+    head = _git_out(cwd, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    names = [head] if head else []
+    configured = _git_out(cwd, "config", "--get", "init.defaultBranch")
+    names += ["origin/%s" % b for b in ([configured] if configured else [])
+              + list(dfs_paths.DEFAULT_BRANCHES)]
+    for name in names:
+        if _git_out(cwd, "rev-parse", "--verify", "--quiet", "refs/remotes/" + name):
+            return name
+    return None
+
+
 def unpushed(cwd=None, ttl=5.0):
-    """`(shas, {task: count})` for the node commits HEAD has and `origin/main` lacks, or
-    None when there is no `origin/main` here to compare with. `origin/main` is as last
-    fetched: nothing here touches the network. Kept `ttl` seconds, since the screens
-    ask on every draw and a push moves no file their own caches are keyed by."""
+    """`(shas, {task: count})` for the node commits HEAD has and the default branch on
+    origin (`default_ref`) lacks, or None when there is none here to compare with. That
+    ref is as last fetched: nothing here touches the network. Kept `ttl` seconds, since
+    the screens ask on every draw and a push moves no file their own caches are keyed by."""
     key = str(cwd or dfs_paths.work_root())
     hit = _unpushed_seen.get(key)
     if hit and time.monotonic() - hit[0] < ttl:
         return hit[1]
     got = None
+    base = default_ref(key)
     try:
-        r = subprocess.run(["git", "log", "--format=%H%x09%s", "origin/main..HEAD"],
-                           capture_output=True, text=True, cwd=key)
-        if r.returncode == 0:
+        r = base and subprocess.run(["git", "log", "--format=%H%x09%s", "%s..HEAD" % base],
+                                    capture_output=True, text=True, cwd=key)
+        if r and r.returncode == 0:
             shas, tasks = set(), {}
             for line in r.stdout.splitlines():
                 sha, _, subj = line.partition("\t")

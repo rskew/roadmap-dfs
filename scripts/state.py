@@ -123,10 +123,11 @@ def state_for(task: str):
     corr = [c for c in dfs_tree.corrections(t) if not c["done"]]
     return dict(
         item=task, status=status, why=why,
-        # Node commits HEAD has and origin/main (as last fetched) lacks; 0 when none
-        # or when there is no origin/main to say.
+        # Node commits HEAD has and the default branch on origin (as last fetched) lacks; 0 when none
+        # or when there is no such branch to say.
         ahead=((dfs_tree.unpushed() or (set(), {}))[1]).get(task, 0),
-        # Edits to the task's files that are not committed: on no branch, so not on origin/main.
+        base=dfs_tree.default_ref() or "",
+        # Edits to the task's files that are not committed: on no branch, so not on origin.
         uncommitted=int(task in dfs_tree.uncommitted()),
         sessions=since_author, since_critic=since_critic,
         critic_due=int(since_critic >= dfs_tree.CRITIC_EVERY),

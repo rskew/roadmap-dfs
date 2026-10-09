@@ -251,9 +251,9 @@ def node_detail(nd, archived=None, commits=()):
         out.append(("Determination", f["Determination"]))
     skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination", "Ask", "Corrects")
     out += [(k, v) for k, v in f.items() if k not in skip]
-    # A commit HEAD has and origin/main lacks says so on its line.
+    # A commit HEAD has and the default branch on origin lacks says so on its line.
     off = (dfs_tree.unpushed() or (set(), {}))[0]
-    out += [("Commit", "%s %s%s" % (sha[:7], subj, " · not on origin/main" if sha in off else ""))
+    out += [("Commit", "%s %s%s" % (sha[:7], subj, " · not on %s" % dfs_tree.default_ref() if sha in off else ""))
             for sha, subj, _at in commits]
     return out
 
