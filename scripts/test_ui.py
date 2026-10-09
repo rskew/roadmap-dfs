@@ -251,6 +251,11 @@ class Flows(unittest.TestCase):
         self.assertFalse((self.root / ".dfs" / "background").exists())
         self.assertFalse((self.root / ".dfs" / "theme").exists())
 
+    def test_a_background_picture_is_chosen_in_the_dialog_and_writes_dfs_background_image(self):
+        self.flow("picture")
+        self.assertFalse((self.root / ".dfs" / "background-image").exists(), "removed again at the end")
+        self.assertFalse((self.root / ".dfs" / "background").exists())
+
     def test_artefacts_are_linked_and_sandboxed(self):
         self.flow("artefacts")
 

@@ -24,10 +24,16 @@ function paintBackground() {
   const root = document.documentElement, p = PALETTES[isDark() ? "dark" : "light"];
   for (const k of ["paper", "panel", "sel", "ink", "muted", "line", "faint"])
     p && p.paper ? root.style.setProperty("--" + k, p[k]) : root.style.removeProperty("--" + k);
+  // the picture behind the page (`.dfs/background-image`); IMAGE is its version, so a new one is fetched
+  if (IMAGE) { root.style.setProperty("--picture", `url("/background-image?v=${IMAGE}")`); root.dataset.picture = ""; }
+  else { root.style.removeProperty("--picture"); delete root.dataset.picture; }
 }
 paintBackground();
 </script>
 <style>
+/* The picture behind the page, under a veil of the page's own paper at 90% so text keeps its contrast on any picture. */
+:root[data-picture] body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(color-mix(in srgb, var(--paper) 90%, transparent), color-mix(in srgb, var(--paper) 90%, transparent)), var(--picture) center / cover no-repeat; }
 /* The page's own layout. What things ARE (type, colour, buttons, tags, fields, cards,
    dialogs) is the design system, /design.css; what is here is where they go. */
 :root { --bar: 56px; --tabs: 52px; --col: 880px; --page: 1180px; }
@@ -959,8 +965,8 @@ $("#chat-input").addEventListener("keydown", ev => { if (ev.key === "Enter" && (
 // The colour can change under an open page (another tab, `.dfs/theme` by hand, a rename
 // that moves the one made from the name): the state says what it is now.
 function syncColour(state) {
-  if (state.palettes && JSON.stringify(state.background) !== JSON.stringify(BACKGROUND)) {
-    BACKGROUND = state.background; PALETTES = state.palettes; paintBackground();
+  if (state.palettes && (JSON.stringify(state.background) !== JSON.stringify(BACKGROUND) || state.background_image !== IMAGE)) {
+    BACKGROUND = state.background; PALETTES = state.palettes; IMAGE = state.background_image; paintBackground();
   }
   if (state.colour && (state.colour !== COLOUR || state.colour_chosen !== CHOSEN)) {
     COLOUR = state.colour; CHOSEN = state.colour_chosen; paintColour();
@@ -978,6 +984,9 @@ function renameForm() {
     <label><input type="checkbox" id="pa" name="auto"${CHOSEN ? "" : " checked"}> Take the colour from the name</label>
     ${["light", "dark"].map(m => `<div><label for="pb-${m}">Background, ${m} mode</label><input type="color" id="pb-${m}" name="${m}" value="${BACKGROUND[m] || (m === "dark" ? "#171a1d" : "#f5f4ef")}"></div>
     <label><input type="checkbox" id="pd-${m}" name="plain-${m}"${BACKGROUND[m] ? "" : " checked"}> Use the design's own ${m} paper</label>`).join("")}
+    <div><label for="pi">Background picture</label><input type="file" id="pi" name="picture" accept="image/png,image/jpeg,image/webp,image/gif"></div>
+    <label><input type="checkbox" id="pr" name="no-picture"${IMAGE ? "" : " checked disabled"}> No picture</label>
+    <p class="muted" style="margin:0">A png, jpeg, webp or gif of 8 MB or less, drawn behind the page under a veil of its paper so text stays readable; kept in <code>.dfs/background-image</code>.</p>
     <p class="muted" style="margin:0">Marks the top of this page, the browser's bar and the installed app, so projects are not mistaken for one another. Kept in <code>.dfs/theme</code>. The backgrounds colour the page itself, one for each of light and dark mode, and the light/dark switch picks between them; kept in <code>.dfs/background</code>.</p>${buttons("Save")}`,
     async fd => {
       const res = await api("/api/title", { title: fd.get("title") }); PROJECT = res.title;
@@ -986,8 +995,16 @@ function renameForm() {
       const want_bg = {};
       for (const m of ["light", "dark"]) { const bg = fd.get("plain-" + m) === "on" ? "" : fd.get(m); if (bg !== BACKGROUND[m]) want_bg[m] = bg; }
       if (Object.keys(want_bg).length) { const b = await api("/api/background", want_bg); BACKGROUND = b.background; PALETTES = b.palettes; paintBackground(); }
+      const pic = fd.get("picture"), drop = fd.get("no-picture") === "on" && IMAGE;
+      if (pic && pic.size || drop) {
+        if (pic && pic.size > 8 * 1024 * 1024) throw new Error("A background picture is 8 MB or smaller.");
+        const b64 = drop && !(pic && pic.size) ? "" : await new Promise((ok, no) => { const r = new FileReader();
+          r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(new Error("Could not read that file.")); r.readAsDataURL(pic); });
+        IMAGE = (await api("/api/background-image", { image: b64 })).background_image; paintBackground();
+      }
       const st = await api("/api/state"); COLOUR = st.colour; paintColour();
       toast("Saved."); S.sig = ""; await render(true); });
+  $("#pi").addEventListener("change", () => { $("#pr").disabled = false; $("#pr").checked = false; });
   $("#pc").addEventListener("input", () => { $("#pa").checked = false; });
   for (const m of ["light", "dark"]) $("#pb-" + m).addEventListener("input", () => { $("#pd-" + m).checked = false; });
 }

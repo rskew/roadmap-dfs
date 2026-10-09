@@ -1,0 +1,172 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A veil of 90% keeps text readable on any picture</title>
+<!--
+  An assumption artefact: the page a node's Hypothesis names. Copy this file to
+  .dfs/artefacts/<uuid>.html, keep it SELF-CONTAINED (no CDN, and the one fetch below to
+  /artefact-state: the web page serves it sandboxed, scripts allowed, the network off), and check it with
+      <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
+  It must be INTERACTIVE: a control the reader changes (a button, input, select or
+  details) and a handler on it (addEventListener or onclick), because check.py refuses a
+  Hypothesis whose page has none. The
+  page explains the assumption and lets the author decide it; the Hypothesis itself
+  still says it in words, since the node must read without the page.
+  MOBILE FIRST: the author reads this on a phone. Write the rules for a 360px screen
+  and widen them under @media (min-width: ...); the checker also renders it at 360px.
+-->
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff;
+            padding: 10px 14px; min-height: 3em; }
+  #rulebox, #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p, #answerbox p { margin: 0 0 8px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; }
+  label { display: block; margin: 8px 0 2px; }
+  input[type="range"] { width: 100%; min-height: 44px; }
+</style>
+
+<h1>A veil of 90% keeps text readable on any picture</h1>
+<p class="lede">The page draws the picture under a layer of the page's own paper colour. The
+  node assumes a veil of 90% (the picture shows at 10%) keeps the text readable whatever the picture is.
+  Move the strength and see the worst case: a picture pixel of pure black or pure white behind the text.</p>
+
+<h2>Which mode to look at</h2>
+<div class="choices" role="group" aria-label="Which mode to look at">
+  <button type="button" data-case="light" aria-pressed="true">Light mode</button>
+  <button type="button" data-case="dark" aria-pressed="false">Dark mode</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+
+<div id="rulebox" hidden>
+  <p>Rule on this node: what the work takes to be true is settled by the choice above.</p>
+  <label for="note">Your note, sent with it (optional)</label>
+  <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
+<div id="answerbox" hidden>
+  <p>This page is also the answer to a raise. Choose above, then send it.</p>
+  <button type="button" id="answer">Send as my answer</button>
+  <p id="answer-status" aria-live="polite"></p>
+</div>
+
+<h2>The input it depends on</h2>
+<label for="knob">Veil strength: <output id="knob-out">90</output>%</label>
+<input id="knob" type="range" min="60" max="100" value="90">
+<div id="swatches" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+  <div id="sw-dark" style="padding:10px;border:1px solid #888;border-radius:6px"></div>
+  <div id="sw-light" style="padding:10px;border:1px solid #888;border-radius:6px"></div>
+</div>
+<p style="margin:6px 0 0;color:#444">Left: over a black pixel. Right: over a white one. Text is the page's body text and its muted text.</p>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">Wrong if body text falls under 7:1 or muted text under 4:1 over a pure black or pure white
+  pixel at a 90% veil, in either mode, or if at 90% the picture is too faint to see.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>For: computed from the page's own palettes (light paper #f5f4ef, ink #1a1d21, muted #676869; dark paper #171a1d, ink #e9e7e1, muted #a09f9c). At 90%, body text is 12.3:1 over black and 15.5:1 over white in light mode, 14.5:1 and 10.6:1 in dark mode.</p>
+  <p>Against: muted text, which sits exactly at 4.5:1 on plain paper, drops to 4.1:1 in light mode over a pure black pixel at 90%; it reaches 4.5:1 only at about 94%. Real pictures are rarely pure black behind small text.</p>
+</details>
+
+<script>
+  var PAL = { light: { paper: [245,244,239], ink: [26,29,33], muted: [103,104,105] },
+              dark: { paper: [23,26,29], ink: [233,231,225], muted: [160,159,156] } };
+  function lum(c) { var v = c.map(function (x) { x /= 255; return x <= .03928 ? x / 12.92 : Math.pow((x + .055) / 1.055, 2.4); });
+    return .2126 * v[0] + .7152 * v[1] + .0722 * v[2]; }
+  function cr(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + .05) / (Math.min(x, y) + .05); }
+  function over(paper, px, a) { return paper.map(function (p, i) { return Math.round(p * a + px * (1 - a)); }); }
+  function rgb(c) { return 'rgb(' + c.join(',') + ')'; }
+  var cases = {};
+  ['light', 'dark'].forEach(function (m) {
+    cases[m] = function (n) {
+      var p = PAL[m], a = n / 100, out = [];
+      [0, 255].forEach(function (px) {
+        var bg = over(p.paper, px, a);
+        out.push((px ? 'white' : 'black') + ' pixel: text ' + cr(bg, p.ink).toFixed(1) + ':1, muted ' + cr(bg, p.muted).toFixed(1) + ':1');
+      });
+      return m + ' mode at a ' + n + '% veil, worst case. ' + out.join('; ') + '.';
+    };
+  });
+  var chosen = 'light', touched = false;
+  var knob = document.getElementById('knob');
+
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it, rules on the node whose Hypothesis names this page (verdict: confirmed or refuted), and
+  // records the answer when a raise names it ("Answer with: ..."). Opened
+  // from a file (the artefact check) there is no server, and none of this runs. Send text/plain
+  // (a JSON string, no header): that needs no preflight, which the server never grants.
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen, knob: knob.value }; }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
+  function show() {
+    document.getElementById('knob-out').textContent = knob.value;
+    document.getElementById('result').textContent = cases[chosen](knob.value);
+    var p = PAL[chosen], a = knob.value / 100;
+    [['sw-dark', 0], ['sw-light', 255]].forEach(function (s) {
+      var el = document.getElementById(s[0]), bg = over(p.paper, s[1], a);
+      el.style.background = rgb(bg);
+      el.innerHTML = '<div style="color:' + rgb(p.ink) + '">Body text</div><div style="color:' + rgb(p.muted) + '">Muted text</div>';
+    });
+    document.querySelectorAll('[data-case]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.case === chosen));
+    });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
+  });
+  knob.addEventListener('input', function () { touched = true; show(); keep(); });
+  // The node's Hypothesis names this page, so the buttons below rule on that node: the same
+  // refute/confirm the web page's form writes. Say the decision, then the author's note.
+  function rule(verdict) {
+    var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    var text = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: mine(), verdict: verdict, answer: text }).then(function () {
+      note.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      note.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
+  // The answer is the text the author reads on the page: make it say the decision.
+  var send = document.getElementById('answer');
+  send.addEventListener('click', function () {
+    var note = document.getElementById('answer-status');
+    send.disabled = true;
+    call('POST', { state: mine(), answer: document.getElementById('result').textContent }).then(function () {
+      note.textContent = 'Recorded as your answer.';
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }).catch(function (e) { send.disabled = false; note.textContent = 'Not recorded: ' + e.message; });
+  });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
+    document.getElementById('answerbox').hidden = !j.raise;
+  }).catch(function () {});
+</script>
