@@ -1084,7 +1084,18 @@ document.addEventListener("click", e => {
   }[d.act] || (() => {}))();
 });
 // The bar's All, Needs you and Reorder set how the list is drawn; from another screen they take you to it.
-function showList() { if (route().view !== "tasks") return go(""); drawTasks(); drawBar(route()); }
+// Reorder gives every row a strip of moves, so the rows change height and the page's old offset lands on other
+// tasks. The first row on screen is found before the redraw and put back where it was after it.
+function showList() {
+  if (route().view !== "tasks") return go("");
+  const key = el => el.dataset.row || el.dataset.id;
+  const at = [...document.querySelectorAll("#view .item")].find(el => el.getBoundingClientRect().bottom > 0);
+  const was = at && { id: key(at), top: at.getBoundingClientRect().top };
+  drawTasks();
+  const now = was && [...document.querySelectorAll("#view .item")].find(el => key(el) === was.id);
+  if (now) window.scrollBy(0, now.getBoundingClientRect().top - was.top);
+  drawBar(route());
+}
 const up = () => {
   const r = route();
   if (r.view === "artefact" || r.view === "run") return NAVS ? history.back() : go(`t/${r.task}`, true);

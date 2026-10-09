@@ -220,6 +220,9 @@ class Flows(unittest.TestCase):
     def test_reordering_the_task_list_writes_order_md(self):
         self.flow("reorder")
 
+    def test_reorder_keeps_the_list_where_it_was_scrolled(self):
+        self.flow("reorderkeepsscroll")
+
     def test_all_in_the_bar_leaves_reorder(self):
         self.flow("allleavesreorder")
 

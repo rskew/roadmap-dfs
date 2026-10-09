@@ -704,6 +704,33 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // Switching Reorder on or off keeps the list where the reader was: the rows grow a strip of moves, and the row
+  // at the top of the screen stays at the top of the screen instead of the page keeping its offset into new content.
+  async reorderkeepsscroll(b) {
+    for (let n = 20; n < 32; n++) fs.writeFileSync(path.join(DIR, ".dfs", "items", `W${n}.md`), `# W${n} · Task ${n}\n\n## Goal\n\nTask ${n} is here to make the list long enough to scroll.\n\n## Tree\n`);
+    const { page, errors } = await open(b, PHONE);
+    const top = () => page.evaluate(() => {
+      const r = [...document.querySelectorAll("#view [data-id], #view [data-row]")].find(e => e.getBoundingClientRect().bottom > 1);
+      return { id: r.dataset.row || r.dataset.id, y: Math.round(r.getBoundingClientRect().top) };
+    });
+    await page.evaluate(() => window.scrollTo(0, 600));
+    const scrolled = await page.evaluate(() => window.scrollY);
+    assert(scrolled > 100, "the list scrolls on a phone, got " + scrolled);
+    const was = await top();
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".moves");
+    const on = await top();
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    same(on.id, was.id, "the row at the top of the screen is the same row in Reorder");
+    assert(Math.abs(on.y - was.y) <= 2, `and it has not moved on screen: ${was.y} then ${on.y}`);
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector("button.item");
+    const off = await top();
+    same(off.id, was.id, "the row at the top of the screen is the same row when Reorder is switched off");
+    assert(Math.abs(off.y - was.y) <= 2, `and it has not moved on screen: ${was.y} then ${off.y}`);
+    same(errors, [], "no page errors");
+  },
+
   // All in the bar leaves Reorder: pressed in reorder mode, and from the Chats screen after Reorder was on.
   async allleavesreorder(b) {
     const { page, errors } = await open(b, PHONE);
