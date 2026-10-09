@@ -559,6 +559,14 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       await page.waitForFunction(() => location.hash === "" || location.hash === "#/");
       assert(await page.$("#tabs [data-act=only]"), `${sel} from Chats leaves the list bar showing`);
     }
+    // The loop left Reorder on; from Chats, pressing Reorder opens the list in Reorder, not out of it.
+    await page.waitForSelector(".moves");
+    await page.click("#tabs [data-tab=chats]");
+    await page.waitForFunction(() => !document.querySelector(".item"));
+    await page.click("#tabs [data-act=reorder]");
+    await page.waitForFunction(() => location.hash === "" || location.hash === "#/");
+    assert(await page.$(".moves"), "Reorder from Chats, with Reorder already on, opens the list in Reorder");
+    assert(await page.$("#tabs [data-act=reorder][aria-current=page]"), "the Reorder cell is current");
     same(errors, [], "no page errors");
   },
 

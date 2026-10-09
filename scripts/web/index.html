@@ -914,7 +914,7 @@ document.addEventListener("click", e => {
     retry: () => render(true),
     flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
     only: () => { S.only = d.v === "1"; S.reorder = false; S.moved = null; showList(); },
-    reorder: () => { S.reorder = !S.reorder; S.moved = null; if (S.reorder) S.only = false; showList(); },
+    reorder: () => { S.reorder = route().view === "tasks" ? !S.reorder : true; S.moved = null; if (S.reorder) S.only = false; showList(); },
     move: () => moveTask(d.id, d.move),
     task: () => go("t/" + d.id),
     node: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
