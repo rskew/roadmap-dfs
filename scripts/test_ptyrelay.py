@@ -86,6 +86,32 @@ class Background(unittest.TestCase):
         self.assertEqual(self.relay.rc, 3)
         self.assertFalse(self.relay.send("late"))
 
+    def test_interrupt_presses_escape_and_the_agent_goes_on(self):
+        agent = r'''echo ready; while IFS= read -rsn1 c; do if [ "$c" = $'\e' ]; then echo esc >> "$LOG"; else echo "c:$c" >> "$LOG"; fi; done'''
+        r = ptyrelay.Relay().start(["bash", "-c", agent], env=self.env)
+        self.addCleanup(r.close)
+        self.assertTrue(until(lambda: r.first_out))
+        self.assertTrue(r.interrupt())
+        self.assertTrue(until(lambda: self.lines() == ["esc"]))
+        self.assertTrue(r.live, "an interrupt stops the turn, not the agent")
+        r.send("x")
+        self.assertTrue(until(lambda: "c:x" in self.lines()), "and it still hears what is sent next")
+
+    def test_interrupt_drops_a_message_that_has_not_been_typed(self):
+        agent = r'''sleep 1.5; echo ready; while IFS= read -rsn1 c; do echo "c:$c" >> "$LOG"; done'''
+        r = ptyrelay.Relay().start(["bash", "-c", agent], env=self.env)
+        self.addCleanup(r.close)
+        r.send("late")                  # waiting for the agent to draw itself
+        time.sleep(0.3)
+        self.assertTrue(r.interrupt())
+        time.sleep(3)
+        self.assertNotIn("c:l", self.lines(), "stopped before it was typed, so never typed")
+
+    def test_interrupt_of_an_ended_agent_says_so(self):
+        self.relay.send("quit")
+        self.assertTrue(until(lambda: not self.relay.live))
+        self.assertFalse(self.relay.interrupt())
+
     def test_close_ends_it(self):
         self.relay.close()
         self.assertFalse(self.relay.live)

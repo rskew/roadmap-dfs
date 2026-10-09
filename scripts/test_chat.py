@@ -110,6 +110,19 @@ class Chat(unittest.TestCase):
         self.assertEqual([m["role"] for m in st["messages"]][-2:], ["you", "agent"])
         self.assertNotIn("note", [m["role"] for m in st["messages"]], "the note goes once it moves on")
 
+    def test_stop_is_pressed_in_the_screens_chat_when_it_is_the_one_answering(self):
+        class Screen:
+            has_screen = True
+            def __init__(s): s.pressed = []
+            def chat_live(s, scope): return True
+            def chat_active(s, scope): return True
+            def chat_interrupt(s, scope): s.pressed.append(scope); return True
+        screen = Screen()
+        chats = dfs_chat.Chats(walker=lambda: screen)
+        st = chats.interrupt("W1")
+        self.assertEqual(screen.pressed, ["W1"])
+        self.assertNotIn("note", [m["role"] for m in st["messages"]], "the screen's chat leaves its own mark in the transcript")
+
     def test_stop_with_nothing_answering_changes_nothing(self):
         st = self.chats.interrupt("W1")
         self.assertFalse(st["busy"])

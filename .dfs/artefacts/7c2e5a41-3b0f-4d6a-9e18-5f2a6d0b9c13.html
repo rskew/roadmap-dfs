@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>How Stop reaches a chat the screen runs</title>
+<style>
+  body { margin: 0; padding: 28px 32px; background: #fbfaf7; color: #1a1a1a;
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 6px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; }
+</style>
+
+<h1>How Stop reaches a chat the screen runs</h1>
+<p class="lede">A chat started on the page is a real interactive claude the screen keeps on a
+  pseudo-terminal. Stop has to end the answer it is giving without ending the conversation.
+  Pick a way to see what each does.</p>
+
+<h2>The way Stop is sent</h2>
+<div class="choices" role="group" aria-label="Interrupt mechanism">
+  <button type="button" data-way="esc" aria-pressed="true">Type Esc (chosen)</button>
+  <button type="button" data-way="ctrlc" aria-pressed="false">Type Ctrl-C</button>
+  <button type="button" data-way="sigterm" aria-pressed="false">SIGTERM the process</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+
+<h2>Does claude honour a lone Esc?</h2>
+<div class="choices" role="group" aria-label="Whether the assumption holds">
+  <button type="button" data-holds="yes" aria-pressed="true">Yes, as in a terminal</button>
+  <button type="button" data-holds="no" aria-pressed="false">No, it ignores it</button>
+</div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">On a real claude answering in the background, Stop leaves it still answering
+  (Esc is ignored), or the claude exits (the conversation would then resume on the next message,
+  but the turn is lost).</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>Not observed here: this sandbox has no claude binary. test_ptyrelay shows the ESC byte
+  reaches a process on the pty and that queued messages are dropped; that claude acts on it is
+  claude's documented behaviour (Esc interrupts a running turn) and has not been run.</p>
+</details>
+
+<script>
+  var outcomes = {
+    esc: { yes: 'The turn stops where it is, the session and the process stay, the next message is answered. This is what Esc does at the keyboard.',
+           no: 'Nothing happens: Stop appears to do nothing and the answer carries on. Fall back to Ctrl-C.' },
+    ctrlc: { yes: 'Stops the turn too, but a second Ctrl-C while idle exits claude, and a Stop pressed just after the answer ended would end the chat process.',
+             no: 'Same as Esc ignored; and at an idle prompt it quits the process.' },
+    sigterm: { yes: 'Always works, but it ends the claude process: the conversation is kept in the transcript and resumes on the next message, after a restart delay.',
+               no: 'n/a: the signal is not typed. Works, at the cost of the process.' }
+  };
+  var way = 'esc', holds = 'yes';
+  function show() {
+    document.getElementById('result').textContent = outcomes[way][holds];
+    document.querySelectorAll('[data-way]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.way === way)); });
+    document.querySelectorAll('[data-holds]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.holds === holds)); });
+  }
+  document.querySelectorAll('[data-way]').forEach(function (b) { b.addEventListener('click', function () { way = b.dataset.way; show(); }); });
+  document.querySelectorAll('[data-holds]').forEach(function (b) { b.addEventListener('click', function () { holds = b.dataset.holds; show(); }); });
+  show();
+</script>
