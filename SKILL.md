@@ -200,8 +200,10 @@ body: "<text>"}, "*")` fills the web page's answer form, and the author records 
 Wiring and data flow, before and after, two or three options set side by side on the
 same axes, a sequence of what ran and what it showed, a layout, measured
 results as a chart or a table: if you would otherwise be describing a shape in words, draw
-it. It is one self-contained HTML page in `.dfs/artefacts/`, checked with
-`<scripts>/artefact_check.sh` and its screenshot looked at. Name it in the raise by its
+it. It is one self-contained HTML page in `.dfs/artefacts/`, **written mobile-first**
+(the author reads on a phone: start from the templates, which stack at 360px and widen
+from 720px), checked with `<scripts>/artefact_check.sh`, which also renders it at 360px,
+and its screenshot looked at. Name it in the raise by its
 path, `.dfs/artefacts/<uuid>.html`: the author's web page turns that into a link, and
 the screen's `v` pane lists it. (`http://localhost:<port>/<uuid>.html` still works.) How to
 write one is `<scripts>/../docs/artefacts.md`; read it before starting one. The raise must

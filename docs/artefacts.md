@@ -24,6 +24,18 @@ inside the raise's prose, so this can be abandoned without withdrawing a law. �
 **The raise stays answerable with the artefact gone**: the decision is written out in
 the raise, and a diagram is an aid, never the carrier.
 
+## Mobile first
+
+The author usually reads an artefact on a phone, so a page is designed for a 360px-wide
+screen first and widened under `@media (min-width: …)`, never the other way about. In
+practice that is: `<meta name="viewport" content="width=device-width, initial-scale=1">`
+(without it a phone lays the page out at 980px and shrinks it); a column of full-width
+boxes with the arrows between them pointing down, running left to right only from
+720px up; body text 16px; buttons, inputs and `<summary>` at least 44px high; no
+fixed widths and no horizontal scroll. Both templates already do this, so start from
+one. A diagram that cannot be stacked (a real grid, a timeline) scrolls inside its own
+box (`overflow-x: auto`) rather than widening the page, and says so in its caption.
+
 ## Writing one
 
 1. Name it with a uuid — `python3 -c 'import uuid; print(uuid.uuid4())'` — and put
@@ -41,9 +53,12 @@ the raise, and a diagram is an aid, never the carrier.
 
    (`<scripts>` is the tool's scripts directory, which your briefing names.) It
    takes `playwright` from PATH, else from the dev shell `.dfs/playwright-shell`
-   names, else from nixpkgs. It renders headless and fails on overlapping boxes, text that does not fit,
-   text below 12px, console errors, failed requests and a blank page — then writes
-   `/tmp/artefact-check/<uuid>.png`. Read the image once the checks are clean; it
+   names, else from nixpkgs. It renders headless, once at desktop width and once as a
+   360px touch screen (`--mobile-width N`, `0` to skip), and fails on overlapping boxes,
+   text that does not fit, text below 12px, console errors, failed requests, a blank page,
+   a missing `width=device-width` viewport meta, content wider than the phone, and
+   controls under 32px high — then writes `/tmp/artefact-check/<uuid>.png` and
+   `<uuid>-mobile.png`. Read the mobile image first once the checks are clean; it
    catches what no assertion does (a diagram that is legible and still says the
    wrong thing), and reading it costs context, so not on every iteration.
 4. Reference it by its path, `.dfs/artefacts/<uuid>.html`, in the raise (or the
@@ -92,9 +107,12 @@ button does nothing there; the author states the verdict in their own words.
 
 - Every box carries `data-node="<name>"`. That is how overlaps get reported by name
   rather than as two rectangles.
-- Layout is stated, not solved: each box gives its own `left`/`top`/`width`/`height`
-  and the connectors are hand-placed SVG. A layout engine's output is the thing
-  nobody can see, which is what this whole mechanism exists to fix.
+- Layout is stated, not solved, and stated for the phone: boxes are plain blocks in a
+  flex column, arrows are the `.link` rows between them, and a media query turns the
+  column into a row. A solver's output is the thing nobody can see, which is what this
+  whole mechanism exists to fix. Absolute `left`/`top`/`width` boxes are for a standing
+  map that scrolls in its own container (see the two named above), not for a raise
+  picture.
 
 ## Screenshots
 
