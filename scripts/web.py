@@ -841,11 +841,11 @@ def main(argv=None):
         if not handle.public:
             print("  this machine only; --host 0.0.0.0 opens it to the network")
         if handle.url.startswith("http:") and handle.public:
-            print("  to INSTALL it as an app, a browser wants https (or localhost): --cert/--key, "
+            print("  to install it as an app, a browser wants https (or localhost): --cert/--key, "
                   "or see the README")
         if handle.public:
             print("  no login: anyone on this network can answer, correct and accept"
-                  + (", and START AGENTS (the walk), which run with their permission prompts "
+                  + (", and start agents (the walk), which run with their permission prompts "
                      "off. --no-walk removes that; --host 127.0.0.1 keeps it to this machine."
                      if WALK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
         while handle.thread.is_alive():
