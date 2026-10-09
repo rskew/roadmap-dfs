@@ -991,6 +991,11 @@ class Web(unittest.TestCase):
         self.assertEqual((log["start"], log["end"]), (0, len(log["text"].encode())))
         self.assertEqual(self.call("GET", "/api/run/dfs_run_ccc")[1]["text"], "")
 
+    def test_the_readme_says_where_the_page_shows_a_runs_log(self):
+        readme = (HERE.parent / "README.md").read_text()
+        self.assertIn("**Runs**", readme)
+        self.assertIn("console log", readme)
+
     def test_a_runs_log_is_refused_for_a_name_that_is_not_a_run_directory(self):
         self.make_run("dfs_run_aaa", console="x\n")
         (self.root / "secret.txt").write_text("no")

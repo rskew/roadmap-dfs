@@ -15,6 +15,9 @@ watcher stats the task files once a second and a change, from here or from the
 terminal or from a chain, is pushed to every open page, which then reads what it is
 showing.
 
+A task's page lists the chains that worked it (`runs.py`) and opens one's `console.log` (`/api/run/<name>`,
+read by the directory's name and never by a path), so what the terminal's `l` shows is on the phone too.
+
 It also steers the walk (`walk.py`: one engine, the terminal's `w`, `n` and `K`): start it with a
 session budget, stop it, choose where it goes next, interrupt a chain.
 

@@ -18,6 +18,10 @@ nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 `python3 scripts/web.py` serves the roadmap as a phone-sized page and an installable app.
 There is no login, so it listens on this machine only until you say otherwise.
 
+A task's page lists the chains that worked it under **Runs**; tap one to read its console log
+(the same `console.log` the terminal's `l` opens), which keeps growing while the chain is live.
+Whoever can reach the page can read those logs too.
+
 Chrome on Android offers Install only on a secure origin: https, or `localhost`. Over plain
 `http://<lan address>:8765` the page works, but there is no Install. Two ways to https:
 
