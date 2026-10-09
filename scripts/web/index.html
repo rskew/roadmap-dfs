@@ -499,8 +499,7 @@ function drawChats() {
 }
 function drawTasks() {
   const items = S.state.items.filter(i => !S.only || i.needs_you);
-  let seg = 0, html = (chatOn() ? `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project">Chat about the project</button></div>` : "")
-    + walkHtml() + `<div class="filters" role="group" aria-label="Filter">
+  let seg = 0, html = walkHtml() + `<div class="filters" role="group" aria-label="Filter">
     <button data-act="only" data-v="0" aria-pressed="${!S.only}">All</button>
     <button data-act="only" data-v="1" aria-pressed="${S.only}">Needs you ${S.state.needs_you}</button>
     <button data-act="reorder" aria-pressed="${S.reorder}">Reorder</button></div>`;

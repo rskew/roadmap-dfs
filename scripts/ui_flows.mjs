@@ -351,7 +351,7 @@ const FLOWS = {
       await page.click("#tabs [data-act=up]"); await page.waitForSelector(".item");
       assert(await page.$("#tabs [data-tab=tasks]"), `${name}: the tabs are back`);
       // the chat: Back at the bottom
-      await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
+      await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
       await low("#chat [data-act=chatclose]", "chat Back");
       await page.click("#chat [data-act=chatclose]"); await page.waitForFunction(() => !document.querySelector("#chat[open]"));
       same(errors, [], `${name}: no page errors`);
@@ -391,7 +391,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => { const m = document.querySelectorAll("#chat-log .msg"); return m.length === 1 && m[0].classList.contains("agent") && !document.querySelector("#chat-log .msg.you"); }, null, { timeout: 20000 });    // and a new one opens with the summary again
     await page.click("[data-act=chatclose]");
     await toList(page);
-    await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
+    await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
     assert(/Chat · /.test(await page.textContent("#chat-title")), "the project has its own");
     same(errors, [], "no page errors");
   },
@@ -531,8 +531,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     const { page, errors } = await open(b, PHONE);
     const btn = await page.$eval("[data-act=newtask]", e => { const r = e.getBoundingClientRect(), t = document.querySelector("#tabs").getBoundingClientRect(); return { h: r.height, fixed: getComputedStyle(e).position === "fixed", right: innerWidth - r.right, aboveTabs: r.bottom <= t.top, low: r.top > innerHeight / 2 }; });
     assert(btn.h >= 44 && btn.fixed && btn.right < 40 && btn.aboveTabs && btn.low, "the button is tap-sized and floats at the bottom right, above the tab bar");
-    const chat = await page.$eval("[data-act=chat][data-scope=project]", e => e.getBoundingClientRect().top);
-    assert(chat < (await page.$eval(".item", e => e.getBoundingClientRect().top)), "project chat is above the task list");
+    assert(!(await page.$("[data-act=chat][data-scope=project]")), "the task list has no project chat button");
     await page.click("[data-act=newtask]"); await dialog(page);
     await page.fill("#nn", "Cache the lookups");
     await page.fill("#ng", "Hits above 90%.");
@@ -692,7 +691,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
         await page.click("#tabs [data-tab=assumptions]"); await check("assumptions");
         await page.click("#tabs [data-tab=chats]"); await check("chats");
         await page.click("#tabs [data-tab=tasks]"); await page.waitForSelector(".item");
-        await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]"); await check("chat");
+        assert(!(await page.$("[data-act=chat][data-scope=project]")), "the task list has no project chat button");
+        await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]"); await check("chat");
         same(errors, [], `${name}/${scheme}: no page errors`);
         await ctx.close();
       }
