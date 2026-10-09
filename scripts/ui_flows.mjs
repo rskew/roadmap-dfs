@@ -112,6 +112,15 @@ const FLOWS = {
     });
     assert(crowded.goalW >= crowded.rowW - 1, "a crowded done row gives its goal the body's whole width: " + JSON.stringify(crowded));
     assert(crowded.below && !crowded.overflow, "the tags wrap under the goal, inside the row: " + JSON.stringify(crowded));
+    // A tag longer than the row wraps inside it: nowrap made it wider than the phone, which zoomed the page out and
+    // carried the fixed bottom bar and the add button off to the right.
+    const wide = await page.$eval(".item:not(.done)", row => {
+      const meta = row.querySelector(".meta"), body = row.querySelector(".body");
+      meta.insertAdjacentHTML("beforeend", `<span class="tag">+ uncommitted log entries and edits to the task files, not on origin/main</span>`);
+      const t = meta.lastElementChild.getBoundingClientRect(), r = body.getBoundingClientRect();
+      return { tagRight: t.right, bodyRight: r.right, scrollW: document.documentElement.scrollWidth, innerW: innerWidth };
+    });
+    assert(wide.tagRight <= wide.bodyRight + 1 && wide.scrollW <= wide.innerW, "a long tag wraps inside its row and the page does not scroll sideways: " + JSON.stringify(wide));
     await page.click("[data-act=only][data-v='1']");
     const ids = await page.$$eval(".item", a => a.map(x => x.dataset.id));
     same(ids, ["W2", "W4", "W9"], "needs you: the ones that wait on the author");

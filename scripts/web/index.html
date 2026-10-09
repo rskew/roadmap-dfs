@@ -91,6 +91,7 @@ a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; 
 .item .iid { font-weight: 600; letter-spacing: .03em; }
 .item .goal { font-weight: 500; overflow-wrap: anywhere; }
 .item .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin-top: 6px; font-size: var(--fs-control); }
+.item .meta .tag { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }   /* a long tag wraps inside its row: nowrap made it wider than the phone, and the page with it */
 .item .st { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
 .item .st.done { color: var(--settled); } .item .st.blocked { color: var(--attention); }
 /* a finished task recedes whole, so the open ones are what the eye lands on */
