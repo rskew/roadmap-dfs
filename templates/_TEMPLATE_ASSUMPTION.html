@@ -1,5 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The assumption, in a sentence</title>
 <!--
   An assumption artefact: the page a node's Hypothesis names. Copy this file to
@@ -11,24 +12,27 @@
   Hypothesis whose page has none. The
   page explains the assumption and lets the author decide it; the Hypothesis itself
   still says it in words, since the node must read without the page.
+  MOBILE FIRST: the author reads this on a phone. Write the rules for a 360px screen
+  and widen them under @media (min-width: ...); the checker also renders it at 360px.
 -->
 <style>
-  body { margin: 0; padding: 28px 32px; background: #fbfaf7; color: #1a1a1a;
-         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
   h1 { font-size: 20px; margin: 0 0 4px; }
   h2 { font-size: 15px; margin: 22px 0 6px; }
   .lede { margin: 0 0 18px; color: #444; }
   .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
-  button { font: inherit; padding: 6px 12px; border: 1.5px solid #333; border-radius: 6px;
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
            background: #fff; cursor: pointer; }
   button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
   .result { border: 1.5px solid #333; border-radius: 6px; background: #fff;
             padding: 10px 14px; min-height: 3em; }
   .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
   details { margin: 8px 0; }
-  summary { cursor: pointer; }
+  summary { cursor: pointer; padding: 8px 0; }
   label { display: block; margin: 8px 0 2px; }
-  input[type="range"] { width: 100%; }
+  input[type="range"] { width: 100%; min-height: 44px; }
 </style>
 
 <h1>The assumption, in a sentence</h1>
