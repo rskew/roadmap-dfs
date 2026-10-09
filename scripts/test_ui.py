@@ -195,6 +195,9 @@ class Flows(unittest.TestCase):
     def test_all_in_the_bar_leaves_reorder(self):
         self.flow("allleavesreorder")
 
+    def test_the_lists_bar_buttons_work_from_chats(self):
+        self.flow("barfromchats")
+
     def test_a_forms_buttons_clear_the_keyboard(self):
         self.flow("keyboard")
 

@@ -323,6 +323,7 @@ const FLOWS = {
         const r = await box(sel), h = await H();
         assert(r.y > h * 0.7, `${name}: ${what} is in the lower third (y ${Math.round(r.y)} of ${h})`);
         assert(r.h >= 44, `${name}: ${what} is tap-sized (${Math.round(r.h)}px)`);
+        assert(r.w >= 44 && r.x >= 0 && r.x + r.w <= await W(), `${name}: ${what} is at least 44px wide and inside the viewport (x ${Math.round(r.x)}, ${Math.round(r.w)}px wide)`);
         return r;
       };
       // the list: All, Needs you, Reorder and Chats in the bar, no filter strip above the rows and no Assumptions tab
@@ -545,6 +546,19 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForSelector("button.item");
     assert(!(await page.$(".moves")), "All from Chats shows the list out of Reorder");
     assert(await page.$(all), "All is current after coming from Chats");
+    same(errors, [], "no page errors");
+  },
+
+  // All, Needs you and Reorder pressed from the Chats screen take you back to the list.
+  async barfromchats(b) {
+    const { page, errors } = await open(b, PHONE);
+    for (const sel of ["#tabs [data-act=only][data-v='0']", "#tabs [data-act=only][data-v='1']", "#tabs [data-act=reorder]"]) {
+      await page.click("#tabs [data-tab=chats]");
+      await page.waitForFunction(() => !document.querySelector(".item"));
+      await page.click(sel);
+      await page.waitForFunction(() => location.hash === "" || location.hash === "#/");
+      assert(await page.$("#tabs [data-act=only]"), `${sel} from Chats leaves the list bar showing`);
+    }
     same(errors, [], "no page errors");
   },
 
