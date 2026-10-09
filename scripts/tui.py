@@ -3898,15 +3898,15 @@ class UI(WalkMixin):
         """The footer's keys: the key in the accent, what it does in grey.
 
         `footer` still decides WHICH keys fit, as text; this only draws them, so the
-        narrowing rule has one home. A capitalised label is a state that wants
-        seeing (`w STOP WALK`) and is drawn in red."""
+        narrowing rule has one home. A label that says a state is on wants seeing
+        (`w stop walk`, while a walk runs) and is drawn in red."""
         x = 1
         for seg in self.footer(w).split(" · "):
             key, _, label = seg.partition(" ")
             if seg.startswith("●"):
                 x = self.puts(y, x, [(seg, curses.color_pair(2)), ("   ", 0)])
                 continue
-            loud = label.isupper()
+            loud = self.walk_on and label == "stop walk"
             x = self.puts(y, x, [(key, look("accent") | curses.A_BOLD), (" ", 0),
                                  (label, (curses.color_pair(1) | curses.A_BOLD) if loud
                                   else look("chrome")), ("   ", 0)])

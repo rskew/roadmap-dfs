@@ -549,6 +549,20 @@ class TheKeysPane(unittest.TestCase):
             self.assertIn("? keys", ui.footer(w), w)
             self.assertTrue(ui.footer(w).endswith("q quit"), w)
 
+    def test_the_stop_walk_label_is_drawn_red_and_the_others_in_the_chrome_colour(self):
+        pair, look, bold = curses.color_pair, TUI.look, curses.A_BOLD
+        curses.color_pair = lambda n: n << 8
+        self.addCleanup(setattr, curses, "color_pair", pair)
+        for walking in (True, False):
+            ui = a_screen([item("W1")], walk_on=walking)
+            ui.footer = lambda w: "⏎ run · w stop walk · q quit"
+            drawn = []
+            ui.puts = lambda y, x, parts: drawn.extend(parts) or x
+            ui.draw_footer(0, 80)
+            attrs = dict(drawn)
+            self.assertEqual(attrs["stop walk"] == (1 << 8) | bold, walking)
+            self.assertEqual(attrs["quit"], look("chrome"))
+
 
 class TheCursorIsParked(unittest.TestCase):
     def test_on_a_panes_cursor_row_when_it_is_on_screen(self):
