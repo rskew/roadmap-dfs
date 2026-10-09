@@ -11,6 +11,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
 from pathlib import Path
 
@@ -245,6 +246,24 @@ class Sizing(unittest.TestCase):
         ui.agent_update_tick = stop         # the next thing `poll` does, so it ends here
         with self.assertRaises(Stop):
             ui.poll()
+        self.assertEqual(calls, ["follow"])
+
+    def test_a_resize_key_in_the_main_loop_follows_the_terminal_size(self):
+        import curses
+        import tui
+        calls, keys = [], iter([curses.KEY_RESIZE])
+
+        def getch():
+            try:
+                return next(keys)
+            except StopIteration:
+                raise KeyboardInterrupt     # ends `loop` after the one key
+
+        ui = object.__new__(tui.UI)
+        ui.scr = types.SimpleNamespace(timeout=lambda ms: None, getch=getch)
+        ui.draw = lambda: None
+        ui.follow_terminal_size = lambda: calls.append("follow")
+        ui.loop()
         self.assertEqual(calls, ["follow"])
 
 
