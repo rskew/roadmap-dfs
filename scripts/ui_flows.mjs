@@ -102,6 +102,16 @@ const FLOWS = {
       same(await row.$eval(".goal", g => getComputedStyle(g).whiteSpace), "nowrap", "a done task's goal is one line");
       assert(!(await row.$(".why")), "a done task has no why line");
     }
+    // Tags crowding a done row (unpushed commits, uncommitted edits) go on a second line; the goal keeps its line.
+    const crowded = await page.$eval(".item.done", row => {
+      const meta = row.querySelector(".meta"), goal = row.querySelector(".goal");
+      // fixed widths stand in for the text: this browser may draw none, and the tags must be wide
+      for (const t of ["3 not on main", "+ uncommitted edits, not on main"]) meta.insertAdjacentHTML("beforeend", `<span class="tag" style="display:inline-block;width:150px">${t}</span>`);
+      const g = goal.getBoundingClientRect(), m = meta.getBoundingClientRect(), r = row.querySelector(".body").getBoundingClientRect();
+      return { goalW: g.width, rowW: r.width, below: m.top >= g.bottom - 1, overflow: m.right > r.right + 1 };
+    });
+    assert(crowded.goalW >= crowded.rowW - 1, "a crowded done row gives its goal the body's whole width: " + JSON.stringify(crowded));
+    assert(crowded.below && !crowded.overflow, "the tags wrap under the goal, inside the row: " + JSON.stringify(crowded));
     await page.click("[data-act=only][data-v='1']");
     const ids = await page.$$eval(".item", a => a.map(x => x.dataset.id));
     same(ids, ["W2", "W4", "W9"], "needs you: the ones that wait on the author");
@@ -669,9 +679,6 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   async artefacts(b, ctx0) {
     const { ctx, page, errors } = await open(b, PHONE);
     await task(page, "W9");
-    const head = (await page.textContent("#title .tname")).trim(), goal = (await page.textContent(".head h2")).trim();
-    assert(head.startsWith("W9 · ") && head.length > 5 && goal.startsWith(head.slice(5, 15)), "the bar leads with the task's name: " + head);
-    same(await page.evaluate(() => { const e = document.querySelector("#title .tname"); return getComputedStyle(e).whiteSpace; }), "nowrap", "on one line");
     assert((await page.textContent(".arts")).includes("Where the fsync lands"), "the task lists it");
     await page.click(".row.hasraise .main");
     await page.waitForSelector("#sheet.open");

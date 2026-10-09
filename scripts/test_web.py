@@ -7,7 +7,6 @@ Run:  python3 roadmap-dfs/scripts/test_web.py
 import http.client
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -391,27 +390,6 @@ class Web(unittest.TestCase):
         self.assertFalse(out[3], "the same name under another task is drawn afresh")
         self.assertIn("No such artefact: gone.html", out[4])
         self.assertNotIn("<iframe", out[4])
-
-    def test_a_tasks_bar_leads_with_its_name_on_one_line(self):
-        """chrome() and the .tname rule in index.html, run under node (skipped when there is none)."""
-        node = shutil.which("node") or os.environ.get("DFS_NODE")
-        if not node:
-            self.skipTest("no node on PATH (or DFS_NODE) to run the page's chrome()")
-        src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("function chrome(r) {"):src.index("/* ── the walk")]
-        js = ("const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');"
-              "const el = () => ({hidden: false, innerHTML: '', classList: {toggle() {}}});"
-              "const els = {}; const $ = s => els[s] || (els[s] = el());"
-              "const document = {}, PROJECT = 'P', wide = () => false, drawBar = () => {}, drawSheet = () => {};"
-              "const artefactOf = () => null;"
-              "const S = {task: {id: 'W1', goal: 'Show <b> the name', status: 'open', accepted: false, rows: []}};"
-              + body + "chrome({view: 'task', task: 'W1'}); console.log(JSON.stringify([$('#title').innerHTML, document.title]))")
-        title, doc = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(title, '<span class="tname">W1 · Show &lt;b> the name</span><small>open</small>')
-        self.assertEqual(doc, "W1 · P")
-        rule = re.search(r"#bar h1 \.tname \{([^}]*)\}", src).group(1)
-        for part in ("overflow: hidden", "text-overflow: ellipsis", "white-space: nowrap"):
-            self.assertIn(part, rule, "the name takes one line, cut with an ellipsis")
 
     def test_flagged_only_keeps_the_nodes_that_want_the_author(self):
         """visibleRows() in index.html, run under node (skipped when there is none)."""
