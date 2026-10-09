@@ -965,6 +965,8 @@ function acceptForm() {
 document.addEventListener("click", e => {
   const b = e.target.closest("[data-act]"), tab = e.target.closest("[data-tab]");
   if (tab) return go(tab.dataset.tab === "tasks" ? "" : tab.dataset.tab);
+  // An artefact link in a dialog (the chat's replies) opens the viewer in #view, which a modal dialog covers: close it first.
+  if (e.target.closest("a.art, a.shot")) for (const d of document.querySelectorAll("dialog[open]")) d.close();
   if (e.target.id === "scrim") return go(`t/${S.task.id}`, true);
   if (!b || b.disabled) return;
   const d = b.dataset;

@@ -696,6 +696,17 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.click("#tabs [data-act=up]");
     await page.waitForSelector(".arts");
     assert(/#\/t\/W9/.test(page.url()), "after a reload Back goes to the task: " + page.url());
+    // An artefact named in a chat reply opens the viewer from inside the modal chat: the chat must give way to it.
+    const state = { messages: [{ role: "agent", text: "See 7f3a9c1e-fsync.html for where the fsync lands." }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open] .msg.agent a.art");
+    await page.click("#chat a.art");
+    await page.waitForSelector("iframe.artview");
+    assert(!(await page.$("#chat[open]")), "the chat closes so the viewer shows");
+    assert(await page.isVisible("iframe.artview"), "the viewer is on top, not behind the chat");
+    await page.click("#tabs [data-act=up]");
+    await page.waitForSelector(".arts");
+    assert(!(await page.$("iframe.artview")) && /#\/t\/W9/.test(page.url()), "Back from it lands on the task: " + page.url());
     same(errors, [], "no page errors");
   },
 
