@@ -541,6 +541,8 @@ def main() -> int:
     for rel in sorted(names("archive/items") | head_names("archive/items") | now_items):
         arc = arc_dir / rel
         was = at_head(arc)
+        if was is not None and "archive/items/%s" % rel in moved:
+            continue   # moved away whole, as `tree.py delete_task` does: the copy is the record
         if was is not None:
             fatal += ["%s: %s" % (dfs_paths.rel(arc), b)
                       for b in check_archive(dfs_tree.part_of(rel)[0], read(arc) or "", was)]

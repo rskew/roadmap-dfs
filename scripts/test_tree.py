@@ -631,6 +631,46 @@ class Check(InARepo):
         code, out = self.run_check("--staged")
         self.assertNotIn("was deleted", out)
 
+    def test_a_deleted_task_is_moved_under_archive_deleted_and_the_guard_follows_the_move(self):
+        git = lambda c: subprocess.run(c, shell=True, cwd=self.root, check=True,
+                                       capture_output=True)
+        arc = self.root / ".dfs" / "archive" / "items" / "W1.md"
+        arc.parent.mkdir(parents=True)
+        arc.write_text("# W1\n\n**W1.1 Evidence**:\n- for: it ran\n")
+        (self.root / ".dfs" / "items" / "W1").mkdir()
+        (self.root / ".dfs" / "items" / "W1" / "fx.md").write_text(task(node(2)).replace("W1.2", "W1.2@fx"))
+        self.write(task(node(1, "confirmed", extra="Evidence: archived.\nDetermination: yes\n")))
+        order = self.root / ".dfs" / "order.md"
+        order.write_text("Prose.\n\n- W1\n  - W2\n- W3\n")
+        self.commit()
+        moved = dfs_tree.delete_task("W1")
+        self.assertEqual(sorted(moved), ["archive/items/W1.md", "items/W1", "items/W1.md"])
+        gone = self.root / ".dfs" / "archive" / "deleted"
+        for rel in ("items/W1.md", "items/W1/fx.md", "archive/W1.md"):
+            self.assertTrue((gone / rel).is_file(), rel)
+        self.assertFalse(dfs_tree.exists("W1"))
+        self.assertEqual(order.read_text(), "Prose.\n\n- W2\n- W3\n")
+        self.assertEqual(dfs_tree.retired_ids(), {"W1"})
+        self.assertEqual(dfs_tree.next_task_id(), "W2")   # W1 is not handed out again
+        with self.assertRaises(ValueError):
+            dfs_tree.create_task("again", task="W1")
+        git("git add -A .dfs")
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.commit()
+        with self.assertRaises(ValueError):
+            dfs_tree.delete_task("W1")
+
+    def test_a_task_that_is_not_there_is_refused_and_a_plain_delete_still_is(self):
+        with self.assertRaises(ValueError):
+            dfs_tree.delete_task("W9")
+        self.write(task(node(1)))
+        self.commit()
+        subprocess.run("git rm -q .dfs/items/W1.md", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("was deleted", out)
+
     LOG = ("- 2026-09-25T09:00:00Z · session · work\n"
            "- 2026-09-25T09:01:00Z · session · critic\n"
            "- 2026-09-25T09:02:00Z · session · work\n"

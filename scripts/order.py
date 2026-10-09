@@ -280,6 +280,17 @@ def moved(nodes, item, step):
     return _replant(nodes, i, span(nodes, other)[1], 0)
 
 
+def removed(nodes, item):
+    """The tree without `item`, or None if it is not named. Its children stay where they
+    were and take its place a level up: they are work in their own right, and deleting
+    a parent is not deleting them (unlike a MOVE, which carries the subtree)."""
+    i = index_of(nodes, item)
+    if i is None:
+        return None
+    s, e = span(nodes, i)
+    return nodes[:s] + [(n, d - 1) for n, d in nodes[s + 1:e]] + nodes[e:]
+
+
 def indented(nodes, item):
     """`item` becomes the LAST CHILD of the sibling above it, or None if it has none.
 

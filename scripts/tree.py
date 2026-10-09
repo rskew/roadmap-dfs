@@ -89,6 +89,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paths as dfs_paths            # noqa: E402
+import order as dfs_order            # noqa: E402
 
 # `parked` is an alternative not being pursued now: not determined, so it may be
 # reopened, and neither it nor anything planned under it holds the task open.
@@ -602,7 +603,8 @@ def next_task_id():
     """The id a new task gets: one past the highest W on ANY branch this checkout can see,
     tagged with this branch's. Raises dfs_paths.NoBranch on a detached HEAD."""
     tag = dfs_paths.branch_tag()
-    nums = [int(m.group(1)) for m in (re.fullmatch(r"W(\d+)(?:@.*)?", i) for i in task_ids()) if m]
+    nums = [int(m.group(1)) for m in (re.fullmatch(r"W(\d+)(?:@.*)?", i)
+                                          for i in set(task_ids()) | retired_ids()) if m]
     return "W%d%s" % (max(nums, default=0) + 1, "@" + tag if tag else "")
 
 
@@ -622,7 +624,7 @@ def create_task(name, goal="", todos=(), task=None):
     if not re.fullmatch(r"[A-Za-z]+\d+%s" % re.escape(suffix), task):
         raise ValueError("a task id is letters then a number (W25)%s, not %r"
                          % (", tagged %s on this branch" % suffix if suffix else "", task))
-    if exists(task):
+    if exists(task) or task in retired_ids():
         raise ValueError("%s already exists: pick another id" % task)
     path = part_path(task, tag)
     todos = [" ".join(x.split()) for x in todos if x and x.strip()]
@@ -664,6 +666,55 @@ def edit_task(task, name, goal):
     t["sections"]["Goal"] = goal
     p.write_text(render(t))
     return task
+
+
+def deleted_dir():
+    """Where a deleted task's files are kept: `items/` and `archive/items/` mirrored under it."""
+    return dfs_paths.state() / "archive" / "deleted"
+
+
+def retired_ids():
+    """The tasks `delete_task` has retired. Their numbers are not handed out again."""
+    base = deleted_dir() / "items"
+    out = set()
+    for p in base.glob("*") if base.is_dir() else ():
+        got = part_of(p.name) if p.is_file() else (p.name,) if re.fullmatch(TASK_RE, p.name) else None
+        if got:
+            out.add(got[0])
+    return out
+
+
+def delete_task(task):
+    """Delete a task: move every part of it, and of its archive, under `deleted_dir()`
+    (the same relative paths) and drop it from `order.md`, its children there taking its
+    place. Nothing is erased, so putting the files back restores it, and the move is a
+    rename, which is what `check.py` lets through where it refuses a deleted task file.
+    Refused: an unknown task, one a live chain is working, and one already retired under
+    that id. Returns the moved paths, relative to `.dfs`; ValueError says what is wrong."""
+    if not exists(task):
+        raise ValueError("no task %s" % task)
+    import runs as dfs_runs
+    if any(r["item"] == task for r in dfs_runs.live_runs()):
+        raise ValueError("%s is being worked on by a running session; stop it first" % task)
+    if task in retired_ids():
+        raise ValueError("%s was deleted before, and its files are still under %s"
+                         % (task, dfs_paths.rel(deleted_dir())))
+    state = dfs_paths.state()
+    moves = []
+    for sub in ("items", "archive/items"):
+        base = state / sub
+        for src in [base / ("%s.md" % task), base / task]:
+            if src.exists():
+                moves.append((src, deleted_dir() / ("items" if sub == "items" else "archive")
+                              / src.relative_to(base)))
+    for src, dst in moves:
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
+    text = dfs_order.read_text()
+    left = dfs_order.removed(dfs_order.nodes_of(text), task)
+    if left is not None:
+        dfs_order.write_order(left)
+    return [str(src.relative_to(state)) for src, _ in moves]
 
 
 def edit_node(task, nid, title, approach=""):
