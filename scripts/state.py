@@ -126,6 +126,8 @@ def state_for(task: str):
         # Node commits HEAD has and origin/main (as last fetched) lacks; 0 when none
         # or when there is no origin/main to say.
         ahead=((dfs_tree.unpushed() or (set(), {}))[1]).get(task, 0),
+        # Edits to the task's files that are not committed: on no branch, so not on origin/main.
+        uncommitted=int(task in dfs_tree.uncommitted()),
         sessions=since_author, since_critic=since_critic,
         critic_due=int(since_critic >= dfs_tree.CRITIC_EVERY),
         review_due=int(dfs_tree.review_due(t) and status == "open"

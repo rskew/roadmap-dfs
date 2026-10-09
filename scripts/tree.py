@@ -1126,6 +1126,34 @@ def unpushed(cwd=None, ttl=5.0):
     return got
 
 
+_uncommitted_seen = {}
+
+
+def uncommitted(cwd=None, ttl=5.0):
+    """The set of tasks whose files under `items/` have edits `git` has not committed
+    (modified, staged or new): work that is on no branch yet, so on origin/main least of
+    all. Empty when `.dfs/` is gitignored or there is no git here. Kept `ttl` seconds
+    like `unpushed`."""
+    key = str(cwd or dfs_paths.work_root())
+    hit = _uncommitted_seen.get(key)
+    if hit and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    got = set()
+    try:
+        r = subprocess.run(["git", "status", "--porcelain", "-z", "--no-renames",
+                            "--untracked-files=all", "--", "%s/items" % dfs_paths.STATE_DIR_NAME],
+                           capture_output=True, text=True, cwd=key)
+        if r.returncode == 0:
+            for entry in r.stdout.split("\0"):
+                m = re.search(r"(?:^|/)items/(%s)(?:\.md|/)" % TASK_RE, entry[3:])
+                if m:
+                    got.add(m.group(1))
+    except OSError:
+        pass
+    _uncommitted_seen[key] = (time.monotonic(), got)
+    return got
+
+
 def reverted_shas(cwd=None):
     try:
         out = subprocess.run(["git", "log", "--format=%B", "--grep=This reverts commit"],

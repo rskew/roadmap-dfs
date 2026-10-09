@@ -56,6 +56,21 @@ class Unpushed(unittest.TestCase):
         self.assertEqual(dfs_tui.ahead_cell({"ahead": 0}), "")
         self.assertEqual(dfs_tui.ahead_cell({}), "")
         self.assertEqual(dfs_tui.ahead_cell({"ahead": 3}), "ahead 3")
+        self.assertEqual(dfs_tui.ahead_cell({"uncommitted": 1}), "edits")
+        self.assertEqual(dfs_tui.ahead_cell({"ahead": 3, "uncommitted": 1}), "ahead 3 +edits")
+
+    def test_task_files_with_uncommitted_edits_are_named(self):
+        self.git("init", "-q")
+        items = self.root / ".dfs" / "items"
+        items.mkdir(parents=True)
+        (items / "W1.md").write_text("# W1\n")
+        (items / "W2.md").write_text("# W2\n")
+        self.git("add", ".dfs")
+        self.commit("W1.1: both")
+        self.assertEqual(dfs_tree.uncommitted(self.root, ttl=0), set())
+        (items / "W1.md").write_text("# W1 edited\n")
+        (items / "W3.md").write_text("# W3 new\n")
+        self.assertEqual(dfs_tree.uncommitted(self.root, ttl=0), {"W1", "W3"})
 
 
 if __name__ == "__main__":

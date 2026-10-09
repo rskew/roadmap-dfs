@@ -505,6 +505,7 @@ function drawTasks() {
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.ahead ? `<span class="tag">${it.ahead} not on origin/main</span>` : ""}
+          ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted edits, not on origin/main</span>` : ""}
           ${it.waiting_on ? `<span class="tag">waiting on ${esc(it.waiting_on)}</span>` : ""}
           ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}</span></span>
       ${it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}`;
