@@ -44,6 +44,8 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 #bar h1 { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-body); line-height: 1.2; font-weight: 500; padding: var(--s2) 0; }
 #bar h1 .rename { display: block; max-width: 100%; text-align: left; font: inherit; color: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 28px; padding: 8px 0; margin: -8px 0; box-sizing: content-box; }
 #bar h1 .rename:hover, #bar h1 .rename:focus-visible { text-decoration-color: var(--ink); }
+/* a task's bar leads with its name, cut to the one line it has, so the name stays in view when the page scrolls */
+#bar h1 .tname { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #bar h1 small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--fs-label); font-weight: 400; color: var(--muted); letter-spacing: .04em; }
 #bar .iconbtn { margin-right: -10px; }
 #back[hidden], #live[hidden] { display: none; }
@@ -427,7 +429,7 @@ function chrome(r) {
   drawBar(r);
   $("#back").hidden = r.view === "tasks" || r.view === "chats";
   const t = $("#title");
-  if (r.view === "task" && S.task) t.innerHTML = `${esc(S.task.id)}<small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
+  if (r.view === "task" && S.task) t.innerHTML = `<span class="tname">${esc(S.task.id)} · ${esc(S.task.goal)}</span><small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
   else if (r.view === "artefact") { const a = artefactOf(r); t.innerHTML = `${esc(a ? a.title : r.name)}<small>${esc(r.task)}, artefact</small>`; }
   else if (r.view === "chats") t.innerHTML = `Chats<small>${S.chats ? S.chats.length : 0} going, any of them yours to pick up</small>`;
   else if (S.state) t.innerHTML = `<button class="rename" data-act="rename" aria-label="Rename the project">${esc(PROJECT)}</button><small>${S.state.items.length} tasks, ${S.state.needs_you} need you</small>`;

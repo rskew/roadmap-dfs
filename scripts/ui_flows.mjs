@@ -669,6 +669,9 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   async artefacts(b, ctx0) {
     const { ctx, page, errors } = await open(b, PHONE);
     await task(page, "W9");
+    const head = (await page.textContent("#title .tname")).trim(), goal = (await page.textContent(".head h2")).trim();
+    assert(head.startsWith("W9 · ") && head.length > 5 && goal.startsWith(head.slice(5, 15)), "the bar leads with the task's name: " + head);
+    same(await page.evaluate(() => { const e = document.querySelector("#title .tname"); return getComputedStyle(e).whiteSpace; }), "nowrap", "on one line");
     assert((await page.textContent(".arts")).includes("Where the fsync lands"), "the task lists it");
     await page.click(".row.hasraise .main");
     await page.waitForSelector("#sheet.open");

@@ -1,0 +1,106 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which screen hides the item's name?</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a; font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  .bar { border: 1.5px solid #333; border-bottom-width: 4px; background: #fff; padding: 6px 12px; margin: 10px 0; }
+  .bar .l1 { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar .l2 { font-size: 12px; color: #666; }
+  .row { border-bottom: 1px solid #ccc; padding: 6px 0; font: 13px/1.4 ui-monospace, monospace; white-space: nowrap; overflow: hidden; background: #fff; }
+  #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  summary { cursor: pointer; padding: 8px 0; min-height: 32px; box-sizing: border-box; }
+  label { display: block; margin: 8px 0 2px; }
+  input[type="range"] { width: 100%; min-height: 44px; }
+</style>
+
+<h1>Which screen hides the item's name?</h1>
+<p class="lede">"Show at least one line of item name" does not say where. The work reads it as: <b>on a task's own screen the top bar shows only the id and status, so the name scrolls away</b>. The fix puts the name on the bar's first line, cut to one line.</p>
+
+<h2>Reading</h2>
+<div class="choices" role="group" aria-label="Which screen">
+  <button type="button" data-case="bar" aria-pressed="true">Task screen bar (chosen)</button>
+  <button type="button" data-case="tui" aria-pressed="false">TUI list row</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+<div id="demo"></div>
+
+<h2>How long the name is: <output id="knob-out">40</output> characters</h2>
+<input id="knob" type="range" min="5" max="120" value="40">
+
+<div id="answerbox" hidden>
+  <p>This page is the answer to a raise. Choose above, then send it.</p>
+  <button type="button" id="answer">Send as my answer</button>
+  <p id="answer-status" aria-live="polite"></p>
+</div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The author meant a different screen (the TUI list, where the goal is the last column and a narrow terminal leaves it no room) or a different amount (several lines, not one). Then the task-screen bar is not the fix.</p>
+<details><summary>The evidence so far</summary>
+  <p>Web: drawTask's heading holds the name but scrolls away; chrome() puts only id and status in the bar. Web list rows already wrap the whole name. TUI: the goal is the last column of the row, after id, status, review, ahead and tag cells.</p>
+</details>
+
+<script>
+  var NAME = 'Show at least one line of item name and keep going past what the bar can hold, ';
+  function nameOf(n) { var s = ''; while (s.length < n) s += NAME; return s.slice(0, n); }
+  var cases = {
+    bar: function (n) { return 'Before: the bar reads "W41 / open", the name is two screens up. After: the bar leads with the name, cut to one line with an ellipsis; at ' + n + ' characters it ' + (n > 34 ? 'is cut.' : 'fits.'); },
+    tui: function (n) { return 'The row is id, status, review, ahead and tag cells, then the goal. At 40 columns the cells take ' + 28 + ', leaving ' + 12 + ' for a ' + n + '-character name.'; }
+  };
+  var chosen = 'bar', touched = false, knob = document.getElementById('knob');
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen, knob: knob.value }; }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
+  function show() {
+    var n = +knob.value, d = document.getElementById('demo');
+    document.getElementById('knob-out').textContent = n;
+    document.getElementById('result').textContent = cases[chosen](n);
+    d.textContent = '';
+    var el = document.createElement('div');
+    if (chosen === 'bar') {
+      el.className = 'bar';
+      var a = document.createElement('div'); a.className = 'l1'; a.textContent = 'W41 · ' + nameOf(n);
+      var b = document.createElement('div'); b.className = 'l2'; b.textContent = 'open';
+      el.appendChild(a); el.appendChild(b);
+    } else {
+      el.className = 'row'; el.style.width = '40ch';
+      el.textContent = ('W41 open  rev  +2 run  ').padEnd(28) + nameOf(n);
+    }
+    d.appendChild(el);
+    document.querySelectorAll('[data-case]').forEach(function (x) { x.setAttribute('aria-pressed', String(x.dataset.case === chosen)); });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (x) {
+    x.addEventListener('click', function () { touched = true; chosen = x.dataset.case; show(); keep(); });
+  });
+  knob.addEventListener('input', function () { touched = true; show(); keep(); });
+  var send = document.getElementById('answer');
+  send.addEventListener('click', function () {
+    var note = document.getElementById('answer-status');
+    send.disabled = true;
+    call('POST', { state: mine(), answer: document.getElementById('result').textContent }).then(function () {
+      note.textContent = 'Recorded as your answer.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) { send.disabled = false; note.textContent = 'Not recorded: ' + e.message; });
+  });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
+    document.getElementById('answerbox').hidden = !j.raise;
+  }).catch(function () {});
+</script>
