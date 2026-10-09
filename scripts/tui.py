@@ -686,6 +686,7 @@ KEYS = [
     ("items", "w", ord("w"), "walk", "walk the roadmap depth-first, or stop the walk"),
     ("items", "n", ord("n"), "pin", "pin this item as where the walk goes next (again: unpin)"),
     ("items", "K", ord("K"), "stop", "stop this item's running chain (asks first)"),
+    ("items", "D", ord("D"), "delete", "delete this item; its files are kept under .dfs/archive/deleted (asks first)"),
     ("items", "r", ord("r"), "review", "review: open the tree to answer and correct"),
     ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (run.sh --review)"),
     ("items", "c", ord("c"), "chat", "chat about this item (run.sh --chat)"),
@@ -709,6 +710,7 @@ KEYS = [
     ("tree", "i", ord("i"), "add", "add a node under the one at the cursor (none: under the task)"),
     ("tree", "f", ord("f"), "correct", "correct this node: it was really confirmed or refuted"),
     ("tree", "A", ord("A"), "accept", "accept a finished tree (asks first)"),
+    ("tree", "D", ord("D"), "delete-node", "delete the node under the cursor and all below it; the log keeps their text (asks first)"),
     ("tree", "tab", 9, "list", "back to the item list"),
     ("runs", "⏎", 10, "read", "read this run"),
     ("agentlog", "G", ord("G"), "follow", "to the end, and follow it while it grows"),
@@ -4416,6 +4418,49 @@ class UI(WalkMixin):
         self.reload()
         self.msg = self.event("review", "added %s under %s" % (nid, parent or item))
 
+    def delete_item(self, item):
+        """Retire `item` to `.dfs/archive/deleted` after a yes, then land the cursor on
+        the item that took its row (`reload` falls back to the row once it is gone)."""
+        if self.prompt("delete %s? Its files are kept under %s and its number is not "
+                       "used again [y/N]:" % (item, dfs_paths.rel(dfs_tree.deleted_dir()))
+                       )[:1].lower() != "y":
+            self.msg = "%s kept" % item
+            return
+        try:
+            dfs_tree.delete_task(item)
+        except (ValueError, OSError, dfs_paths.NoBranch) as e:
+            self.msg = "not deleted: %s" % e
+            return
+        self.focus = "list"
+        self.reload()
+        self.msg = self.event("review", "deleted %s" % item)
+
+    def tree_delete(self, item):
+        """Delete the node under the tree's cursor, and every node below it, after a
+        yes that names them: the task's Log keeps their text, but the screen has no
+        way to put them back."""
+        row = self.tree_row()
+        if row is None or row["kind"] != "node":
+            self.msg = "the cursor is not on a node"
+            return
+        nid = row["key"]
+        t, _, _ = self.tree_of(item)
+        under = [nd["id"] for nd in dfs_tree.descendants(t, nid)]
+        also = (" and the %d node%s under it (%s)" % (len(under), "" if len(under) == 1 else "s",
+                                                      ", ".join(under))
+                if under else "")
+        if self.prompt("delete %s%s, whatever its status? The log keeps their text [y/N]:"
+                       % (nid, also))[:1].lower() != "y":
+            self.msg = "%s kept" % nid
+            return
+        try:
+            gone = dfs_tree.delete_node(item, nid)
+        except (ValueError, OSError, dfs_paths.NoBranch) as e:
+            self.msg = "not deleted: %s" % e
+            return
+        self.reload()
+        self.msg = self.event("review", "deleted %s" % ", ".join(gone))
+
     def tree_accept(self, item):
         it = self.current()
         if it is None or not self.tree_acceptable(it):
@@ -4790,6 +4835,13 @@ class UI(WalkMixin):
             self.open_chat(item)
         elif ch == ord("C"):
             self.open_chat("project")
+        elif ch == ord("D"):
+            # Capital, and it asks, for the same reason as `K`: nothing in the screen
+            # puts a deleted item back (its files wait under .dfs/archive/deleted).
+            if self.tree_focused():
+                self.tree_delete(item)
+            else:
+                self.delete_item(item)
         elif ch == ord("K"):
             # Capital, and it asks: a chain is an hour of somebody's subscription and
             # there is no undo for stopping one halfway.

@@ -409,6 +409,78 @@ class Pane(unittest.TestCase):
         ui.tree_add("W1")
         self.assertEqual(added, [("W1", "a title", "W1.3", "")])
 
+    def stub_delete(self, name, result):
+        calls = []
+        saved = getattr(TUI.dfs_tree, name)
+        setattr(TUI.dfs_tree, name, lambda *a: calls.append(a) or result)
+        self.addCleanup(setattr, TUI.dfs_tree, name, saved)
+        return calls
+
+    def test_deleting_a_node_names_what_goes_with_it_and_needs_a_yes(self):
+        ui = self.ui
+        ui.open_tree()
+        self.to("W1.1")
+        calls = self.stub_delete("delete_node", ["W1.1", "W1.2", "W1.3"])
+        asked = []
+        ui.prompt = lambda label, default="": asked.append(label) or ""
+        ui.act(ord("D"))
+        self.assertEqual(calls, [], "an empty answer deletes nothing")
+        self.assertIn("W1.2, W1.3", asked[0])
+        self.assertEqual(ui.msg, "W1.1 kept")
+        ui.prompt = lambda label, default="": "y"
+        ui.act(ord("D"))
+        self.assertEqual(calls, [("W1", "W1.1")])
+        self.assertEqual(ui.msg, "deleted W1.1, W1.2, W1.3")
+
+    def test_deleting_with_the_cursor_off_a_node_deletes_nothing(self):
+        ui = self.ui
+        ui.open_tree()
+        self.to("section:W1:Goal")
+        calls = self.stub_delete("delete_node", [])
+        ui.prompt = lambda label, default="": "y"
+        ui.act(ord("D"))
+        self.assertEqual(calls, [])
+        self.assertEqual(ui.msg, "the cursor is not on a node")
+
+    def test_a_refused_node_deletion_says_why(self):
+        ui = self.ui
+        ui.open_tree()
+        self.to("W1.4")
+        saved = TUI.dfs_tree.delete_node
+        def refuse(*a):
+            raise ValueError("the raise at T names W1.4; answer it first")
+        TUI.dfs_tree.delete_node = refuse
+        self.addCleanup(setattr, TUI.dfs_tree, "delete_node", saved)
+        ui.prompt = lambda label, default="": "y"
+        ui.act(ord("D"))
+        self.assertEqual(ui.msg, "not deleted: the raise at T names W1.4; answer it first")
+
+    def test_deleting_an_item_from_the_list_needs_a_yes_and_leaves_the_tree(self):
+        ui = self.ui
+        calls = self.stub_delete("delete_task", ["items/W1.md"])
+        asked = []
+        ui.prompt = lambda label, default="": asked.append(label) or ""
+        ui.act(ord("D"))
+        self.assertEqual(calls, [])
+        self.assertIn("delete W1?", asked[0])
+        self.assertEqual(ui.msg, "W1 kept")
+        ui.prompt = lambda label, default="": "y"
+        ui.focus = "list"
+        ui.act(ord("D"))
+        self.assertEqual(calls, [("W1",)])
+        self.assertEqual(ui.msg, "deleted W1")
+
+    def test_a_refused_item_deletion_says_why(self):
+        ui = self.ui
+        saved = TUI.dfs_tree.delete_task
+        def refuse(task):
+            raise ValueError("%s is being worked on by a running session; stop it first" % task)
+        TUI.dfs_tree.delete_task = refuse
+        self.addCleanup(setattr, TUI.dfs_tree, "delete_task", saved)
+        ui.prompt = lambda label, default="": "y"
+        ui.act(ord("D"))
+        self.assertTrue(ui.msg.startswith("not deleted: W1 is being worked on"), ui.msg)
+
     def test_a_chain_step_is_drawn_with_the_mark_and_a_root_without(self):
         self.ui.open_tree()
         lines = [l for l, *_ in self.ui.lines_tree(100)]
