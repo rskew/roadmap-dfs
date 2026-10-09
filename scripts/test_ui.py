@@ -183,6 +183,9 @@ class Flows(unittest.TestCase):
     def test_navigation_is_under_the_thumbs(self):
         self.flow("thumbs")
 
+    def test_stop_is_shown_while_the_agent_answers_and_asks_the_server_to_stop_it(self):
+        self.flow("chatstop")
+
     def test_several_chats_are_found_again_in_the_chats_section(self):
         self.flow("chats")
 

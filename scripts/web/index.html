@@ -211,13 +211,14 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .msg .what { white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.you { padding: var(--s2) var(--s3); background: var(--sel); border-left: var(--rule-status) solid var(--ink); }
 .msg.error { padding: var(--s2) var(--s3); background: var(--attention-wash); border-left: var(--rule-status) solid var(--attention); }
-.msg.wait { color: var(--muted); }
+.msg.wait, .msg.note { color: var(--muted); }
 pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
 ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } ul.md li, ol.md li { margin: 0 0 2px; overflow-wrap: anywhere; }
 .msg pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
 #chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 #chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: calc(var(--vvh, 100dvh) * .3); resize: none; }
 #chat-form .btn { flex: none; }
+#chat-stop[hidden] { display: none; }
 
 /* A keyboard shrinks the VISUAL viewport and may leave the layout one as it was: the dialogs
    are fitted to the visual one (--vvh, --vvt, set below), their fields scroll, and the row of
@@ -267,7 +268,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 <dialog id="chat" aria-label="Chat">
   <div class="chat-top"><span class="cap" id="chat-title"></span></div>
   <div id="chat-log" role="log" aria-live="polite"></div>
-  <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn primary" id="chat-send" type="submit">Send</button></form>
+  <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn" id="chat-stop" type="button" hidden>Stop</button><button class="btn primary" id="chat-send" type="submit">Send</button></form>
   <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
 </dialog>
 <div id="toast" role="status"></div>
@@ -476,7 +477,7 @@ function chainStopForm(item) {
 const ago = ts => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 129600 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
 function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
-  const who = { you: "You", agent: "Agent", error: "Not answered" };
+  const who = { you: "You", agent: "Agent", error: "Not answered", note: "Stopped" };
   const rows = S.chats.map(c => `<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
       <span class="iid">${esc(c.scope === "project" ? "All" : c.scope)}</span>
       <span><span class="goal">${esc(goal(c.scope))}</span>
@@ -805,6 +806,7 @@ function chatDraw(st) {
     + (st.messages.length ? "" : `<p class="muted">Ask about ${CHAT.scope === "project" ? "the project" : "this task"}: where the work is, what was refuted and why, what to do next. It can read the roadmap and the task; it changes nothing.</p>`)
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Thinking… ${st.busy_for}s</div></div>` : "");
+  $("#chat-stop").hidden = !st.busy;
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined;
@@ -841,6 +843,13 @@ $("#chat-form").addEventListener("submit", async ev => {
   $("#chat-send").disabled = true;
   try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatLoad(); }
   catch (e) { toast(e.message, true); $("#chat-send").disabled = false; }
+});
+$("#chat-stop").addEventListener("click", async () => {
+  if (!CHAT.scope) return;
+  $("#chat-stop").disabled = true;
+  try { chatDraw(await api("/api/chat/interrupt", { scope: CHAT.scope })); chatLoad(); }
+  catch (e) { toast(e.message, true); }
+  finally { $("#chat-stop").disabled = false; }
 });
 $("#chat-input").addEventListener("keydown", ev => { if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); } });
 // The colour can change under an open page (another tab, `.dfs/theme` by hand, a rename

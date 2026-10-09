@@ -580,6 +580,8 @@ def chat_act(name, body=None, scope=None):
             return chats().send(need(body, "scope", "a scope"), body.get("message"))
         if name == "chat/open":
             return chats().open(need(body, "scope", "a scope"))
+        if name == "chat/interrupt":
+            return chats().interrupt(need(body, "scope", "a scope"))
         if name == "chat/clear":
             return chats().clear(need(body, "scope", "a scope"))
         if name == "chat":

@@ -420,6 +420,28 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // Stop: shown only while the agent is answering, and pressing it asks the server to stop that chat.
+  async chatstop(b) {
+    const { page, errors } = await open(b, PHONE);
+    const state = { scope: "W9", messages: [{ role: "you", text: "a long question" }], busy: true, busy_for: 12, live: false, elsewhere: false, note: "" };
+    const stops = [];
+    await page.route("**/api/chat/**", async r => {
+      const u = r.request().url();
+      if (u.endsWith("/api/chat/interrupt")) { stops.push(r.request().postDataJSON()); state.busy = false; state.messages.push({ role: "note", text: "Stopped before it answered." }); }
+      await r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => !document.querySelector("#chat-stop").hidden);
+    assert(await page.$eval("#chat-send", e => e.disabled), "while it answers, Send waits");
+    await page.click("#chat-stop");
+    await page.waitForFunction(() => document.querySelector("#chat-stop").hidden);
+    same(stops, [{ scope: "W9" }], "Stop asks the server to stop W9's chat");
+    assert(await page.$("#chat-log .msg.note"), "the log says it was stopped");
+    assert(!(await page.$eval("#chat-send", e => e.disabled)), "and you can send again");
+    same(errors, [], "no page errors");
+  },
+
   // Chats: start several, leave each, find them in the Chats section, pick one up again.
   async chats(b) {
     const { page, errors } = await open(b, PHONE);
