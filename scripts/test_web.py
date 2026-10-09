@@ -226,15 +226,14 @@ class Web(unittest.TestCase):
                     "/artefacts/.hidden.html", "/artefacts/0a1b2c.py", "/artefacts/sub/x.html", "/artefacts/"):
             self.assertEqual(self.call("GET", bad)[0], 404, bad)
 
-    def test_a_task_lists_the_artefacts_it_names_then_the_rest(self):
+    def test_a_task_lists_only_the_artefacts_it_names(self):
         self.put_artefact()
         self.put_artefact("standing-map.html", "The standing map")
         dfs_tree.append_log("W1", "raise", (), "Which design? See .dfs/artefacts/0a1b2c.html, "
                             "or http://localhost:3016/0a1b2c.html, or gone.html.")
         arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
-        self.assertEqual([(a["file"], a["title"], a["named"]) for a in arts],
-                         [("0a1b2c.html", "How the limiter is wired", True),
-                          ("standing-map.html", "The standing map", False)])
+        self.assertEqual([(a["file"], a["title"]) for a in arts],
+                         [("0a1b2c.html", "How the limiter is wired")])
 
     def test_a_task_lists_screenshots_as_images_beside_the_pages(self):
         self.put_artefact()
@@ -243,9 +242,7 @@ class Web(unittest.TestCase):
             (d / n).write_bytes(b"x")
         dfs_tree.append_log("W1", "raise", (), "Looks like ![the bar](.dfs/artefacts/shot-1.png) not gone.png.")
         arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
-        self.assertEqual([(a["file"], a["kind"], a["named"]) for a in arts],
-                         [("shot-1.png", "image", True), ("0a1b2c.html", "page", False),
-                          ("other.svg", "image", False)])
+        self.assertEqual([(a["file"], a["kind"]) for a in arts], [("shot-1.png", "image")])
         self.assertEqual(arts[0]["title"], "shot-1.png")
         self.assertEqual(self.call("GET", "/artefacts/shot-1.png")[2].getheader("Content-Type"), "image/png")
 
@@ -309,7 +306,7 @@ class Web(unittest.TestCase):
         self.assertEqual(on.count("Remove break"), 1, "only W2 sits behind a fence")
         self.assertIn('aria-pressed="true">Reorder', on)
 
-    def test_the_artefacts_section_previews_the_named_and_only_links_the_rest(self):
+    def test_the_artefacts_section_previews_each_artefact_and_offers_no_list_of_the_rest(self):
         """artefactsHtml() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
@@ -318,14 +315,14 @@ class Web(unittest.TestCase):
         body = src[src.index("const THUMB_W"):src.index("function raiseCard")]
         js = ("const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;');"
               + body + "console.log(artefactsHtml({artefacts: ["
-              "{file:'s.png',title:'s.png',kind:'image',named:true},"
-              "{file:'m.html',title:'The <map>',kind:'page',named:true},"
-              "{file:'o.html',title:'Other',kind:'page',named:false}]}))")
+              "{file:'s.png',title:'s.png',kind:'image'},"
+              "{file:'m.html',title:'The <map>',kind:'page'}]}), artefactsHtml({artefacts: []}))")
         out = subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout
         self.assertIn('<img src="/artefacts/s.png"', out)
         self.assertIn('<iframe src="/artefacts/m.html" title="The &lt;map>"', out)
         self.assertEqual(out.count("<iframe"), 1)
-        self.assertIn('<li><a class="art" href="/artefacts/o.html"', out)
+        self.assertNotIn("project", out)
+        self.assertNotIn("<li>", out)
 
     def test_the_name_starts_from_git_then_the_file_is_the_name(self):
         subprocess.run(["git", "remote", "add", "origin", "git@github.com:acme/payments-api.git"],

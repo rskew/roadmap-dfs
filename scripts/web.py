@@ -224,9 +224,8 @@ def artefact_title(path):
 
 def artefacts_for(text):
     """The artefacts a task's prose names (as the screen's `v` pane finds them: by scanning
-    for `<name>.html`, and for a screenshot `<name>.png` and the other picture types), then
-    every other file in `.dfs/artefacts`, which is where the standing maps live. Each: file,
-    title, kind ("page" or "image") and whether this task names it."""
+    for `<name>.html`, and for a screenshot `<name>.png` and the other picture types) that
+    exist in `.dfs/artefacts`. Each: file, title and kind ("page" or "image")."""
     root = dfs_paths.artefacts()
     on_disk = {}
     try:
@@ -244,8 +243,8 @@ def artefacts_for(text):
     def entry(n):
         page = on_disk[n].suffix.lower() == ".html"
         return dict(file=n, title=(artefact_title(on_disk[n]) if page else "") or n,
-                    kind="page" if page else "image", named=n in named)
-    return [entry(n) for n in named + [n for n in on_disk if n not in named]]
+                    kind="page" if page else "image")
+    return [entry(n) for n in named]
 
 
 def task_json(task):
