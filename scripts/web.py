@@ -293,7 +293,13 @@ def task_json(task):
             rows.append(dict(
                 kind="node", key=nd["id"], id=nd["id"], title=nd["title"], status=st,
                 depth=row["depth"], indent=row["indent"], kids=row["kids"], chain=row["chain"],
-                parent=nd["parent"] or "", skim=skim_for(t, nd),
+                parent=nd["parent"] or "",
+                # Only a node being worked has a mark; refuted, parked, dormant and
+                # pruned ones keep their chips.
+                progress=("done" if st == "confirmed" else
+                          "started" if st == "open" and nd["status"] == "started" else
+                          "open" if st == "open" else ""),
+                skim=skim_for(t, nd),
                 editable=st in ("open", "parked") and nd["fields"].get("Approach") != dfs_tree.SHELF_STUB,
                 approach=nd["fields"].get("Approach", ""),
                 raises=[raise_json(r) for r in row["raises"]],

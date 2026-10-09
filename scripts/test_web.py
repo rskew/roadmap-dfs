@@ -769,6 +769,20 @@ class Web(unittest.TestCase):
         self.assertEqual({k: (r["depth"], r["chain"]) for k, r in rows.items()},
                          {"W1.1": (0, False), "W1.2": (0, True), "W1.3": (0, True)})
 
+    def test_a_node_says_whether_it_is_done_started_or_not_begun(self):
+        path = self.root / ".dfs" / "items" / "W1.md"
+        path.write_text(path.read_text().replace(
+            "## Log", "### W1.4 · Park\nParent: W1.1\nStatus: parked\n\n"
+            "### W1.5 · Under it\nParent: W1.4\nStatus: started\n\n"
+            "### W1.6 · Backed out\nParent: W1.1\nStatus: refuted\n\n## Log"))
+        progress = lambda: {r["key"]: r["progress"] for r in self.task()["rows"] if r["kind"] == "node"}
+        self.assertEqual(progress(), {"W1.1": "done", "W1.2": "done", "W1.3": "open", "W1.4": "",
+                                      "W1.5": "", "W1.6": ""})
+        dfs_tree.start_node("W1", "W1.3")
+        self.assertEqual(progress()["W1.3"], "started")
+        rows = {r["key"]: r for r in self.task()["rows"] if r["kind"] == "node"}
+        self.assertEqual((rows["W1.3"]["status"], rows["W1.5"]["status"]), ("open", "dormant"))
+
     def test_a_node_carries_its_skim_flags_and_card(self):
         rows = {r["key"]: r for r in self.task()["rows"]}
         n = rows["W1.2"]
