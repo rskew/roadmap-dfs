@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W30: the bottom bar after the merge</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a; font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .phone { border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .phone .body { padding: 10px 14px; min-height: 3.2em; color: #444; }
+  .bar { display: flex; border-top: 1.5px solid #333; }
+  .bar span { flex: 1; text-align: center; padding: 12px 2px; font-size: 14px; letter-spacing: .06em; color: #666; border-top: 3px solid transparent; margin-top: -2px; }
+  .bar span.cur { color: #1a1a1a; border-top-color: #1a1a1a; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; } summary { cursor: pointer; padding: 8px 0; }
+</style>
+<h1>The bottom bar after the merge</h1>
+<p class="lede">Assumed: All, Needs you and Reorder leave the top of the task list and join the bottom bar; the Assumptions tab and its screen are removed, and Chats keeps its place.</p>
+<h2>Which screen</h2>
+<div class="choices" role="group" aria-label="Screen">
+  <button type="button" data-screen="tasks" aria-pressed="true">Task list</button>
+  <button type="button" data-screen="needs" aria-pressed="false">Needs you on</button>
+  <button type="button" data-screen="reorder" aria-pressed="false">Reorder on</button>
+  <button type="button" data-screen="chats" aria-pressed="false">Chats</button>
+  <button type="button" data-screen="before" aria-pressed="false">Before (today)</button>
+</div>
+<div class="phone"><div class="body" id="body"></div><div class="bar" id="bar"></div></div>
+<p id="note" aria-live="polite"></p>
+<h2>What would show it wrong</h2>
+<p class="wrong">The author meant the terminal screen's footer, or wants the Assumptions list kept somewhere (the per-task Flagged button is then not enough), or wants Chats out of the bar.</p>
+<details><summary>The evidence so far</summary>
+<p>The web page is the only place with a "bottom bar" (#tabs) and an "Assumptions" list tab; the terminal has neither as such.</p></details>
+<script>
+  var S = {
+    tasks: { body: 'All tasks in order, a break line between segments.', bar: [['All', 1], ['Needs you 3'], ['Reorder'], ['Chats']], note: 'All, Needs you and Reorder act on the list; the one in force carries the line.' },
+    needs: { body: 'Only the tasks that wait on you.', bar: [['All'], ['Needs you 3', 1], ['Reorder'], ['Chats']], note: 'Needs you and Reorder exclude each other, as they do now.' },
+    reorder: { body: 'Each row grows Up / Down / Out / In / Break.', bar: [['All'], ['Needs you 3'], ['Reorder', 1], ['Chats']], note: 'Pressing Reorder again switches it off.' },
+    chats: { body: 'The conversations. None of the three list controls is current.', bar: [['All'], ['Needs you 3'], ['Reorder'], ['Chats', 1]], note: 'Pressing All, Needs you or Reorder here goes back to the list with that setting.' },
+    before: { body: 'Today: filters sit at the top of the list; the bar is Tasks | Assumptions | Chats.', bar: [['Tasks', 1], ['Assumptions 4'], ['Chats']], note: 'The cross-task Assumptions list is what goes. A task still has its Flagged button.' }
+  };
+  var cur = 'tasks';
+  function show() {
+    var s = S[cur];
+    document.getElementById('body').textContent = s.body;
+    document.getElementById('note').textContent = s.note;
+    document.getElementById('bar').innerHTML = s.bar.map(function (b) { return '<span' + (b[1] ? ' class="cur"' : '') + '>' + b[0] + '</span>'; }).join('');
+    document.querySelectorAll('[data-screen]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.screen === cur)); });
+  }
+  document.querySelectorAll('[data-screen]').forEach(function (b) { b.addEventListener('click', function () { cur = b.dataset.screen; show(); }); });
+  show();
+</script>

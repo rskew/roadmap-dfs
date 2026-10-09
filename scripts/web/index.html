@@ -75,9 +75,6 @@ html[data-loading] #stripe { opacity: 1; }
 .count[hidden] { display: none; }
 
 /* the task list: ruled, with ids in a column */
-.filters { display: flex; gap: 22px; margin: var(--s1) 0 6px; border-bottom: var(--rule) solid var(--line); }
-.filters button { min-height: var(--hit); min-width: var(--hit); padding: 0 var(--s1); font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; color: var(--muted); border-bottom: var(--rule-strong) solid transparent; margin-bottom: -1px; }
-.filters button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
 .item { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 var(--s3); width: 100%; padding: var(--s4) 0; padding-left: calc(var(--ind, 0px) + var(--gx, 0px)); border-bottom: var(--rule) solid var(--line); }
 .item.tint { margin: 0 -10px; width: calc(100% + 20px); --gx: 10px; padding-right: 10px; }
 .item.assumes { background: var(--assumption-wash); }
@@ -238,7 +235,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   #tabs { position: fixed; top: 0; left: auto; right: var(--s4); bottom: auto; width: auto; height: var(--bar); border: 0; background: transparent; padding: 0; gap: var(--s2); z-index: 7; }
   #tabs button { flex: none; padding: 0 14px; margin: 0; border-top: 0; border-bottom: var(--rule-strong) solid transparent; height: var(--bar); }
   #tabs button[aria-current="page"] { border-bottom-color: var(--ink); }
-  #bar { padding-right: 280px; }
+  #bar { padding-right: 400px; }
   #layout.has-node { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 44%); gap: 0 28px; align-items: start; }
   #sheet { position: sticky; top: calc(var(--bar) + var(--s3)); right: auto; left: auto; bottom: auto; height: calc(100dvh - var(--bar) - 28px); border: var(--rule) solid var(--line); margin: var(--s3) var(--s4) 0 0; display: none; }
   #layout.has-node #sheet.open { display: flex; }
@@ -314,11 +311,10 @@ function toast(msg, err) {
   clearTimeout(toastT); toastT = setTimeout(() => t.className = "", err ? 5000 : 2600);
 }
 
-/* ── routing: #/  #/t/W3  #/t/W3/W3.2  #/assumptions ─────────────────────────── */
+/* ── routing: #/  #/t/W3  #/t/W3/W3.2  #/chats ─────────────────────────── */
 function route() {
   const p = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   if (p[0] === "t" && p[1]) return { view: "task", task: p[1], node: p[2] || null };
-  if (p[0] === "assumptions") return { view: "assumptions" };
   if (p[0] === "chats") return { view: "chats" };
   return { view: "tasks" };
 }
@@ -361,23 +357,18 @@ async function render(force) {
       const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned);
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
-    } else if (r.view === "assumptions") {
-      const asm = (await api("/api/assumptions")).assumed;
-      if (mine !== RENDERS) return;
-      S.asm = asm;
-      S.node = null; drawAsm();
     } else if (r.view === "chats") {
       const [list, state] = await Promise.all([api("/api/chats"), api("/api/state")]);
       if (mine !== RENDERS) return;
-      S.chats = list.chats; S.state = state; syncColour(state); S.node = null; drawChats();
+      S.chats = list.chats; S.state = state; S.needs = state.needs_you; syncColour(state); S.node = null; drawChats();
     } else {
       const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk")]);
       if (mine !== RENDERS) return;
-      S.state = state; S.walk = walk; syncColour(state);
+      S.state = state; S.needs = state.needs_you; S.walk = walk; syncColour(state);
       S.node = null; drawTasks();
     }
     chrome(r);
-    refreshCount();
+    if (r.view === "task") refreshNeeds();
     if (!SCROLL.ready && mine === RENDERS) scrollBack(where);
   } catch (e) {
     toast(e.message, true);
@@ -387,23 +378,23 @@ async function render(force) {
       $("#view").innerHTML = `<p class="wait" role="alert">Could not load: ${esc(e.message)}</p><div class="actions top-actions"><button class="btn" data-act="retry">Retry</button></div>`;
   }
 }
-async function refreshCount() {
-  try {
-    S.asmCount = (await api("/api/assumptions")).assumed.length;
-    const b = $("#asmcount"); if (b) { b.hidden = !S.asmCount; b.textContent = S.asmCount; }
-  } catch (e) { /* a count is a convenience */ }
+// A task screen does not load the list, but the bar's Needs you carries the count.
+async function refreshNeeds() {
+  try { S.needs = (await api("/api/state")).needs_you; drawBar(route()); } catch (e) { /* a count is a convenience */ }
 }
 /* The bar at the bottom is where the thumbs are, so it holds what you press to move: on a phone,
    Back is always its right cell, under the right thumb, with what moves you on the left, and what is next to it is what that screen leads to. On a wide
-   screen it is the two tabs, up at the top, and Back is in the header. */
+   screen it is the same cells, up at the top, and Back is in the header. */
 function drawBar(r) {
-  const tab = (name, label, cur) => `<button data-tab="${name}" ${cur ? 'aria-current="page"' : ""}>${label}</button>`;
-  const count = `<span class="count" id="asmcount" ${S.asmCount ? "" : "hidden"}>${S.asmCount || ""}</span>`;
+  const cell = (attrs, label, cur) => `<button ${attrs} ${cur ? 'aria-current="page"' : ""}>${label}</button>`;
+  const list = r.view === "tasks";
   let html, mode;
   if (r.view !== "task" || wide()) {
     mode = "tabs";
-    html = tab("tasks", "Tasks", r.view === "tasks") + tab("assumptions", `Assumptions ${count}`, r.view === "assumptions")
-      + (chatOn() ? tab("chats", "Chats", r.view === "chats") : "");
+    html = cell('data-act="only" data-v="0"', "All", list && !S.only && !S.reorder)
+      + cell('data-act="only" data-v="1"', `Needs you <span class="count">${S.needs || ""}</span>`, list && S.only)
+      + cell('data-act="reorder"', "Reorder", list && S.reorder)
+      + (chatOn() ? `<button data-tab="chats" ${r.view === "chats" ? 'aria-current="page"' : ""}>Chats</button>` : "");
   } else {
     mode = "task";
     const flagged = S.task ? S.task.assumed.length : 0;
@@ -417,10 +408,9 @@ function drawBar(r) {
 }
 function chrome(r) {
   drawBar(r);
-  $("#back").hidden = r.view === "tasks" || r.view === "assumptions" || r.view === "chats";
+  $("#back").hidden = r.view === "tasks" || r.view === "chats";
   const t = $("#title");
   if (r.view === "task" && S.task) t.innerHTML = `${esc(S.task.id)}<small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
-  else if (r.view === "assumptions") t.innerHTML = `Assumptions<small>what rests on a decision of yours</small>`;
   else if (r.view === "chats") t.innerHTML = `Chats<small>${S.chats ? S.chats.length : 0} going, any of them yours to pick up</small>`;
   else if (S.state) t.innerHTML = `<button class="rename" data-act="rename" aria-label="Rename the project">${esc(PROJECT)}</button><small>${S.state.items.length} tasks, ${S.state.needs_you} need you</small>`;
   document.title = (r.view === "task" ? r.task + " · " : "") + PROJECT;
@@ -499,10 +489,7 @@ function drawChats() {
 }
 function drawTasks() {
   const items = S.state.items.filter(i => !S.only || i.needs_you);
-  let seg = 0, html = walkHtml() + `<div class="filters" role="group" aria-label="Filter">
-    <button data-act="only" data-v="0" aria-pressed="${!S.only}">All</button>
-    <button data-act="only" data-v="1" aria-pressed="${S.only}">Needs you ${S.state.needs_you}</button>
-    <button data-act="reorder" aria-pressed="${S.reorder}">Reorder</button></div>`;
+  let seg = 0, html = walkHtml();
   for (const it of S.state.items) {
     const fenced = it.segment > seg && !S.only;
     if (fenced) html += `<div class="break cap">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
@@ -708,29 +695,6 @@ function nextFlag() {
     }
   }
   toast("No raise, assumption or ask in this tree.");
-}
-
-/* ── assumptions across the tasks ───────────────────────────────────────────── */
-function drawAsm() {
-  $("#view").className = "col";
-  if (!S.asm.length) { $("#view").innerHTML = `<p class="hint">Nothing to read: every task is accepted, or none states a hypothesis or an ask.</p>`; return; }
-  let task = "", html = "";
-  for (const a of S.asm) {
-    if (a.task !== task) { task = a.task; html += `<div class="cap" style="margin:20px 0 4px">${esc(task)}</div>`; }
-    html += `<button class="item" data-act="asm" data-task="${esc(a.task)}" data-id="${esc(a.id)}">
-      <span class="iid c-assumption">${esc(a.id)}</span>
-      <span><span class="goal">${esc(a.title)}</span>
-      ${a.assumption ? `<span class="asm">${esc(a.assumption)}</span>` : ""}
-      ${a.wrong ? `<span style="display:block;margin-top:6px"><span class="cap c-assumption">Wrong if</span> ${esc(a.wrong)}</span>` : ""}
-      ${a.ask ? `<span class="c-attention" style="display:block;margin-top:6px"><span class="cap c-attention">Ask</span> ${esc(a.ask)}</span>` : ""}</span></button>`;
-    // the page a Hypothesis names, to operate from here; a link cannot sit inside the button, and the
-    // server serves an artefact by bare name whichever task is open
-    const pages = [...new Set([...`${a.assumption || ""} ${a.wrong || ""}`.matchAll(new RegExp(ART_RE.source, "gi"))]
-      .filter(m => /\.html$/i.test(m[3])).map(m => m[3]))];
-    if (pages.length) html += `<div style="margin:2px 0 8px 52px">${pages.map(n =>
-      `<a class="art" href="/artefacts/${esc(n)}" target="_blank" rel="noopener">Open the page</a>`).join(" ")}</div>`;
-  }
-  $("#view").innerHTML = html;
 }
 
 /* ── writing: the same log entries the terminal writes ──────────────────────── */
@@ -949,11 +913,10 @@ document.addEventListener("click", e => {
   ({
     retry: () => render(true),
     flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
-    only: () => { S.only = d.v === "1"; if (S.only) S.reorder = false; drawTasks(); },
-    reorder: () => { S.reorder = !S.reorder; S.moved = null; if (S.reorder) S.only = false; drawTasks(); },
+    only: () => { S.only = d.v === "1"; if (S.only) S.reorder = false; showList(); },
+    reorder: () => { S.reorder = !S.reorder; S.moved = null; if (S.reorder) S.only = false; showList(); },
     move: () => moveTask(d.id, d.move),
     task: () => go("t/" + d.id),
-    asm: () => go(`t/${d.task}/${d.id}`),
     node: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
     fold: () => { const s = S.folded[S.task.id] ||= new Set(); s.has(d.id) ? s.delete(d.id) : s.add(d.id); S.sig = ""; render(true); },
     close: () => go(`t/${S.task.id}`, true), up,
@@ -967,6 +930,8 @@ document.addEventListener("click", e => {
     walkhere: async () => { try { S.walk = await api("/api/walk/pin", { item: d.item }); toast(S.walk.pinned ? "The walk goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
   }[d.act] || (() => {}))();
 });
+// The bar's All, Needs you and Reorder set how the list is drawn; from another screen they take you to it.
+function showList() { if (route().view !== "tasks") return go(""); drawTasks(); drawBar(route()); }
 const up = () => { if (S.node) go(`t/${S.task.id}`, true); else go(""); };
 $("#back").onclick = up;
 $("#sheet").addEventListener("scroll", e => { if (S.node && e.target.isConnected && e.target.classList.contains("sheet-body")) keepScroll(sheetKey(), e.target.scrollTop); }, true);

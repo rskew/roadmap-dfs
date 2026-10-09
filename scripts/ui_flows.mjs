@@ -325,8 +325,9 @@ const FLOWS = {
         assert(r.h >= 44, `${name}: ${what} is tap-sized (${Math.round(r.h)}px)`);
         return r;
       };
-      // the list: its two tabs
-      await low("#tabs [data-tab=tasks]", "Tasks tab"); await low("#tabs [data-tab=assumptions]", "Assumptions tab"); await low("#tabs [data-tab=chats]", "Chats tab");
+      // the list: All, Needs you, Reorder and Chats in the bar, no filter strip above the rows and no Assumptions tab
+      await low("#tabs [data-act=only][data-v='0']", "All"); await low("#tabs [data-act=only][data-v='1']", "Needs you"); await low("#tabs [data-act=reorder]", "Reorder"); await low("#tabs [data-tab=chats]", "Chats tab");
+      assert(!(await page.$(".filters")) && !(await page.$("[data-tab=assumptions]")), `${name}: the filters live in the bar and the Assumptions tab is gone`);
       assert(await page.$eval("#back", e => getComputedStyle(e).display === "none"), `${name}: no Back up in the header`);
       // a task: Chat and Flagged on the left, Back at the right
       await task(page, "W9");
@@ -349,7 +350,7 @@ const FLOWS = {
       await page.click("#sheet [data-act=close]");
       await page.waitForFunction(() => !document.querySelector("#sheet.open") && document.querySelector("#tabs [data-act=up]"));
       await page.click("#tabs [data-act=up]"); await page.waitForSelector(".item");
-      assert(await page.$("#tabs [data-tab=tasks]"), `${name}: the tabs are back`);
+      assert(await page.$("#tabs [data-act=only][data-v='0'][aria-current=page]"), `${name}: the bar is back, All current`);
       // the chat: Back at the bottom
       await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
       await low("#chat [data-act=chatclose]", "chat Back");
@@ -688,9 +689,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
         await page.keyboard.press("Escape");
         await page.evaluate(() => document.querySelector("#sheet [data-act=close]")?.click());
         await toList(page);
-        await page.click("#tabs [data-tab=assumptions]"); await check("assumptions");
         await page.click("#tabs [data-tab=chats]"); await check("chats");
-        await page.click("#tabs [data-tab=tasks]"); await page.waitForSelector(".item");
+        await page.click("#tabs [data-act=only][data-v='0']"); await page.waitForSelector(".item");
         assert(!(await page.$("[data-act=chat][data-scope=project]")), "the task list has no project chat button");
         await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]"); await check("chat");
         same(errors, [], `${name}/${scheme}: no page errors`);
