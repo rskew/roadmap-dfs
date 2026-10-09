@@ -71,8 +71,9 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself (see Raising): a page the
   author can operate, with the options to switch between, the inputs to move and the
   evidence to open, so that it explains the assumption and lets them decide whether
-  it holds. `check.py` refuses a commit that adds a Hypothesis naming no such page, or
-  one with no control a handler answers. A node with no assumption needs none. The
+  it holds, and with Confirm and Refute buttons that submit their ruling on the node
+  (the template does). `check.py` refuses a commit that adds a Hypothesis naming no such
+  page, or one with no control a handler answers, or that cannot post a verdict. A node with no assumption needs none. The
   screen marks a node with a Hypothesis (⚑) and names those nodes when the author
   accepts the tree, so keep it for what is both important and open to question: an
   ordinary choice the check settles is not one.
@@ -197,7 +198,8 @@ assumption, lets the reader change what it depends on, shows what follows, and s
 would make it wrong. A page the reader can only look at does not meet the rule. To let
 the author answer on the page, name it in the raise on a line of its own, `Answer with:
 .dfs/artefacts/<uuid>.html` (one page, even when the raise shows several): the page posts
-the answer itself and keeps where the reader left off (docs/artefacts.md).
+the answer itself and keeps where the reader left off (docs/artefacts.md); a raise
+naming a page that cannot post an answer is refused.
 
 Wiring and data flow, before and after, two or three options set side by side on the
 same axes, a sequence of what ran and what it showed, a layout, measured

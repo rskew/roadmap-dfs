@@ -39,7 +39,8 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a live node, new in this commit or with its Hypothesis changed, that states a
       Hypothesis naming no interactive artefact: a `.dfs/artefacts/<name>.html` that
       exists and has an input, button, select, textarea or details with a handler
-      (addEventListener or onclick and the like) answering it (`check_assumptions`).
+      (addEventListener or onclick and the like) answering it and posts a verdict to
+      `/artefact-state/` (`check_assumptions`).
       A node already at HEAD is judged as committed, and a merge commit judges none
       (the other branch's commits were judged there)
     - a task file or an archive HEAD holds, deleted (the limit case of the two

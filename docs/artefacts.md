@@ -89,10 +89,11 @@ Start from `templates/_TEMPLATE_ASSUMPTION.html`. Give the reader the thing the
 assumption turns on to change (the options to switch between, the input to move, the
 evidence to open) and show what follows from each setting, ending on what would show the
 assumption wrong. The rest of this file (self-contained, checked, screenshot read once)
-applies unchanged. What `check.py` tests is only that the page exists, has a control
-(`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`) and a handler that
-answers it (`addEventListener`, or an `onclick`-style attribute). It does not judge that
-the controls tell the reader anything; the screenshot and the author do.
+applies unchanged. What `check.py` tests is that the page exists, has a control
+(`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`), a handler that answers it
+(`addEventListener`, or an `onclick`-style attribute), and can **rule on its node**: it
+reaches `/artefact-state/` and sends a `verdict`, below. It does not judge that the controls
+tell the reader anything; the screenshot and the author do.
 
 ## A page that answers, and keeps where the reader left off
 
@@ -120,6 +121,18 @@ stays, for answering in words instead. The template's "Send as my answer" button
 this. The page that answers is the one the author is shown, so write the answer as the
 decision, not as a dump of the state. An agent's page can therefore answer its own raise;
 the author reads the log entry, and a raise that names no page is answered by none.
+`tree.py log raise` refuses an `Answer with:` page that cannot answer (it has no
+`/artefact-state/` route and `answer` field to send).
+
+**Confirm or refute an assumption.** A page a node's Hypothesis names
+(`.dfs/artefacts/<uuid>.html` inside it) may rule on that node: `POST {"state": ..., "verdict":
+"confirmed" | "refuted", "answer": "<why>"}` appends the `correct` entry the web form's Refute/
+confirm writes, with `answer` as its directive. It is accepted only while the node is live,
+not parked, and not yet ruled on; the GET's `node` (`{task, id}`) is that node, or `null`, so
+the page shows its buttons only when it can rule. In the web page, Refute/confirm on a node
+with such a page opens it beside the form and closes on `{dfs: "answered"}`, as a raise's does;
+the text box stays for ruling in words. The template's Confirm and Refute buttons do all of
+this, and `check.py` refuses a new Hypothesis whose page cannot post a `verdict`.
 
 ## Conventions the checker relies on
 
