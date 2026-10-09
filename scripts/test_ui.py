@@ -129,6 +129,9 @@ class Flows(unittest.TestCase):
     def test_each_screen_keeps_its_scroll_on_back_and_reload(self):
         self.flow("scroll_memory")
 
+    def test_the_node_sheet_and_the_chat_log_keep_their_scroll(self):
+        self.flow("scroll_memory_areas")
+
     def test_the_node_sheet_keeps_prev_and_next_where_they_are(self):
         self.flow("node_sheet")
 

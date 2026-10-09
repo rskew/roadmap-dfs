@@ -123,7 +123,7 @@ const FLOWS = {
 
   // Each screen's page scroll is kept: Back to the list, and a reload, land where the reader was.
   async scroll_memory(b) {
-    const { page, errors } = await open(b, { viewport: { width: 360, height: 300 }, hasTouch: true });
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true });
     const y = () => page.evaluate(() => Math.round(window.scrollY));
     const settle = () => page.waitForTimeout(400);
     const room = () => page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
@@ -143,6 +143,44 @@ const FLOWS = {
     await page.evaluate(() => document.querySelector(".item[data-id=W9]").click());
     await page.waitForSelector(".row"); await settle();
     same(await y(), 60, "and the tree's, on the way back in");
+    same(errors, [], "no page errors");
+  },
+
+  // The chat log and the node sheet are scroll areas of their own, and each is remembered too.
+  async scroll_memory_areas(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true });
+    // the chat's answers are the tool's own and need an agent: a long conversation is handed to the page instead
+    const state = { messages: Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? "agent" : "you", text: `line ${i} of a long talk` })), busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    const settle = () => page.waitForTimeout(400);
+    const top = sel => page.$eval(sel, e => Math.round(e.scrollTop));
+    await task(page, "W9");
+    await page.evaluate(() => document.querySelector(".row.hasraise .main").click());
+    await page.waitForSelector("#sheet.open .sheet-body");
+    const room = await page.$eval(".sheet-body", e => e.scrollHeight - e.clientHeight);
+    assert(room > 30, `the sheet's body is taller than its window (${room})`);
+    await page.$eval(".sheet-body", e => { e.scrollTop = 30; }); await settle();
+    await page.click("#sheet [data-act=next]"); await settle();
+    same(await top(".sheet-body"), 0, "a node not yet read opens at its top");
+    await page.click("#sheet [data-act=prev]"); await settle();
+    same(await top(".sheet-body"), 30, "stepping back to a read node lands where it was left");
+    await page.click("#sheet [data-act=close]"); await page.waitForSelector("#sheet:not(.open)", { state: "attached" });
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 40);
+    const log = () => page.$eval("#chat-log", e => ({ at: Math.round(e.scrollTop), end: e.scrollHeight - e.clientHeight }));
+    const l0 = await log();
+    assert(l0.end > 200 && Math.abs(l0.at - l0.end) < 3, "a chat opens at its end");
+    await page.$eval("#chat-log", e => { e.scrollTop = 150; }); await settle();
+    await page.click("[data-act=chatclose]"); await settle();
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 40); await settle();
+    same((await log()).at, 150, "a chat reopens where it was scrolled to");
+    await page.$eval("#chat-log", e => { e.scrollTop = e.scrollHeight; }); await settle();
+    await page.click("[data-act=chatclose]"); await settle();
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 40); await settle();
+    const l1 = await log();
+    assert(Math.abs(l1.at - l1.end) < 3, "one left at its end opens at its end");
     same(errors, [], "no page errors");
   },
 

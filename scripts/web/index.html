@@ -324,12 +324,12 @@ function scrollBack(where) {
   window.scrollTo(0, SCROLL.at[where] || 0);
   SCROLL.ready = true;
 }
-addEventListener("scroll", () => {
-  if (!SCROLL.ready || !lastView) return;
-  SCROLL.at[lastView] = Math.round(window.scrollY);
+function keepScroll(key, y) {
+  if (y == null) delete SCROLL.at[key]; else SCROLL.at[key] = Math.round(y);
   clearTimeout(SCROLL.t);
   SCROLL.t = setTimeout(() => { try { sessionStorage.setItem("scroll", JSON.stringify(SCROLL.at)); } catch (e) {} }, 150);
-}, { passive: true });
+}
+addEventListener("scroll", () => { if (SCROLL.ready && lastView) keepScroll(lastView, window.scrollY); }, { passive: true });
 addEventListener("pagehide", () => { try { sessionStorage.setItem("scroll", JSON.stringify(SCROLL.at)); } catch (e) {} });
 
 let lastView = "";
@@ -656,6 +656,7 @@ function raiseCard(r, where) {
 }
 
 /* ── the node card ──────────────────────────────────────────────────────────── */
+const sheetKey = () => "node:" + (S.task ? S.task.id : "") + ":" + S.node;
 function drawSheet() {
   const t = S.task, rows = visibleRows(t).filter(r => r.kind === "node"), i = rows.findIndex(r => r.key === S.node);
   const r = t.rows.find(x => x.key === S.node);
@@ -682,7 +683,7 @@ function drawSheet() {
       <button data-act="next" ${i >= rows.length - 1 ? "disabled" : ""}>Next</button>
       <button data-act="nextflag">Flagged</button>
       <button data-act="close">Back</button></nav>`;
-  const sb = $(".sheet-body"); if (sb && S.lastNode !== S.node) sb.scrollTop = 0;
+  const sb = $(".sheet-body"); if (sb) sb.scrollTop = SCROLL.at[sheetKey()] || 0;   // 0 for a node not yet read
   S.lastNode = S.node;
 }
 function step(d) {
@@ -806,7 +807,8 @@ function correctForm(id) {
 }
 /* ── chat: basic, read-only, one agent turn at a time ──────────────────────────────── */
 const chatOn = () => !!(S.walk && S.walk.enabled);
-const CHAT = { scope: null, busyT: null, last: "" };
+const CHAT = { scope: null, busyT: null, last: "", fresh: false };
+const chatKey = () => "chat:" + CHAT.scope;
 function chatDraw(st) {
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { you: "You", agent: "Agent", error: "Not answered" };
@@ -819,7 +821,11 @@ function chatDraw(st) {
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Thinking… ${st.busy_for}s</div></div>` : "");
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
-  if (atEnd || st.busy) log.scrollTop = log.scrollHeight;
+  // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
+  const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined;
+  CHAT.fresh = false;
+  if (was !== undefined) log.scrollTop = was;
+  else if (atEnd || st.busy) log.scrollTop = log.scrollHeight;
 }
 async function chatLoad() {
   if (!CHAT.scope) return;
@@ -837,7 +843,7 @@ async function chatBegin(scope) {
   chatLoad();
 }
 function chatOpen(scope) {
-  CHAT.scope = scope; CHAT.last = "";
+  CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true;
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
   $("#chat-log").innerHTML = ""; $("#chat-input").value = "";
   $("#chat").showModal(); $("#chat-input").focus();
@@ -941,7 +947,7 @@ document.addEventListener("click", e => {
     prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
     answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
-    chatclear: async () => { try { CHAT.last = ""; chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
+    chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStartForm, walkstop: async () => { try { S.walk = await api("/api/walk/stop", {}); toast("Walk stopped; its chain ends after this run."); drawTasks(); } catch (e) { toast(e.message, true); } },
     chainstop: () => chainStopForm(d.item),
@@ -950,6 +956,11 @@ document.addEventListener("click", e => {
 });
 const up = () => { if (S.node) go(`t/${S.task.id}`, true); else go(""); };
 $("#back").onclick = up;
+$("#sheet").addEventListener("scroll", e => { if (S.node && e.target.isConnected && e.target.classList.contains("sheet-body")) keepScroll(sheetKey(), e.target.scrollTop); }, true);
+$("#chat-log").addEventListener("scroll", e => {
+  const l = e.target; if (!CHAT.scope || CHAT.fresh) return;
+  keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
+}, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 addEventListener("hashchange", () => render(true));
 setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
