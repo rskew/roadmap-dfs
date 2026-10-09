@@ -17,7 +17,7 @@
 try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
 // The backgrounds chosen for this project (`.dfs/background`), one per mode: the one for the mode
 // the page is in sets its surface and text colours, and the light/dark switch picks between them.
-let BACKGROUND = {{background_json}}, PALETTES = {{palettes_json}};
+let BACKGROUND = {{background_json}}, PALETTES = {{palettes_json}}, IMAGE = {{background_image_json}};
 const isDark = () => document.documentElement.dataset.theme
   ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 function paintBackground() {

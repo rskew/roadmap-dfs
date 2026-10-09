@@ -51,6 +51,7 @@ ARTEFACTS (`.dfs/artefacts`) are served sandboxed at `/artefacts/<name>` and lin
 text that names them.
 """
 import argparse
+import base64
 import html
 import subprocess
 import json
@@ -80,6 +81,7 @@ INDEX = HERE / "web" / "index.html"
 STATIC = {"/sw.js": "text/javascript", "/design.css": "text/css", "/design": "text/html", "/icon-192.png": "image/png", "/icon-512.png": "image/png",
           "/icon-maskable-512.png": "image/png", "/apple-touch-icon.png": "image/png"}
 MAX_BODY = 64 * 1024
+IMAGE_BODY = dfs_paths.IMAGE_MAX * 4 // 3 + MAX_BODY      # a picture in base64, and the JSON around it
 LOCK = threading.Lock()       # one writer at a time: a task file is read, changed, written
 
 
@@ -106,6 +108,7 @@ def index_html():
             .replace("{{colour}}", dfs_paths.project_colour())
             .replace("{{background_json}}", json.dumps(dfs_paths.read_background()))
             .replace("{{palettes_json}}", json.dumps(dfs_paths.background_palettes()))
+            .replace("{{background_image_json}}", json.dumps(dfs_paths.background_image_version()))
             .replace("{{project}}", html.escape(name))).encode()
 
 
@@ -143,7 +146,8 @@ def state_json():
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
-                background=dfs_paths.read_background(), palettes=dfs_paths.background_palettes())
+                background=dfs_paths.read_background(), palettes=dfs_paths.background_palettes(),
+                background_image=dfs_paths.background_image_version())
 
 
 _commit_cache = {}
@@ -410,6 +414,23 @@ def set_background(body):
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_file()), e), 500)
     HUB.notify()
     return dict(background=have, palettes=dfs_paths.background_palettes())
+
+
+def set_background_image(body):
+    """Set the picture behind the page (`image`, a png, jpeg, webp or gif in base64) or clear it
+    with an empty string. The background colours are not touched."""
+    value = body.get("image")
+    if not isinstance(value, str):
+        raise Refused("an image is needed")
+    try:
+        data = base64.b64decode(value, validate=True) if value else b""
+        version = dfs_paths.write_background_image(data)
+    except ValueError as e:
+        raise Refused(str(e) if "background image" in str(e) else "that is not base64")
+    except OSError as e:
+        raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_image_file()), e), 500)
+    HUB.notify()
+    return dict(background_image=version)
 
 
 def set_theme(body):
@@ -789,7 +810,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if "text" in ctype or "json" in ctype else ""))
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        if not any(k == "Cache-Control" for k, _ in extra):
+            self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         for k, v in extra:
@@ -898,7 +920,7 @@ class Handler(BaseHTTPRequestHandler):
             if "application/json" not in self.headers.get("Content-Type", ""):
                 raise Refused("JSON only", 415)
             n = int(self.headers.get("Content-Length") or 0)
-            if n > MAX_BODY:
+            if n > (IMAGE_BODY if url.path == "/api/background-image" else MAX_BODY):
                 raise Refused("too large", 413)
             try:
                 body = json.loads(self.rfile.read(n) or b"{}")
@@ -913,6 +935,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, set_theme(body))
             if name == "background":
                 return self.json(200, set_background(body))
+            if name == "background-image":
+                return self.json(200, set_background_image(body))
             if name == "new":
                 return self.json(200, new_task(body))
             if name == "order":
@@ -947,6 +971,11 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/run/"):
             from_ = parse_qs(urlparse(self.path).query).get("from", [""])[0]
             return self.json(200, run_log(path[len("/api/run/"):], int(from_) if from_.isdigit() else None))
+        if path == "/background-image":
+            image = dfs_paths.read_background_image()
+            if image is None:
+                raise Refused("no background image", 404)
+            return self.send(200, image[0], image[1], extra=[("Cache-Control", "no-cache")])
         if path.startswith("/artefacts/"):
             return self.artefact(path[len("/artefacts/"):])
         if path in STATIC:

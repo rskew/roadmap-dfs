@@ -589,6 +589,50 @@ class Web(unittest.TestCase):
         self.assertEqual((status, body["background"]), (200, none))
         self.assertFalse((self.root / ".dfs" / "background").exists())
 
+    def test_a_background_image_is_set_served_and_cleared_apart_from_the_colours(self):
+        import base64
+        png = b"\x89PNG\r\n\x1a\n" + b"pixels"
+        send = lambda raw: self.call("POST", "/api/background-image", dict(image=base64.b64encode(raw).decode()))
+        self.assertIn("IMAGE = \"\"", self.call("GET", "/")[1].decode())
+        self.assertEqual(self.call("GET", "/api/state")[1]["background_image"], "")
+        self.assertEqual(self.call("GET", "/background-image")[0], 404)
+        self.call("POST", "/api/background", dict(light="#fff2cc"))
+        status, body, _ = send(png)
+        ver = body["background_image"]
+        self.assertEqual((status, bool(ver)), (200, True))
+        status, raw, r = self.call("GET", "/background-image")
+        self.assertEqual((status, raw, r.getheader("Content-Type"), r.getheader("Cache-Control")),
+                         (200, png, "image/png", "no-cache"))
+        self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
+        st = self.call("GET", "/api/state")[1]
+        self.assertEqual((st["background_image"], st["background"]["light"]), (ver, "#fff2cc"))
+        self.assertIn('IMAGE = "%s"' % ver, self.call("GET", "/")[1].decode())
+        os.utime(self.root / ".dfs" / "background-image", ns=(1, 1))
+        self.assertNotEqual(self.call("GET", "/api/state")[1]["background_image"], ver)
+        self.assertEqual(send(b"GIF89a....")[1]["background_image"] != ver, True)
+        self.assertEqual(self.call("GET", "/background-image")[2].getheader("Content-Type"), "image/gif")
+        for bad in (dict(), dict(image=5), dict(image="not base64!"), dict(image=base64.b64encode(b"text").decode()),
+                    dict(image=base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\0" * dfs_paths.IMAGE_MAX).decode())):
+            self.assertEqual(self.call("POST", "/api/background-image", bad)[0], 400, str(bad)[:30])
+        self.assertEqual(self.call("GET", "/background-image")[2].getheader("Content-Type"), "image/gif")
+        def declared(path, n):          # a body of length n announced, not sent: the answer comes first
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+            conn.request("POST", path, headers={"Content-Type": "application/json", "Content-Length": str(n)})
+            return conn.getresponse().status
+        self.assertEqual(declared("/api/background-image", dfs_web.IMAGE_BODY + 1), 413)
+        big = b"\x89PNG\r\n\x1a\n" + b"\0" * (2 * dfs_web.MAX_BODY)        # a picture past the usual body limit
+        self.assertEqual((send(big)[0], len(self.call("GET", "/background-image")[1])), (200, len(big)))
+        self.assertEqual(declared("/api/background", dfs_web.MAX_BODY + 1), 413)
+        self.assertEqual(self.call("POST", "/api/background-image", dict(image=""), headers={"Origin": "https://evil.example"})[0], 403)
+        self.assertEqual(self.call("POST", "/api/background-image", "{}", ctype="text/plain")[0], 415)
+        self.assertEqual(self.call("POST", "/api/background-image", dict(image=""), headers={"Host": "evil.example"})[0], 421)
+        self.assertEqual(self.call("GET", "/background-image", headers={"Host": "evil.example"})[0], 421)
+        status, body, _ = self.call("POST", "/api/background-image", dict(image=""))
+        self.assertEqual((status, body), (200, dict(background_image="")))
+        self.assertEqual(self.call("GET", "/background-image")[0], 404)
+        self.assertFalse((self.root / ".dfs" / "background-image").exists())
+        self.assertEqual(self.call("GET", "/api/state")[1]["background"]["light"], "#fff2cc")
+
     def test_the_dark_washes_stay_visible_and_their_text_readable(self):
         import re
         css = (Path(dfs_web.__file__).parent / "web" / "design.css").read_text()
