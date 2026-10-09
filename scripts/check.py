@@ -33,6 +33,9 @@ edited log line or a rewritten determination erases what the author reviews. So:
       (`tree.py shelve`). The archive is then the only copy, so it only grows,
       at its end: HEAD's nonblank lines must open it, in order, since a line's
       heading is the nearest one above it
+    - a node, new in this commit or with its Ask changed, that states an `Ask:`
+      (`check_no_new_ask`): a choice the author may want the other way is a Hypothesis.
+      An Ask already at HEAD stays as committed
     - a live node, new in this commit or with its Hypothesis changed, that states a
       Hypothesis naming no interactive artefact: a `.dfs/artefacts/<name>.html` that
       exists and has an input, button, select, textarea or details with a handler
@@ -456,6 +459,23 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
     return bad
 
 
+def check_no_new_ask(task, text, head):
+    """No node may gain or change an `Ask:`. A choice the author may want the other way
+    is a Hypothesis, which says what would show it wrong and carries evidence and an
+    artefact; an Ask has none of those, so nothing can refute it. An Ask already at HEAD,
+    unchanged, is history and still parses, displays and counts; deleting one is allowed."""
+    was = ({nd["id"]: nd for nd in dfs_tree.parse(head, task)["nodes"]} if head else {})
+    bad = []
+    for nd in dfs_tree.parse(text, task)["nodes"]:
+        ask = (nd["fields"].get("Ask") or "").strip()
+        old = was.get(nd["id"])
+        if ask and (not old or (old["fields"].get("Ask") or "").strip() != ask):
+            bad.append("%s adds an Ask. Write it as a Hypothesis instead: the assumption, "
+                       "`Wrong if` what would show it wrong, evidence, and an artefact "
+                       "(templates/_TEMPLATE_ASSUMPTION.html)" % nd["id"])
+    return bad
+
+
 # A node that points at another instead of saying the thing. SKILL.md: a session, the
 # critic and the screen each read ONE node without the rest of the tree.
 BACKREF = re.compile(r"^\s*(see|as in|same as|as for|fix what|the other|per|like)\b|"
@@ -542,6 +562,8 @@ def main() -> int:
                 fatal += ["%s: %s" % (rel, b)
                           for b in check_assumptions(task, text, head, read, arc,
                                                      at_head(arc_dir / tasks[task][tag]) or "")]
+            if judge_writer:
+                fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, head)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
                 fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, head)]
             now_tok = len(text) // 4
