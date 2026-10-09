@@ -208,9 +208,8 @@ it. It is one self-contained HTML page in `.dfs/artefacts/`, **written mobile-fi
 (the author reads on a phone: start from the templates, which stack at 360px and widen
 from 720px), checked with `<scripts>/artefact_check.sh`, which also renders it at 360px,
 and its screenshot looked at. Name it in the raise by its
-path, `.dfs/artefacts/<uuid>.html`: the author's web page turns that into a link, and
-the screen's `v` pane lists it. Never the bare filename: `tree.py log raise` refuses a
-raise that names an artefact without its path. (`http://localhost:<port>/<uuid>.html` still works.) How to
+path, `.dfs/artefacts/<uuid>.html`: the author's web page turns that into a link (a bare filename links too), and
+the screen's `v` pane lists it. (`http://localhost:<port>/<uuid>.html` still works.) How to
 write one is `<scripts>/../docs/artefacts.md`; read it before starting one. The raise must
 still be answerable with the artefact gone, so the options and your recommendation stay
 written out in the raise itself. Skip it only for what has no shape to draw: a budget, a

@@ -62,10 +62,10 @@ box (`overflow-x: auto`) rather than widening the page, and says so in its capti
    catches what no assertion does (a diagram that is legible and still says the
    wrong thing), and reading it costs context, so not on every iteration.
 4. Reference it by its path, `.dfs/artefacts/<uuid>.html`, in the raise (or the
-   Hypothesis, Ask or Summary it belongs to). The web page links that path to the page it
-   serves at `/artefacts/<uuid>.html`, and lists every artefact a task names under the
-   task; the screen's `v` pane lists them too. Never the bare filename: `tree.py log raise`
-   refuses a raise that names a file in `.dfs/artefacts` without the path. The older form,
+   Hypothesis, Ask or Summary it belongs to). The web page makes that path an `<a>` with the
+   relative href `artefacts/<uuid>.html` (the text is read in the page, which serves it
+   there), as it does a bare `<uuid>.html` naming a file the task has, and lists every artefact a task names under the
+   task; the screen's `v` pane lists them too. The older form,
    `http://localhost:<port>/<uuid>.html` (`DFS_ARTEFACT_PORT`, 3016 unless set), still
    works in both, but it needs something serving that port, and the path does not.
 
@@ -107,7 +107,7 @@ server. There it can
   the same entry the terminal writes, but only for an open raise that names this page on a
   line of its own, `Answer with: .dfs/artefacts/<uuid>.html`. A raise may link several
   pages to look at; the `Answer with:` line picks the one that answers, and `tree.py log
-  raise` refuses one that names a page that is not there, or not by its path. `raise` in the GET is that raise
+  raise` refuses one that names a page that is not there. `raise` in the GET is that raise
   while it is open, so the page can show its send button only when there is something to
   answer.
 

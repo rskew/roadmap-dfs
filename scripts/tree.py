@@ -564,27 +564,6 @@ def answer_page(body):
     return m.group(1) if m else None
 
 
-# An artefact is named in a raise by its path, `.dfs/artefacts/<name>`: the web page links that,
-# and a bare filename it does not. The older `localhost:<port>/<name>` URL still counts as a path.
-BARE_ARTEFACT = re.compile(r"(?<![0-9A-Za-z._/-])([0-9A-Za-z][0-9A-Za-z._-]*\.(?:html|png|jpe?g|gif|webp|svg))\b",
-                           re.I)
-ANSWER_LINE = re.compile(r"^[ \t]*Answer with:[ \t]*(\S+)", re.I | re.M)
-
-
-def bare_artefacts(body):
-    """The artefact files a raise names by filename alone: any `Answer with:` page not given as
-    `.dfs/artefacts/<name>.html`, and any other name that is a file in `.dfs/artefacts`."""
-    out = []
-    for m in ANSWER_LINE.finditer(body or ""):
-        if answer_page(m.group(0)) and not m.group(1).startswith(".dfs/artefacts/"):
-            out.append(m.group(1).split("/")[-1])
-    root = dfs_paths.artefacts()
-    for m in BARE_ARTEFACT.finditer(body or ""):
-        if (root / m.group(1)).is_file() and m.group(1) not in out:
-            out.append(m.group(1))
-    return out
-
-
 def append_log(task, kind, args=(), body=""):
     """Append one entry, keyed by a timestamp later than every other in this file,
     and re-render: the Log section is found by name, wherever it is."""
@@ -594,10 +573,6 @@ def append_log(task, kind, args=(), body=""):
     if page and not (dfs_paths.artefacts() / page).is_file():
         raise ValueError("the raise says to answer with %s, which is not in %s"
                          % (page, dfs_paths.rel(dfs_paths.artefacts())))
-    bare = bare_artefacts(body) if kind == "raise" else []
-    if bare:
-        raise ValueError("the raise names %s by filename alone; write the path, %s/%s"
-                         % (", ".join(bare), dfs_paths.rel(dfs_paths.artefacts()), bare[0]))
     p = ensure_part(task)
     t = parse(p.read_text(), task)
     ts = now_ts()

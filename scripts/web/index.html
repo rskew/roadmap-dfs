@@ -585,16 +585,18 @@ function drawTask() {
   $("#view").className = ""; $("#view").innerHTML = html + `</div>`;
   if (thumbScale) document.querySelectorAll("#view .thumb").forEach(el => thumbScale.observe(el));
 }
-/* An artefact named in prose (`.dfs/artefacts/<name>.html`, or the localhost URL older raises carry)
-   becomes a link to the page this server serves, when the task has it; a screenshot (`<name>.png`, or
-   `![alt](.dfs/artefacts/<name>.png)`) is drawn in place, tap for full size. Text is escaped first. */
-const ART_RE = /(!\[([^\]\n]*)\]\()?(?:https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/|(?:\.dfs\/)?artefacts\/)([0-9A-Za-z][0-9A-Za-z._-]*\.(?:html|png|jpe?g|gif|webp|svg))(\))?/gi;
+/* An artefact named in prose (`.dfs/artefacts/<name>.html`, the bare `<name>.html`, or the localhost URL
+   older raises carry) becomes an <a> whose href is the relative path `artefacts/<name>`, since the text
+   is read in this page, which serves it there; it links only when the task has the file. A screenshot
+   (`<name>.png`, or `![alt](.dfs/artefacts/<name>.png)`) is drawn in place, tap for full size. Text is
+   escaped first. */
+const ART_RE = /(?<![0-9A-Za-z._\/-])(!\[([^\]\n]*)\]\()?(?:https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/|(?:\.dfs\/)?artefacts\/)?([0-9A-Za-z][0-9A-Za-z._-]*\.(?:html|png|jpe?g|gif|webp|svg))(\))?/gi;
 function rich(text) {
   const have = new Map(((S.task && S.task.artefacts) || []).map(a => [a.file, a]));
   return esc(text).replace(ART_RE, (m, md, alt, name, close) => {
     const a = have.get(name);
     if (!a || (md && !close)) return m;
-    const href = `/artefacts/${name}`;
+    const href = `artefacts/${name}`;
     if (a.kind === "image")
       return `<a class="shot" href="${href}" target="_blank" rel="noopener"><img src="${href}" alt="${alt || esc(a.title)}" loading="lazy"></a>`;
     return `<a class="art" href="${href}" target="_blank" rel="noopener">${esc(a.title)}</a>`;
@@ -643,7 +645,7 @@ const thumbScale = typeof ResizeObserver === "function"
 function artefactsHtml(t) {
   const arts = t.artefacts || [];
   if (!arts.length) return "";
-  const href = a => `/artefacts/${esc(a.file)}`;
+  const href = a => `artefacts/${esc(a.file)}`;
   const card = a => `<a class="tile" href="${href(a)}" target="_blank" rel="noopener"><span class="thumb">${a.kind === "image"
     ? `<img src="${href(a)}" alt="" loading="lazy">`
     : `<iframe src="${href(a)}" title="${esc(a.title)}" tabindex="-1" loading="lazy" scrolling="no" width="${THUMB_W}" height="${THUMB_W * 2 / 3}"></iframe>`}</span><span class="name">${esc(a.title)}</span></a>`;
@@ -768,7 +770,7 @@ function answerForm(ts) {
   const r = S.task.rows.flatMap(x => x.kind === "raise" ? [x] : x.kind === "node" ? x.raises : []).find(x => x.ts === ts);
   const page = answerPage(r);
   form(`<h3>Answer the raise</h3><div class="quote">${esc(r ? r.body : "")}</div>
-    ${page ? `<iframe id="answerpage" class="answerpage" src="/artefacts/${esc(page.file)}" title="${esc(page.title)}" sandbox="allow-scripts"></iframe>` : ""}
+    ${page ? `<iframe id="answerpage" class="answerpage" src="artefacts/${esc(page.file)}" title="${esc(page.title)}" sandbox="allow-scripts"></iframe>` : ""}
     <div><label for="b">${page ? "Or in your own words, instead of the page" : "Your answer, in your own words"}</label><textarea id="b" name="body" required></textarea></div>${buttons("Record answer")}`,
     async fd => wrote(await api("/api/answer", { task: S.task.id, ts, body: fd.get("body") }), "Answered."));
 }

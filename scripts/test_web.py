@@ -302,20 +302,6 @@ class Web(unittest.TestCase):
         self.assertEqual(dfs_tree.answer_page("Answer with: gone.html"), "gone.html")
         self.assertIsNone(dfs_tree.answer_page("Look at .dfs/artefacts/x.html. Answer with words."))
 
-    def test_a_raise_names_an_artefact_by_its_path_not_its_bare_filename(self):
-        self.put_artefact()
-        self.put_artefact("shot-1.png")
-        before = len([e for e in self.log() if e["kind"] == "raise"])
-        for body in ("Which? See 0a1b2c.html.", "Which?\nAnswer with: 0a1b2c.html", "Which?\nAnswer with: artefacts/0a1b2c.html",
-                     "Looks like shot-1.png."):
-            with self.assertRaises(ValueError, msg=body) as e:
-                dfs_tree.append_log("W1", "raise", (), body)
-            self.assertIn(".dfs/artefacts/", str(e.exception))
-        for body in ("Which? See .dfs/artefacts/0a1b2c.html, or http://localhost:3016/0a1b2c.html, or gone.html.",
-                     "Looks like ![bar](.dfs/artefacts/shot-1.png).\nAnswer with: .dfs/artefacts/0a1b2c.html"):
-            dfs_tree.append_log("W1", "raise", (), body)
-        self.assertEqual(len([e for e in self.log() if e["kind"] == "raise"]), before + 2)
-
     def test_a_task_lists_only_the_artefacts_it_names(self):
         self.put_artefact()
         self.put_artefact("standing-map.html", "The standing map")
@@ -362,12 +348,18 @@ class Web(unittest.TestCase):
               "const S = {task: {artefacts: [{file:'s.png',title:'s.png',kind:'image'},"
               "{file:'m.html',title:'The map',kind:'page'}]}};" + body +
               "console.log(JSON.stringify([rich('a ![the bar](.dfs/artefacts/s.png) b'),"
-              "rich('.dfs/artefacts/m.html'), rich('artefacts/gone.png <i>'), rich('![x](artefacts/s.png')]))")
+              "rich('.dfs/artefacts/m.html'), rich('artefacts/gone.png <i>'), rich('![x](artefacts/s.png'),"
+              "rich('see m.html, or s.png'), rich('not-m.html x/m.html gone.html')]))")
         out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(out[0], 'a <a class="shot" href="/artefacts/s.png" target="_blank" rel="noopener">'
-                                 '<img src="/artefacts/s.png" alt="the bar" loading="lazy"></a> b')
-        self.assertIn('<a class="art" href="/artefacts/m.html"', out[1])
-        self.assertEqual(out[2:], ["artefacts/gone.png &lt;i>", "![x](artefacts/s.png"])
+        self.assertEqual(out[0], 'a <a class="shot" href="artefacts/s.png" target="_blank" rel="noopener">'
+                                 '<img src="artefacts/s.png" alt="the bar" loading="lazy"></a> b')
+        self.assertIn('<a class="art" href="artefacts/m.html"', out[1])
+        self.assertEqual(out[2:4], ["artefacts/gone.png &lt;i>", "![x](artefacts/s.png"])
+        # a bare filename of an artefact the task has is linked the same way, relative to the page
+        self.assertIn('see <a class="art" href="artefacts/m.html"', out[4])
+        self.assertIn('or <a class="shot" href="artefacts/s.png"', out[4])
+        # but not one inside a longer name or path, nor a file the task does not have
+        self.assertEqual(out[5], "not-m.html x/m.html gone.html")
 
     def test_flagged_only_keeps_the_nodes_that_want_the_author(self):
         """visibleRows() in index.html, run under node (skipped when there is none)."""
@@ -441,8 +433,8 @@ class Web(unittest.TestCase):
               "{file:'s.png',title:'s.png',kind:'image'},"
               "{file:'m.html',title:'The <map>',kind:'page'}]}), artefactsHtml({artefacts: []}))")
         out = subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout
-        self.assertIn('<img src="/artefacts/s.png"', out)
-        self.assertIn('<iframe src="/artefacts/m.html" title="The &lt;map>"', out)
+        self.assertIn('<img src="artefacts/s.png"', out)
+        self.assertIn('<iframe src="artefacts/m.html" title="The &lt;map>"', out)
         self.assertEqual(out.count("<iframe"), 1)
         self.assertNotIn("project", out)
         self.assertNotIn("<li>", out)
