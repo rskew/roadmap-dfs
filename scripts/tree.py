@@ -1095,6 +1095,37 @@ def node_commits(task, cwd=None):
     return found
 
 
+_unpushed_seen = {}
+
+
+def unpushed(cwd=None, ttl=5.0):
+    """`(shas, {task: count})` for the node commits HEAD has and `origin/main` lacks, or
+    None when there is no `origin/main` here to compare with. `origin/main` is as last
+    fetched: nothing here touches the network. Kept `ttl` seconds, since the screens
+    ask on every draw and a push moves no file their own caches are keyed by."""
+    key = str(cwd or dfs_paths.work_root())
+    hit = _unpushed_seen.get(key)
+    if hit and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    got = None
+    try:
+        r = subprocess.run(["git", "log", "--format=%H%x09%s", "origin/main..HEAD"],
+                           capture_output=True, text=True, cwd=key)
+        if r.returncode == 0:
+            shas, tasks = set(), {}
+            for line in r.stdout.splitlines():
+                sha, _, subj = line.partition("\t")
+                shas.add(sha)
+                m = re.match(r"^(%s)\.\d+(?:@%s)?:" % (TASK_RE, TAG_RE), subj)
+                if m:
+                    tasks[m.group(1)] = tasks.get(m.group(1), 0) + 1
+            got = (shas, tasks)
+    except OSError:
+        pass
+    _unpushed_seen[key] = (time.monotonic(), got)
+    return got
+
+
 def reverted_shas(cwd=None):
     try:
         out = subprocess.run(["git", "log", "--format=%B", "--grep=This reverts commit"],

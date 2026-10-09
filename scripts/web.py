@@ -121,7 +121,7 @@ def state_json():
             assumptions=list(it.get("assumptions") or ()),
             corrections=list(it.get("corrections") or ()),
             waiting_on=it.get("waiting_on") or "", blocked_by=it.get("blocked_by") or "",
-            segment=it.get("segment", 0)))
+            segment=it.get("segment", 0), ahead=it.get("ahead", 0)))
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()))

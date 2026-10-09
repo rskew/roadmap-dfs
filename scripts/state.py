@@ -123,6 +123,9 @@ def state_for(task: str):
     corr = [c for c in dfs_tree.corrections(t) if not c["done"]]
     return dict(
         item=task, status=status, why=why,
+        # Node commits HEAD has and origin/main (as last fetched) lacks; 0 when none
+        # or when there is no origin/main to say.
+        ahead=((dfs_tree.unpushed() or (set(), {}))[1]).get(task, 0),
         sessions=since_author, since_critic=since_critic,
         critic_due=int(since_critic >= dfs_tree.CRITIC_EVERY),
         review_due=int(dfs_tree.review_due(t) and status == "open"

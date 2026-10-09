@@ -251,7 +251,10 @@ def node_detail(nd, archived=None, commits=()):
         out.append(("Determination", f["Determination"]))
     skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination", "Ask", "Corrects")
     out += [(k, v) for k, v in f.items() if k not in skip]
-    out += [("Commit", "%s %s" % (sha[:7], subj)) for sha, subj, _at in commits]
+    # A commit HEAD has and origin/main lacks says so on its line.
+    off = (dfs_tree.unpushed() or (set(), {}))[0]
+    out += [("Commit", "%s %s%s" % (sha[:7], subj, " · not on origin/main" if sha in off else ""))
+            for sha, subj, _at in commits]
     return out
 
 
@@ -1533,6 +1536,12 @@ def review_cell(it):
     return "accept" if it.get("standing") else ""
 
 
+def ahead_cell(it):
+    """`ahead 3` when 3 of this task's node commits are not on origin/main, else "".
+    Blank at zero for the reason `review_cell` is."""
+    return "ahead %d" % it["ahead"] if it.get("ahead") else ""
+
+
 # ---- the look -----------------------------------------------------------------
 #
 # ⚠️ QUIET CHROME, PLAIN CONTENT, AND NEVER THE TERMINAL'S BACKGROUND. What made the
@@ -2435,6 +2444,9 @@ class UI(WalkMixin):
         revs = {it["id"]: review_cell(it) for it in self.items}
         revw = max([len(r) for r in revs.values()] + [0])
         revw = revw + 2 if revw else 0
+        aheads = {it["id"]: ahead_cell(it) for it in self.items}
+        aheadw = max([len(a) for a in aheads.values()] + [0])
+        aheadw = aheadw + 2 if aheadw else 0
         for i in range(min(height, len(rows) - self.list_scroll)):
             kind, val = rows[self.list_scroll + i]
             y = top + i
@@ -2465,8 +2477,10 @@ class UI(WalkMixin):
                 state = "✓ done"
             rev = revs[it["id"]]
             cell = ("  " * it["depth"]) + it["id"]
-            line = "%s %s %s %s%s%s" % (marker, cell.ljust(idw), state.ljust(statw),
-                                        rev.ljust(revw), tag.ljust(tagw), it["goal"])
+            ahead = aheads[it["id"]]
+            line = "%s %s %s %s%s%s%s" % (marker, cell.ljust(idw), state.ljust(statw),
+                                          rev.ljust(revw), ahead.ljust(aheadw),
+                                          tag.ljust(tagw), it["goal"])
             band = attr & curses.A_REVERSE
             # ⚠️ A DONE row recedes whole (id, goal and all), not just its status
             # word: that one word's colour was the only thing telling a finished
@@ -2493,8 +2507,10 @@ class UI(WalkMixin):
                 # put the selected row's status one column right of every other row's.
                 if rev:
                     self.put(y, 3 + idw + statw, rev.ljust(revw), look("amber"))
+                if ahead:
+                    self.put(y, 4 + idw + statw + revw, ahead.ljust(aheadw), look("chrome"))
                 if tag:
-                    self.put(y, 4 + idw + statw + revw, tag, tag_attr)
+                    self.put(y, 4 + idw + statw + revw + aheadw, tag, tag_attr)
 
     def wrapper(self, width):
         w = max(20, width - 2)
