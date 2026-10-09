@@ -639,6 +639,26 @@ class Web(unittest.TestCase):
         self.assertEqual(w1["rev"], "rev 2")          # the raise and the assumption
         self.assertNotIn("2026-09-25T", w1["why"], "a timestamp is shown as an age")
 
+    def test_a_row_says_if_a_chain_is_running_on_it_and_if_the_walk_takes_it_next(self):
+        row = lambda: self.call("GET", "/api/state")[1]["items"][0]
+        self.fake.next_item = None
+        self.assertEqual((row()["running"], row()["next"]), ("", False))
+        self.fake.next_item = "W1"
+        self.fake.run_dirs = [test_walker.run("d1", "W1", live=True, run_no="2", cap="5")]
+        self.assertEqual((row()["running"], row()["next"]), ("run 2/5", True))
+
+    def test_the_walks_pin_is_the_next_task_while_it_is_open_and_the_order_otherwise(self):
+        self.fake.pin("W2")
+        self.fake.next_item = "W1"
+        rows = lambda s2: dict(items=[dict(id="W1", status="open"), dict(id="W2", status=s2)],
+                               next_item="W1")
+        self.assertEqual(dfs_web.walk_marks(rows("open"))[1], "W2")
+        self.assertEqual(dfs_web.walk_marks(rows("done"))[1], "W1")
+
+    def test_with_the_walk_off_the_rows_still_say_what_runs_and_what_is_next(self):
+        dfs_web.WALK.update(enabled=False)
+        self.assertEqual(dfs_web.walk_marks(dict(items=[], next_item="W4")), ({}, "W4"))
+
     def test_a_node_drawn_at_its_parents_column_says_it_is_a_chain_step(self):
         rows = {r["key"]: r for r in self.task()["rows"] if r["kind"] == "node"}
         self.assertEqual({k: (r["depth"], r["chain"]) for k, r in rows.items()},

@@ -111,9 +111,25 @@ def needs_you(it):
                 or it.get("standing") or it.get("corrections"))
 
 
+def walk_marks(data):
+    """Which task a work chain is running on now (item -> its progress), and which the walk
+    takes next: its pin while that task is open, else the order's answer. What the rows
+    say beside the terminal's running and next columns."""
+    if WALK["enabled"]:
+        snap = walker().snapshot()
+        running = {c["item"]: c["progress"] for c in snap["live"]}
+        pinned, auto = snap["pinned"], snap["auto"]
+    else:
+        running = {r["item"]: dfs_runs.progress(r) for r in dfs_runs.live_runs("work")}
+        pinned, auto = None, data.get("next_item")
+    pin_open = any(i["id"] == pinned and i["status"] == "open" for i in data["items"])
+    return running, (pinned if pin_open else auto)
+
+
 def state_json():
     """The task list: the rows `state.py --json` gives the terminal, plus `rev`."""
     data = dfs_state.full()
+    running, nxt = walk_marks(data)
     items = []
     for it in data["items"]:
         items.append(dict(
@@ -124,7 +140,8 @@ def state_json():
             corrections=list(it.get("corrections") or ()),
             waiting_on=it.get("waiting_on") or "", blocked_by=it.get("blocked_by") or "",
             segment=it.get("segment", 0), ahead=it.get("ahead", 0), base=it.get("base") or "origin/main",
-            uncommitted=bool(it.get("uncommitted"))))
+            uncommitted=bool(it.get("uncommitted")),
+            running=running.get(it["id"], ""), next=it["id"] == nxt))
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
