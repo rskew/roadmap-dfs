@@ -1031,6 +1031,26 @@ def accepted(t):
     return bool(last_acc) and last_acc >= last_work
 
 
+# The page a node's Hypothesis names as its artefact, by path inside the Hypothesis; the name has
+# no slash, so it cannot leave `.dfs/artefacts`. That page may confirm or refute the node
+# (web.py's `/artefact-state/<name>`).
+ARTEFACT_REF = re.compile(r"\.dfs/artefacts/([\w.-]+\.html)(?![\w-]|\.\w)")
+
+
+def deciding_node(page, tasks=None):
+    """The (task, node id) whose Hypothesis names `page` and that is still waiting on the author:
+    live, not parked, not yet ruled on (`assumed`). None when no node is."""
+    for task in (tasks if tasks is not None else task_ids()):
+        t = load(task)
+        status, _ = effective(t)
+        nodes = by_id(t)
+        for nid in assumed(t):
+            nd = nodes[nid]
+            if status[nid] != "parked" and page in ARTEFACT_REF.findall(nd["fields"].get("Hypothesis") or ""):
+                return task, nid
+    return None
+
+
 def assumed(t):
     """The live nodes that rest on an assumption (they state a Hypothesis), in tree order,
     and those of an older tree that put a question to the author (they state an Ask,

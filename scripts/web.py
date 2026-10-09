@@ -455,10 +455,22 @@ def answering_raise(page):
     return None
 
 
+def record_correction(task, nid, verdict, why):
+    """The author's ruling on a node, as the web form and an assumption's page both give it."""
+    t = dfs_tree.load(task)
+    if nid not in dfs_tree.by_id(t) or verdict not in ("confirmed", "refuted"):
+        raise Refused("a node, and confirmed or refuted, are needed")
+    if not isinstance(why, str) or not why.strip():
+        raise Refused("a directive is needed")
+    dfs_tree.append_log(task, "correct", [nid, verdict], why.strip())
+
+
 def artefact_state(page, body=None):
     """What `/artefact-state/<page>` says and does. Without a body it tells the page what the reader
-    left on it (`state`) and the raise it answers (`raise`, while that is open). A body `{state, answer}`
-    keeps the state, and records `answer` as the author's answer to the raise the page is named for."""
+    left on it (`state`), the raise it answers (`raise`, while that is open) and the node whose
+    Hypothesis names it while that waits on the author (`node`). A body `{state, answer}` keeps the
+    state, and records `answer` as the author's answer to the raise the page is named for; with
+    `verdict` ("confirmed" or "refuted") the answer is instead the author's ruling on that node."""
     root = dfs_paths.artefacts()
     if not re.fullmatch(ART_NAME, page) or not page.lower().endswith(".html") or not (root / page).is_file():
         raise Refused("no such page", 404)
@@ -466,8 +478,16 @@ def artefact_state(page, body=None):
     answered = None
     if body is not None:
         with LOCK:
-            found = None
-            if "answer" in body:
+            found = ruling = None
+            if "verdict" in body:
+                ruling = dfs_tree.deciding_node(page)
+                if not ruling:
+                    raise Refused("no node waiting on the author names this page in its Hypothesis", 409)
+                if body["verdict"] not in ("confirmed", "refuted"):
+                    raise Refused("the verdict is confirmed or refuted")
+                if not isinstance(body.get("answer"), str) or not body["answer"].strip():
+                    raise Refused("a directive is needed")
+            elif "answer" in body:
                 text = body["answer"]
                 if not isinstance(text, str) or not text.strip():
                     raise Refused("an answer is needed")
@@ -483,6 +503,9 @@ def artefact_state(page, body=None):
                 task, r = found
                 dfs_tree.append_log(task, "answer", [r["ts"]], text.strip())
                 answered = dict(task=task, ts=r["ts"])
+            if ruling:
+                record_correction(*ruling, body["verdict"], body["answer"])
+                answered = dict(task=ruling[0], node=ruling[1], verdict=body["verdict"])
         if answered:
             HUB.notify()
     found = answering_raise(page)
@@ -490,8 +513,10 @@ def artefact_state(page, body=None):
         saved = json.loads(f.read_text())
     except (OSError, ValueError):
         saved = None
+    node = dfs_tree.deciding_node(page)
     return {"state": saved, "answered": answered,
-            "raise": dict(task=found[0], ts=found[1]["ts"]) if found else None}
+            "raise": dict(task=found[0], ts=found[1]["ts"]) if found else None,
+            "node": dict(task=node[0], id=node[1]) if node else None}
 
 
 def act(name, body):
@@ -508,11 +533,7 @@ def act(name, body):
             dfs_tree.append_log(task, "answer", [ts], need(body, "body", "an answer"))
         elif name == "correct":
             nid = need(body, "node", "the node")
-            verdict = body.get("verdict")
-            if nid not in nodes or verdict not in ("confirmed", "refuted"):
-                raise Refused("a node, and confirmed or refuted, are needed")
-            dfs_tree.append_log(task, "correct", [nid, verdict],
-                                need(body, "body", "a directive"))
+            record_correction(task, nid, body.get("verdict"), need(body, "body", "a directive"))
         elif name == "accept":
             if not (dfs_tree.status_of(t)[0] == "done" and not dfs_tree.accepted(t)):
                 raise Refused("%s is not a finished tree waiting to be accepted" % task, 409)

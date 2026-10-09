@@ -400,12 +400,11 @@ def check_history(task, text, head, archive=""):
     return bad
 
 
-# An assumption's artefact is named by its path inside the Hypothesis; the name has no
-# slash, so it cannot leave `.dfs/artefacts`. Interactive is the page having a control
-# and a handler that answers it: a looked-at picture is a raise's artefact, not an
-# assumption's, and a button nothing listens to is a picture. A floor, not a proof of
-# a good page: the author's reading of the page is what judges that.
-ARTEFACT_REF = re.compile(r"\.dfs/artefacts/([\w.-]+\.html)(?![\w-]|\.\w)")
+# An assumption's artefact is named by its path inside the Hypothesis (`dfs_tree.ARTEFACT_REF`).
+# Interactive is the page having a control and a handler that answers it: a looked-at
+# picture is a raise's artefact, not an assumption's, and a button nothing listens to is a
+# picture. A floor, not a proof of a good page: the author's reading of the page judges that.
+ARTEFACT_REF = dfs_tree.ARTEFACT_REF
 _TAGS = "input|button|select|textarea|details"
 CONTROL = re.compile(r"<(?:%s)\b|createElement\(\s*['\"](?:%s)['\"]" % (_TAGS, _TAGS), re.I)
 HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|toggle|key\w+|"

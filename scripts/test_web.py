@@ -242,7 +242,7 @@ class Web(unittest.TestCase):
         self.assertIn("connect-src 'self'", csp)
         status, data, r = self.page_call("GET", "0a1b2c.html")
         self.assertEqual((status, data, r.getheader("Access-Control-Allow-Origin")),
-                         (200, {"state": None, "answered": None, "raise": None}, "*"))
+                         (200, {"state": None, "answered": None, "raise": None, "node": None}, "*"))
         status, data, r = self.page_call("POST", "0a1b2c.html", {"state": {"chosen": "b", "knob": 7}})
         self.assertEqual((status, data["state"]), (200, {"chosen": "b", "knob": 7}))
         self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["state"], {"chosen": "b", "knob": 7})
@@ -289,6 +289,40 @@ class Web(unittest.TestCase):
         status, data, r = self.call("POST", "/artefact-state/0a1b2c.html", "{}", ctype="text/plain",
                                     headers={"Content-Length": "many"})
         self.assertEqual((status, r.getheader("Access-Control-Allow-Origin")), (400, "*"))
+
+    def assume(self, page="0a1b2c.html"):
+        f = self.root / ".dfs" / "items" / "W1.md"
+        f.write_text(f.read_text().replace(
+            "Approach: Run test_churn.py", "Hypothesis: Churn is from many clients. Wrong if one client. "
+            ".dfs/artefacts/%s\nApproach: Run test_churn.py" % page))
+
+    def test_the_page_a_hypothesis_names_confirms_or_refutes_its_node_and_no_other_page_can(self):
+        self.put_artefact()
+        self.put_artefact("other.html", "Another page")
+        self.assume()
+        self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["node"], {"task": "W1", "id": "W1.3"})
+        self.assertIsNone(self.page_call("GET", "other.html")[1]["node"])
+        verdict = lambda page, **b: self.page_call("POST", page, b)[0]
+        self.assertEqual(verdict("other.html", verdict="refuted", answer="From the wrong page."), 409)
+        self.assertEqual(verdict("0a1b2c.html", verdict="maybe", answer="x"), 400)
+        self.assertEqual(verdict("0a1b2c.html", verdict="refuted", answer=" "), 400)
+        self.assertEqual([e for e in self.log() if e["kind"] == "correct"], [])
+        status, data, _ = self.page_call("POST", "0a1b2c.html", {
+            "state": {"pick": "one"}, "verdict": "refuted", "answer": "It was one client."})
+        self.assertEqual((status, data["answered"], data["node"], data["state"]),
+                         (200, {"task": "W1", "node": "W1.3", "verdict": "refuted"}, None, {"pick": "one"}))
+        e = [e for e in self.log() if e["kind"] == "correct"][-1]
+        self.assertEqual((e["args"], e["body"].strip()), (["W1.3", "refuted"], "It was one client."))
+        self.assertEqual(verdict("0a1b2c.html", verdict="confirmed", answer="Again."), 409,
+                         "the author has ruled; the page no longer decides it")
+
+    def test_a_parked_nodes_page_decides_nothing(self):
+        self.put_artefact()
+        self.assume()
+        f = self.root / ".dfs" / "items" / "W1.md"
+        f.write_text(f.read_text().replace("Status: open\nHypothesis", "Status: parked\nHypothesis"))
+        self.assertIsNone(self.page_call("GET", "0a1b2c.html")[1]["node"])
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", {"verdict": "confirmed", "answer": "x"})[0], 409)
 
     def test_a_raise_that_names_no_answering_page_is_answered_by_no_page(self):
         self.put_artefact()
