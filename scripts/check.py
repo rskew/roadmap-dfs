@@ -37,7 +37,8 @@ edited log line or a rewritten determination erases what the author reviews. So:
       Hypothesis naming no interactive artefact: a `.dfs/artefacts/<name>.html` that
       exists and has an input, button, select, textarea or details with a handler
       (addEventListener or onclick and the like) answering it (`check_assumptions`).
-      A node already at HEAD is judged as committed
+      A node already at HEAD is judged as committed, and a merge commit judges none
+      (the other branch's commits were judged there)
     - a task file or an archive HEAD holds, deleted (the limit case of the two
       rules above; a staged rename is followed, not refused). A task retired on
       purpose is the author's rewrite of history, committed with --no-verify
@@ -521,7 +522,7 @@ def main() -> int:
         here = None
         if dfs_paths.branch() is not None:   # two branches with one tag, not detached
             fatal.append(str(e))
-    judge_writer = not merging()
+    judge_writer = not merging()   # also: the other parent's commits were judged there
     tasks = {}
     for rel in now_items:
         task, tag = dfs_tree.part_of(rel)
@@ -537,9 +538,10 @@ def main() -> int:
             head = at_head(path)
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]
-            fatal += ["%s: %s" % (rel, b)
-                      for b in check_assumptions(task, text, head, read, arc,
-                                                 at_head(arc_dir / tasks[task][tag]) or "")]
+            if judge_writer:   # a merge brings in nodes judged on their own branch
+                fatal += ["%s: %s" % (rel, b)
+                          for b in check_assumptions(task, text, head, read, arc,
+                                                     at_head(arc_dir / tasks[task][tag]) or "")]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
                 fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, head)]
             now_tok = len(text) // 4

@@ -995,6 +995,34 @@ class Branches(InARepo):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.git("rev-parse -q --verify HEAD^2").returncode, 0)
 
+    OLD_HYPOTHESIS = ("## Tree\n\n### W1.1@fx · the other way\nParent: W1.1\nStatus: open\n"
+                      "Hypothesis: It holds. Wrong if not.\n")
+
+    def add_fx_hypothesis(self):
+        p = dfs_tree.ensure_part("W1")
+        t = dfs_tree.parse(p.read_text(), "W1")
+        t["nodes"].append(dfs_tree.parse(self.OLD_HYPOTHESIS, "W1")["nodes"][0])
+        p.write_text(dfs_tree.render(t))
+
+    def test_a_merge_does_not_judge_the_hypotheses_a_branch_brings_in(self):
+        self.hooked()
+        self.switch("checkout -qb fx")
+        self.add_fx_hypothesis()
+        self.commit()   # no pre-commit hook here: the branch was cut before the rule
+        self.switch("checkout -q master")
+        dfs_tree.append_log("W1", "session", ["work"])
+        self.commit()
+        r = self.git("merge --no-edit fx")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("names no artefact", r.stdout + r.stderr)
+
+    def test_a_plain_commit_adding_the_same_hypothesis_is_still_refused(self):
+        self.switch("checkout -qb fx")
+        self.add_fx_hypothesis()
+        rc, out = self.check()
+        self.assertNotEqual(rc, 0, out)
+        self.assertIn("W1.1@fx states a Hypothesis and names no artefact", out)
+
     def test_the_pre_merge_commit_hook_refuses_a_merge_that_removes_a_node(self):
         self.hooked()
         self.switch("checkout -qb fx")
