@@ -192,6 +192,9 @@ class Flows(unittest.TestCase):
     def test_reordering_the_task_list_writes_order_md(self):
         self.flow("reorder")
 
+    def test_all_in_the_bar_leaves_reorder(self):
+        self.flow("allleavesreorder")
+
     def test_a_forms_buttons_clear_the_keyboard(self):
         self.flow("keyboard")
 

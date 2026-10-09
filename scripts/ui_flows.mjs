@@ -527,6 +527,27 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // All in the bar leaves Reorder: pressed in reorder mode, and from the Chats screen after Reorder was on.
+  async allleavesreorder(b) {
+    const { page, errors } = await open(b, PHONE);
+    const all = "#tabs [data-act=only][data-v='0'][aria-current=page]";
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".moves");
+    await page.click("#tabs [data-act=only][data-v='0']");
+    await page.waitForSelector("button.item");
+    assert(!(await page.$(".moves")), "All takes the list out of Reorder");
+    assert(await page.$(all), "All is current after it");
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".moves");
+    await page.click("#tabs [data-tab=chats]");
+    await page.waitForFunction(() => !document.querySelector(".moves"));
+    await page.click("#tabs [data-act=only][data-v='0']");
+    await page.waitForSelector("button.item");
+    assert(!(await page.$(".moves")), "All from Chats shows the list out of Reorder");
+    assert(await page.$(all), "All is current after coming from Chats");
+    same(errors, [], "no page errors");
+  },
+
   // A new task from the floating button, and the title renamed by clicking it.
   async newtask(b) {
     const { page, errors } = await open(b, PHONE);
