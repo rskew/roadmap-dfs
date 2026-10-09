@@ -322,7 +322,8 @@ class Check(InARepo):
         return " | ".join(dfs_check.check_assumptions("W1", text, head, read, archive,
                                                       head_archive))
 
-    PAGE = "<button>decide</button><script>b.addEventListener('click', f)</script>"
+    RULES = "<script>fetch('/artefact-state/a1.html', {body: JSON.stringify({verdict: 'refuted', answer: 'x'})})</script>"
+    PAGE = "<button>decide</button><script>b.addEventListener('click', f)</script>" + RULES
 
     def test_a_hypothesis_must_name_an_interactive_artefact(self):
         def hyp(ref):
@@ -341,7 +342,13 @@ class Check(InARepo):
                      "<button onclick=\"go()\">x</button>",
                      "<script>var b = document.createElement('button');"
                      "b.addEventListener('click', f)</script>"):
-            self.assertEqual(self.assumed(hyp(art), pages={"a1.html": page}), "", page)
+            self.assertEqual(self.assumed(hyp(art), pages={"a1.html": page + self.RULES}), "", page)
+        # a page the reader can operate that cannot rule on its node is a picture of a decision
+        for page in ("<button onclick=\"go()\">x</button>",
+                     "<button onclick=\"go()\">x</button><script>fetch('/artefact-state/a1.html', "
+                     "{body: JSON.stringify({answer: 'x'})})</script>",
+                     "<button onclick=\"go()\">x</button><script>({verdict: 'refuted'})</script>"):
+            self.assertIn("cannot rule on its node", self.assumed(hyp(art), pages={"a1.html": page}), page)
         self.assertIn("names no artefact", self.assumed(hyp(".dfs/artefacts/../x.html")))
         # a sentence's full stop after the name is not part of it; a longer name is another file
         self.assertEqual(self.assumed(hyp(art + "."), pages={"a1.html": self.PAGE}), "")

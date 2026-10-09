@@ -215,7 +215,9 @@ class Web(unittest.TestCase):
     def put_artefact(self, name="0a1b2c.html", title="How the limiter is wired"):
         d = self.root / ".dfs" / "artefacts"
         d.mkdir(parents=True, exist_ok=True)
-        (d / name).write_text("<!doctype html><title>%s</title><p>hello</p>" % title)
+        (d / name).write_text("<!doctype html><title>%s</title><p>hello</p><script>"
+                              "fetch('/artefact-state/%s', {body: JSON.stringify({answer: 'x'})})</script>"
+                              % (title, name))
         (d / "_TEMPLATE.html").write_text("<title>template</title>")
         (self.root / ".dfs" / "secret.html").write_text("<title>not an artefact</title>")
 
@@ -332,6 +334,13 @@ class Web(unittest.TestCase):
         dfs_tree.append_log("W1", "raise", (), "Which design? See .dfs/artefacts/0a1b2c.html")
         self.assertEqual(self.page_call("POST", "0a1b2c.html", {"answer": "Mine."})[0], 409)
         self.assertEqual([e for e in self.log() if e["kind"] == "answer"], [])
+
+    def test_a_raise_cannot_name_an_answering_page_that_cannot_answer(self):
+        self.put_artefact()
+        (self.root / ".dfs" / "artefacts" / "still.html").write_text("<title>A picture</title><p>hello</p>")
+        with self.assertRaisesRegex(ValueError, "cannot answer"):
+            dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/still.html")
+        dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/0a1b2c.html")
 
     def test_a_raise_cannot_name_an_answering_page_that_does_not_exist(self):
         with self.assertRaises(ValueError):

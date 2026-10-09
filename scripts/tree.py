@@ -563,6 +563,11 @@ def answer_page(body):
     return m.group(1) if m else None
 
 
+def can_answer(page):
+    """Whether a page names the route and the field that record an answer to a raise."""
+    return "/artefact-state/" in page and bool(re.search(r"\banswer\b", page))
+
+
 def append_log(task, kind, args=(), body=""):
     """Append one entry, keyed by a timestamp later than every other in this file,
     and re-render: the Log section is found by name, wherever it is."""
@@ -572,6 +577,10 @@ def append_log(task, kind, args=(), body=""):
     if page and not (dfs_paths.artefacts() / page).is_file():
         raise ValueError("the raise says to answer with %s, which is not in %s"
                          % (page, dfs_paths.rel(dfs_paths.artefacts())))
+    if page and not can_answer((dfs_paths.artefacts() / page).read_text(errors="replace")):
+        raise ValueError("the raise says to answer with %s, which cannot answer: the page must POST "
+                         "{answer: <text>} to /artefact-state/<its file name> "
+                         "(templates/_TEMPLATE_ASSUMPTION.html does)" % page)
     p = ensure_part(task)
     t = parse(p.read_text(), task)
     ts = now_ts()

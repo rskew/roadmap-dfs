@@ -1,5 +1,6 @@
 """The artefact templates are mobile-first: what a session copies is what the author reads on a phone."""
 import re
+import sys
 import unittest
 from pathlib import Path
 
@@ -34,6 +35,11 @@ class MobileFirst(unittest.TestCase):
         self.assertIn("/artefact-state/", page)
         for verdict in ("'confirmed'", "'refuted'"):
             self.assertIn("rule(%s)" % verdict, page)
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import check as dfs_check
+        import tree as dfs_tree
+        self.assertTrue(dfs_check.can_rule(page), "what check.py demands of a Hypothesis's page")
+        self.assertTrue(dfs_tree.can_answer(page), "what a raise's answering page must do")
         self.assertIn("j.node", page, "the buttons show only while a node waits on this page")
 
 

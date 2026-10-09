@@ -411,6 +411,15 @@ HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|to
                      r"pointer\w+|mouse\w+|focus|select)\s*=", re.I)
 
 
+# And it must be able to rule: reach `/artefact-state/<its file>` and send a `verdict`, which is
+# how the author confirms or refutes the node from the page (web.py `artefact_state`).
+SUBMITS_VERDICT = re.compile(r"/artefact-state/")
+
+
+def can_rule(page):
+    return bool(SUBMITS_VERDICT.search(page) and re.search(r"\bverdict\b", page))
+
+
 def check_assumptions(task, text, head, read, archive="", head_archive=""):
     """A Hypothesis must name an interactive artefact (`.dfs/artefacts/<name>.html`).
 
@@ -446,6 +455,10 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
             page = read(dfs_paths.artefacts() / name)
             if page is None:
                 why.append("%s does not exist" % name)
+            elif CONTROL.search(page) and HANDLER.search(page) and not can_rule(page):
+                why.append("%s cannot rule on its node (it must POST {verdict: 'confirmed' or "
+                           "'refuted', answer: <why>} to /artefact-state/<its file name>, as "
+                           "templates/_TEMPLATE_ASSUMPTION.html does)" % name)
             elif not CONTROL.search(page) or not HANDLER.search(page):
                 why.append("%s is not interactive (it needs an <input>, <button>, <select>, "
                            "<textarea> or <details> and a handler that answers it: "
