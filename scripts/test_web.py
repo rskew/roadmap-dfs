@@ -336,6 +336,21 @@ class Web(unittest.TestCase):
         self.assertEqual(arts[0]["title"], "shot-1.png")
         self.assertEqual(self.call("GET", "/artefacts/shot-1.png")[2].getheader("Content-Type"), "image/png")
 
+    def test_a_done_tasks_summary_screenshot_is_one_of_its_artefacts_and_in_its_summary_row(self):
+        """The item shows the change: the Summary section carries the embed, and the image is listed."""
+        d = self.root / ".dfs" / "artefacts"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "0a1b2c.png").write_bytes(b"\x89PNG")
+        done = TASK.split("## Log")[0].replace("Status: open", "Status: confirmed").replace(
+            "## Goal", "## Summary\n\nThe bar is wider. ![the wider bar](.dfs/artefacts/0a1b2c.png)\n\n## Goal", 1) + "## Log\n"
+        (self.root / ".dfs" / "items" / "W1.md").write_text(done)
+        t = self.call("GET", "/api/task/W1")[1]
+        self.assertEqual([(a["file"], a["kind"]) for a in t["artefacts"]], [("0a1b2c.png", "image")])
+        summary = [r for r in t["rows"] if r["kind"] == "section" and r["name"] == "Summary"]
+        self.assertEqual(len(summary), 1)
+        self.assertIn("![the wider bar](.dfs/artefacts/0a1b2c.png)", summary[0]["text"])
+        self.assertTrue(summary[0]["open"])
+
     def test_prose_draws_a_named_screenshot_and_links_a_named_page(self):
         """rich() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
