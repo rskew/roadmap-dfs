@@ -893,6 +893,16 @@ class Check(InARepo):
         self.assertIn("tree.py start W1 <node>", brief)
         self.assertIn("commits nothing", brief)
 
+    def test_the_work_briefing_shows_what_the_author_deleted(self):
+        self.write(task(node(1, "confirmed", extra="Approach: done.\nDetermination: Confirmed: ok.\n")
+                        + node(2, parent=1, extra="Approach: a doomed idea.\n"), self.LOG))
+        self.commit()
+        dfs_tree.delete_node("W1", "W1.2")
+        brief = dfs_state.brief("W1")
+        self.assertIn("**Deleted** by the author", brief)
+        self.assertIn("W1.2", brief)
+        self.assertIn("> Approach: a doomed idea.", brief)
+
     def test_the_authors_words_stay_with_the_node(self):
         log = (self.LOG + "- 2026-09-25T09:10:00Z · raise · W1.1\n  Which way?\n"
                "- 2026-09-25T09:11:00Z · answer · 2026-09-25T09:10:00Z\n  The second.\n"

@@ -13,6 +13,16 @@ nix run github:rskew/roadmap-dfs                         # the tui
 nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 ```
 
+## Deleting
+
+An item or a node can be deleted from the tui (`D` on the item list, or on a node in the tree) and from the web
+page (Delete task on a task's page, Delete on a node's sheet), each after a confirmation. A deleted **item**
+is recoverable: its files move under `.dfs/archive/deleted/` (move them back to restore it), it leaves
+`order.md` with its children taking its place, and its number is not handed out again. A deleted **node** goes
+with everything under it, whatever its status, and is logged: a `delete` entry in the task's log keeps their
+text verbatim, a work session's briefing shows it, and the numbers are not reused. A task a live session is
+working, or a node an unanswered raise names, is refused until that is settled.
+
 ## The web page on a phone
 
 `python3 scripts/web.py` serves the roadmap as a phone-sized page and an installable app.

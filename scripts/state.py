@@ -463,7 +463,7 @@ def _ignored_note(task):
 def _author_since_last_ok(t):
     last_ok = max((e["ts"] for e in t["log"] if e["kind"] == "end"
                    and e["args"][:2] == ["work", "ok"]), default="")
-    return [e for e in t["log"] if e["kind"] in ("answer", "correct") and e["ts"] > last_ok]
+    return [e for e in t["log"] if e["kind"] in ("answer", "correct", "delete") and e["ts"] > last_ok]
 
 
 def brief(task: str) -> str:
@@ -516,6 +516,11 @@ def brief(task: str) -> str:
                 if raise_e:
                     out += ["  > " + ln for ln in raise_e["body"].splitlines()]
                 out += ["  " + ln for ln in e["body"].splitlines()]
+            elif e["kind"] == "delete":
+                out += ["- **Deleted** by the author at %s: %s, with everything below %s. They are "
+                        "gone from the tree and their numbers are not used again; what they said "
+                        "was:" % (e["ts"], ", ".join(e["args"]), e["args"][0] if e["args"] else "it")]
+                out += ["  > " + ln for ln in e["body"].splitlines()]
         for c in todo:
             if c["disp"] == "backtrack":
                 out += ["- **The critic backtracked to %s.** Not yet carried out. %s and "
