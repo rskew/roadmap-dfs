@@ -50,13 +50,14 @@ def run_turn(argv, message, cwd, env):
                          text=True, cwd=cwd, env=env)
     try:
         out, err = p.communicate(message, timeout=TURN_TIMEOUT)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         p.terminate()
         try:
-            p.communicate(timeout=TURN_GRACE)
+            out, err = p.communicate(timeout=TURN_GRACE)
         except subprocess.TimeoutExpired:
             p.kill()
-            p.communicate()
+            out, err = p.communicate()
+        e.output, e.stderr = out, err      # what the agent had said, for the log of a hang
         raise
     return subprocess.CompletedProcess(argv, p.returncode, out, err)
 
@@ -230,7 +231,7 @@ class Chats:
         return [str(dfs_paths.SCRIPTS / "run.sh")]
 
     def turn(self, scope, message, sid, opening=False):
-        error, new_sid, began = "", sid, time.time()
+        error, new_sid, began, said = "", sid, time.time(), ""
         chatlog.log(scope, "turn: %s, %d characters, session %s" % (
             "opening" if opening else "message", len(message), sid or "(new)"))
         rc = None
@@ -260,15 +261,16 @@ class Chats:
             else:
                 error = ((out.get("result") if isinstance(out, dict) else "") or r.stderr.strip()
                          or r.stdout.strip() or "the agent exited %d" % r.returncode)[-600:]
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as e:
             error = "no answer in %d minutes" % (TURN_TIMEOUT // 60)
+            said = "\n".join(x for x in (e.stderr, e.output) if isinstance(x, str) and x.strip())[-600:]
         except OSError as e:
             error = "could not start the agent: %s" % e
         except Exception as e:      # the turn's thread would die unseen, and the page wait forever
             error = "the turn failed: %s: %s" % (type(e).__name__, e)
         chatlog.log(scope, "turn: %s after %ds, rc=%s, session %s" % (
             "FAILED" if error else "answered", time.time() - began, rc, new_sid or "(none)"),
-            error)
+            (error + "\n" + said) if said else error)
         with self.lock:
             if new_sid and new_sid != sid:
                 self.save_sid(scope, new_sid)

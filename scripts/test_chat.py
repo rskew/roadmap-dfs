@@ -321,6 +321,19 @@ class Chat(unittest.TestCase):
         self.assertIn("boom: not logged in", log)           # the reason is on disk, not only in `notes`
         self.assertIn("| ", log)
 
+    def test_a_timed_out_turn_logs_what_the_agent_had_said(self):
+        for k in ("TURN_TIMEOUT", "TURN_GRACE"):
+            self.addCleanup(setattr, dfs_chat, k, getattr(dfs_chat, k))
+        dfs_chat.TURN_TIMEOUT, dfs_chat.TURN_GRACE = 1, 1
+        self.chats.argv = lambda: ["bash", "-c", "echo reading the roadmap; echo waiting on a dialog >&2; exec sleep 30", "x"]
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        log = self.record("W1")
+        self.assertIn("turn: FAILED after", log)
+        self.assertIn("no answer in", log)
+        self.assertIn("reading the roadmap", log)
+        self.assertIn("waiting on a dialog", log)
+
     def test_a_refused_send_and_a_new_chat_are_recorded(self):
         self.chats.busy["W1"] = time.time()
         with self.assertRaises(ValueError):
