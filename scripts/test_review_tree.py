@@ -115,6 +115,23 @@ class Rows(unittest.TestCase):
         # W1.2 has two children (W1.3, W1.4): both step in. W1.1 → W1.2 does not.
         self.assertEqual(rows, {"W1.1": 0, "W1.2": 0, "W1.3": 1, "W1.4": 1})
 
+    def test_every_child_is_drawn_right_of_its_parent_and_siblings_share_a_column(self):
+        # W1.1 → W1.2, which forks to W1.3 → W1.5 and W1.4; a half step is one unit.
+        t = dfs_tree.parse(TREE.replace(
+            "### W1.4 · A refuted sibling\nStatus: refuted",
+            "### W1.4 · A refuted sibling\nParent: W1.2\nStatus: refuted").replace(
+            "## Log", "### W1.5 · Under W1.3\nParent: W1.3\nStatus: open\nApproach: x.\n\n## Log", 1), "W1")
+        rows = {r["key"]: r["indent"] for r in TUI.tree_entries(t) if r["kind"] == "node"}
+        self.assertEqual(rows, {"W1.1": 0, "W1.2": 1, "W1.3": 3, "W1.4": 3, "W1.5": 4})
+
+    def test_a_long_chain_stops_indenting_at_the_cap(self):
+        steps = "".join("### W1.%d · step\nParent: W1.%d\nStatus: open\nApproach: x.\n\n" % (n, n - 1)
+                        for n in range(2, 41))
+        t = dfs_tree.parse("# W1 · t\n\n## Goal\n\ng\n\n## Tree\n\n### W1.1 · first\nStatus: open\n"
+                           "Approach: x.\n\n" + steps + "## Log\n\n", "W1")
+        ind = [r["indent"] for r in TUI.tree_entries(t) if r["kind"] == "node"]
+        self.assertEqual((ind[:3], max(ind), len(ind)), ([0, 1, 2], TUI.TREE_INDENT_CAP, 40))
+
     def test_a_finished_task_shows_its_summary_above_the_goal(self):
         done = TREE.replace("Status: open", "Status: confirmed").replace(
             "\n## Goal", "\n## Summary\n\nIt works now: the other thing no longer happens.\n\n## Goal", 1

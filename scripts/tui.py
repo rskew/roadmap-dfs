@@ -104,6 +104,9 @@ TREE_MARK = {"confirmed": "✓", "refuted": "✗", "open": "○", "parked": "‖
 # Marks a blank line in the tree whose indent guides are settled once both its
 # neighbours are known; compared by identity, never mutated.
 BLANK_GUIDES = []
+# The farthest a row is drawn in, in half steps: a chain past it reads level, but
+# keeps its `↳` mark.
+TREE_INDENT_CAP = 16
 TREE_QUIET = ("refuted", "parked", "dormant", "pruned")
 # The task file's own prose, above the tree: what the nodes are FOR. Goal starts
 # open because a review judges nodes against it; Background starts folded because
@@ -190,7 +193,7 @@ def tree_entries(t, folded=(), flagged=False):
                        if (n["parent"] if n["parent"] in nodes else None) == parent),
                       key=lambda n: n["n"])
 
-    def walk(parent, d):
+    def walk(parent, d, ind):
         sibs = kids_of(parent)
         for nd in sibs:
             nid = nd["id"]
@@ -203,7 +206,8 @@ def tree_entries(t, folded=(), flagged=False):
                          for k in dfs_tree.descendants(t, nid)) if shut else 0)
             # ⚠️ `chain`: drawn at its parent's column, which reads as the parent's
             # sibling, so "add under" looked like it had added beside. The row says it.
-            out.append(dict(key=nid, kind="node", depth=d, node=nd, status=st,
+            out.append(dict(key=nid, kind="node", depth=d, indent=min(ind, TREE_INDENT_CAP),
+                            node=nd, status=st,
                             chain=parent is not None and len(sibs) == 1,
                             raises=on_node.get(nid, []), kids=len(kids),
                             folded=shut, raises_below=below,
@@ -220,8 +224,14 @@ def tree_entries(t, folded=(), flagged=False):
                 # deep and a real alternative (two siblings) looked like one more
                 # step. A node that is the only child of its parent continues at its
                 # parent's column; its siblings, when there are any, step in.
-                walk(nid, d + (1 if len(kids) > 1 else 0))
-    walk(None, 0)
+                #
+                # ⚠️ BUT NEVER LEVEL WITH ITS PARENT. A chain step at its parent's
+                # column read as a sibling of the parent's siblings, so `indent` (in
+                # half steps) puts a fork's child two past its parent and an only
+                # child one past, capped so a long chain stays narrow. `depth` is
+                # the fork count and keeps its meaning; a surface draws from `indent`.
+                walk(nid, d + (1 if len(kids) > 1 else 0), ind + (2 if len(kids) > 1 else 1))
+    walk(None, 0, 0)
     return out
 
 
