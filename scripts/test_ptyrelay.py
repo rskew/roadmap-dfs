@@ -209,6 +209,27 @@ class Sizing(unittest.TestCase):
         host.resize((24, 60))
         self.assertTrue(until(lambda: self.sizes(out) == ["40 120", "24 60"]), self.sizes(out))
 
+    def test_a_chat_with_a_terminal_attached_is_left_to_it(self):
+        relay, out = self.agent(size=(40, 120))
+        self.assertTrue(until(lambda: self.sizes(out) == ["40 120"]))
+        relay.attached = True
+        relay.resize((24, 60))
+        time.sleep(0.3)
+        self.assertEqual(self.sizes(out), ["40 120"])
+
+    def test_the_screen_tells_the_chats_each_new_size_once_wherever_it_was_resized(self):
+        import tui
+        sizes, host = [], ptyrelay.ChatHost()
+        host.resize = sizes.append
+        ui = object.__new__(tui.UI)
+        ui.chat_host = host
+        real = ptyrelay._terminal_size
+        ptyrelay._terminal_size = lambda: self.now
+        self.addCleanup(setattr, ptyrelay, "_terminal_size", real)
+        for self.now in [(30, 100), (30, 100), (24, 60), (24, 60)]:
+            ui.follow_terminal_size()       # the poll tick, which a prompt or dialog does not stop
+        self.assertEqual(sizes, [(30, 100), (24, 60)])
+
 
 class Leaving(unittest.TestCase):
     """Ending a chat is a SIGTERM, as ctrl-c is to a claude in a terminal, with a SIGKILL behind

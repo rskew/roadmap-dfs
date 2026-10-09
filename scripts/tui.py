@@ -2256,8 +2256,22 @@ class UI(WalkMixin):
         elif "unchanged" not in out:
             self.msg = "agent updated: %s (from the next c)" % out.strip()
 
+    chat_size = None        # the (rows, cols) the chats in the background were last told
+
+    def follow_terminal_size(self):
+        """Tell the chats in the background the terminal's size when it changed. KEY_RESIZE
+        does not do it alone: the prompt and the dialogs read their own keys and swallow it."""
+        if self.chat_host is None:
+            return
+        import ptyrelay
+        size = ptyrelay._terminal_size()
+        if size != self.chat_size:
+            self.chat_size = size
+            self.chat_host.resize(size)
+
     def poll(self):
         """Auto-refresh. Cheap enough to do every second, so there is no refresh key."""
+        self.follow_terminal_size()
         self.agent_update_tick()
         self.drain_commands()
         self.walk_tick()
@@ -4831,8 +4845,7 @@ class UI(WalkMixin):
                 continue
             self.msg = ""
             if ch == curses.KEY_RESIZE:
-                if self.chat_host is not None:
-                    self.chat_host.resize()     # the chats in the background wrap for the new width
+                self.follow_terminal_size()     # the chats in the background wrap for the new width
                 continue
             if not self.act(ch):
                 break
