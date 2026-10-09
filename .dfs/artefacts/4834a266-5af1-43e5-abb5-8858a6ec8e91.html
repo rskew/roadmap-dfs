@@ -1,0 +1,81 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W34: a wrapped name field versus a one-line input, on your phone</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a; font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; min-height: 44px; box-sizing: border-box; }
+  label { display: block; margin: 8px 0 4px; }
+  #field { box-sizing: border-box; width: 100%; padding: 12px; font: 17px/1.4 Georgia, serif; border: 1.5px solid #333; border-radius: 4px; background: #fff; color: #1a1a1a; min-height: 48px; }
+  textarea#field { resize: none; overflow: hidden; display: block; }
+  body.spaced #field { letter-spacing: .005em; }
+</style>
+
+<h1>Does the name field lose your caret?</h1>
+<p class="lede">The assumption: on a phone, a one-line text box scrolls its text sideways and does not keep the caret in view once the name is longer than the box, and a box that wraps the name has nothing to scroll sideways. Try both below, on your phone, with the long name already in them.</p>
+
+<h2>The field to try</h2>
+<div class="choices" role="group" aria-label="Kind of field">
+  <button type="button" data-kind="input" aria-pressed="true">One line (today)</button>
+  <button type="button" data-kind="wrap" aria-pressed="false">Wraps (the fix)</button>
+</div>
+<div class="choices" role="group" aria-label="Letter spacing">
+  <button type="button" id="spacing" aria-pressed="true">Letter-spacing .005em (the page's)</button>
+</div>
+<label for="field">Name</label>
+<div id="host"></div>
+<div class="result" id="result" aria-live="polite"></div>
+
+<h2>What to do</h2>
+<p>Tap in the field, move the caret by dragging it or by holding the space bar, add words at the end, then at the start. Watch whether the text keeps the caret on screen and whether the caret sits where the letters are. Switch field kind and spacing and compare.</p>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The one-line field keeps the caret in view on your phone, or the wrapped field loses it as well. Then the fault is elsewhere (the dialog's own scrolling under the keyboard) and the fix is not this.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>Chromium's iPhone 13 emulation follows the caret in the one-line field (End scrolled 0 to 517 of 823 px, Home back to 0), so the fault is not in Blink. The wrapped field has no horizontal scroll to lose (scrollWidth equal to clientWidth after 92 characters). Neither says anything about a real phone's input, which only you can try here.</p>
+</details>
+
+<script>
+  var LONG = 'A very long task name that runs well past the right edge of a phone field and keeps on going';
+  var kind = 'input', spaced = true;
+  var host = document.getElementById('host'), result = document.getElementById('result');
+  function grow(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + el.offsetHeight - el.clientHeight + 'px'; }
+  function build() {
+    var old = document.getElementById('field'), value = old ? old.value : LONG;
+    host.innerHTML = '';
+    var el = document.createElement(kind === 'input' ? 'input' : 'textarea');
+    el.id = 'field'; el.value = value;
+    if (kind === 'input') el.type = 'text'; else el.rows = 1;
+    el.setAttribute('autocomplete', 'off'); el.setAttribute('spellcheck', 'false');
+    host.appendChild(el);
+    if (kind === 'wrap') { el.addEventListener('input', function () { grow(el); report(); }); el.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); }); grow(el); }
+    else el.addEventListener('input', report);
+    ['keyup', 'click', 'select', 'scroll'].forEach(function (n) { el.addEventListener(n, report); });
+    document.querySelectorAll('[data-kind]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.kind === kind)); });
+    document.body.classList.toggle('spaced', spaced);
+    document.getElementById('spacing').setAttribute('aria-pressed', String(spaced));
+    report();
+  }
+  function report() {
+    var el = document.getElementById('field');
+    var sideways = el.scrollWidth > el.clientWidth + 1;
+    result.textContent = (kind === 'input' ? 'One line' : 'Wrapping') + ', ' + (spaced ? 'with' : 'without') + ' letter-spacing. ' +
+      el.value.length + ' characters, caret at ' + el.selectionStart + ', scrolled sideways ' + Math.round(el.scrollLeft) + ' of ' + Math.max(0, Math.round(el.scrollWidth - el.clientWidth)) + ' px' +
+      (sideways ? ' (the field scrolls sideways, so the caret can leave the screen).' : ' (nothing to scroll sideways).');
+  }
+  document.querySelectorAll('[data-kind]').forEach(function (b) { b.addEventListener('click', function () { kind = b.dataset.kind; build(); }); });
+  document.getElementById('spacing').addEventListener('click', function () { spaced = !spaced; build(); });
+  document.addEventListener('selectionchange', report);
+  build();
+</script>

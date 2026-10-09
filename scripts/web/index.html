@@ -704,14 +704,25 @@ function nextFlag() {
 }
 
 /* ── writing: the same log entries the terminal writes ──────────────────────── */
+/* A one-line text field is a textarea that wraps (`.line`), not an <input>: a phone's input scrolls its text
+   sideways and loses the caret when the name is longer than the field, and a wrapped field has nowhere to
+   scroll to. Enter submits and a pasted line break is a space, so it still holds one line. */
+const line = (id, name, value, attrs = "") => `<textarea class="line" id="${id}" name="${name}" rows="1" required autocomplete="off" enterkeyhint="done" spellcheck="false"${attrs}>${esc(value)}</textarea>`;
 function form(html, onsubmit) {
   const d = $("#form"); d.innerHTML = `<form method="dialog">${html}</form>`;
   d.showModal();
   const f = $("form", d), first = $("textarea, input[type=text]", d); if (first) first.focus();
+  for (const el of f.querySelectorAll("textarea.line")) {
+    const grow = () => { el.style.height = "auto"; el.style.height = el.scrollHeight + el.offsetHeight - el.clientHeight + "px"; };
+    el.addEventListener("input", grow);
+    el.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); f.requestSubmit($("button[value=ok]", f)); } });
+    grow();
+  }
   f.addEventListener("submit", async ev => {
     ev.preventDefault();
     if (ev.submitter && ev.submitter.value === "cancel") { d.close(); return; }
     const btn = ev.submitter; if (btn) btn.disabled = true;
+    for (const el of f.querySelectorAll("textarea.line")) el.value = el.value.replace(/\s*\n\s*/g, " ").trim();
     try { await onsubmit(new FormData(f)); d.close(); }
     catch (e) { toast(e.message, true); if (btn) btn.disabled = false; }
   });
@@ -849,7 +860,7 @@ function paintColour() {
 function renameForm() {
   form(`<h3>Project name</h3>
     <p class="muted" style="margin:0">Shown on this page and under the installed app's icon. Kept in <code>.dfs/title</code>, so it travels with the repo.</p>${isSecureContext ? "" : `<p class="muted" style="margin:0">${esc(NO_INSTALL)}</p>`}
-    <div><label for="pn">Name</label><input type="text" id="pn" name="title" value="${esc(PROJECT)}" maxlength="80" required autocomplete="off"></div>
+    <div><label for="pn">Name</label>${line("pn", "title", PROJECT, ' maxlength="80"')}</div>
     <div><label for="pc">Colour</label><input type="color" id="pc" name="colour" value="${COLOUR}"></div>
     <label><input type="checkbox" id="pa" name="auto"${CHOSEN ? "" : " checked"}> Take the colour from the name</label>
     ${["light", "dark"].map(m => `<div><label for="pb-${m}">Background, ${m} mode</label><input type="color" id="pb-${m}" name="${m}" value="${BACKGROUND[m] || (m === "dark" ? "#171a1d" : "#f5f4ef")}"></div>
@@ -869,7 +880,7 @@ function renameForm() {
 }
 function newTaskForm() {
   form(`<h3>Add a task</h3>
-    <div><label for="nn">Name</label><input type="text" id="nn" name="name" required autocomplete="off" placeholder="A few words"></div>
+    <div><label for="nn">Name</label>${line("nn", "name", "", ' placeholder="A few words"')}</div>
     <div><label for="ng">Goal, in your own words: what done looks like, and why</label><textarea id="ng" name="goal"></textarea></div>
     <div><label for="nt">First steps, one per line, optional</label><textarea id="nt" name="todos" placeholder="Each line becomes a node, in order"></textarea></div>${buttons("Add task")}`,
     async fd => { const res = await api("/api/new", { name: fd.get("name"), goal: fd.get("goal"), todos: fd.get("todos") }); toast("Added " + res.added + "."); S.sig = ""; await render(true); });
@@ -877,7 +888,7 @@ function newTaskForm() {
 function editTaskForm() {
   const t = S.task;
   form(`<h3>Edit ${esc(t.id)}</h3>
-    <div><label for="en">Name</label><input type="text" id="en" name="name" value="${esc(t.name)}" required autocomplete="off"></div>
+    <div><label for="en">Name</label>${line("en", "name", t.name)}</div>
     <div><label for="eg">Goal, in your own words: what done looks like, and why</label><textarea id="eg" name="goal" required>${esc(t.goal_text)}</textarea></div>${buttons("Save")}`,
     async fd => wrote(await api("/api/edit_task", { task: t.id, name: fd.get("name"), goal: fd.get("goal") }), "Saved."));
 }
@@ -885,7 +896,7 @@ function editNodeForm(id) {
   const r = S.task.rows.find(x => x.key === id);
   if (!r || !r.editable) return;
   form(`<h3>Edit ${esc(id)}</h3>
-    <div><label for="et">Title</label><input type="text" id="et" name="title" value="${esc(r.title)}" required autocomplete="off"></div>
+    <div><label for="et">Title</label>${line("et", "title", r.title)}</div>
     <div><label for="ea">Approach: what to do, where, and the check (one paragraph; line breaks become spaces)</label><textarea id="ea" name="approach">${esc(r.approach)}</textarea></div>${buttons("Save")}`,
     async fd => wrote(await api("/api/edit_node", { task: S.task.id, node: id, title: fd.get("title"), approach: fd.get("approach") }), "Saved."));
 }
@@ -894,7 +905,7 @@ function addForm(parent) {
   const dead = p && ["refuted", "pruned"].includes(p.status);
   form(`<h3>Add a node ${parent ? "under " + esc(parent) : ""}</h3>
     ${dead ? `<p class="warn">${esc(parent)} is ${esc(p.status)}, so a node under it is pruned too.</p>` : ""}
-    <div><label for="t">Title</label><input type="text" id="t" name="title" required autocomplete="off"></div>
+    <div><label for="t">Title</label>${line("t", "title", "")}</div>
     <div><label for="a">Approach, optional: what to do, where, and the check</label><textarea id="a" name="approach"></textarea></div>${buttons("Add")}`,
     async fd => { const res = await api("/api/add", { task: S.task.id, parent: parent || null, title: fd.get("title"), approach: fd.get("approach") }); await wrote(res, "Added " + res.added + "."); });
 }

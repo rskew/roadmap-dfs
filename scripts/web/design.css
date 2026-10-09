@@ -123,6 +123,8 @@ a.art, .link { color: var(--settled); text-decoration: underline; text-underline
 dialog input[type=number] { width: 8em; border-color: var(--line); }
 .field:focus-visible, dialog :is(textarea, input):focus-visible { outline-offset: 0; border-color: var(--ink); }
 dialog textarea { min-height: 116px; resize: vertical; }
+dialog textarea.line { min-height: 0; resize: none; overflow: hidden; line-height: 1.4; }
+:is(dialog, .walk) :is(textarea, input[type=text], input[type=number]) { letter-spacing: normal; }
 label.cap, dialog label { display: block; margin-bottom: 6px; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
 /* a choice of one among few: the picked one is ruled in ink and set */
 .seg { display: flex; gap: var(--s3); }

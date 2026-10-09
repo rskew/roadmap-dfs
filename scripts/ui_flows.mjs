@@ -275,6 +275,28 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A name longer than the field wraps, so a phone's text never scrolls sideways away from the caret; Enter
+  // saves it and a pasted line break is a space.
+  async namefield(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W3");
+    await page.click("[data-act=edittask]"); await dialog(page);
+    const long = "A very long task name that runs well past the right edge of a phone field and keeps on going";
+    await page.fill("#en", long);
+    await page.focus("#en"); await page.keyboard.press("End");
+    const m = await page.$eval("#en", e => ({ tag: e.tagName, sw: e.scrollWidth, cw: e.clientWidth, h: e.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(e).lineHeight), top: e.scrollTop }));
+    assert(m.tag === "TEXTAREA" && m.sw <= m.cw, `the name wraps instead of scrolling sideways (${JSON.stringify(m)})`);
+    const drawn = await page.$eval("#en", e => { const c = document.createElement("canvas").getContext("2d"); c.font = getComputedStyle(e).font; return c.measureText(e.value).width > e.clientWidth; });
+    assert(!drawn || m.h > m.lh * 1.5, `the field grows to show the whole name (${JSON.stringify(m)})`);   // a box with no fonts draws no width to wrap
+    assert(m.top === 0, `the field itself does not scroll (${m.top})`);
+    if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "namefield.png") });
+    await page.fill("#en", "Stop cache\nstampedes");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    await page.waitForFunction(() => /Stop cache stampedes/.test(document.body.textContent));
+    same(errors, [], "no page errors");
+  },
+
   // Add a node under another.
   async add(b) {
     const { page, errors } = await open(b, PHONE);
