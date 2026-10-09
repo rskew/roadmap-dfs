@@ -51,6 +51,27 @@ class Theme(unittest.TestCase):
         dfs_paths.theme_file().write_text("blue\n")
         self.assertEqual(dfs_paths.project_colour(), dfs_paths.colour_from_name("Gateway"))
 
+    def test_a_chosen_background_is_kept_apart_from_the_project_colour(self):
+        self.assertEqual(dfs_paths.read_background(), "")
+        line = dfs_paths.project_colour()
+        self.assertEqual(dfs_paths.write_background("#FFF2CC"), "#fff2cc")
+        self.assertEqual(dfs_paths.read_background(), "#fff2cc")
+        self.assertEqual(dfs_paths.project_colour(), line)
+        self.assertFalse(dfs_paths.theme_file().exists())
+        dfs_paths.write_theme("#aa3355")
+        self.assertEqual(dfs_paths.read_background(), "#fff2cc")
+        self.assertEqual(dfs_paths.write_background(""), "")
+        self.assertFalse(dfs_paths.background_file().exists())
+        self.assertEqual(dfs_paths.project_colour(), "#aa3355")
+
+    def test_what_is_not_a_background_is_refused_and_a_bad_file_is_ignored(self):
+        for bad in ("red", "#fff", "#12345g", "fff2cc"):
+            with self.assertRaises(ValueError):
+                dfs_paths.write_background(bad)
+        self.assertFalse(dfs_paths.background_file().exists())
+        dfs_paths.background_file().write_text("blue\n")
+        self.assertEqual(dfs_paths.read_background(), "")
+
     def test_the_made_colours_hold_white_text(self):
         def lum(c):
             ch = [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)]

@@ -451,6 +451,23 @@ class Web(unittest.TestCase):
         self.assertEqual((status, body), (200, dict(colour=made, chosen=False)))
         self.assertFalse((self.root / ".dfs" / "theme").exists())
 
+    def test_the_page_background_is_choosable_apart_from_the_project_colour(self):
+        (self.root / ".dfs" / "title").write_text("Gateway\n")
+        made = dfs_paths.colour_from_name("Gateway")
+        self.assertIn('BACKGROUND = ""', self.call("GET", "/")[1].decode())
+        self.assertEqual(self.call("GET", "/api/state")[1]["background"], "")
+        status, body, _ = self.call("POST", "/api/background", dict(background="#FFF2CC"))
+        self.assertEqual((status, body), (200, dict(background="#fff2cc")))
+        self.assertEqual((self.root / ".dfs" / "background").read_text(), "#fff2cc\n")
+        self.assertIn('BACKGROUND = "#fff2cc"', self.call("GET", "/")[1].decode())
+        st = self.call("GET", "/api/state")[1]
+        self.assertEqual((st["background"], st["colour"], st["colour_chosen"]), ("#fff2cc", made, False))
+        for bad in ("red", "#fff", None, 5):
+            self.assertEqual(self.call("POST", "/api/background", dict(background=bad))[0], 400, bad)
+        status, body, _ = self.call("POST", "/api/background", dict(background=""))
+        self.assertEqual((status, body), (200, dict(background="")))
+        self.assertFalse((self.root / ".dfs" / "background").exists())
+
     def test_the_dark_washes_stay_visible_and_their_text_readable(self):
         import re
         css = (Path(dfs_web.__file__).parent / "web" / "design.css").read_text()

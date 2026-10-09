@@ -181,6 +181,38 @@ def write_theme(value: str) -> str:
     return v
 
 
+def background_file() -> Path:
+    return state() / "background"
+
+
+def read_background() -> str:
+    """The page background `.dfs/background` holds as `#rrggbb`, "" when there is none (the
+    design's own paper) or it is not one."""
+    try:
+        v = (background_file().read_text().strip().splitlines() or [""])[0].strip().lower()
+    except OSError:
+        return ""
+    return v if re.fullmatch(r"#[0-9a-f]{6}", v) else ""
+
+
+def write_background(value: str) -> str:
+    """Choose the page background, `#rrggbb`; an empty value clears it back to the design's
+    paper. Separate from the project's colour, which only marks the top. Returns what is
+    now in force ("" for the paper)."""
+    v = str(value or "").strip().lower()
+    if not v:
+        try:
+            background_file().unlink()
+        except FileNotFoundError:
+            pass
+        return ""
+    if not re.fullmatch(r"#[0-9a-f]{6}", v):
+        raise ValueError("a background is #rrggbb")
+    background_file().parent.mkdir(parents=True, exist_ok=True)
+    background_file().write_text(v + "\n")
+    return v
+
+
 def colour_from_name(name: str) -> str:
     """A colour for a name: its hash picks the hue, and lightness and saturation are fixed
     so white text reads on it. The same name is always the same colour."""

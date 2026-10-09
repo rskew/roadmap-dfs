@@ -101,6 +101,7 @@ def index_html():
     return (INDEX.read_text().replace("{{project_json}}", json.dumps(name).replace("</", "<\\/"))
             .replace("{{colour_chosen}}", "true" if dfs_paths.read_theme() else "false")
             .replace("{{colour}}", dfs_paths.project_colour())
+            .replace("{{background}}", dfs_paths.read_background())
             .replace("{{project}}", html.escape(name))).encode()
 
 
@@ -125,7 +126,8 @@ def state_json():
             uncommitted=bool(it.get("uncommitted"))))
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
-                colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()))
+                colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
+                background=dfs_paths.read_background())
 
 
 _commit_cache = {}
@@ -325,6 +327,22 @@ def set_title(body):
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.title_file()), e), 500)
     HUB.notify()
     return dict(title=name)
+
+
+def set_background(body):
+    """Choose the page background (`#rrggbb`), or clear it with an empty string so the page
+    keeps the design's paper. The project's colour, which marks the top, is not touched."""
+    value = body.get("background")
+    if not isinstance(value, str):
+        raise Refused("a background is needed")
+    try:
+        background = dfs_paths.write_background(value)
+    except ValueError as e:
+        raise Refused(str(e))
+    except OSError as e:
+        raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_file()), e), 500)
+    HUB.notify()
+    return dict(background=background)
 
 
 def set_theme(body):
@@ -793,6 +811,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, set_title(body))
             if name == "theme":
                 return self.json(200, set_theme(body))
+            if name == "background":
+                return self.json(200, set_background(body))
             if name == "new":
                 return self.json(200, new_task(body))
             if name == "order":

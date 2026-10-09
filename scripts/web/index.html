@@ -268,7 +268,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 "use strict";
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
+let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}}, BACKGROUND = "{{background}}";
 const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, reorder: false, moved: null, flagged: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
