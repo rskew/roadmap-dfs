@@ -207,7 +207,8 @@ notes" in the item pane and the accept prompt; parent reviewer nodes at the chai
   ~44 and every row is a stack of `│`. Indentation here means "order", and branching
   (the thing the tree is for) is indistinguishable from "next step". W9's real branch
   (W9.5 vs W9.6 vs parked W9.7) is only legible because it is short.
-  *Fix:* render a single-child chain at one indent and indent only at real forks.
+  *Fix:* render a single-child chain at one indent and indent only at real forks. (Later: a chain step
+  steps in half a step so it is never level with its parent; see the done list, item 7.)
 - **80×24:** the item list keeps ~8 rows (header + 9 tasks) while the tree is focused, so
   the pane has ~12 rows. One opened node fills it; Evidence is below the fold. The task
   title, status and "sessions n of 10" lines scroll out of the pane, so you stop knowing
@@ -298,7 +299,7 @@ Built after this review (the numbers are §4's):
 | 4 | An answered raise is marked `✎ answered` and shown with its answer; a correction shows its reason; an overruled determination is said to be overruled; `Corrects:` shows the correction it carries out. |
 | 5 | `n`/`N` jump between raises, ⚑ and asks; `rev` counts assumptions and asks (a finished tree with none reads `accept`); the accept prompt quotes each assumption's falsifier and counts reviewer notes. |
 | 6 | Reviewer and critic notes are a section above the Goal until accepted; `critic ok` takes a body; the review brief says a leak or an unhandled failure is a node, and titles fixes `Fix:`. |
-| 7 | A single-child chain stays in one column; only a fork steps in. |
+| 7 | A single-child chain steps in half a step (a column in the terminal), a fork a full one (two), capped at eight steps; siblings share a column and a child is never level with its parent. (First done as one column for the whole chain, which read as the parent's sibling.) |
 | 8 | With the tree focused the list is one row; the pane rule names the task. |
 | 9 | The Summary shows before the task is done, marked as a draft. |
 | 10 | `g`/`G` move the tree's cursor; `f` takes one key; `i` under a refuted or pruned node asks first. |
