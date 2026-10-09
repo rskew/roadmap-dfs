@@ -315,7 +315,7 @@ def task_json(task):
 
 
 def assumptions_json():
-    """Every open assumption and ask in every task not yet accepted. The page no longer shows this
+    """Every open assumption (an old Ask counts) in every task not yet accepted. The page no longer shows this
     list (each task has its own Flagged view); the endpoint stays for API clients."""
     out = []
     for it in dfs_state.items():

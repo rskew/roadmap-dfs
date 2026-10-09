@@ -148,7 +148,7 @@ def state_for(task: str):
         # or a finished tree nobody has accepted since it last changed.
         standing=(["tree"] if status == "done" and not dfs_tree.accepted(t) else []),
         # The nodes the author should read before accepting: those that state a
-        # Hypothesis or an Ask. What `rev` counts, beside the raises.
+        # Hypothesis (or, in an old tree, an Ask). What `rev` counts, beside the raises.
         assumptions=([] if dfs_tree.accepted(t) else dfs_tree.assumed(t)),
     )
 

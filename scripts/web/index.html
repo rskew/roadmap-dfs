@@ -532,7 +532,7 @@ async function moveTask(id, move) {
 }
 
 /* ── one task ───────────────────────────────────────────────────────────────── */
-// A node the author is there for: an open raise, an assumption or an ask.
+// A node the author is there for: an open raise or an assumption (an old Ask counts).
 const wantsYou = r => r.raises.length > 0 || r.assumes || r.ask;
 function visibleRows(t) {
   // Flagged only: the other nodes go, and with them the folds (one on a dropped node would hide a flagged one below it).
@@ -703,7 +703,7 @@ function nextFlag() {
       return go(`t/${S.task.id}/${r.id}`, true);
     }
   }
-  toast("No raise, assumption or ask in this tree.");
+  toast("No raise or assumption in this tree.");
 }
 
 /* ── writing: the same log entries the terminal writes ──────────────────────── */
@@ -924,7 +924,7 @@ function acceptForm() {
   const a = S.task.assumed;
   form(`<h3>Accept ${esc(S.task.id)}'s tree as finished?</h3>
     ${a.length ? `<p class="muted" style="margin:0">It rests on ${a.length} assumption${a.length === 1 ? "" : "s"} you have not accepted:</p>
-      <ul>${a.map(x => `<li><b>${esc(x.id)}</b> ${x.wrong ? "wrong if " + esc(x.wrong) : esc(x.ask || x.assumption)}</li>`).join("")}</ul>` : `<p class="muted" style="margin:0">Nothing in it states an assumption or an ask.</p>`}
+      <ul>${a.map(x => `<li><b>${esc(x.id)}</b> ${x.wrong ? "wrong if " + esc(x.wrong) : esc(x.ask || x.assumption)}</li>`).join("")}</ul>` : `<p class="muted" style="margin:0">Nothing in it states an assumption.</p>`}
     ${S.task.notes.length ? `<p class="warn">What the ${S.task.notes.length === 1 ? "reviewer said" : "reviewer and critic said"}:</p>
       <div class="quote">${S.task.notes.map(n => esc(n.kind + " " + n.verdict + ": " + n.body)).join("\n\n")}</div>` : ""}
     ${buttons("Accept")}`,

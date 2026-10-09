@@ -1032,9 +1032,10 @@ def accepted(t):
 
 
 def assumed(t):
-    """The live nodes that rest on an assumption (they state a Hypothesis) or put a
-    question to the author (they state an Ask), in tree order. Most nodes only say
-    something was done and are neither. A refuted or pruned node's assumption is moot,
+    """The live nodes that rest on an assumption (they state a Hypothesis), in tree order,
+    and those of an older tree that put a question to the author (they state an Ask,
+    which can no longer be written but still counts). Most nodes only say something was
+    done and are neither. A refuted or pruned node's assumption is moot,
     and so is one the author has ruled on: a correction at the node, confirmed or
     refuted, is their answer to what it assumed, so it no longer asks to be looked at."""
     status, pruned = effective(t)

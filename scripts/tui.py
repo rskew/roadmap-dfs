@@ -142,7 +142,7 @@ def tree_entries(t, folded=(), flagged=False):
     only thing the author was there to answer off the screen. So a folded row
     carries `raises_below`, the count of open raises it is hiding.
 
-    `flagged` keeps only the nodes that want the author (an assumption, an ask, an
+    `flagged` keeps only the nodes that want the author (an assumption, an old Ask, an
     open raise on the node) and drops the rest, ancestors included. Folds are off
     then (a fold on a dropped row would hide a flagged node below it) and a kept
     node's `kids` is 0, so no row shows a fold mark. Sections and the task's own
@@ -348,7 +348,7 @@ def node_card(t, row, archive="", commits=()):
 
 def assumed_nodes(t):
     """The live nodes the author should read before accepting: those that state a
-    Hypothesis (an assumption) or an Ask (a question). See `dfs_tree.assumed`."""
+    Hypothesis (an assumption) or, in an old tree, an Ask (a question). See `dfs_tree.assumed`."""
     return dfs_tree.assumed(t)
 
 
@@ -682,9 +682,9 @@ KEYS = [
     ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
     ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
-    ("tree", "p", ord("p"), "flagged", "show only the ⚑ assumptions, asks and raises, or every node"),
+    ("tree", "p", ord("p"), "flagged", "show only the ⚑ assumptions and raises, or every node"),
     ("tree", "a", ord("a"), "answer", "answer the raise here"),
-    ("tree", "n  N", ord("n"), "next-flag", "next, previous raise, ⚑ or ask in the tree"),
+    ("tree", "n  N", ord("n"), "next-flag", "next, previous raise or ⚑ in the tree"),
     ("tree", "^d  ^u", 4, "card-scroll", "scroll the node panel at the right"),
     ("tree", "i", ord("i"), "add", "add a node under the one at the cursor (none: under the task)"),
     ("tree", "f", ord("f"), "correct", "correct this node: it was really confirmed or refuted"),
@@ -698,7 +698,7 @@ KEYS = [
     ("panes", "L", ord("L"), "runs", "agent runs: the live chains and the finished ones, newest first"),
     ("panes", "v", ord("v"), "art", "artefacts: the pictures its raises name"),
     ("panes", "t", ord("t"), "todo", "the epic's todo"),
-    ("panes", "H", ord("H"), "assumptions", "every open assumption and ask, across the tasks"),
+    ("panes", "H", ord("H"), "assumptions", "every open assumption, across the tasks"),
     ("panes", "h", ord("h"), "activity", "what this screen and its walk did"),
     ("any", "↑↓ j k", ord("j"), "move", "move the cursor, or the text where there is none"),
     ("any", "d  u", ord("d"), "half-page", "half a page down, up"),
@@ -2672,7 +2672,7 @@ class UI(WalkMixin):
         self.msg = "opened %s in %s" % (art["name"], os.path.basename(argv[0]))
 
     def asm_rows(self):
-        """Every assumption and ask the author has not accepted, across the tasks:
+        """Every assumption the author has not accepted (an old Ask counts as one), across the tasks:
         `(item index, node)`. The pre-accept job is "show me every open assumption I
         have not looked at", and the only way was to enter each task."""
         out = []
@@ -2694,7 +2694,7 @@ class UI(WalkMixin):
         out.append(("", 0))
         self._sel_row = None
         if not rows:
-            out.append(("  none: every task is accepted, or none states a hypothesis or an ask",
+            out.append(("  none: every task is accepted, or none states a hypothesis",
                         look("chrome")))
             return out
         for i, (idx, nd) in enumerate(rows):
@@ -3199,13 +3199,13 @@ class UI(WalkMixin):
         self.tree_flagged = not self.tree_flagged
         keys = [r["key"] for r in self.tree_rows()]
         self.tree_sel = keys.index(row["key"]) if row and row["key"] in keys else 0
-        self.msg = ("only ⚑ assumptions, asks and raises — p shows every node"
+        self.msg = ("only ⚑ assumptions and raises — p shows every node"
                     if self.tree_flagged else "every node")
 
     def tree_jump_flag(self, step):
         """Move the cursor to the next (or previous) row that wants the author: an open
-        raise, an assumption (⚑) or an ask. A tree is read for those, and with nothing
-        to jump by the only way to find them was to open every node."""
+        raise or an assumption (⚑; an old Ask counts). A tree is read for those, and
+        with nothing to jump by the only way to find them was to open every node."""
         rows = self.tree_rows()
 
         def wants(r):
@@ -3219,7 +3219,7 @@ class UI(WalkMixin):
             if wants(rows[i]):
                 self.tree_sel = i
                 return
-        self.msg = "no raise, ⚑ or ask in this tree"
+        self.msg = "no raise or ⚑ in this tree"
 
     def choose(self, label, keys):
         """One KEY out of `keys`, with no ⏎: `""` for any other, which cancels. The
@@ -3620,7 +3620,7 @@ class UI(WalkMixin):
                     % (it.get("sessions", 0), 10, max(5 - it.get("since_critic", 0), 0)),
                     look("chrome")))
         if self.tree_flagged:
-            out.append(("only ⚑ assumptions, asks and raises · p shows every node",
+            out.append(("only ⚑ assumptions and raises · p shows every node",
                         curses.A_BOLD))
         out.append(("", 0))
         if not rows:
