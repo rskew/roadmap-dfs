@@ -32,8 +32,17 @@ STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a 
 def _winsize(fd):
     try:
         return fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8)
-    except OSError:
+    except (OSError, ValueError):
         return struct.pack("HHHH", 40, 120, 0, 0)
+
+
+def _terminal_size():
+    """(rows, cols) of this process's own terminal, 40x120 when it has none or it reports 0."""
+    try:
+        rows, cols = struct.unpack("HHHH", _winsize(sys.__stdout__.fileno()))[:2]
+    except (AttributeError, ValueError, OSError):
+        rows = cols = 0
+    return (rows, cols) if rows and cols else (40, 120)
 
 
 def _try(fn, *a):
@@ -87,7 +96,7 @@ class Relay:
         self.pid, self.fd, self.started = pid, master, time.time()
         self.log("start pid=%d cwd=%s argv=%s" % (pid, cwd or os.getcwd(), " ".join(
             a if len(a) <= 60 else a[:57] + "..." for a in argv)))
-        rows, cols = size or (40, 120)
+        rows, cols = size or _terminal_size()
         _try(fcntl.ioctl, master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
         threading.Thread(target=self._pump, daemon=True).start()
         threading.Thread(target=self._typist, daemon=True).start()
@@ -163,6 +172,16 @@ class Relay:
                 time.sleep(0.05)
         else:
             threading.Thread(target=reap, daemon=True).start()
+
+    def resize(self, size=None):
+        """Tell the agent its terminal is now `size` (rows, cols), by default this process's own,
+        so that what it wraps in the background is wrapped for the width it will be looked at."""
+        rows, cols = size or _terminal_size()
+        with self.lock:
+            if self.fd is None or self.attached:        # attached, `attach` follows the terminal itself
+                return
+            _try(fcntl.ioctl, self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        _try(os.kill, self.pid, signal.SIGWINCH)
 
     # ── typing into it ─────────────────────────────────────────────────────────────────
     def send(self, text):
@@ -340,6 +359,13 @@ class ChatHost:
                         r.close(why="idle %ds, limit %ds" % (now - max(r.started, r.last_out), limit))
                         closed.append(s)
         return closed
+
+    def resize(self, size=None):
+        """Resize every running chat that nobody is attached to (see `Relay.resize`)."""
+        with self.lock:
+            relays = list(self.relays.values())
+        for r in relays:
+            r.resize(size)
 
     def live_scopes(self):
         with self.lock:

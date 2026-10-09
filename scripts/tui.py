@@ -4831,6 +4831,8 @@ class UI(WalkMixin):
                 continue
             self.msg = ""
             if ch == curses.KEY_RESIZE:
+                if self.chat_host is not None:
+                    self.chat_host.resize()     # the chats in the background wrap for the new width
                 continue
             if not self.act(ch):
                 break

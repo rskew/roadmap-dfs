@@ -175,6 +175,41 @@ class Looking(unittest.TestCase):
         self.assertEqual(self.result, [False])
 
 
+class Sizing(unittest.TestCase):
+    """A chat wraps for the terminal it will be looked at in, not for a fixed 120 columns."""
+
+    def agent(self, size=None):
+        out = Path(tempfile.mkdtemp()) / "size"
+        script = "stty size > %s; trap 'stty size >> %s' WINCH; while :; do sleep 0.1; done" % (out, out)
+        relay = ptyrelay.Relay().start(["bash", "-c", script], size=size)
+        self.addCleanup(relay.close)
+        return relay, out
+
+    def sizes(self, out):
+        return out.read_text().splitlines() if out.exists() else []
+
+    def test_it_starts_at_the_size_of_the_screens_terminal(self):
+        real = ptyrelay._terminal_size
+        ptyrelay._terminal_size = lambda: (30, 77)
+        self.addCleanup(setattr, ptyrelay, "_terminal_size", real)
+        _, out = self.agent()
+        self.assertTrue(until(lambda: self.sizes(out) == ["30 77"]), self.sizes(out))
+
+    def test_without_a_terminal_it_is_40_by_120(self):
+        real = ptyrelay._winsize
+        ptyrelay._winsize = lambda fd: b"\0" * 8
+        self.addCleanup(setattr, ptyrelay, "_winsize", real)
+        self.assertEqual(ptyrelay._terminal_size(), (40, 120))
+
+    def test_a_resize_of_the_screen_reaches_the_chats_in_the_background(self):
+        relay, out = self.agent(size=(40, 120))
+        self.assertTrue(until(lambda: self.sizes(out) == ["40 120"]))
+        host = ptyrelay.ChatHost()
+        host.relays["W1"] = relay
+        host.resize((24, 60))
+        self.assertTrue(until(lambda: self.sizes(out) == ["40 120", "24 60"]), self.sizes(out))
+
+
 class Leaving(unittest.TestCase):
     """Ending a chat is a SIGTERM, as ctrl-c is to a claude in a terminal, with a SIGKILL behind
     it; the screen's exit waits, so the backstop is not left to a thread that dies with it."""
