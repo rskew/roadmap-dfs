@@ -46,6 +46,25 @@ class Derivation(unittest.TestCase):
         self.assertEqual([n["id"] for n in dfs_tree.frontier(t)], ["W1.2"])
         self.assertEqual(dfs_tree.status_of(t)[0], "open")
 
+    def test_a_started_node_is_open_to_every_derivation(self):
+        t = self.t(node(1, "confirmed"), node(2, "started", 1), node(3, parent=2))
+        self.assertEqual(dfs_tree.by_id(t)["W1.2"]["status"], "started")
+        status, pruned = dfs_tree.effective(t)
+        self.assertEqual(status["W1.2"], "open")
+        self.assertEqual([n["id"] for n in dfs_tree.frontier(t)], ["W1.2"])
+        self.assertEqual(dfs_tree.status_of(t)[0], "open")
+        self.assertIn("W1.2 [open]", "\n".join(dfs_tree.outline(t)))
+
+    def test_a_started_node_alone_keeps_the_tree_from_completing(self):
+        t = self.t(node(1, "confirmed"), node(2, "started", 1))
+        self.assertIn("workable", dfs_tree.incomplete(t))
+        t = self.t(node(1, "confirmed"), node(2, "parked", 1), node(3, "started", 2))
+        self.assertIsNone(dfs_tree.incomplete(t))
+
+    def test_a_started_node_below_a_parked_one_is_dormant(self):
+        t = self.t(node(1, "confirmed"), node(2, "parked", 1), node(3, "started", 2))
+        self.assertEqual(dfs_tree.dormant(t), {"W1.2", "W1.3"})
+
     def test_backing_up_prunes_what_was_planned_under_the_refuted_node(self):
         t = self.t(node(1, "confirmed"), node(2, "refuted", 1), node(3, parent=2),
                    node(4, parent=1))
@@ -754,6 +773,20 @@ class Check(InARepo):
         for nid, title in (("W1.1", "x"), ("W1.4", "x"), ("W1.9", "x"), ("W1.2", " ")):
             with self.assertRaises(ValueError, msg=nid):
                 dfs_tree.edit_node("W1", nid, title, "")
+
+    def test_a_started_node_is_edited_and_checked_and_then_ruled(self):
+        self.write(task(node(1, "started", extra="Approach: old way.\n"), self.LOG))
+        self.commit()
+        dfs_tree.edit_node("W1", "W1.1", "new", "new way")
+        self.assertEqual(dfs_tree.by_id(dfs_tree.load("W1"))["W1.1"]["status"], "started")
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.commit()
+        self.write(task(node(1, "confirmed", extra="Approach: new way.\nDetermination: Confirmed: ok.\n"), self.LOG))
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
 
     def test_the_authors_words_stay_with_the_node(self):
         log = (self.LOG + "- 2026-09-25T09:10:00Z · raise · W1.1\n  Which way?\n"

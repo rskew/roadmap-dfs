@@ -15,7 +15,7 @@ Each task is one file, `.dfs/items/<task>.md`:
 
     ### W13.1 · <title>
     Parent: W13.0                 (optional; absent means a child of the task)
-    Status: open | parked | confirmed | refuted
+    Status: open | started | parked | confirmed | refuted
     Approach: <what this node does and how: the files, the change, the check>
     Hypothesis: <optional: an important, questionable assumption, and what would show it wrong>
     Evidence:
@@ -91,7 +91,10 @@ import paths as dfs_paths            # noqa: E402
 
 # `parked` is an alternative not being pursued now: not determined, so it may be
 # reopened, and neither it nor anything planned under it holds the task open.
-STATUSES = ("open", "parked", "confirmed", "refuted")
+# `started` is an open node a session has begun to change code for. It is written to the
+# working copy and never committed as it is: the node's commit rules it. Every derivation
+# reads it as `open` (`effective`); only `nd["status"]` and the web page tell it apart.
+STATUSES = ("open", "started", "parked", "confirmed", "refuted")
 DETERMINED = ("confirmed", "refuted")
 # Who writes each kind is a convention the checker enforces only by shape; the
 # runner, the agent, the critic and the author's passes each append their own.
@@ -680,7 +683,7 @@ def edit_node(task, nid, title, approach=""):
     nd = by_id(t).get(nid) if t else None
     if not nd:
         raise ValueError("no node %s in %s" % (nid, task))
-    if nd["status"] not in ("open", "parked"):
+    if nd["status"] not in ("open", "started", "parked"):
         raise ValueError("%s is %s, and a determined node is history: add a node instead"
                          % (nid, nd["status"]))
     if nd["fields"].get("Approach") == SHELF_STUB:
@@ -799,7 +802,8 @@ def effective(t):
     be shown this time.
     """
     nodes = by_id(t)
-    status = {nid: nd["status"] for nid, nd in nodes.items()}
+    status = {nid: "open" if nd["status"] == "started" else nd["status"]
+              for nid, nd in nodes.items()}
     cut = set()
     for c in corrections(t):
         if c["node"] not in nodes:
