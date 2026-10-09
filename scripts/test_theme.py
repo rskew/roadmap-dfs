@@ -118,6 +118,28 @@ class Theme(unittest.TestCase):
         self.assertIsNone(dfs_paths.read_background_image())
         self.assertEqual(dfs_paths.write_background_image(None), "")        # clearing nothing is fine
 
+    def test_each_mode_shows_its_own_picture_else_the_one_for_both(self):
+        a, b, c = kind_png(b"a"), kind_png(b"b"), kind_png(b"c")
+        both = dfs_paths.background_image_file()
+        dfs_paths.write_background_image(a, "dark")
+        self.assertEqual((dfs_paths.read_background_image("dark"), dfs_paths.read_background_image("light")), ((a, "image/png"), None))
+        self.assertEqual(dfs_paths.background_image_versions()["light"], "")
+        both.write_bytes(b)                                     # a picture put there by hand serves the mode with none
+        self.assertEqual((dfs_paths.read_background_image("dark")[0], dfs_paths.read_background_image("light")[0]), (a, b))
+        dfs_paths.write_background_image(c, "dark")             # changing one mode hands the shared picture to the other
+        self.assertFalse(both.exists())
+        self.assertEqual([dfs_paths.read_background_image(m)[0] for m in dfs_paths.MODES], [b, c])
+        both.write_bytes(a)
+        self.assertEqual(dfs_paths.write_background_image(b"", "light"), "")     # clearing a mode keeps the other's picture
+        self.assertEqual((dfs_paths.read_background_image("light"), dfs_paths.read_background_image("dark")[0]), (None, c))
+        dfs_paths.write_background_image(b)                     # no mode sets both, replacing the per-mode ones
+        self.assertEqual([dfs_paths.read_background_image(m)[0] for m in dfs_paths.MODES], [b, b])
+        self.assertFalse(dfs_paths.background_image_file("dark").exists())
+        dfs_paths.write_background_image(None)
+        self.assertEqual(dfs_paths.background_image_versions(), dict(light="", dark=""))
+        with self.assertRaises(ValueError):
+            dfs_paths.write_background_image(a, "dusk")
+
     def test_a_new_picture_is_a_new_version(self):
         a = dfs_paths.write_background_image(kind_png(b"a"))
         os.utime(dfs_paths.background_image_file(), ns=(1, 1))

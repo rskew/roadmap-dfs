@@ -36,9 +36,11 @@ THE PROJECT'S COLOUR is `.dfs/theme` (`#rrggbb`), else one made from the name; i
 bar, the browser's own bar and the installed app, so two projects are told apart. It is chosen
 in the same dialog as the name ("Rename project"), and `--project` in /design.css holds it.
 THE PROJECT'S BACKGROUND is `.dfs/background` (a colour for light mode, one for dark) and, apart from
-it, `.dfs/background-image`: a png, jpeg, webp or gif of 8 MB or less, set at POST /api/background-image
-(base64 in JSON, the one write allowed a body past 64 KB), served at GET /background-image, and drawn
-fixed behind the page under a 90% veil of the paper so text keeps its contrast on any picture.
+it, a picture for each mode, `.dfs/background-image-light` and `-dark` (`.dfs/background-image` serves a
+mode that has none of its own): a png, jpeg, webp or gif of 8 MB or less, set at POST /api/background-image
+(base64 in JSON, with a `mode`; the one write allowed a body past 64 KB), served at GET /background-image
+(`?mode=light|dark`), and drawn fixed behind the page under a 90% veil of the paper so text keeps its
+contrast on any picture.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the
@@ -112,7 +114,7 @@ def index_html():
             .replace("{{colour}}", dfs_paths.project_colour())
             .replace("{{background_json}}", json.dumps(dfs_paths.read_background()))
             .replace("{{palettes_json}}", json.dumps(dfs_paths.background_palettes()))
-            .replace("{{background_image_json}}", json.dumps(dfs_paths.background_image_version()))
+            .replace("{{background_image_json}}", json.dumps(dfs_paths.background_image_versions()))
             .replace("{{project}}", html.escape(name))).encode()
 
 
@@ -151,7 +153,7 @@ def state_json():
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
                 background=dfs_paths.read_background(), palettes=dfs_paths.background_palettes(),
-                background_image=dfs_paths.background_image_version())
+                background_image=dfs_paths.background_image_versions())
 
 
 _commit_cache = {}
@@ -422,19 +424,22 @@ def set_background(body):
 
 def set_background_image(body):
     """Set the picture behind the page (`image`, a png, jpeg, webp or gif in base64) or clear it
-    with an empty string. The background colours are not touched."""
-    value = body.get("image")
+    with an empty string, for the `mode` "light" or "dark", or for both when there is none. The
+    background colours are not touched."""
+    value, mode = body.get("image"), body.get("mode", "")
     if not isinstance(value, str):
         raise Refused("an image is needed")
+    if not isinstance(mode, str):
+        raise Refused("a mode is light or dark")
     try:
         data = base64.b64decode(value, validate=True) if value else b""
-        version = dfs_paths.write_background_image(data)
+        dfs_paths.write_background_image(data, mode)
     except ValueError as e:
-        raise Refused(str(e) if "background image" in str(e) else "that is not base64")
+        raise Refused(str(e) if "background image" in str(e) or "a mode" in str(e) else "that is not base64")
     except OSError as e:
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_image_file()), e), 500)
     HUB.notify()
-    return dict(background_image=version)
+    return dict(background_image=dfs_paths.background_image_versions())
 
 
 def set_theme(body):
@@ -976,7 +981,8 @@ class Handler(BaseHTTPRequestHandler):
             from_ = parse_qs(urlparse(self.path).query).get("from", [""])[0]
             return self.json(200, run_log(path[len("/api/run/"):], int(from_) if from_.isdigit() else None))
         if path == "/background-image":
-            image = dfs_paths.read_background_image()
+            mode = parse_qs(urlparse(self.path).query).get("mode", [""])[0]
+            image = dfs_paths.read_background_image(mode if mode in dfs_paths.MODES else "")
             if image is None:
                 raise Refused("no background image", 404)
             return self.send(200, image[0], image[1], extra=[("Cache-Control", "no-cache")])

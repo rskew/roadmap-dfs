@@ -25,8 +25,9 @@ installed app) and is never used for status or text. `--project-mark` is how it 
 as it is on paper, lightened in the dark theme so it still shows. The `theme-color` meta is
 the project colour in both themes, not the paper of the dark one, so the browser bar tells
 projects apart.
-A project may also have a **background picture** (`.dfs/background-image`): `body::before` draws it fixed
-behind the page under a 90% veil of `--paper`, so the picture shows at 10% and text keeps 10:1 (body) and
+A project may also have a **background picture** for each mode (`.dfs/background-image-light` and `-dark`;
+`.dfs/background-image` serves a mode with none of its own): `body::before` draws the one of the mode the page
+is in, fixed behind the page under a 90% veil of `--paper`, so the picture shows at 10% and text keeps 10:1 (body) and
 4:1 (muted) on a worst-case black or white pixel. It adds no colour of its own, and the opaque surfaces
 (the bar, the sheet, dialogs) stay paper.
 Everything else is paper, panel, ink, muted and two rules. Square corners, no shadows, no

@@ -280,8 +280,11 @@ def background_palettes() -> dict:
 IMAGE_MAX = 8 * 1024 * 1024
 
 
-def background_image_file() -> Path:
-    return state() / "background-image"
+def background_image_file(mode="") -> Path:
+    """The picture file for `light` or `dark` mode, or the one for both when no mode is given."""
+    if mode and mode not in MODES:
+        raise ValueError("a mode is light or dark")
+    return state() / ("background-image-" + mode if mode else "background-image")
 
 
 def image_type(data: bytes) -> str:
@@ -297,44 +300,87 @@ def image_type(data: bytes) -> str:
     return ""
 
 
-def read_background_image():
-    """The picture behind the page, `.dfs/background-image`: (bytes, content type), None when
-    there is none or the file is not a picture. The name has no extension, so a file put there
-    by hand works whatever it was called."""
+def _picture(path: Path):
+    """(bytes, content type) of the picture in `path`, None when it is absent or not one."""
     try:
-        data = background_image_file().read_bytes()
+        data = path.read_bytes()
     except OSError:
         return None
     kind = image_type(data) if len(data) <= IMAGE_MAX else ""
     return (data, kind) if kind else None
 
 
-def background_image_version() -> str:
-    """Which picture is in force, for a page to tell a new one from the old: the file's
+def _shown(mode: str):
+    """(file, bytes, content type) of the picture a mode shows: its own, else the one for both.
+    With no mode, only the one for both."""
+    for path in ([background_image_file(mode)] if mode else []) + [background_image_file()]:
+        found = _picture(path)
+        if found:
+            return (path,) + found
+    return None
+
+
+def read_background_image(mode=""):
+    """The picture behind the page in a mode, `.dfs/background-image-light` or `-dark`, else
+    `.dfs/background-image` (which serves both): (bytes, content type), None when there is
+    none or the file is not a picture. The names have no extension, so a file put there by
+    hand works whatever it was called."""
+    found = _shown(mode)
+    return found[1:] if found else None
+
+
+def background_image_version(mode="") -> str:
+    """Which picture a mode shows, for a page to tell a new one from the old: the file's
     modification time in nanoseconds, "" when there is no picture."""
-    if read_background_image() is None:
-        return ""
-    return str(background_image_file().stat().st_mtime_ns)
+    found = _shown(mode)
+    return str(found[0].stat().st_mtime_ns) if found else ""
 
 
-def write_background_image(data) -> str:
-    """Set the picture behind the page (png, jpeg, webp or gif, at most 8 MB); empty or None
-    clears it. Separate from the background colours. Returns the version now in force."""
-    if not data:
-        try:
-            background_image_file().unlink()
-        except FileNotFoundError:
-            pass
-        return ""
-    if len(data) > IMAGE_MAX:
-        raise ValueError("a background image is 8 MB or smaller")
-    if not image_type(data):
-        raise ValueError("a background image is a png, jpeg, webp or gif")
-    background_image_file().parent.mkdir(parents=True, exist_ok=True)
-    tmp = background_image_file().with_name("background-image.tmp")
+def background_image_versions() -> dict:
+    """The version of the picture each mode shows: {"light": ..., "dark": ...}."""
+    return {m: background_image_version(m) for m in MODES}
+
+
+def _write_atomically(path: Path, data: bytes):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
     tmp.write_bytes(data)
-    tmp.replace(background_image_file())
-    return background_image_version()
+    tmp.replace(path)
+
+
+def _unlink(path: Path):
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def write_background_image(data, mode="") -> str:
+    """Set the picture behind the page (png, jpeg, webp or gif, at most 8 MB) in `light` or
+    `dark` mode, or in both when no mode is given; empty or None clears it. A picture for both
+    that is already there is first handed to each mode that has none of its own, so changing
+    one mode leaves the other as it was. Separate from the background colours. Returns the
+    version the mode now shows."""
+    path = background_image_file(mode)
+    if data:
+        if len(data) > IMAGE_MAX:
+            raise ValueError("a background image is 8 MB or smaller")
+        if not image_type(data):
+            raise ValueError("a background image is a png, jpeg, webp or gif")
+    shared = _picture(background_image_file())
+    if mode and shared:
+        for m in MODES:
+            if not background_image_file(m).exists():
+                _write_atomically(background_image_file(m), shared[0])
+        _unlink(background_image_file())
+    if not mode:
+        for m in MODES:
+            _unlink(background_image_file(m))
+    if not data:
+        _unlink(path)
+        return ""
+    _write_atomically(path, data)
+    return background_image_version(mode)
 
 
 def colour_from_name(name: str) -> str:

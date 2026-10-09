@@ -593,25 +593,26 @@ class Web(unittest.TestCase):
         import base64
         png = b"\x89PNG\r\n\x1a\n" + b"pixels"
         send = lambda raw: self.call("POST", "/api/background-image", dict(image=base64.b64encode(raw).decode()))
-        self.assertIn("IMAGE = \"\"", self.call("GET", "/")[1].decode())
-        self.assertEqual(self.call("GET", "/api/state")[1]["background_image"], "")
+        none = dict(light="", dark="")
+        self.assertIn("IMAGE = " + json.dumps(none), self.call("GET", "/")[1].decode())
+        self.assertEqual(self.call("GET", "/api/state")[1]["background_image"], none)
         self.assertEqual(self.call("GET", "/background-image")[0], 404)
         self.call("POST", "/api/background", dict(light="#fff2cc"))
         status, body, _ = send(png)
         ver = body["background_image"]
-        self.assertEqual((status, bool(ver)), (200, True))
+        self.assertEqual((status, bool(ver["light"]), ver["light"] == ver["dark"]), (200, True, True))
         status, raw, r = self.call("GET", "/background-image")
         self.assertEqual((status, raw, r.getheader("Content-Type"), r.getheader("Cache-Control")),
                          (200, png, "image/png", "no-cache"))
         self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
         st = self.call("GET", "/api/state")[1]
         self.assertEqual((st["background_image"], st["background"]["light"]), (ver, "#fff2cc"))
-        self.assertIn('IMAGE = "%s"' % ver, self.call("GET", "/")[1].decode())
+        self.assertIn("IMAGE = " + json.dumps(ver), self.call("GET", "/")[1].decode())
         os.utime(self.root / ".dfs" / "background-image", ns=(1, 1))
         self.assertNotEqual(self.call("GET", "/api/state")[1]["background_image"], ver)
         self.assertEqual(send(b"GIF89a....")[1]["background_image"] != ver, True)
         self.assertEqual(self.call("GET", "/background-image")[2].getheader("Content-Type"), "image/gif")
-        for bad in (dict(), dict(image=5), dict(image="not base64!"), dict(image=base64.b64encode(b"text").decode()),
+        for bad in (dict(), dict(image=5), dict(image="not base64!"), dict(image="", mode="dusk"), dict(image="", mode=5), dict(image=base64.b64encode(b"text").decode()),
                     dict(image=base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\0" * dfs_paths.IMAGE_MAX).decode())):
             self.assertEqual(self.call("POST", "/api/background-image", bad)[0], 400, str(bad)[:30])
         self.assertEqual(self.call("GET", "/background-image")[2].getheader("Content-Type"), "image/gif")
@@ -628,10 +629,34 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/background-image", dict(image=""), headers={"Host": "evil.example"})[0], 421)
         self.assertEqual(self.call("GET", "/background-image", headers={"Host": "evil.example"})[0], 421)
         status, body, _ = self.call("POST", "/api/background-image", dict(image=""))
-        self.assertEqual((status, body), (200, dict(background_image="")))
+        self.assertEqual((status, body), (200, dict(background_image=none)))
         self.assertEqual(self.call("GET", "/background-image")[0], 404)
         self.assertFalse((self.root / ".dfs" / "background-image").exists())
         self.assertEqual(self.call("GET", "/api/state")[1]["background"]["light"], "#fff2cc")
+
+    def test_each_mode_has_its_own_picture_and_one_for_both_serves_the_rest(self):
+        import base64
+        png, gif = b"\x89PNG\r\n\x1a\n" + b"pixels", b"GIF89a...."
+        send = lambda raw, **kw: self.call("POST", "/api/background-image", dict(image=base64.b64encode(raw).decode(), **kw))
+        get = lambda mode="": self.call("GET", "/background-image" + ("?mode=" + mode if mode else ""))
+        state = lambda: self.call("GET", "/api/state")[1]["background_image"]
+        self.assertEqual(send(png, mode="dark")[0], 200)
+        self.assertEqual((get("dark")[1], get("light")[0], get()[0]), (png, 404, 404))
+        self.assertEqual((bool(state()["dark"]), state()["light"]), (True, ""))
+        self.assertEqual(send(gif, mode="light")[0], 200)
+        self.assertEqual((get("light")[1], get("light")[2].getheader("Content-Type"), get("dark")[1]), (gif, "image/gif", png))
+        for name in ("background-image-light", "background-image-dark"):
+            self.assertTrue((self.root / ".dfs" / name).exists(), name)
+        self.assertEqual(get("dusk")[0], 404)                  # a mode that is neither is the one for both: none
+        send(png)                                              # no mode: one picture for both, the old ones go
+        self.assertEqual((get("light")[1], get("dark")[1], get()[1]), (png, png, png))
+        self.assertFalse((self.root / ".dfs" / "background-image-light").exists())
+        self.assertEqual(send(gif, mode="light")[0], 200)      # one mode changes, the other keeps the shared picture
+        self.assertEqual((get("light")[1], get("dark")[1], get()[0]), (gif, png, 404))
+        self.assertEqual(send("".encode(), mode="light")[0], 200)
+        self.assertEqual((get("light")[0], get("dark")[1]), (404, png))
+        self.assertEqual(send(b"", mode="dark")[0], 200)
+        self.assertEqual((state(), get("dark")[0]), (dict(light="", dark=""), 404))
 
     def test_the_dark_washes_stay_visible_and_their_text_readable(self):
         import re

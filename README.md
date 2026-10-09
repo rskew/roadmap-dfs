@@ -20,11 +20,12 @@ There is no login, so it listens on this machine only until you say otherwise.
 
 Each project can look its own way, set in the project dialog (tap the project's name): a colour for the top
 of the page (`.dfs/theme`), a background colour for light mode and another for dark (`.dfs/background`), and
-a background picture (`.dfs/background-image`, a png, jpeg, webp or gif of 8 MB or less). The picture is
-drawn fixed behind the page under a veil of the page's own paper at 90%, so text stays readable on any
-picture (body text at least 10:1 and muted text at least 4:1 on a pure black or white pixel); "No picture"
-removes it. It is a plain file, so a picture put there by hand works too, and it travels with the repo like
-the name and the colour.
+a background picture for each of light and dark mode (`.dfs/background-image-light` and `-dark`, each a png,
+jpeg, webp or gif of 8 MB or less). The page draws the picture of the mode it is in, fixed behind itself under
+a veil of the page's own paper at 90%, so text stays readable on any picture (body text at least 10:1 and
+muted text at least 4:1 on a pure black or white pixel), and the light/dark switch changes it; "No picture"
+removes one mode's. They are plain files, so a picture put there by hand works too (`.dfs/background-image`
+serves a mode that has none of its own), and they travel with the repo like the name and the colour.
 
 Each live node on a task's page carries a mark before its id, so its state does not rest on the colour
 of its left rule: a tick for a confirmed node, a filled circle for an open node a session has started, an

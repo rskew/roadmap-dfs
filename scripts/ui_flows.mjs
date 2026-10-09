@@ -592,37 +592,60 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   // The page's background is chosen in the same dialog, one for light mode and one for dark, and
   // lives in .dfs/background apart from the colour: the paper follows the mode the switch picks,
   // the bar's stripe stays the project's colour, and clearing both returns the design's paper.
-  // A picture behind the page is chosen in the same dialog and lives in .dfs/background-image: the page
-  // draws it under a veil, the files that hold the colours are untouched, and removing it puts the paper back.
+  // A picture behind the page is chosen in the same dialog, one for light mode and one for dark, and lives in
+  // .dfs/background-image-light and -dark: the page draws the mode's own under a veil, the switch changes it,
+  // the files that hold the colours are untouched, and removing one puts the paper back in that mode alone.
   async picture(b) {
     const { page, errors } = await open(b, PHONE);
     const file = process.env.DFS_PICTURE;
     const fs = await import("node:fs");
     const buf = file ? fs.readFileSync(file) : Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const gif = Buffer.from("R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=", "base64");
     const veil = () => page.evaluate(() => { const c = getComputedStyle(document.body, "::before"); return [c.content, c.backgroundImage, c.position, c.zIndex]; });
+    const mode = m => page.evaluate(m => { document.documentElement.dataset.theme = m; localStorage.setItem("theme", m); paintBackground(); }, m);
+    await mode("light");
     assert((await veil())[0] === "none", "no picture, nothing is drawn behind the page");
     await page.click("[data-act=rename]"); await dialog(page);
-    assert(await page.isDisabled("#pr"), "there is no picture to remove yet");
-    await page.setInputFiles("#pi", { name: "wall.png", mimeType: "image/png", buffer: buf });
-    assert(!(await page.isChecked("#pr")), "choosing a picture is not removing one");
+    assert(await page.isDisabled("#pr-light") && await page.isDisabled("#pr-dark"), "there is no picture to remove yet");
+    await page.setInputFiles("#pi-light", { name: "wall.png", mimeType: "image/png", buffer: buf });
+    assert(!(await page.isChecked("#pr-light")) && await page.isDisabled("#pr-dark"), "choosing a picture for light mode is not removing one, and leaves dark alone");
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => document.documentElement.hasAttribute("data-picture"));
     const [content, image, position, z] = await veil();
-    assert(content !== "none" && image.includes("/background-image?v=") && image.includes("linear-gradient"), "the picture is drawn under a veil, got " + image);
+    assert(content !== "none" && image.includes("/background-image?mode=light&v=") && image.includes("linear-gradient"), "the light picture is drawn under a veil, got " + image);
     same([position, z], ["fixed", "-1"], "behind the page, fixed");
-    const got = await page.evaluate(async () => { const r = await fetch(getComputedStyle(document.documentElement).getPropertyValue("--picture").match(/url\("(.*)"\)/)[1]); return [r.status, r.headers.get("content-type"), (await r.arrayBuffer()).byteLength]; });
-    same(got, [200, "image/png", buf.length], "the page's picture is the one chosen");
+    const got = () => page.evaluate(async () => { const r = await fetch(getComputedStyle(document.documentElement).getPropertyValue("--picture").match(/url\("(.*)"\)/)[1]); return [r.status, r.headers.get("content-type"), (await r.arrayBuffer()).byteLength]; });
+    same(await got(), [200, "image/png", buf.length], "the page's picture is the one chosen");
     assert(await page.isVisible(".item"), "the tasks are still there");
     await page.waitForSelector("dialog[open]", { state: "hidden" });
+    await mode("dark");
+    same((await veil())[0], "none", "dark mode has no picture of its own, so the paper shows");
+    await page.click("[data-act=rename]"); await dialog(page);
+    await page.setInputFiles("#pi-dark", { name: "night.gif", mimeType: "image/gif", buffer: gif });
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => document.documentElement.hasAttribute("data-picture"));
+    assert((await veil())[1].includes("mode=dark"), "the dark picture is drawn in dark mode");
+    same(await got(), [200, "image/gif", gif.length], "and it is the other one");
+    await page.waitForSelector("dialog[open]", { state: "hidden" });
+    await mode("light");
+    same(await got(), [200, "image/png", buf.length], "switching back, light mode shows its own again");
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
     await page.reload(); await page.waitForSelector(".item");
     assert(await page.evaluate(() => document.documentElement.hasAttribute("data-picture")), "it survives a reload");
     await page.click("[data-act=rename]"); await dialog(page);
-    assert(!(await page.isDisabled("#pr")), "now it can be removed");
-    await page.check("#pr");
+    assert(!(await page.isDisabled("#pr-light")) && !(await page.isDisabled("#pr-dark")), "now each can be removed");
+    await page.check("#pr-light");
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => !document.documentElement.hasAttribute("data-picture"));
-    same((await veil())[0], "none", "removed, the paper is back");
+    same((await veil())[0], "none", "removed, the paper is back in light mode");
+    await page.waitForSelector("dialog[open]", { state: "hidden" });
+    await mode("dark");
+    assert((await veil())[1].includes("mode=dark"), "and dark mode keeps its picture");
+    await page.click("[data-act=rename]"); await dialog(page);
+    await page.check("#pr-dark");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.documentElement.hasAttribute("data-picture"));
+    same((await veil())[0], "none", "removed from both, the paper is back");
     same(errors, [], "no page errors");
   },
 
