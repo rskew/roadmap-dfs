@@ -59,6 +59,7 @@ class Relay:
         self.closing = False
         self.started = self.first_out = self.last_out = 0.0
         self.outbox = queue.Queue()
+        self.unsent = 0             # messages queued or taken by the typist and not yet typed
         self.stops = 0              # interrupts so far: a message taken before one is not typed after it
         self.out_fd = None          # where the terminal is, while attached
 
@@ -172,27 +173,29 @@ class Relay:
                 self.log("message of %d characters refused: the agent is not running" % len(text))
                 return False
             self.outbox.put(text)
+            self.unsent += 1
             self.log("message of %d characters queued (%d waiting)" % (len(text), self.outbox.qsize()))
             return True
 
     def interrupt(self):
         """Stop what the agent is answering, as pressing Esc in its terminal does: messages still
-        waiting to be typed are dropped, then ESC is written to it. False if it is not running."""
+        waiting to be typed are dropped, then ESC is written to it. Returns how many messages were
+        dropped untyped, or None if it is not running."""
         with self.lock:
             if not self.live:
-                return False
-            dropped = 0
+                return None
+            dropped = self.unsent
+            self.unsent = 0
             while True:
                 try:
                     self.outbox.get_nowait()
-                    dropped += 1
                 except queue.Empty:
                     break
             self.typed_at = 0.0
             self.stops += 1
             _try(os.write, self.fd, b"\x1b")
-        self.log("interrupt: ESC sent%s" % (", %d queued message(s) dropped" % dropped if dropped else ""))
-        return True
+        self.log("interrupt: ESC sent%s" % (", %d unsent message(s) dropped" % dropped if dropped else ""))
+        return dropped
 
     def _typist(self):
         while self.live:
@@ -214,6 +217,7 @@ class Relay:
                     continue
                 _try(os.write, fd, b"\x1b[200~" + text.encode() + b"\x1b[201~")
                 self.typed_at, self.typed_out = time.time(), self.total_out
+                self.unsent = max(0, self.unsent - 1)
             self.log("typed %d characters after %.1fs wait (%s)" % (
                 len(text), time.time() - waited, "settled" if time.time() - waited < READY_TIMEOUT
                 else "the agent had not settled in %ds, typed anyway" % READY_TIMEOUT))

@@ -4878,7 +4878,7 @@ class UiWalker:
 
     def chat_interrupt(self, scope):
         r = self._relay(scope)
-        return bool(r and r.interrupt())
+        return r.interrupt() if r else None
 
     def loop(self, stop, interval=1.0):
         stop.wait()             # the screen's own poll steps the walk

@@ -257,8 +257,12 @@ class Chats:
                 chatlog.log(scope, "page: stop, ending the turn (%ds in)" % (time.time() - self.busy[scope]))
                 self.stopped.add(scope)
                 self.end_turn(scope)
-            elif w and w.chat_interrupt(scope):
+            elif w and (dropped := w.chat_interrupt(scope)) is not None:
                 chatlog.log(scope, "page: stop, interrupt sent to the screen's chat")
+                if dropped:     # the message was stopped before it was typed: it is not sent, and not shown as sent
+                    chatlog.log(scope, "page: stop, %d message(s) were never typed" % dropped)
+                    self.pending.pop(scope, None)
+                    self.stops[scope] = True
             else:
                 chatlog.log(scope, "page: stop, nothing was answering")
         self.on_change()

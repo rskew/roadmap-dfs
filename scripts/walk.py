@@ -604,7 +604,7 @@ class HeadlessWalk(WalkMixin):
         pass
 
     def chat_interrupt(self, scope):
-        return False
+        return None
 
     def __init__(self, on_change=None):
         self.lock = threading.RLock()

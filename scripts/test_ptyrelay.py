@@ -91,7 +91,7 @@ class Background(unittest.TestCase):
         r = ptyrelay.Relay().start(["bash", "-c", agent], env=self.env)
         self.addCleanup(r.close)
         self.assertTrue(until(lambda: r.first_out))
-        self.assertTrue(r.interrupt())
+        self.assertEqual(r.interrupt(), 0, "nothing was waiting to be typed")
         self.assertTrue(until(lambda: self.lines() == ["esc"]))
         self.assertTrue(r.live, "an interrupt stops the turn, not the agent")
         r.send("x")
@@ -103,14 +103,14 @@ class Background(unittest.TestCase):
         self.addCleanup(r.close)
         r.send("late")                  # waiting for the agent to draw itself
         time.sleep(0.3)
-        self.assertTrue(r.interrupt())
+        self.assertEqual(r.interrupt(), 1, "it says the message was dropped untyped")
         time.sleep(3)
         self.assertNotIn("c:l", self.lines(), "stopped before it was typed, so never typed")
 
     def test_interrupt_of_an_ended_agent_says_so(self):
         self.relay.send("quit")
         self.assertTrue(until(lambda: not self.relay.live))
-        self.assertFalse(self.relay.interrupt())
+        self.assertIsNone(self.relay.interrupt())
 
     def test_close_ends_it(self):
         self.relay.close()

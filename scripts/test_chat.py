@@ -116,12 +116,27 @@ class Chat(unittest.TestCase):
             def __init__(s): s.pressed = []
             def chat_live(s, scope): return True
             def chat_active(s, scope): return True
-            def chat_interrupt(s, scope): s.pressed.append(scope); return True
+            def chat_interrupt(s, scope): s.pressed.append(scope); return 0
         screen = Screen()
         chats = dfs_chat.Chats(walker=lambda: screen)
         st = chats.interrupt("W1")
         self.assertEqual(screen.pressed, ["W1"])
         self.assertNotIn("note", [m["role"] for m in st["messages"]], "the screen's chat leaves its own mark in the transcript")
+
+    def test_stop_before_the_screens_chat_typed_a_message_does_not_leave_it_shown_as_sent(self):
+        class Screen:
+            has_screen = True
+            def chat_live(s, scope): return True
+            def chat_active(s, scope): return False
+            def chat_send(s, scope, text): return True
+            def chat_interrupt(s, scope): return 1      # one message was dropped untyped
+        chats = dfs_chat.Chats(walker=lambda: Screen())
+        chats.send("W1", "never typed")
+        self.assertEqual([m["text"] for m in chats.state("W1")["messages"]], ["never typed"])
+        st = chats.interrupt("W1")
+        self.assertEqual([m["role"] for m in st["messages"]], ["note"], st["messages"])
+        chats.send("W1", "again")
+        self.assertEqual([m["role"] for m in chats.state("W1")["messages"]], ["you"], "the note goes once it moves on")
 
     def test_stop_with_nothing_answering_changes_nothing(self):
         st = self.chats.interrupt("W1")
