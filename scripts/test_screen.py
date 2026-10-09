@@ -848,6 +848,28 @@ class ANodeSaysHowFarItIs(unittest.TestCase):
         card = dict(TUI.node_card(t, rows["W1.2"])[1:2])
         self.assertEqual(card["meta"], "● started · under W1.1")
 
+    def test_a_node_the_author_confirmed_is_not_ticked(self):
+        """Confirmed by a correction, a node may have nothing built: it keeps its status
+        but not the tick, which is for what a session confirmed."""
+        text = self.TEXT.replace("## Log\n", "## Log\n\n"
+            "- 2026-10-01T00:00:01Z · correct · W1.4 · confirmed\n  keep it\n"
+            "- 2026-10-01T00:00:02Z · correct · W1.1 · confirmed\n")
+        t = TUI.dfs_tree.parse(text, "W1")
+        rows = {r["key"]: r for r in TUI.tree_entries(t) if r["kind"] == "node"}
+        self.assertEqual({k: (r["status"], r["progress"]) for k, r in rows.items()},
+                         {"W1.1": ("confirmed", "done"), "W1.2": ("open", "started"),
+                          "W1.3": ("open", "open"), "W1.4": ("confirmed", "ruled")})
+        ui = a_screen([item("W1")], pane="item", focus="tree", tree_open=set())
+        ui.tree_of = lambda task: (t, "", {})
+        ui.status_attr = lambda status: 0
+        ui._tree_cache = {}
+        ui.tree_item = "W1"
+        heads = {k: next(l[0] for l in ui.lines_tree(100) if k in l[0]) for k in rows}
+        for k, mark in (("W1.1", "✓"), ("W1.4", "◇")):
+            self.assertRegex(heads[k], r"%s %s " % (k.replace(".", r"\."), mark), heads[k])
+        self.assertEqual(dict(TUI.node_card(t, rows["W1.4"])[1:2])["meta"],
+                         "◇ confirmed by you, not built · under W1.1")
+
 
 class ADoneTaskRecedesInTheList(unittest.TestCase):
     """The list told a finished task from an open one by the colour of one word."""

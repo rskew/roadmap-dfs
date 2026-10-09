@@ -894,6 +894,15 @@ class Web(unittest.TestCase):
         self.assertTrue(row["skim"].startswith("overruled by you:"))
         self.assertFalse(row["assumes"], "a refuted node's assumption is moot")
 
+    def test_a_node_the_author_confirmed_is_not_ticked(self):
+        """Confirming an open node is the author's word; nothing may be built, so no tick."""
+        status, data, _ = self.call("POST", "/api/correct", dict(
+            task="W1", node="W1.3", verdict="confirmed", body="Fine as it is."))
+        self.assertEqual(status, 200)
+        rows = {r["key"]: r for r in data["task"]["rows"] if r["kind"] == "node"}
+        self.assertEqual((rows["W1.3"]["status"], rows["W1.3"]["progress"]), ("confirmed", "ruled"))
+        self.assertEqual(rows["W1.1"]["progress"], "done")
+
     # ── reordering the task list ────────────────────────────────────────────────
     def three_tasks(self):
         for n in ("W2", "W3"):

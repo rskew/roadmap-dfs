@@ -39,7 +39,8 @@ serves a mode that has none of its own), and they travel with the repo like the 
 
 Each live node on a task's page carries a mark before its id, so its state does not rest on the colour
 of its left rule: a tick for a confirmed node, a filled circle for an open node a session has started, an
-empty circle for one not yet begun. A refuted or parked node has no mark and says so in its chip. The
+empty circle for one not yet begun. A node you confirmed with a correction, which no session built, has no tick: it
+is `◇` in the terminal and says "confirmed by you, not built" in its chip. A refuted or parked node has no mark and says so in its chip. The
 terminal's tree draws the same marks (`✓`, `●`, `○`). *Started* is a node status (`Status: started`) that
 everything else reads as open: a session runs `python3 scripts/tree.py start <task> <node>` before it
 changes code for the node, which edits the task file and commits nothing, and the node's own commit

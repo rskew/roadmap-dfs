@@ -299,6 +299,9 @@ class Flows(unittest.TestCase):
 
     def test_every_live_node_shows_whether_it_is_complete_started_or_not_begun(self):
         dfs_tree.start_node("W9", "W9.9")
+        # The author confirmed W9.11 without any session building it: no tick, and it says so.
+        w9 = self.root / ".dfs" / "items" / "W9.md"
+        w9.write_text(w9.read_text().rstrip("\n") + "\n- 2026-10-09T05:00:00Z · correct · W9.11 · confirmed\n  Fine as it is.\n")
         self.flow("progress")
 
     def test_a_change_elsewhere_reaches_an_open_page(self):

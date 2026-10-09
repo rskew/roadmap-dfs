@@ -675,6 +675,7 @@ function drawTask() {
         r.assumes ? `<span class="tag assumption">assumption</span>` : "",
         r.ask ? `<span class="tag attention">ask</span>` : "",
         r.answered ? `<span class="tag">answered</span>` : "",
+        r.progress === "ruled" ? `<span class="tag">confirmed by you, not built</span>` : "",
         ["refuted", "parked", "dormant", "pruned"].includes(r.status) ? `<span class="tag ${r.status === "refuted" ? "red" : ""}">${esc(r.status)}</span>` : ""].join("");
       html += `<div class="${cls}" style="--i:${r.indent}">
         <button class="fold ${r.kids && !S.flagged ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>

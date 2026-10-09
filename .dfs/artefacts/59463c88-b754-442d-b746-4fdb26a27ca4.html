@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W53: which manually confirmed items lose their tick</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  .row { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid #ddd; align-items: baseline; }
+  .row:first-child { border-top: 0; }
+  .mk { width: 1.4em; text-align: center; flex: none; }
+  .why { color: #555; font-size: 14px; }
+  #rulebox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p { margin: 0 0 8px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; }
+  label { display: block; margin: 8px 0 2px; }
+</style>
+
+<h1>Which "manually confirmed" items lose the tick?</h1>
+<p class="lede">The author can overrule a node's verdict by writing a correction. The tree then
+  treats the node as confirmed, and draws a tick, though no session built it. Pick a reading of
+  the goal to see which rows lose the tick.</p>
+
+<h2>The reading</h2>
+<div class="choices" role="group" aria-label="Reading of the goal">
+  <button type="button" data-case="node" aria-pressed="true">A node the author confirmed</button>
+  <button type="button" data-case="task" aria-pressed="false">A task the author accepted</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+<div id="rows" aria-live="polite"></div>
+
+<div id="rulebox" hidden>
+  <p>Rule on this node: does the work take "item" to mean a node?</p>
+  <label for="note">Your note, sent with it (optional)</label>
+  <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">If "item" means a whole task in the list, an accepted task is the case meant, and the
+  tick belongs off the task row instead of, or as well as, the node.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>An accepted task has every live node confirmed by a session first (it cannot be accepted
+    otherwise), so its tick is true. Only a node confirmed by the author's correction can be ticked
+    with nothing built: it may be open, started, parked or refuted in the file.</p>
+</details>
+
+<script>
+  var cases = {
+    node: { text: 'Only a node whose own verdict is not confirmed loses the tick when the author confirms it. Nodes a session confirmed keep it.',
+      rows: [['✓', 'W1.1 confirmed by a session, built', 'keeps the tick'],
+             ['', 'W1.2 open, confirmed by the author', 'no tick; the chip says "confirmed by you"'],
+             ['', 'W1.3 refuted by a session, confirmed by the author', 'no tick; the chip says "confirmed by you"']] },
+    task: { text: 'A task accepted by the author loses its tick in the list, even though every node under it was confirmed by a session.',
+      rows: [['', 'W1 every node confirmed, accepted', 'no tick (would hide real completion)']] }
+  };
+  var chosen = 'node', touched = false;
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen }; }
+  function show() {
+    var c = cases[chosen], box = document.getElementById('rows');
+    document.getElementById('result').textContent = c.text;
+    box.innerHTML = '';
+    c.rows.forEach(function (r) {
+      var d = document.createElement('div'); d.className = 'row';
+      d.innerHTML = '<span class="mk"></span><span><span class="t"></span><br><span class="why"></span></span>';
+      d.querySelector('.mk').textContent = r[0] || '–';
+      d.querySelector('.t').textContent = r[1];
+      d.querySelector('.why').textContent = r[2];
+      box.appendChild(d);
+    });
+    document.querySelectorAll('[data-case]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.case === chosen)); });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); call('POST', { state: mine() }).catch(function () {}); });
+  });
+  function rule(verdict) {
+    var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    var text = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: mine(), verdict: verdict, answer: text }).then(function () {
+      note.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      note.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
+  }).catch(function () {});
+</script>

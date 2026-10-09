@@ -177,6 +177,10 @@ const FLOWS = {
       same(mark, [want[r.progress]], `${r.id} is marked ${r.progress}`); seen.add(r.progress);
     }
     same([...seen].sort(), ["done", "open", "started"], "the fixture shows all three marks");
+    // A node only the author confirmed has nothing built behind it: no tick, and a chip saying so.
+    const ruled = nodes.filter(r => r.progress === "ruled").map(r => r.id);
+    same(ruled, ["W9.11"], "the author-confirmed node is read as ruled, not done");
+    same(await page.$$eval('.row:has(.fold[data-id="W9.11"]) .chips .tag', a => a.map(e => e.textContent)), ["confirmed by you, not built"], "W9.11 says it is not built");
     const fill = await page.$$eval(".row .mk", a => Object.fromEntries(a.map(e => [e.className, getComputedStyle(e).backgroundColor])));
     assert(fill["mk started"] !== "rgba(0, 0, 0, 0)" && fill["mk open"] === "rgba(0, 0, 0, 0)", "a started mark is filled in and an open one is empty");
     await page.evaluate(() => document.querySelector('.row:has(.fold[data-id="W9.9"])').scrollIntoView({ block: "center" }));
