@@ -141,7 +141,8 @@ def chain_cause(rundir):
 def walk_decide(stop, moved, next_item):
     """What the walk does after a chain ends, as `(action, why)`.
 
-    `run` carries the item, `hold` and `stop` carry a reason to show a person.
+    `run` carries the item, `hold`, `pend` and `stop` carry a reason to show a person.
+    `pend` is nothing workable now: the walk stays on and waits for a task to appear.
 
     `raise` carries the question to put to the author on the item; the walk then
     goes on to the next item, which the raise has just made the item stop being.
@@ -171,7 +172,7 @@ def walk_decide(stop, moved, next_item):
     if not moved and stop != "done":
         return ("raise", "the chain moved nothing in the task tree")
     if next_item is None:
-        return ("stop", "every branch is blocked or finished")
+        return ("pend", "every branch is blocked or finished")
     return ("run", next_item)
 
 
@@ -194,6 +195,7 @@ class WalkMixin:
         self.walk_content = set()   # what the trees said when that chain started
         self.walk_note = ""         # why the last walk stopped, until the next one
         self.walk_next = None       # an item the author pinned for the next chain — walk_pin
+        self.walk_pending = False   # on, but nothing is workable: waiting for a task to appear
 
     def walk_begin(self, budget):
         """Turn the walk on with `budget` sessions: what `w` does once the number is in,
@@ -206,6 +208,7 @@ class WalkMixin:
         self.walk_until = 0.0
         self.walk_dir = None
         self.walk_note = ""
+        self.walk_pending = False
         self.msg = "walk: on, %d sessions — w to stop" % budget
         self.event("walk", "walk on, %d sessions" % budget)
         self.walk_tick()
@@ -214,6 +217,7 @@ class WalkMixin:
         self.walk_on = False
         self.walk_dir = None
         self.walk_until = 0.0
+        self.walk_pending = False
         self.walk_note = why
         self.msg = "walk: stopped — %s" % why
         self.event("stop", "walk off — %s" % why)
@@ -326,6 +330,8 @@ class WalkMixin:
             if action == "raise":
                 if not self.walk_raise(run["item"], why):
                     return
+            # "pend" falls through: the target is asked again below, and None there
+            # is what makes the walk wait.
 
         left = self.walk_budget - self.walk_spent
         if left < 1:
@@ -334,8 +340,17 @@ class WalkMixin:
         self.walk_pinned()          # drops a pin that cannot be worked, and says so
         item = self.walk_target()
         if item is None:
-            self.walk_off("every branch is blocked or finished")
+            # ⚠️ NOTHING TO TAKE IS A WAIT, NOT AN END. The walk stays on and asks
+            # again on every tick (`reload` re-reads the trees), so a task created
+            # later, or one a raise's answer unblocks, is taken without the walk
+            # being started again. Nothing is spent while it waits.
+            if not self.walk_pending:
+                self.walk_pending = True
+                self.msg = self.event("walk", "walk: nothing workable — waiting for a task")
             return
+        if self.walk_pending:
+            self.walk_pending = False
+            self.event("walk", "walk: %s is workable — resuming" % item)
         self.walk_next = None
         self.walk_content = set(self.data.get("content", ()))
         self.walk_started = time.time()
@@ -560,7 +575,8 @@ class WalkMixin:
         goal = next((i["goal"] for i in items if i["id"] == auto), "")
         return dict(
             next=self.walk_target(),
-            on=self.walk_on, budget=self.walk_budget, used=self.walk_used(),
+            on=self.walk_on, pending=self.walk_pending,
+            budget=self.walk_budget, used=self.walk_used(),
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS),
             pinned=self.walk_next, auto=auto, auto_goal=goal,

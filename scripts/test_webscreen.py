@@ -38,7 +38,7 @@ def a_screen(items):
     ui.agent = "claude"
     ui.walk_on, ui.walk_budget, ui.walk_spent, ui.walk_until = False, 20, 0, 0.0
     ui.walk_dir, ui.walk_started, ui.walk_content, ui.walk_note = None, 0.0, set(), ""
-    ui.walk_next = None
+    ui.walk_next, ui.walk_pending = None, False
     ui.chains = []
     ui.data = dict(next_item=items[0]["id"] if items else None)
     ui._items = items

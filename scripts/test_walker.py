@@ -82,6 +82,18 @@ class Interface(unittest.TestCase):
         self.assertEqual(self.w.started_chains, [("W1", "7")])
         self.assertTrue(self.w.walk_on)
 
+    def test_a_walk_with_nothing_workable_pends_and_takes_the_task_that_appears(self):
+        self.w.next_item = None
+        self.w.start(4)
+        self.assertTrue(self.w.walk_on)
+        self.assertTrue(self.w.snapshot()["pending"])
+        self.assertEqual(self.w.started_chains, [])
+        self.w.next_item = "W2"             # a task is created; the loop re-reads the trees
+        self.w.reload()
+        self.w.walk_tick()
+        self.assertEqual(self.w.started_chains, [("W2", "4")])
+        self.assertFalse(self.w.snapshot()["pending"])
+
     def test_a_budget_that_is_not_a_walk_is_refused(self):
         for bad in (0, -3, "5", True, 10_000):
             with self.assertRaises(ValueError):

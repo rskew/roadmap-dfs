@@ -472,10 +472,10 @@ function walkHtml() {
   if (!w || !w.enabled) return "";
   const chain = w.chain && w.chain.live ? w.chain : null;
   const state = w.on
-    ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : `<span class="on">Walking</span>`)
+    ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : w.pending ? `<span class="hold">Waiting for a task</span>` : `<span class="on">Walking</span>`)
     : "Walk is off";
   const line2 = w.on
-    ? `${w.used} of ${w.budget} sessions used${chain ? `. Now ${esc(chain.item)}, ${esc(chain.progress)}.` : "."}`
+    ? `${w.used} of ${w.budget} sessions used${chain ? `. Now ${esc(chain.item)}, ${esc(chain.progress)}.` : w.pending ? ". Nothing is workable; it takes the next task that appears." : "."}`
     : (w.note ? `Stopped: ${esc(w.note)}.` : `A walk works the tasks depth-first, under a budget of sessions.`);
   const auto = w.auto ? `Automatic: ${esc(w.auto)}` : "Automatic: nothing is workable";
   const options = [`<option value="">${auto}</option>`].concat(w.candidates.map(c =>
@@ -505,7 +505,7 @@ async function setNext(item) {
 }
 function walkStartForm() {
   form(`<h3>Start the walk?</h3>
-    <p class="muted" style="margin:0">It starts agent sessions on this machine, one chain at a time, depth-first, until the budget is spent, every branch is blocked or finished, or you stop it. They run with the agent's permission prompts off.</p>
+    <p class="muted" style="margin:0">It starts agent sessions on this machine, one chain at a time, depth-first, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>
     <div><label for="bud">Budget, in sessions</label><input type="number" id="bud" name="budget" min="1" max="500" value="${esc(S.walk.budget)}" required></div>${buttons("Start walk")}`,
     async fd => { S.walk = await api("/api/walk/start", { budget: parseInt(fd.get("budget"), 10) }); toast("Walking."); drawTasks(); });
 }

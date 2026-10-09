@@ -4294,6 +4294,8 @@ class UI(WalkMixin):
         run = self.walk_run()
         if run and run["live"]:
             return "● walk %s%s %s" % (run["item"], pin, spent)
+        if self.walk_pending:
+            return "● walk waiting for a task%s %s" % (pin, spent)
         return "● walk%s %s" % (pin, spent)
 
     def stop_chain(self, item):

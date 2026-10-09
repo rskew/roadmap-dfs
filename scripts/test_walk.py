@@ -79,7 +79,7 @@ class Deciding(unittest.TestCase):
         # that 2026-09-30; a done item closes, and the walk takes the next branch.
         self.assertEqual(TUI.walk_decide("done", False, "W8"), ("run", "W8"))
         action, why = TUI.walk_decide("done", False, None)
-        self.assertEqual(action, "stop")
+        self.assertEqual(action, "pend")
         self.assertIn("blocked or finished", why)
 
     def test_an_idle_session_raises_on_its_item(self):
@@ -87,9 +87,9 @@ class Deciding(unittest.TestCase):
         self.assertEqual(action, "raise")
         self.assertIn("changed nothing", why)
 
-    def test_nothing_left_to_do_is_a_stop_not_an_error(self):
+    def test_nothing_left_to_do_is_a_wait_not_a_stop(self):
         action, why = TUI.walk_decide("done", True, None)
-        self.assertEqual(action, "stop")
+        self.assertEqual(action, "pend")
         self.assertIn("blocked or finished", why)
 
     def test_a_hold_reads_in_whole_minutes_and_never_zero(self):
@@ -158,6 +158,7 @@ class Ticking(unittest.TestCase):
         ui.walk_content = set()
         ui.walk_note = ""
         ui.walk_next = None
+        ui.walk_pending = False
         ui.chains = []
         # The seam the tick re-asks through. Stubbed to a no-op so a test says which
         # chains are on the box; `re_ask` below hands it a list to find them in.
@@ -204,6 +205,37 @@ class Ticking(unittest.TestCase):
         self.live(ui, [self.chain(dir="/runs/somebody-else", live=True)])
         ui.walk_tick()
         self.assertEqual(ui.started, [], "started work beside a live chain")
+
+    def test_with_nothing_workable_it_waits_and_stays_on(self):
+        ui = self.ui(data={"content": ["a"], "next_item": None})
+        events = []
+        ui.event = lambda kind, text: events.append(text) or text
+        self.live(ui, [])
+        ui.walk_tick()
+        ui.walk_tick()
+        self.assertTrue(ui.walk_on)
+        self.assertTrue(ui.walk_pending)
+        self.assertEqual(ui.started, [])
+        self.assertEqual(len(events), 1, "the wait is said once, not on every tick")
+
+    def test_a_chain_that_leaves_nothing_workable_ends_in_a_wait_not_a_stop(self):
+        ui = self.ui(walk_dir="/runs/mine", data={"content": ["a", "b", "new"],
+                                                    "next_item": None})
+        self.live(ui, [self.chain()])
+        ui.walk_tick()
+        self.assertTrue(ui.walk_on)
+        self.assertTrue(ui.walk_pending)
+        self.assertIsNone(ui.walk_dir)
+
+    def test_a_task_that_appears_while_it_waits_is_taken(self):
+        ui = self.ui(data={"content": ["a"], "next_item": None})
+        ui.event = lambda kind, text: text
+        self.live(ui, [])
+        ui.walk_tick()
+        ui.data = {"content": ["a", "b"], "next_item": "W9"}
+        ui.walk_tick()
+        self.assertFalse(ui.walk_pending)
+        self.assertEqual(ui.started, [("W9", "20")])
 
     def test_it_starts_the_next_item_when_nothing_is_running(self):
         ui = self.ui()
