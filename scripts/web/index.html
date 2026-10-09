@@ -315,6 +315,23 @@ function route() {
 }
 const go = (h, replace) => replace ? location.replace("#/" + h) : (location.hash = "/" + h);
 
+/* Each screen's page scroll is kept for the tab's session (so Back to the list, and a reload, land
+   where the reader was). Scrolls are not recorded while a screen is changing: the short page that
+   is there until the new one draws would overwrite the saved offset with 0. */
+const SCROLL = { at: {}, ready: false, t: null };
+try { SCROLL.at = JSON.parse(sessionStorage.getItem("scroll") || "{}") || {}; } catch (e) {}
+function scrollBack(where) {
+  window.scrollTo(0, SCROLL.at[where] || 0);
+  SCROLL.ready = true;
+}
+addEventListener("scroll", () => {
+  if (!SCROLL.ready || !lastView) return;
+  SCROLL.at[lastView] = Math.round(window.scrollY);
+  clearTimeout(SCROLL.t);
+  SCROLL.t = setTimeout(() => { try { sessionStorage.setItem("scroll", JSON.stringify(SCROLL.at)); } catch (e) {} }, 150);
+}, { passive: true });
+addEventListener("pagehide", () => { try { sessionStorage.setItem("scroll", JSON.stringify(SCROLL.at)); } catch (e) {} });
+
 let lastView = "";
 let RENDERS = 0;
 async function render(force) {
@@ -324,7 +341,7 @@ async function render(force) {
   const mine = ++RENDERS;
   const r = route();
   const where = r.view + ":" + (r.task || "");
-  if (where !== lastView) { lastView = where; window.scrollTo(0, 0); S.sig = ""; }
+  if (where !== lastView) { lastView = where; SCROLL.ready = false; window.scrollTo(0, 0); S.sig = ""; }
   try {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
@@ -352,6 +369,7 @@ async function render(force) {
     }
     chrome(r);
     refreshCount();
+    if (!SCROLL.ready && mine === RENDERS) scrollBack(where);
   } catch (e) {
     toast(e.message, true);
     // Nothing has drawn yet, so "Loading…" would claim a wait that has ended: say what failed.

@@ -121,6 +121,31 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Each screen's page scroll is kept: Back to the list, and a reload, land where the reader was.
+  async scroll_memory(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 300 }, hasTouch: true });
+    const y = () => page.evaluate(() => Math.round(window.scrollY));
+    const settle = () => page.waitForTimeout(400);
+    const room = () => page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    assert(await room() > 150, "the list is taller than this window, or there is nothing to scroll");
+    await page.evaluate(() => window.scrollTo(0, 120)); await settle();
+    same(await y(), 120, "the list scrolled");
+    await page.evaluate(() => document.querySelector(".item[data-id=W9]").click());
+    await page.waitForSelector(".row"); await settle();
+    same(await y(), 0, "a screen never seen opens at the top");
+    assert(await room() > 60, "the tree is taller than this window");
+    await page.evaluate(() => window.scrollTo(0, 60)); await settle();
+    same(await y(), 60, "the tree scrolled");
+    await page.goBack(); await page.waitForSelector(".item"); await settle();
+    same(await y(), 120, "Back to the list lands where it was left");
+    await page.reload(); await page.waitForSelector(".item"); await settle();
+    same(await y(), 120, "a reload keeps the list's place");
+    await page.evaluate(() => document.querySelector(".item[data-id=W9]").click());
+    await page.waitForSelector(".row"); await settle();
+    same(await y(), 60, "and the tree's, on the way back in");
+    same(errors, [], "no page errors");
+  },
+
   // The node sheet: prev and next move, and stay exactly where they are.
   async node_sheet(b) {
     const { page, errors } = await open(b, PHONE);
