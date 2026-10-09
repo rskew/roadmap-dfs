@@ -491,7 +491,7 @@ main() {
       run_in_container "$@"
       ;;
     codex)
-      run_in_container bash -lc 'exec nix shell github:NixOS/nixpkgs#codex -c codex --sandbox danger-full-access "$@"' -- "$@"
+      run_in_container bash -lc 'exec nix shell github:NixOS/nixpkgs/nixos-unstable#codex -c codex --sandbox danger-full-access "$@"' -- "$@"
       ;;
     claude)
       run_in_container bash -lc 'NIXPKGS_ALLOW_UNFREE=1 exec nix shell --impure github:NixOS/nixpkgs#claude-code -c claude --dangerously-skip-permissions "$@"' -- "$@"

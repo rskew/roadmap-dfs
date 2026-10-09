@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paths as dfs_paths  # noqa: E402
 
 NIXPKGS = "github:nixos/nixpkgs"
+UNSTABLE = NIXPKGS + "/nixos-unstable"  # the pin follows the channel: its revisions have built, cached packages
 REV_LEN = 40
 NIX_JOIN = 5       # seconds to wait for nix's pipes to close once it is killed
 NIX_TIMEOUT = 900  # a first build of a new revision is a download, not a compile
@@ -98,7 +99,7 @@ def nix(*args, timeout=NIX_TIMEOUT, stream=False):
 
 
 def resolve(*flags, **kw):
-    meta = json.loads(nix("flake", "metadata", *flags, "--json", NIXPKGS, **kw))
+    meta = json.loads(nix("flake", "metadata", *flags, "--json", UNSTABLE, **kw))
     return meta["locked"]["rev"]
 
 
