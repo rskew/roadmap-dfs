@@ -56,8 +56,9 @@ class Chat(unittest.TestCase):
         self.stub.write_text(STUB)
         self.stub.chmod(self.stub.stat().st_mode | stat.S_IEXEC)
         self.log = self.root / "stub.log"
-        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "HOME")}
-        os.environ.update(CLAUDE_CMD=str(self.stub), CHAT_STUB_LOG=str(self.log), HOME=str(self.root / "home"))
+        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "HOME", "DFS_RUN_DIR")}
+        os.environ.update(CLAUDE_CMD=str(self.stub), CHAT_STUB_LOG=str(self.log), HOME=str(self.root / "home"),
+                          DFS_RUN_DIR=str(self.root / ".dfs" / "runs"))     # the chat logs are this project's, not the real one's
         (self.root / "home").mkdir()
         os.environ.pop("CHAT_STUB_FAIL", None)
         self._wr = dfs_paths.work_root

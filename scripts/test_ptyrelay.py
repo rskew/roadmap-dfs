@@ -6,6 +6,7 @@ Run:  python3 roadmap-dfs/scripts/test_ptyrelay.py
 """
 import os
 import select
+import shutil
 import sys
 import tempfile
 import threading
@@ -15,6 +16,24 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ptyrelay  # noqa: E402
+
+
+_RUNS = []
+
+
+def setUpModule():
+    """The chat logs go to a run root of their own, not the project's `.dfs/runs/chat/`."""
+    _RUNS.append(tempfile.mkdtemp(prefix="dfs-test-runs-"))
+    _RUNS.append(os.environ.get("DFS_RUN_DIR"))
+    os.environ["DFS_RUN_DIR"] = _RUNS[0]
+
+
+def tearDownModule():
+    if _RUNS[1] is None:
+        os.environ.pop("DFS_RUN_DIR", None)
+    else:
+        os.environ["DFS_RUN_DIR"] = _RUNS[1]
+    shutil.rmtree(_RUNS[0], ignore_errors=True)
 
 # an "agent": says it is ready, then logs each line typed at it (paste markers stripped) and echoes it
 AGENT = r'''echo ready; while IFS= read -r l; do l=$(printf '%s' "$l" | sed -e 's/\x1b\[20[01]~//g'); echo "$l" >> "$LOG"; echo "heard: $l"; [ "$l" = quit ] && exit 3; done'''
