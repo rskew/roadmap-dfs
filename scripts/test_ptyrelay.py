@@ -131,14 +131,15 @@ class Looking(unittest.TestCase):
 
 
 class Leaving(unittest.TestCase):
-    """Ending a chat leaves nothing of it running: not what the agent started, not an agent
-    that ignores hangup, not when the screen exits straight after."""
+    """Ending a chat is a SIGTERM, as ctrl-c is to a claude in a terminal, with a SIGKILL behind
+    it; the screen's exit waits, so the backstop is not left to a thread that dies with it."""
 
     def setUp(self):
         self.pids = Path(tempfile.mkdtemp()) / "pids"
         self.addCleanup(self.sweep)
-        ptyrelay.GRACE, self.grace = 0.3, ptyrelay.GRACE
-        self.addCleanup(setattr, ptyrelay, "GRACE", self.grace)
+
+    def started(self):
+        return [int(x) for x in self.pids.read_text().split()] if self.pids.exists() else []
 
     def sweep(self):
         for p in self.started():
@@ -147,53 +148,31 @@ class Leaving(unittest.TestCase):
             except OSError:
                 pass
 
-    def started(self):
-        return [int(x) for x in self.pids.read_text().split()] if self.pids.exists() else []
-
     def gone(self, pid):
-        return not ptyrelay._running(pid, (ptyrelay._stat(pid) or (0, 0, None))[2])
+        try:
+            return Path("/proc/%d/stat" % pid).read_text().rsplit(")", 1)[1].split()[0] == "Z"
+        except OSError:
+            return True
 
-    def agent(self, helper):
-        """An agent that records its own pid and its helper's, and ignores hangup."""
-        return ["bash", "-c", "trap '' HUP; echo $$ >> %s\n%s\necho ready; sleep 600" % (self.pids, helper)]
-
-    def test_close_ends_what_the_agent_started_even_in_its_own_session(self):
-        helper = "setsid sh -c 'trap \"\" HUP TERM; echo $$ >> %s; exec sleep 600' &" % self.pids
-        relay = ptyrelay.Relay().start(self.agent(helper))
+    def test_sigterm_is_enough_for_an_agent_that_stops_what_it_started(self):
+        # what claude does on SIGTERM: stop its tool process, then exit
+        script = "sleep 600 & echo $$ $! >> %s; trap 'kill $!; exit' TERM; wait" % self.pids
+        relay = ptyrelay.Relay().start(["bash", "-c", script])
         self.assertTrue(until(lambda: len(self.started()) == 2))
+        t = time.time()
         relay.close(wait=True)
+        self.assertLess(time.time() - t, 1.5)       # before the SIGKILL backstop's two seconds
         self.assertTrue(all(self.gone(p) for p in self.started()), self.started())
 
-    def test_close_all_returns_only_when_they_are_gone(self):
+    def test_close_all_returns_only_when_an_agent_that_ignores_sigterm_is_gone(self):
         host = ptyrelay.ChatHost()
-        host.ensure("W1", lambda: (self.agent("true"), None, None))
-        host.ensure("project", lambda: (self.agent("true"), None, None))
+        script = "trap '' HUP TERM; echo $$ >> %s; while :; do sleep 1; done" % self.pids
+        host.ensure("W1", lambda: (["bash", "-c", script], None, None))
+        host.ensure("project", lambda: (["bash", "-c", script], None, None))
         self.assertTrue(until(lambda: len(self.started()) == 2))
         host.close_all()
         self.assertTrue(all(self.gone(p) for p in self.started()), self.started())
         self.assertEqual(host.live_scopes(), [])
-
-
-class Idling(unittest.TestCase):
-    def test_only_a_chat_nobody_is_using_is_closed_and_a_dead_one_is_forgotten(self):
-        host = ptyrelay.ChatHost()
-        self.addCleanup(host.close_all)
-        mk = lambda: (["bash", "-c", "echo ready; sleep 30"], None, None)
-        quiet, busy, looked, dead = (host.ensure(n, mk) for n in ("quiet", "busy", "looked", "dead"))
-        self.assertTrue(until(lambda: all(r.first_out for r in (quiet, busy, looked, dead))))
-        looked.attached = True
-        dead.close(wait=True)
-        later = time.time() + 100
-        busy.last_out = later - 1
-        self.assertEqual(host.reap_idle(60, now=later), ["quiet"])
-        self.assertFalse(quiet.live)
-        self.assertTrue(busy.live and looked.live)
-        self.assertEqual(sorted(host.relays), ["busy", "looked"])
-        self.assertNotIn("dead", host.relays)
-        busy.outbox.put("typed, not yet sent")
-        self.assertEqual(host.reap_idle(60, now=later + 1000), [], "a chat with something waiting is not idle")
-        looked.attached = False
-        self.assertEqual(host.reap_idle(60, now=later + 1000), ["looked"])
 
 
 class Hosting(unittest.TestCase):

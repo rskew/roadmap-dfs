@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>W17: does SIGTERM to the agent end what it started?</title>
+<style>
+  body { margin: 0; padding: 28px 32px; background: #fbfaf7; color: #1a1a1a;
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 680px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 6px 12px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 5em; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; }
+</style>
+<h1>Does SIGTERM to the agent end what it started?</h1>
+<p class="lede">Closing a chat sends the agent SIGTERM, then SIGKILL to the agent alone after two
+  seconds; the earlier design also walked the process tree. Pick what a real claude does on SIGTERM
+  and the design shows what is left running.</p>
+
+<h2>What claude does when it gets SIGTERM</h2>
+<div class="choices" role="group" aria-label="What claude does on SIGTERM">
+  <button type="button" data-case="stops" aria-pressed="true">Stops its tool processes, exits</button>
+  <button type="button" data-case="exits" aria-pressed="false">Exits at once, tools left</button>
+  <button type="button" data-case="ignores" aria-pressed="false">Does not exit</button>
+</div>
+<h2>Which design</h2>
+<div class="choices" role="group" aria-label="Design">
+  <button type="button" data-design="simple" aria-pressed="true">SIGTERM, SIGKILL the agent (this node)</button>
+  <button type="button" data-design="tree" aria-pressed="false">Walk the process tree (refuted)</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">A real claude, sent SIGTERM while a tool process runs, exits and leaves that tool
+  process running (the "exits at once" case). Then the simple design leaks and the tree walk is needed.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>Not run with a real claude here (none is installed). For: ctrl-c in the claude terminal
+  stops its tools, which is the author's reading of its behaviour. Against: nothing observed.</p>
+</details>
+<script>
+  var what = 'stops', design = 'simple';
+  function text() {
+    if (what === 'stops') return 'The agent stops its tools and exits on SIGTERM: nothing is left, under either design.';
+    if (what === 'exits') return design === 'simple'
+      ? 'The agent exits and its tool processes are left running: this design leaks them.'
+      : 'The agent exits; the walk, run before it exits, ended the tools too: nothing is left.';
+    return design === 'simple'
+      ? 'After two seconds SIGKILL ends the agent; whatever it started is left running.'
+      : 'After two seconds SIGKILL ends the agent and everything found under it: nothing is left.';
+  }
+  function show() {
+    document.getElementById('result').textContent = text();
+    document.querySelectorAll('[data-case]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.case === what));
+    });
+    document.querySelectorAll('[data-design]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.design === design));
+    });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { what = b.dataset.case; show(); });
+  });
+  document.querySelectorAll('[data-design]').forEach(function (b) {
+    b.addEventListener('click', function () { design = b.dataset.design; show(); });
+  });
+  show();
+</script>

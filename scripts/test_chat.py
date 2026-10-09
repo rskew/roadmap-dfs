@@ -19,7 +19,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
-import ptyrelay             # noqa: E402
 
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
@@ -340,53 +339,26 @@ class Chat(unittest.TestCase):
 
 
 class TurnTimeout(unittest.TestCase):
-    """A turn nobody is waiting on is ended with everything it started, not left running."""
+    """A turn nobody is waiting on is asked to stop as ctrl-c would, and killed only if it won't."""
 
-    def test_the_timeout_ends_what_the_turn_started(self):
-        pids = Path(tempfile.mkdtemp()) / "pids"
-        script = "echo $$ >> %s; setsid sh -c 'trap \"\" HUP TERM; echo $$ >> %s; exec sleep 600' & sleep 600" % (pids, pids)
-        ptyrelay.GRACE, grace = 0.3, ptyrelay.GRACE
-        try:
-            with self.assertRaises(subprocess.TimeoutExpired):
-                dfs_chat.run_turn(["bash", "-c", script], "hello", None, dict(os.environ), timeout=1.5)
-        finally:
-            ptyrelay.GRACE = grace
-        started = [int(x) for x in pids.read_text().split()]
-        self.assertEqual(len(started), 2)
-        for p in started:
-            self.assertFalse(ptyrelay._running(p, (ptyrelay._stat(p) or (0, 0, None))[2]), p)
+    def setUp(self):
+        self.addCleanup(setattr, dfs_chat, "TURN_TIMEOUT", dfs_chat.TURN_TIMEOUT)
+        self.addCleanup(setattr, dfs_chat, "TURN_GRACE", dfs_chat.TURN_GRACE)
+        dfs_chat.TURN_TIMEOUT, dfs_chat.TURN_GRACE = 1, 1
+        self.dir = Path(tempfile.mkdtemp())
 
-    def test_closing_the_chats_ends_a_turn_in_flight(self):
-        import threading, time
-        pids = Path(tempfile.mkdtemp()) / "pids"
-        script = "echo $$ >> %s; setsid sh -c 'trap \"\" HUP TERM; echo $$ >> %s; exec sleep 600' & sleep 600" % (pids, pids)
-        chats = dfs_chat.Chats()
-        ptyrelay.GRACE, grace = 0.3, ptyrelay.GRACE
-        try:
-            t = threading.Thread(target=lambda: dfs_chat.run_turn(["bash", "-c", script], "hi", None,
-                                                                  dict(os.environ), timeout=60,
-                                                                  running=chats.running))
-            t.start()
-            end = time.time() + 5
-            while time.time() < end and not (pids.exists() and len(pids.read_text().split()) == 2):
-                time.sleep(0.05)
-            self.assertEqual(len(chats.running), 1)
-            chats.close()
-            t.join(10)
-        finally:
-            ptyrelay.GRACE = grace
-        self.assertFalse(t.is_alive())
-        self.assertEqual(chats.running, set())
-        for p in [int(x) for x in pids.read_text().split()]:
-            self.assertFalse(ptyrelay._running(p, (ptyrelay._stat(p) or (0, 0, None))[2]), p)
+    def run_turn(self, script):
+        with self.assertRaises(subprocess.TimeoutExpired):
+            dfs_chat.run_turn(["bash", "-c", script], "hello", None, dict(os.environ))
 
+    def test_the_timeout_sends_sigterm_first(self):
+        self.run_turn("trap 'echo term > %s/saw; exit' TERM; while :; do sleep 0.1; done" % self.dir)
+        self.assertEqual((self.dir / "saw").read_text().strip(), "term")
 
-    def test_a_turn_started_after_close_is_refused(self):
-        chats = dfs_chat.Chats()
-        chats.close()
-        with self.assertRaises(OSError):
-            dfs_chat.run_turn(["bash", "-c", "sleep 600"], "hi", None, dict(os.environ), running=chats.running)
-        self.assertEqual(chats.running, set())
+    def test_an_agent_that_ignores_sigterm_is_killed_after_the_grace(self):
+        t = time.time()
+        self.run_turn("trap '' TERM; while :; do sleep 0.1; done")
+        self.assertLess(time.time() - t, 4)
 
 
 if __name__ == "__main__":

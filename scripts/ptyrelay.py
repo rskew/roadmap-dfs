@@ -23,7 +23,6 @@ import tty
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
-GRACE = 2.0                 # seconds a closed agent has to stop before it is killed
 
 
 def _winsize(fd):
@@ -31,66 +30,6 @@ def _winsize(fd):
         return fcntl.ioctl(fd, termios.TIOCGWINSZ, b"\0" * 8)
     except OSError:
         return struct.pack("HHHH", 40, 120, 0, 0)
-
-
-def _stat(pid):
-    """(ppid, state, start time) of a process from /proc, or None if there is no such process."""
-    try:
-        with open("/proc/%d/stat" % pid) as f:
-            raw = f.read()
-    except OSError:
-        return None
-    f = raw[raw.rindex(")") + 2:].split()       # after the command name, which may hold spaces
-    return int(f[1]), f[0], f[19]
-
-
-def tree_of(pid):
-    """{pid: start time} of `pid` and everything it started that is still running, found by
-    parent links in /proc. A process that moved itself to another session is still in it; one
-    that was already re-parented to init is not."""
-    kids = {}
-    for name in os.listdir("/proc"):
-        if name.isdigit():
-            st = _stat(int(name))
-            if st:
-                kids.setdefault(st[0], []).append(int(name))
-    found, todo = {}, [pid]
-    while todo:
-        p = todo.pop()
-        st = _stat(p)
-        if st and p not in found:
-            found[p] = st[2]
-            todo += kids.get(p, [])
-    return found
-
-
-def _running(pid, started):
-    """Whether this very process (not a later one with the pid) is still running, not a zombie."""
-    st = _stat(pid)
-    return bool(st and st[2] == started and st[1] != "Z")
-
-
-def finish(pid, gone):
-    """Wait up to GRACE seconds for the processes in `gone` ({pid: start time}) to stop, then
-    kill them and whatever else `pid` has started since, and wait for that to take."""
-    end = time.time() + GRACE
-    while time.time() < end and any(_running(p, t) for p, t in gone.items()):
-        time.sleep(0.05)
-    gone.update(tree_of(pid))
-    for p, t in gone.items():
-        if _running(p, t):
-            _try(os.kill, p, signal.SIGKILL)
-    end = time.time() + 1.0             # a kill is delivered, not instant
-    while time.time() < end and any(_running(p, t) for p, t in gone.items()):
-        time.sleep(0.02)
-
-
-def stop_tree(pid):
-    """End `pid` and everything it started: ask, wait, kill."""
-    gone = tree_of(pid)
-    for p in gone:
-        _try(os.kill, p, signal.SIGTERM)
-    finish(pid, gone)
 
 
 def _try(fn, *a):
@@ -164,24 +103,26 @@ class Relay:
             self.rc = 0
 
     def close(self, wait=False):
-        """End it, and everything it started: hang up on the agent and ask the rest to stop,
-        then kill what is still there after GRACE seconds. With `wait` it returns when none of
-        them is left (a process that is exiting cannot finish a thread it left behind), else
-        that is done in the background."""
+        """End it as ctrl-c ends a claude in a terminal: ask it to stop with SIGTERM, which has it
+        stop what it started, and make sure with SIGKILL after a grace. `wait` blocks until it is
+        gone, for a process that is about to exit (a daemon thread would not outlive it)."""
         pid = self.pid
         if not self.live:
             return
         self.closing = True
-        gone = tree_of(pid)
-        _try(os.kill, pid, signal.SIGHUP)
-        for p in gone:
-            if p != pid:
-                _try(os.kill, p, signal.SIGTERM)
+        _try(os.kill, pid, signal.SIGTERM)
 
         def reap():
-            finish(pid, gone)
+            end = time.time() + 2
+            while self.fd is not None and time.time() < end:
+                time.sleep(0.05)
+            if self.fd is not None:
+                _try(os.kill, pid, signal.SIGKILL)
         if wait:
             reap()
+            end = time.time() + 2       # SIGKILL is delivered, not instant
+            while self.fd is not None and time.time() < end:
+                time.sleep(0.05)
         else:
             threading.Thread(target=reap, daemon=True).start()
 
@@ -189,11 +130,10 @@ class Relay:
     def send(self, text):
         """Queue `text` to be typed into the agent, as a paste and then enter. It waits for a
         fresh agent to be ready, and does not block the caller. False if it is not running."""
-        with self.lock:         # agrees with `reap_idle`, which closes under it
-            if not self.live:
-                return False
-            self.outbox.put(text)
-            return True
+        if not self.live:
+            return False
+        self.outbox.put(text)
+        return True
 
     def _typist(self):
         while self.live:
@@ -299,7 +239,8 @@ class ChatHost:
             r.close(wait)
 
     def close_all(self):
-        """End every chat and return when they are gone: this is what the screen does as it exits."""
+        """End every chat and wait: this is the screen's exit, which would take the SIGKILL
+        backstop with it."""
         with self.lock:
             relays, self.relays = list(self.relays.values()), {}
         threads = [threading.Thread(target=r.close, args=(True,)) for r in relays]
@@ -307,38 +248,6 @@ class ChatHost:
             t.start()
         for t in threads:
             t.join()
-
-    def reap_idle(self, limit, now=None):
-        """Close the chats nobody has used for `limit` seconds and forget the ones that ended:
-        no output from the agent, nothing waiting to be typed, and no terminal attached. Their
-        conversation is in the agent's own transcript, so the next message starts the chat again
-        where it was. Returns the scopes closed."""
-        now = now or time.time()
-        with self.lock:
-            stale = [s for s, r in self.relays.items() if not r.live]
-            idle = [s for s, r in self.relays.items() if r.live and not r.attached and r.outbox.empty()
-                    and now - max(r.started, r.last_out) > limit]
-            # Taken out of the table while the lock is held, so a message that arrives after this
-            # starts a new chat (resuming the conversation) rather than going to one being closed.
-            closing = [self.relays.pop(s) for s in idle]
-            for s in stale:
-                del self.relays[s]
-        # A caller that already held the relay may have queued a message or attached since the
-        # table was read; `send` and this agree under the relay's lock, and a chat that is in use
-        # after all goes back.
-        kept = []
-        for s, r in zip(idle, closing):
-            with r.lock:
-                if r.attached or not r.outbox.empty():
-                    kept.append((s, r))
-                else:
-                    r.close()
-        if kept:
-            with self.lock:
-                for s, r in kept:
-                    self.relays.setdefault(s, r)
-        kept_scopes = {s for s, _ in kept}
-        return [s for s in idle if s not in kept_scopes]
 
     def live_scopes(self):
         with self.lock:

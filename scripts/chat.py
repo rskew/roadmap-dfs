@@ -12,9 +12,7 @@ With the terminal screen serving the page, a chat started on the page is an inte
 screen runs in the BACKGROUND (ptyrelay.py): any number at once, one per task and one for the project,
 none of them on the screen unless you ask. The page types into them and reads them from the
 transcript; the screen's `c` attaches to the running one (ctrl-] leaves it running). They end with
-the screen (quit, SIGTERM or SIGHUP), with "New chat", or after DFS_CHAT_IDLE seconds (30 minutes) with
-nobody using them; the conversation stays, and the next message resumes it. Ending one ends everything
-the agent started, not only the agent. With no screen (web.py alone) the page runs its own turns. A claude
+the screen, or with "New chat". With no screen (web.py alone) the page runs its own turns. A claude
 running on the session in some OTHER terminal would tangle it, so then the page does not send.
 
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
@@ -33,13 +31,33 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paths as dfs_paths    # noqa: E402
 import runs as dfs_runs      # noqa: E402
 import tree as dfs_tree      # noqa: E402
-import ptyrelay             # noqa: E402
 import context as dfs_context   # noqa: E402
 import uuid
 from walk import agent_file, read_agent   # noqa: E402
 
+
+def run_turn(argv, message, cwd, env):
+    """`subprocess.run` with the agent's end done as ctrl-c would: on a timeout it is sent
+    SIGTERM (run.sh execs the agent, so this is the agent, which stops what it started) and
+    SIGKILLed only if it has not gone after a grace. `run` itself would SIGKILL at once."""
+    p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, cwd=cwd, env=env)
+    try:
+        out, err = p.communicate(message, timeout=TURN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        p.terminate()
+        try:
+            p.communicate(timeout=TURN_GRACE)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            p.communicate()
+        raise
+    return subprocess.CompletedProcess(argv, p.returncode, out, err)
+
+
 SCOPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 MAX_MESSAGE = 4000
+TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
 
 
@@ -112,59 +130,6 @@ def running_elsewhere(sid, own=()):
     return False
 
 
-class Running(set):
-    """The pids of the page turns in flight, each in its own session, with when each started (a
-    pid reused after its turn ended is not the turn). Once `end()` has run, no turn may start."""
-
-    def __init__(self):
-        super().__init__()
-        self.lock = threading.Lock()
-        self.starts = {}
-        self.closed = False
-
-    def end(self):
-        """Stop new turns and end the ones in flight, with everything they started."""
-        with self.lock:
-            self.closed = True
-            turns = [(p, self.starts.get(p)) for p in self]
-        for pid, start in turns:
-            st = ptyrelay._stat(pid)
-            if st and st[2] == start:
-                ptyrelay.stop_tree(pid)
-
-
-def run_turn(argv, message, cwd, env, timeout=None, running=None):
-    """Run one turn and return its CompletedProcess. A turn that outlasts the timeout is ended
-    with everything it started, not just the shell that began it (`subprocess.run` kills only
-    that), and then TimeoutExpired is raised. `running`, a set, holds the turn's pid while it
-    runs, so whoever ends the process can end the turn too (it is in its own session)."""
-    timeout = timeout or TURN_TIMEOUT
-    def start():
-        return subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                text=True, cwd=cwd, env=env, start_new_session=True)
-    if running is None:
-        proc = start()
-    else:
-        with running.lock:      # started and recorded together, so `end()` cannot miss it
-            if running.closed:
-                raise OSError("the server is shutting down")
-            proc = start()
-            running.add(proc.pid)
-            running.starts[proc.pid] = (ptyrelay._stat(proc.pid) or (0, 0, None))[2]
-    try:
-        out, err = proc.communicate(message, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        ptyrelay.stop_tree(proc.pid)
-        proc.communicate()
-        raise
-    finally:
-        if running is not None:
-            with running.lock:
-                running.discard(proc.pid)
-                running.starts.pop(proc.pid, None)
-    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
-
-
 class Chats:
     def __init__(self, on_change=None, walker=lambda: None):
         self.walker = walker        # the screen's side of the chat, if there is a screen
@@ -173,12 +138,6 @@ class Chats:
         self.busy = {}      # scope -> when its turn started
         self.pending = {}   # scope -> what was sent and has not reached the transcript yet
         self.notes = {}     # scope -> [errors], until the conversation moves on
-        self.running = Running()    # pids of the page turns in flight, each in its own session
-
-    def close(self):
-        """End every page turn in flight, with everything it started: the server or screen is
-        going, and a turn in its own session would otherwise run on past it."""
-        self.running.end()
 
     # ── the record: just the session id ────────────────────────────────────────────────
     def path(self, scope):
@@ -276,8 +235,7 @@ class Chats:
                 p = dfs_context.transcript_path(sid, "claude")
                 if p and os.path.exists(p):
                     env["CHAT_RESUME"] = "1"
-            r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
-                         running=self.running)
+            r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env)
             out = {}
             try:
                 out = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}

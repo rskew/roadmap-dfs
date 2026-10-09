@@ -735,51 +735,5 @@ class Web(unittest.TestCase):
         self.assertIn("text/html", r.getheader("Content-Type"))
 
 
-
-class KilledWithTurnRunning(unittest.TestCase):
-    """A web.py sent SIGTERM or SIGHUP ends the page's turns in flight, which run in sessions of their own."""
-
-    CHILD = r"""
-import sys, threading, time
-sys.path.insert(0, %(here)r)
-import web, chat
-script = "echo $$ >> %(pids)s; setsid sh -c 'trap \"\" HUP TERM; echo $$ >> %(pids)s; exec sleep 600' & sleep 600"
-chats = web.chats()
-threading.Thread(target=lambda: chat.run_turn(["bash", "-c", script], "hi", None, dict(__import__("os").environ),
-                                              timeout=600, running=chats.running), daemon=True).start()
-sys.exit(web.main(["--port", "0"]))
-"""
-
-    def test_the_turns_go_with_it(self):
-        import signal, time
-        from pathlib import Path as P
-        import ptyrelay
-        root = P(tempfile.mkdtemp())
-        (root / ".dfs" / "items").mkdir(parents=True)
-        (root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
-        subprocess.run("git init -q -b master && git add -A && git -c user.name=t "
-                       "-c user.email=t@t commit -qm x", shell=True, cwd=root, check=True)
-        for sig in (signal.SIGTERM, signal.SIGHUP):
-            pids = P(tempfile.mkdtemp()) / "pids"
-            code = self.CHILD % dict(here=str(HERE), pids=str(pids))
-            proc = subprocess.Popen([sys.executable, "-u", "-c", code], cwd=root, stdout=subprocess.PIPE, text=True)
-            try:
-                self.assertTrue(proc.stdout.readline().startswith("roadmap web:"))     # serving, handlers in
-                end = time.time() + 10
-                while time.time() < end and not (pids.exists() and len(pids.read_text().split()) == 2):
-                    time.sleep(0.05)
-                started = [int(x) for x in pids.read_text().split()]
-                self.assertEqual(len(started), 2)
-                proc.send_signal(sig)
-                self.assertEqual(proc.wait(timeout=20), 128 + sig)
-            finally:
-                if proc.poll() is None:
-                    proc.kill()
-                proc.stdout.close()
-            for p in started:
-                self.assertFalse(ptyrelay._running(p, (ptyrelay._stat(p) or (0, 0, None))[2]),
-                                 "%d outlived the server after %s" % (p, sig.name))
-
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -2229,8 +2229,6 @@ class UI(WalkMixin):
         self.agent_update_tick()
         self.drain_commands()
         self.walk_tick()
-        if self.chat_host is not None and CHAT_IDLE > 0:
-            self.chat_host.reap_idle(CHAT_IDLE)
         sig = watch_signature()
         was_live = {r["dir"] for r in self.chains if r["live"]}
         if sig == self.sig:
@@ -4886,28 +4884,6 @@ def start_web(ui):
     return handle
 
 
-# Seconds a background chat may sit without a word before the screen ends its agent (0: never).
-# The conversation is kept; the next message to it, from the page or `c`, resumes it.
-CHAT_IDLE = float(os.environ.get("DFS_CHAT_IDLE", 30 * 60))
-
-
-def end_on_signals():
-    """A SIGTERM, or the SIGHUP of a dropped terminal, ends the screen the way quitting does, so
-    `main`'s `finally` still closes the chats. When the screen dies the kernel hangs up on the
-    agents' ptys, but an agent that ignores hangup, and the helpers it started, only end because
-    this handler lets `close_all` find and end them. Once the exit has begun, further signals
-    are ignored so they cannot abandon that."""
-    def end(signum, frame):
-        for sig in (signal.SIGTERM, signal.SIGHUP):
-            signal.signal(sig, signal.SIG_IGN)
-        raise SystemExit(128 + signum)
-    for sig in (signal.SIGTERM, signal.SIGHUP):
-        try:
-            signal.signal(sig, end)
-        except ValueError:          # not the main thread: a test is
-            pass
-
-
 def main(stdscr):
     # ncurses defaults ESCDELAY to 1000ms: having read an ESC byte it waits that
     # long for the rest of a possible escape sequence (an arrow key is ESC [ A)
@@ -4928,7 +4904,6 @@ def main(stdscr):
         coloured = False
     init_look(LIGHT, coloured)
     ui = UI(stdscr)
-    end_on_signals()
     # From here and not UI(): the tests build a UI of their own, and one that went to
     # the network and rewrote a pin every time it was constructed would be a test of nix.
     ui.agent_update = start_agent_update()
@@ -4936,12 +4911,10 @@ def main(stdscr):
     try:
         ui.loop()
     finally:
-        try:
-            if ui.web is not None:
-                ui.web.stop()           # ends the page's turns in flight too
-        finally:
-            if ui.chat_host is not None:
-                ui.chat_host.close_all()        # the chats run for as long as this screen does
+        if ui.web is not None:
+            ui.web.stop()
+        if ui.chat_host is not None:
+            ui.chat_host.close_all()        # the chats run for as long as this screen does
 
 
 if __name__ == "__main__":
