@@ -805,6 +805,35 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await ctx.close();
   },
 
+  // A task lists its runs, and a run's log opens as a screen of its own that grows while the chain writes.
+  async run_log(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.waitForSelector("details.runs");
+    assert(!(await page.$("details.runs[open]")) === false, "a task with a live chain shows its runs open");
+    same(await page.$$eval("a.runrow", rows => rows.length), 2, "both runs are listed");
+    const audit = async what => { const r = await page.evaluate(AUDIT); assert(!r.overflow && !r.low.length && !r.small.length, `${what}: ${r.overflow ? "scrolls sideways; " : ""}${r.low.join("; ")} ${r.small.join("; ")}`); };
+    await audit("the task with its runs");
+    const row = await page.$("a.runrow:has(.tag.settled)");
+    assert(row, "the live chain is marked");
+    await row.click();
+    await page.waitForSelector("#runlog");
+    await page.waitForFunction(() => document.querySelector("#runlog").textContent.includes("── run 2/5"), null, { timeout: 4000 });
+    assert((await page.textContent("#runhead")).includes("live"), "the head says the chain is live");
+    await audit("the log");
+    fs.appendFileSync(path.join(DIR, ".dfs", "runs", "dfs_run_live", "console.log"), "   exit 0 · 9 turns · session abc\n");
+    await page.waitForFunction(() => document.querySelector("#runlog").textContent.includes("9 turns"), null, { timeout: 8000 })
+      .catch(() => { throw new Error("a live log grows by itself"); });
+    assert((await page.textContent("#runlog")).startsWith("$ run.sh W9 5"), "what was shown is kept, not redrawn from a later point");
+    if (process.env.DFS_UI_SHOT) await page.screenshot({ path: process.env.DFS_UI_SHOT });
+    await page.click("#tabs [data-act=up]");
+    await page.waitForSelector(".row");
+    await page.goto(URL_ + "/#/r/W9/dfs_run_nope");
+    await page.waitForSelector(".hint");
+    assert((await page.textContent(".hint")).includes("No such run"), "an unknown run says so");
+    same(errors.filter(e => !/404/.test(e)), [], "no page errors");
+  },
+
   // A change made elsewhere (a chain, the terminal) reaches an open page by itself.
   async live(b) {
     const { page, errors } = await open(b, PHONE);

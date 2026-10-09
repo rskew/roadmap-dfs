@@ -263,6 +263,24 @@ class Flows(unittest.TestCase):
     def test_a_first_load_that_fails_shows_the_error_and_a_retry_not_loading(self):
         self.flow("loadfail")
 
+    def test_a_tasks_runs_open_their_log_and_a_live_log_grows(self):
+        import runs as dfs_runs
+        runs = self.root / ".dfs" / "runs"
+        for name, finished, console in (
+                ("dfs_run_done", "2026-10-09T03:54:17+00:00", "$ run.sh W9 5\n── run 1/5 · work ──\n   exit 0 · 17 turns\n"),
+                ("dfs_run_live", "", "$ run.sh W9 5\n\ndfs_run: task W9, cap 5, agent claude\n\n── run 2/5 · work (the author answered) ──\n")):
+            (runs / name).mkdir(parents=True)
+            (runs / name / "console.log").write_text(console)
+            (runs / name / "meta.json").write_text(json.dumps(dict(
+                item="W9", agent="claude", mode="work", cap="5", run="2" if finished == "" else "1", pid="4000000",
+                started="2026-10-09T03:47:39+00:00", finished=finished, turns="17" if finished else "")))
+        real = dfs_runs.pid_is_chain
+        dfs_runs.pid_is_chain = lambda pid: True
+        try:
+            self.flow("run_log")
+        finally:
+            dfs_runs.pid_is_chain = real
+
     def test_a_change_elsewhere_reaches_an_open_page(self):
         self.flow("live")
 

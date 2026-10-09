@@ -64,6 +64,12 @@ html[data-loading] #stripe { opacity: 1; }
 #view.col { max-width: var(--col); margin: 0 auto; }
 iframe.artview { display: block; width: 100%; height: calc(100dvh - var(--bar) - var(--tabs) - 3rem); min-height: 50dvh; border: var(--rule) solid var(--line); background: #fff; }
 img.artview { max-width: 100%; height: auto; }
+/* a run's log: wrapped to the screen, scrolling inside its own box so the page keeps its bars */
+pre.runlog { margin: 0; padding: var(--s3); border: var(--rule) solid var(--line); background: var(--paper); font: var(--fs-small)/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; min-height: 40dvh; max-height: calc(100dvh - var(--bar) - var(--tabs) - 9rem); }
+.runhead { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; padding-bottom: var(--s3); }
+a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; min-height: 44px; padding: var(--s2) 0; color: inherit; text-decoration: none; border-top: var(--rule) solid var(--line); }
+.runhead .muted, a.runrow .muted { font-size: var(--fs-small); }
 
 /* tabs: two words; the current one carries a line */
 #tabs {
@@ -140,7 +146,7 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 /* one task */
 .head h2 { margin: 10px 0 var(--s1); font-size: var(--fs-title); line-height: 1.25; font-weight: 500; text-wrap: balance; }
 .head p { margin: 2px 0 0; font-size: var(--fs-small); }
-details.sec.arts .body { white-space: normal; }
+details.sec.arts .body, details.sec.runs .body { white-space: normal; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s3); margin-bottom: var(--s3); }
 a.tile { display: block; color: inherit; text-decoration: none; }
 a.tile .thumb { display: block; position: relative; aspect-ratio: 3 / 2; overflow: hidden; border: var(--rule) solid var(--line); background: var(--faint); }
@@ -322,6 +328,7 @@ function route() {
   if (p[0] === "t" && p[1]) return { view: "task", task: p[1], node: p[2] || null };
   if (p[0] === "chats") return { view: "chats" };
   if (p[0] === "a" && p[1] && p[2]) return { view: "artefact", task: p[1], name: p[2] };
+  if (p[0] === "r" && p[1] && p[2]) return { view: "run", task: p[1], name: p[2] };
   return { view: "tasks" };
 }
 const go = (h, replace) => replace ? location.replace("#/" + h) : (location.hash = "/" + h);
@@ -373,6 +380,9 @@ async function render(force) {
       if (mine !== RENDERS) return;
       S.task = t; S.taskId = r.task; S.node = null;
       drawArtefact(r);
+    } else if (r.view === "run") {
+      S.node = null;
+      await drawRun(r, mine);
     } else if (r.view === "chats") {
       const [list, state] = await Promise.all([api("/api/chats"), api("/api/state")]);
       if (mine !== RENDERS) return;
@@ -405,7 +415,7 @@ function drawBar(r) {
   const cell = (attrs, label, cur) => `<button ${attrs} ${cur ? 'aria-current="page"' : ""}>${label}</button>`;
   const list = r.view === "tasks";
   let html, mode;
-  if (r.view === "artefact") {
+  if (r.view === "artefact" || r.view === "run") {
     mode = "artefact";
     html = `<button data-act="up">Back</button>`;
   } else if (r.view !== "task" || wide()) {
@@ -431,9 +441,10 @@ function chrome(r) {
   const t = $("#title");
   if (r.view === "task" && S.task) t.innerHTML = `${esc(S.task.id)}<small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
   else if (r.view === "artefact") { const a = artefactOf(r); t.innerHTML = `${esc(a ? a.title : r.name)}<small>${esc(r.task)}, artefact</small>`; }
+  else if (r.view === "run") t.innerHTML = `${esc(RUNLOG.info ? RUNLOG.info.progress : "Run")}<small>${esc(r.task)}, run log</small>`;
   else if (r.view === "chats") t.innerHTML = `Chats<small>${S.chats ? S.chats.length : 0} going, any of them yours to pick up</small>`;
   else if (S.state) t.innerHTML = `<button class="rename" data-act="rename" aria-label="Rename the project">${esc(PROJECT)}</button><small>${S.state.items.length} tasks, ${S.state.needs_you} need you</small>`;
-  document.title = (r.view === "task" ? r.task + " · " : r.view === "artefact" ? r.name + " · " : "") + PROJECT;
+  document.title = (r.view === "task" ? r.task + " · " : r.view === "artefact" ? r.name + " · " : r.view === "run" ? r.task + " log · " : "") + PROJECT;
   const open = r.view === "task" && !!r.node && !!S.task && S.task.rows.some(x => x.key === r.node);
   $("#sheet").classList.toggle("open", open);
   $("#scrim").classList.toggle("open", open && !wide());
@@ -506,6 +517,48 @@ function drawArtefact(r) {
   view.innerHTML = !a ? `<p class="hint">No such artefact: ${esc(r.name)} is not one of ${esc(r.task)}'s.</p>`
     : a.kind === "image" ? `<img class="artview shot" src="${src}" alt="${esc(a.title)}">`
     : `<iframe class="artview" src="${src}" title="${esc(a.title)}" sandbox="allow-scripts"></iframe>`;
+}
+/* A run's log, `#/r/<task>/<run>`: the console of the chain, read from where the last look ended, so a
+   live one grows in place and a push or the poll below adds only what was written since. */
+const RUNLOG = { key: "", end: 0, text: "", info: null };
+async function drawRun(r, mine) {
+  const key = r.task + "/" + r.name, view = $("#view"), fresh = RUNLOG.key !== key;
+  if (fresh) Object.assign(RUNLOG, { key, end: 0, text: "", info: null });
+  let got;
+  try { got = await api("/api/run/" + encodeURIComponent(r.name) + (fresh ? "" : "?from=" + RUNLOG.end)); }
+  catch (e) { if (mine === RENDERS) { RUNLOG.key = ""; view.className = ""; view.dataset.run = ""; view.innerHTML = `<p class="hint">No such run: ${esc(r.name)} is not on this machine.</p>`; } return; }
+  if (mine !== RENDERS) return;
+  RUNLOG.info = got;
+  RUNLOG.text = fresh || got.start !== RUNLOG.end ? got.text : RUNLOG.text + got.text;
+  RUNLOG.end = got.end;
+  const head = runTags(got);
+  if (!view.querySelector("#runlog") || view.dataset.run !== key) {
+    view.className = ""; view.dataset.run = key;
+    view.innerHTML = `<div class="runhead" id="runhead"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Log of ${esc(got.progress)}"></pre>`;
+  }
+  $("#runhead").innerHTML = head;
+  const box = $("#runlog"), atEnd = fresh || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  if (fresh || got.text || got.start !== got.end - got.text.length) box.textContent = (got.has_log ? (got.start > 0 && fresh ? "… earlier output is not shown …\n" : "") + RUNLOG.text || "(nothing written yet)" : "No log was kept for this run.");
+  if (atEnd) box.scrollTop = box.scrollHeight;
+}
+const RUN_TAGS = { live: ["settled", "live"], stopped: ["attention", "stopped"], finished: ["", "finished"], unknown: ["", "unknown"] };
+const runWhen = x => { const t = Date.parse(x.started); return t ? ago(t / 1000) : ""; };
+function runTags(x) {
+  const [cls, label] = RUN_TAGS[x.state] || ["", x.state];
+  return `<span class="tag ${cls}">${label}</span><span class="tag">${esc(x.progress)}</span>`
+    + (x.mode ? `<span class="tag">${esc(x.mode)}</span>` : "")
+    + (x.stop && x.stop !== "done" ? `<span class="tag attention">${esc(x.stop)}</span>` : "")
+    + (x.turns ? `<span class="muted">${esc(x.turns)} turns</span>` : "")
+    + `<span class="muted">${esc(runWhen(x))}</span>`;
+}
+/* The chains that worked this task, newest first, each a link to its log. Open while one is live, else as the reader left it. */
+function runsHtml(t) {
+  const runs = t.runs || [];
+  if (!runs.length) return "";
+  const open = S.runsOpen != null ? S.runsOpen : runs.some(x => x.state === "live");
+  return `<details class="sec runs" id="runs" ${open ? "open" : ""}><summary class="cap">Runs ${runs.length}</summary><div class="body">`
+    + runs.map(x => `<a class="runrow" href="#/r/${encodeURIComponent(t.id)}/${encodeURIComponent(x.name)}">${runTags(x)}${x.has_log ? "" : `<span class="muted">no log</span>`}</a>`).join("")
+    + `</div></details>`;
 }
 function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
@@ -587,7 +640,7 @@ function drawTask() {
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
       ${S.walk && S.walk.enabled && S.walk.candidates.some(c => c.id === t.id) ? `<button class="btn" data-act="walkhere" data-item="${esc(t.id)}">${S.walk.pinned === t.id ? "Walk goes here next" : "Walk here next"}</button>` : ""}
-    </div>${artefactsHtml(t)}<div class="tree">`;
+    </div>${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
   for (const r of visibleRows(t)) {
     if (r.kind === "section") {
       // The Goal is a tap away on any width: open, it is a screen of its own above the
@@ -1004,7 +1057,7 @@ document.addEventListener("click", e => {
 function showList() { if (route().view !== "tasks") return go(""); drawTasks(); drawBar(route()); }
 const up = () => {
   const r = route();
-  if (r.view === "artefact") return NAVS ? history.back() : go(`t/${r.task}`, true);
+  if (r.view === "artefact" || r.view === "run") return NAVS ? history.back() : go(`t/${r.task}`, true);
   if (S.node) go(`t/${S.task.id}`, true); else go("");
 };
 $("#back").onclick = up;
@@ -1015,6 +1068,8 @@ $("#chat-log").addEventListener("scroll", e => {
 }, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 addEventListener("hashchange", () => { NAVS++; render(true); });
+document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
+setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
 setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
 addEventListener("keydown", e => {
   if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey) return;

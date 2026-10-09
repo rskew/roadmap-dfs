@@ -325,8 +325,7 @@ def run_entry(r):
     return dict(name=os.path.basename(r["dir"]), item=r["item"], state=r["state"],
                 progress=dfs_runs.progress(r), mode=r["mode"], agent=r["agent"],
                 started=r["started"], finished=r["finished"], stop=r["stop"], rc=r["rc"],
-                peak=r["peak"], turns=r["turns"], has_log=bool(r["console"]),
-                age=dfs_runs.age(r))
+                peak=r["peak"], turns=r["turns"], has_log=bool(r["console"]))
 
 
 def runs_for(task):
