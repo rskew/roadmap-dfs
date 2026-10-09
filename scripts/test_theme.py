@@ -3,6 +3,7 @@
 
 Run:  python3 <scripts>/test_theme.py
 """
+import os
 import shutil
 import sys
 import tempfile
@@ -12,6 +13,10 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths  # noqa: E402
+
+
+def kind_png(tail: bytes) -> bytes:
+    return b"\x89PNG\r\n\x1a\n" + tail
 
 
 class Theme(unittest.TestCase):
@@ -93,6 +98,42 @@ class Theme(unittest.TestCase):
         dfs_paths.write_background(dark="#10243a")
         pal = dfs_paths.background_palettes()
         self.assertEqual((pal["light"], pal["dark"]["paper"]), ({}, "#10243a"))
+
+    def test_a_background_image_round_trips_and_leaves_the_colours_alone(self):
+        kinds = {"image/png": b"\x89PNG\r\n\x1a\n" + b"x" * 20, "image/jpeg": b"\xff\xd8\xff\xe0" + b"x" * 20,
+                 "image/webp": b"RIFF\0\0\0\0WEBPVP8 ", "image/gif": b"GIF89a" + b"x" * 20}
+        self.assertIsNone(dfs_paths.read_background_image())
+        self.assertEqual(dfs_paths.background_image_version(), "")
+        dfs_paths.write_background(light="#fff2cc")
+        dfs_paths.write_theme("#aa3355")
+        for kind, data in kinds.items():
+            ver = dfs_paths.write_background_image(data)
+            self.assertTrue(ver)
+            self.assertEqual(dfs_paths.read_background_image(), (data, kind))
+            self.assertEqual(dfs_paths.background_image_version(), ver)
+        self.assertEqual(dfs_paths.read_background(), dict(light="#fff2cc", dark=""))
+        self.assertEqual(dfs_paths.read_theme(), "#aa3355")
+        self.assertEqual(dfs_paths.write_background_image(b""), "")
+        self.assertFalse(dfs_paths.background_image_file().exists())
+        self.assertIsNone(dfs_paths.read_background_image())
+        self.assertEqual(dfs_paths.write_background_image(None), "")        # clearing nothing is fine
+
+    def test_a_new_picture_is_a_new_version(self):
+        a = dfs_paths.write_background_image(kind_png(b"a"))
+        os.utime(dfs_paths.background_image_file(), ns=(1, 1))
+        self.assertNotEqual(a, dfs_paths.background_image_version())
+
+    def test_what_is_not_a_picture_is_refused_and_a_stray_file_is_ignored(self):
+        for bad in (b"just text", b"<svg xmlns='http://www.w3.org/2000/svg'/>", b"RIFF\0\0\0\0WAVEfmt ",
+                    kind_png(b"x") + b"\0" * dfs_paths.IMAGE_MAX):
+            with self.assertRaises(ValueError):
+                dfs_paths.write_background_image(bad)
+        self.assertFalse(dfs_paths.background_image_file().exists())
+        dfs_paths.background_image_file().write_text("not a picture\n")
+        self.assertIsNone(dfs_paths.read_background_image())
+        self.assertEqual(dfs_paths.background_image_version(), "")
+        dfs_paths.background_image_file().write_bytes(kind_png(b"x") + b"\0" * dfs_paths.IMAGE_MAX)
+        self.assertIsNone(dfs_paths.read_background_image())
 
     def test_the_made_colours_hold_white_text(self):
         def lum(c):

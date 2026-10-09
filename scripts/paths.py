@@ -277,6 +277,66 @@ def background_palettes() -> dict:
     return {m: background_palette(v) for m, v in read_background().items()}
 
 
+IMAGE_MAX = 8 * 1024 * 1024
+
+
+def background_image_file() -> Path:
+    return state() / "background-image"
+
+
+def image_type(data: bytes) -> str:
+    """The content type of a png, jpeg, webp or gif by its first bytes, "" for anything else."""
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    return ""
+
+
+def read_background_image():
+    """The picture behind the page, `.dfs/background-image`: (bytes, content type), None when
+    there is none or the file is not a picture. The name has no extension, so a file put there
+    by hand works whatever it was called."""
+    try:
+        data = background_image_file().read_bytes()
+    except OSError:
+        return None
+    kind = image_type(data) if len(data) <= IMAGE_MAX else ""
+    return (data, kind) if kind else None
+
+
+def background_image_version() -> str:
+    """Which picture is in force, for a page to tell a new one from the old: the file's
+    modification time in nanoseconds, "" when there is no picture."""
+    if read_background_image() is None:
+        return ""
+    return str(background_image_file().stat().st_mtime_ns)
+
+
+def write_background_image(data) -> str:
+    """Set the picture behind the page (png, jpeg, webp or gif, at most 8 MB); empty or None
+    clears it. Separate from the background colours. Returns the version now in force."""
+    if not data:
+        try:
+            background_image_file().unlink()
+        except FileNotFoundError:
+            pass
+        return ""
+    if len(data) > IMAGE_MAX:
+        raise ValueError("a background image is 8 MB or smaller")
+    if not image_type(data):
+        raise ValueError("a background image is a png, jpeg, webp or gif")
+    background_image_file().parent.mkdir(parents=True, exist_ok=True)
+    tmp = background_image_file().with_name("background-image.tmp")
+    tmp.write_bytes(data)
+    tmp.replace(background_image_file())
+    return background_image_version()
+
+
 def colour_from_name(name: str) -> str:
     """A colour for a name: its hash picks the hue, and lightness and saturation are fixed
     so white text reads on it. The same name is always the same colour."""
