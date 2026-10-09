@@ -35,6 +35,10 @@ A TLS proxy's hostname is admitted by name, `--allow-host` or DFS_WEB_ALLOW_HOST
 THE PROJECT'S COLOUR is `.dfs/theme` (`#rrggbb`), else one made from the name; it marks the
 bar, the browser's own bar and the installed app, so two projects are told apart. It is chosen
 in the same dialog as the name ("Rename project"), and `--project` in /design.css holds it.
+THE PROJECT'S BACKGROUND is `.dfs/background` (a colour for light mode, one for dark) and, apart from
+it, `.dfs/background-image`: a png, jpeg, webp or gif of 8 MB or less, set at POST /api/background-image
+(base64 in JSON, the one write allowed a body past 64 KB), served at GET /background-image, and drawn
+fixed behind the page under a 90% veil of the paper so text keeps its contrast on any picture.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the

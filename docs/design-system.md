@@ -25,6 +25,10 @@ installed app) and is never used for status or text. `--project-mark` is how it 
 as it is on paper, lightened in the dark theme so it still shows. The `theme-color` meta is
 the project colour in both themes, not the paper of the dark one, so the browser bar tells
 projects apart.
+A project may also have a **background picture** (`.dfs/background-image`): `body::before` draws it fixed
+behind the page under a 90% veil of `--paper`, so the picture shows at 10% and text keeps 10:1 (body) and
+4:1 (muted) on a worst-case black or white pixel. It adds no colour of its own, and the opaque surfaces
+(the bar, the sheet, dialogs) stay paper.
 Everything else is paper, panel, ink, muted and two rules. Square corners, no shadows, no
 icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes in ink, top left of the bar). The one flourish is the two-pixel line of the three, under the bar.
 
