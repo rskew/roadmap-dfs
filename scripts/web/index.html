@@ -652,6 +652,7 @@ function drawTask() {
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>
       <button class="btn" data-act="edittask">Edit task</button>
+      <button class="btn" data-act="deletetask">Delete task</button>
       <button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button>
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
@@ -782,7 +783,8 @@ function drawSheet() {
     <div class="sheet-actions">
       <button class="btn" data-act="correct" data-id="${esc(r.id)}">Refute/confirm</button>
       ${r.editable ? `<button class="btn" data-act="editnode" data-id="${esc(r.id)}">Edit</button>` : ""}
-      <button class="btn" data-act="add" data-parent="${esc(r.id)}">Add under</button></div>
+      <button class="btn" data-act="add" data-parent="${esc(r.id)}">Add under</button>
+      <button class="btn" data-act="deletenode" data-id="${esc(r.id)}">Delete</button></div>
     <nav class="sheet-nav" aria-label="Nodes">
       <button data-act="prev" ${i <= 0 ? "disabled" : ""}>Prev</button>
       <button data-act="next" ${i >= rows.length - 1 ? "disabled" : ""}>Next</button>
@@ -1034,6 +1036,23 @@ function editNodeForm(id) {
     <div><label for="ea">Approach: what to do, where, and the check (one paragraph; line breaks become spaces)</label><textarea id="ea" name="approach">${esc(r.approach)}</textarea></div>${buttons("Save")}`,
     async fd => wrote(await api("/api/edit_node", { task: S.task.id, node: id, title: fd.get("title"), approach: fd.get("approach") }), "Saved."));
 }
+function deleteTaskForm() {
+  const t = S.task;
+  form(`<h3>Delete ${esc(t.id)}?</h3>
+    <p class="muted" style="margin:0">${inline(t.goal)}</p>
+    <p class="muted" style="margin:0">It leaves the list and the order. Its files are kept under <code>.dfs/archive/deleted/</code>, so moving them back restores it; its number is not used again.</p>${buttons("Delete task")}`,
+    async () => {
+      const res = await api("/api/delete_task", { task: t.id });
+      toast("Deleted " + res.deleted + "."); S.task = null; S.sig = ""; go(""); await render(true); });
+}
+function deleteNodeForm(id) {
+  const rows = S.task.rows.filter(x => x.kind === "node"), under = [];
+  for (const x of rows) { let p = x.parent; while (p) { if (p === id) { under.push(x.id); break; } const up = rows.find(y => y.id === p); p = up ? up.parent : ""; } }
+  form(`<h3>Delete ${esc(id)}?</h3>
+    <p class="warn">${under.length ? `This also deletes the ${under.length} node${under.length === 1 ? "" : "s"} under it: ${under.map(esc).join(", ")}.` : "Nothing is under it."}</p>
+    <p class="muted" style="margin:0">Whatever its status. The task's log keeps what was cut; the node numbers are not used again.</p>${buttons("Delete")}`,
+    async () => { const res = await api("/api/delete_node", { task: S.task.id, node: id }); await wrote(res, "Deleted " + res.deleted.join(", ") + "."); go(`t/${S.task.id}`, true); });
+}
 function addForm(parent) {
   const p = parent && S.task.rows.find(x => x.key === parent);
   const dead = p && ["refuted", "pruned"].includes(p.status);
@@ -1074,7 +1093,7 @@ document.addEventListener("click", e => {
     fold: () => { const s = S.folded[S.task.id] ||= new Set(); s.has(d.id) ? s.delete(d.id) : s.add(d.id); S.sig = ""; render(true); },
     close: () => go(`t/${S.task.id}`, true), up,
     prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
-    answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, editnode: () => editNodeForm(d.id),
+    answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, deletetask: deleteTaskForm, deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
     chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,

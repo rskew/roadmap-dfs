@@ -192,6 +192,11 @@ class Flows(unittest.TestCase):
         titles = [n["title"] for n in dfs_tree.load("W3")["nodes"]]
         self.assertIn("Cover the stampede with a test", titles)
 
+    def test_deleting_a_node_and_a_task(self):
+        self.flow("delete")
+        self.assertFalse(dfs_tree.exists("W3"))
+        self.assertTrue((self.root / ".dfs" / "archive" / "deleted" / "items" / "W3.md").is_file())
+
     def test_accepting_a_finished_tree(self):
         self.flow("accept")
         self.assertTrue(dfs_tree.accepted(dfs_tree.load("W4")))

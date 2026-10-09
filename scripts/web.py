@@ -633,6 +633,23 @@ def act(name, body):
                 dfs_tree.edit_node(task, nid, need(body, "title", "a title"), body.get("approach") or "")
             except (ValueError, dfs_paths.NoBranch) as e:
                 raise Refused(str(e), 409)
+        elif name == "delete_task":
+            try:
+                dfs_tree.delete_task(task)
+            except (ValueError, dfs_paths.NoBranch) as e:
+                raise Refused(str(e), 409)
+            HUB.notify()
+            return dict(deleted=task)
+        elif name == "delete_node":
+            nid = need(body, "node", "the node")
+            if nid not in nodes:
+                raise Refused("no node %s" % nid, 404)
+            try:
+                gone = dfs_tree.delete_node(task, nid)
+            except (ValueError, dfs_paths.NoBranch) as e:
+                raise Refused(str(e), 409)
+            HUB.notify()
+            return dict(deleted=gone, task=task_json(task))
         elif name == "add":
             parent = body.get("parent") or None
             if parent and parent not in nodes:

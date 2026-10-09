@@ -987,6 +987,28 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/edit_node", dict(task="W1", node="W1.9", title="x"))[0], 404)
         self.assertEqual(self.call("POST", "/api/edit_node", dict(task="W1", node="W1.3", title=""))[0], 400)
 
+    def test_a_node_is_deleted_with_its_subtree_whatever_its_status(self):
+        status, data, _ = self.call("POST", "/api/delete_node", dict(task="W1", node="W1.2"))
+        self.assertEqual(status, 409, data)   # W1.3 under it is named by an open raise
+        self.assertIn("answer it first", data["error"])
+        self.call("POST", "/api/answer", dict(task="W1", ts="2026-09-25T09:05:00Z", body="go on"))
+        status, data, _ = self.call("POST", "/api/delete_node", dict(task="W1", node="W1.2"))
+        self.assertEqual(status, 200, data)
+        self.assertEqual(data["deleted"], ["W1.2", "W1.3"])
+        ids = [r.get("id") for r in data["task"]["rows"]]
+        for gone in data["deleted"]:
+            self.assertNotIn(gone, ids)
+        self.assertIn("delete", [e["kind"] for e in dfs_tree.load("W1")["log"]])
+        self.assertEqual(self.call("POST", "/api/delete_node", dict(task="W1", node="W1.2"))[0], 404)
+        self.assertEqual(self.call("POST", "/api/delete_node", dict(task="W1"))[0], 400)
+
+    def test_a_task_is_deleted_by_retiring_its_files_and_the_list_forgets_it(self):
+        status, data, _ = self.call("POST", "/api/delete_task", dict(task="W1"))
+        self.assertEqual((status, data["deleted"]), (200, "W1"))
+        self.assertFalse(dfs_tree.exists("W1"))
+        self.assertTrue((self.root / ".dfs" / "archive" / "deleted" / "items" / "W1.md").is_file())
+        self.assertEqual(self.call("POST", "/api/delete_task", dict(task="W1"))[0], 404)
+
     def test_a_new_task_is_written_as_run_open_writes_it(self):
         status, data, _ = self.call("POST", "/api/new", dict(name="Cache the lookups", goal="Hits above 90%.", todos="profile it\nadd the cache\n"))
         self.assertEqual(status, 200)

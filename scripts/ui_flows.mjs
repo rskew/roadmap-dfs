@@ -372,6 +372,31 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Delete a node from its sheet, then the whole task: each asks first, and the task leaves the list.
+  async delete(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W3");
+    await page.click("[data-act=add]"); await dialog(page);
+    await page.fill("#t", "Throwaway step");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => /Throwaway step/.test(document.body.textContent));
+    await page.click(".main:has-text('Throwaway step')"); await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=deletenode]"); await dialog(page);
+    await page.click("dialog button[value=cancel]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    assert(/Throwaway step/.test(await page.textContent("body")), "cancelling keeps the node");
+    await page.click("#sheet [data-act=deletenode]"); await dialog(page);
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]") && !/Throwaway step/.test(document.body.textContent));
+    await page.click("[data-act=deletetask]"); await dialog(page);
+    assert(/Delete W3\?/.test(await page.textContent("dialog")), "the dialog names the task");
+    if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "delete.png") });
+    await page.click("dialog button[value=ok]");
+    await page.waitForSelector(".item[data-id=W2]");
+    assert(!(await page.$(".item[data-id=W3]")), "W3 has left the list");
+    same(errors, [], "no page errors");
+  },
+
   // Add a node under another.
   async add(b) {
     const { page, errors } = await open(b, PHONE);
