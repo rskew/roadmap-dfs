@@ -821,6 +821,34 @@ class AnAssumptionStandsOut(unittest.TestCase):
         self.assertEqual(len(said), 1, said)
 
 
+class ANodeSaysHowFarItIs(unittest.TestCase):
+    """The tree told complete from open by a glyph; a started node reads as open to the
+    work but is drawn filled in, and a refuted one keeps its own glyph."""
+
+    TEXT = TREE.split("### W1.1")[0] + (
+        "### W1.1 · a\nStatus: confirmed\nDetermination: ok.\n\n"
+        "### W1.2 · b\nParent: W1.1\nStatus: started\n\n"
+        "### W1.3 · c\nParent: W1.1\nStatus: open\n\n"
+        "### W1.4 · d\nParent: W1.1\nStatus: refuted\nDetermination: no.\n\n## Log\n")
+
+    def test_rows_carry_progress_and_the_screen_draws_it(self):
+        t = TUI.dfs_tree.parse(self.TEXT, "W1")
+        rows = {r["key"]: r for r in TUI.tree_entries(t) if r["kind"] == "node"}
+        self.assertEqual({k: r["progress"] for k, r in rows.items()},
+                         {"W1.1": "done", "W1.2": "started", "W1.3": "open", "W1.4": ""})
+        ui = a_screen([item("W1")], pane="item", focus="tree", tree_open=set())
+        ui.tree_of = lambda task: (t, "", {})
+        ui.status_attr = lambda status: 0
+        ui._tree_cache = {}
+        ui.tree_item = "W1"
+        heads = {k: next(l[0] for l in ui.lines_tree(100) if k in l[0])
+                 for k in rows}
+        for k, mark in (("W1.1", "✓"), ("W1.2", "●"), ("W1.3", "○"), ("W1.4", "✗")):
+            self.assertRegex(heads[k], r"%s %s " % (k.replace(".", r"\."), mark), heads[k])
+        card = dict(TUI.node_card(t, rows["W1.2"])[1:2])
+        self.assertEqual(card["meta"], "● started · under W1.1")
+
+
 class ADoneTaskRecedesInTheList(unittest.TestCase):
     """The list told a finished task from an open one by the colour of one word."""
 

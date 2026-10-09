@@ -101,6 +101,9 @@ ART_PORT = int(os.environ.get("DFS_ARTEFACT_PORT") or 3016)  # docs/artefacts.md
 
 TREE_MARK = {"confirmed": "✓", "refuted": "✗", "open": "○", "parked": "‖",
              "dormant": "‖", "pruned": "·"}
+# What a node that is still in play looks like: done, begun, not begun. A node the work
+# has left (refuted, parked, dormant, pruned) has none and keeps its glyph above.
+PROGRESS_MARK = {"done": "✓", "started": "●", "open": "○"}
 # Marks a blank line in the tree whose indent guides are settled once both its
 # neighbours are known; compared by identity, never mutated.
 BLANK_GUIDES = []
@@ -209,6 +212,9 @@ def tree_entries(t, folded=(), flagged=False):
             out.append(dict(key=nid, kind="node", depth=d, indent=min(ind, TREE_INDENT_CAP),
                             guides=forks,
                             node=nd, status=st,
+                            progress=("done" if st == "confirmed" else
+                                      "" if st != "open" else
+                                      "started" if nd["status"] == "started" else "open"),
                             chain=parent is not None and len(sibs) == 1,
                             raises=on_node.get(nid, []), kids=len(kids),
                             folded=shut, raises_below=below,
@@ -309,7 +315,9 @@ def node_card(t, row, archive="", commits=()):
     f = nd["fields"]
     story = dfs_tree.story(t, nd["id"])
     out = [("head", "%s · %s" % (nd["id"], nd["title"]))]
-    meta = "%s %s" % (TREE_MARK.get(st, "?"), st)
+    started = row.get("progress") == "started"
+    meta = "%s %s" % (PROGRESS_MARK["started"] if started else TREE_MARK.get(st, "?"),
+                      "started" if started else st)
     if nd["parent"]:
         meta += " · under %s" % nd["parent"]
     out.append(("meta", meta))
@@ -3705,7 +3713,8 @@ class UI(WalkMixin):
                              if row["kids"] and not row["folded"] else [])
             first = len(out)
             head = "%s %s%s %s%s %s %s%s" % (cursor, pad, fold, "↳" if row["chain"] else "",
-                                             nd["id"], TREE_MARK.get(st, "?"), mark_up(nd["title"]), flag)
+                                             nd["id"], PROGRESS_MARK.get(row["progress"]) or TREE_MARK.get(st, "?"),
+                                             mark_up(nd["title"]), flag)
             lead = len(cursor) + 1 + len(pad) + len(fold) + 1
             for line in (textwrap.wrap(
                     head, max(20, width - 2), subsequent_indent=" " * (lead + 2))):
