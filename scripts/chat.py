@@ -254,9 +254,13 @@ class Chats:
         w = self.walker()
         with self.lock:
             if scope in self.busy:
-                chatlog.log(scope, "page: stop, ending the turn (%ds in)" % (time.time() - self.busy[scope]))
-                self.stopped.add(scope)
-                self.end_turn(scope)
+                p = self.procs.get(scope)
+                if p is not None and p.poll() is not None:     # the agent has answered; the turn is only writing it down
+                    chatlog.log(scope, "page: stop, the turn had already answered")
+                else:
+                    chatlog.log(scope, "page: stop, ending the turn (%ds in)" % (time.time() - self.busy[scope]))
+                    self.stopped.add(scope)
+                    self.end_turn(scope)
             elif w and (dropped := w.chat_interrupt(scope)) is not None:
                 chatlog.log(scope, "page: stop, interrupt sent to the screen's chat")
                 if dropped:     # the message was stopped before it was typed: it is not sent, and not shown as sent

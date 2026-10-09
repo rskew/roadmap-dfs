@@ -138,6 +138,14 @@ class Chat(unittest.TestCase):
         chats.send("W1", "again")
         self.assertEqual([m["role"] for m in chats.state("W1")["messages"]], ["you"], "the note goes once it moves on")
 
+    def test_stop_after_the_agent_has_answered_adds_no_note(self):
+        class Done:
+            def poll(s): return 0
+        self.chats.busy["W1"] = time.time()
+        self.chats.procs["W1"] = Done()
+        self.chats.interrupt("W1")
+        self.assertNotIn("W1", self.chats.stopped, "an answer already given is not stopped")
+
     def test_stop_with_nothing_answering_changes_nothing(self):
         st = self.chats.interrupt("W1")
         self.assertFalse(st["busy"])

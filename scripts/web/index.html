@@ -477,7 +477,7 @@ function chainStopForm(item) {
 const ago = ts => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 129600 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
 function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
-  const who = { you: "You", agent: "Agent", error: "Not answered", note: "Stopped" };
+  const who = { you: "You", agent: "Agent", error: "Not answered", note: "Note" };
   const rows = S.chats.map(c => `<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
       <span class="iid">${esc(c.scope === "project" ? "All" : c.scope)}</span>
       <span><span class="goal">${esc(goal(c.scope))}</span>
