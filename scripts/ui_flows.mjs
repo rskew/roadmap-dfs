@@ -162,6 +162,28 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Every live node carries a mark before its id, not only a rule's colour: a tick for complete, a filled o for
+  // started, an empty o for not begun. A refuted or parked node has none and keeps its chip.
+  async progress(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    const tree = await (await page.request.get(URL_ + "/api/task/W9")).json();
+    const nodes = tree.rows.filter(r => r.kind === "node");
+    const want = { done: ["mk done", "complete"], started: ["mk started", "started"], open: ["mk open", "not started"] };
+    const seen = new Set();
+    for (const r of nodes) {
+      const mark = await page.$$eval(`.row:has(.fold[data-id="${r.id}"]) .mk`, a => a.map(e => [e.className, e.getAttribute("aria-label")]));
+      if (!want[r.progress]) { same(mark, [], `${r.id} (${r.status}) has no mark`); continue; }
+      same(mark, [want[r.progress]], `${r.id} is marked ${r.progress}`); seen.add(r.progress);
+    }
+    same([...seen].sort(), ["done", "open", "started"], "the fixture shows all three marks");
+    const fill = await page.$$eval(".row .mk", a => Object.fromEntries(a.map(e => [e.className, getComputedStyle(e).backgroundColor])));
+    assert(fill["mk started"] !== "rgba(0, 0, 0, 0)" && fill["mk open"] === "rgba(0, 0, 0, 0)", "a started mark is filled in and an open one is empty");
+    await page.evaluate(() => document.querySelector('.row:has(.fold[data-id="W9.9"])').scrollIntoView({ block: "center" }));
+    if (process.env.DFS_UI_SHOT) await page.screenshot({ path: process.env.DFS_UI_SHOT });
+    same(errors, [], "no page errors");
+  },
+
   // Each screen's page scroll is kept: Back to the list, and a reload, land where the reader was.
   async scroll_memory(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true });

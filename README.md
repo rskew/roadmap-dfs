@@ -18,6 +18,15 @@ nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 `python3 scripts/web.py` serves the roadmap as a phone-sized page and an installable app.
 There is no login, so it listens on this machine only until you say otherwise.
 
+Each live node on a task's page carries a mark before its id, so its state does not rest on the colour
+of its left rule: a tick for a confirmed node, a filled circle for an open node a session has started, an
+empty circle for one not yet begun. A refuted or parked node has no mark and says so in its chip. The
+terminal's tree draws the same marks (`✓`, `●`, `○`). *Started* is a node status (`Status: started`) that
+everything else reads as open: a session runs `python3 scripts/tree.py start <task> <node>` before it
+changes code for the node, which edits the task file and commits nothing, and the node's own commit
+replaces it with confirmed or refuted. A started node is seen only while a session is on it, or after
+one was cut off mid-node.
+
 A task's page lists the chains that worked it under **Runs**; tap one to read its console log
 (the same `console.log` the terminal's `l` opens), which keeps growing while the chain is live.
 Whoever can reach the page can read those logs too.

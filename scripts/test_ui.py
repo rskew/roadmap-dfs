@@ -284,6 +284,10 @@ class Flows(unittest.TestCase):
     def test_a_child_is_drawn_right_of_its_parent_and_siblings_share_a_column(self):
         self.flow("indent")
 
+    def test_every_live_node_shows_whether_it_is_complete_started_or_not_begun(self):
+        dfs_tree.start_node("W9", "W9.9")
+        self.flow("progress")
+
     def test_a_change_elsewhere_reaches_an_open_page(self):
         self.flow("live")
 
