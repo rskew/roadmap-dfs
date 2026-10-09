@@ -442,7 +442,7 @@ function walkHtml() {
   const events = w.events.length ? `<details><summary class="cap">Activity</summary><ul class="ev">${w.events.slice(0, 6).map(e =>
     `<li><time>${esc(e.age)}</time><span>${esc(e.text)}</span></li>`).join("")}</ul></details>` : "";
   const brief = w.on ? `${w.used}/${w.budget} sessions${chain ? ", " + esc(chain.item) : ""}` : `next ${esc(w.pinned || w.auto || "none")} · ${esc(w.agent)}`;
-  const open = S.walkOpen === undefined ? w.on : S.walkOpen;
+  const open = S.walkOpen === true;
   return `<details class="walk" id="walkbox" ${open ? "open" : ""}><summary><span class="cap">Walk</span><span class="state">${state}</span><span class="brief">${brief}</span><span class="chev" aria-hidden="true"></span></summary>
     <p class="line2">${line2}</p>
     <div class="row2"><label for="nextsel">Next</label><select id="nextsel">${options}</select></div>

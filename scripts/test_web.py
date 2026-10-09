@@ -369,6 +369,24 @@ class Web(unittest.TestCase):
         self.assertEqual(on.count("Remove break"), 1, "only W2 sits behind a fence")
         self.assertIn('aria-pressed="true">Reorder', on)
 
+    def test_the_walk_panel_is_collapsed_until_the_reader_opens_it(self):
+        """walkHtml() in index.html, run under node (skipped when there is none): closed
+        even while a walk is on, and open only once the reader's own toggle said so."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's walkHtml()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function walkHtml() {"):src.index("async function setAgent")]
+        js = ("const esc = s => String(s); let S;" + body +
+              "const walk = on => ({enabled: true, on, hold: 0, used: 1, budget: 5, chain: null, live: [],"
+              " candidates: [], agents: ['claude'], agent: 'claude', events: [], auto: 'W1', pinned: null});"
+              "const head = h => h.slice(0, h.indexOf('>') + 1);"
+              "console.log(JSON.stringify([[true, undefined], [false, undefined], [true, false], [false, true]]"
+              ".map(([on, open]) => { S = {walk: walk(on), walkOpen: open}; return head(walkHtml()); })))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(["open" in h for h in out], [False, False, False, True],
+                         "only a reader's own toggle opens the panel, walking or not")
+
     def test_the_artefacts_section_previews_each_artefact_and_offers_no_list_of_the_rest(self):
         """artefactsHtml() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
