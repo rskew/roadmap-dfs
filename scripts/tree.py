@@ -1171,16 +1171,38 @@ def unpushed(cwd=None, ttl=5.0):
 _uncommitted_seen = {}
 
 
+# The log entries the runner writes for a session it ran: they say that a session
+# happened, not what it found, so a file they alone changed holds no unsaved work.
+RUNNER_KINDS = ("session", "end")
+
+
+def _edit_kind(old, new):
+    """What a task file's change from `old` to `new` holds: "edits" when anything
+    outside the Log changed, "log" when only log entries other than the runner's
+    came or went, "" when nothing but the runner's `session` and `end` lines did."""
+    t0, s0, _ = split_sections(old)
+    t1, s1, _ = split_sections(new)
+    if t0 != t1 or {k: v for k, v in s0.items() if k != "Log"} != \
+            {k: v for k, v in s1.items() if k != "Log"}:
+        return "edits"
+    a, b = parse_log(s0.get("Log")), parse_log(s1.get("Log"))
+    seen = {e["text"] for e in a} ^ {e["text"] for e in b}
+    return "log" if any(e["kind"] not in RUNNER_KINDS for e in a + b if e["text"] in seen) else ""
+
+
 def uncommitted(cwd=None, ttl=5.0):
-    """The set of tasks whose files under `items/` have edits `git` has not committed
-    (modified, staged or new): work that is on no branch yet, so on origin/main least of
-    all. Empty when `.dfs/` is gitignored or there is no git here. Kept `ttl` seconds
-    like `unpushed`."""
+    """{task: what}: the tasks whose files under `items/` have edits `git` has not
+    committed (modified, staged or new), work that is on no branch yet, so on origin/main
+    least of all. `what` is "edits" for anything but log entries, "log" when the only
+    change is log entries the runner did not write (a review's notes, a raise), and the
+    runner's own `session` and `end` lines alone make no entry: they are why one chain
+    leaves every task it touched differing from HEAD. Empty when `.dfs/` is gitignored
+    or there is no git here. Kept `ttl` seconds like `unpushed`."""
     key = str(cwd or dfs_paths.work_root())
     hit = _uncommitted_seen.get(key)
     if hit and time.monotonic() - hit[0] < ttl:
         return hit[1]
-    got = set()
+    got = {}
     try:
         r = subprocess.run(["git", "status", "--porcelain", "-z", "--no-renames",
                             "--untracked-files=all", "--", "%s/items" % dfs_paths.STATE_DIR_NAME],
@@ -1188,8 +1210,19 @@ def uncommitted(cwd=None, ttl=5.0):
         if r.returncode == 0:
             for entry in r.stdout.split("\0"):
                 m = re.search(r"(?:^|/)items/(%s)(?:\.md|/)" % TASK_RE, entry[3:])
-                if m:
-                    got.add(m.group(1))
+                if not m:
+                    continue
+                what = "edits"
+                if entry[:2] in (" M", "M ", "MM"):
+                    old = subprocess.run(["git", "show", "HEAD:" + entry[3:]],
+                                         capture_output=True, text=True, cwd=key)
+                    try:
+                        if old.returncode == 0:
+                            what = _edit_kind(old.stdout, (Path(key) / entry[3:]).read_text())
+                    except OSError:
+                        pass
+                if what and got.get(m.group(1)) != "edits":
+                    got[m.group(1)] = what
     except OSError:
         pass
     _uncommitted_seen[key] = (time.monotonic(), got)

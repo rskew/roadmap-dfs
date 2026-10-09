@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W42: what an item's "uncommitted" tag should mean</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  table { border-collapse: collapse; width: 100%; background: #fff; }
+  th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: left; font-size: 14px; vertical-align: top; }
+  select { font: inherit; min-height: 44px; width: 100%; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; min-height: 44px; }
+</style>
+
+<h1>What should "uncommitted edits" on an item mean?</h1>
+<p class="lede">Today the tag marks any task file that differs from HEAD. One chain of sessions
+  therefore tags every task it touched, though only work sessions commit.</p>
+
+<h2>Pick the rule</h2>
+<div class="choices" role="group" aria-label="The rule">
+  <button type="button" data-rule="today" aria-pressed="false">Any change (today)</button>
+  <button type="button" data-rule="mine" aria-pressed="true">Not runner lines; say what</button>
+  <button type="button" data-rule="strict" aria-pressed="false">Tree changes only</button>
+</div>
+
+<h2>What changed in the task file</h2>
+<select id="what" aria-label="What changed">
+  <option value="runner">Only session / end lines the runner wrote</option>
+  <option value="note" selected>A review or critic note, nothing else</option>
+  <option value="author">A raise or an answer in the log</option>
+  <option value="tree">The Goal, Summary or a node</option>
+  <option value="new">A task file git has not seen</option>
+</select>
+<div class="result" id="result" aria-live="polite"></div>
+
+<h2>This tree today (W40, W41, W42)</h2>
+<table>
+  <tr><th>Item</th><th>Differs from HEAD by</th><th id="col">Tag</th></tr>
+  <tr><td>W40</td><td>session, end, review note</td><td data-w="note"></td></tr>
+  <tr><td>W41</td><td>session, end, review note</td><td data-w="note"></td></tr>
+  <tr><td>W42</td><td>new file</td><td data-w="new"></td></tr>
+</table>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The author wants every item the runner touched to show as uncommitted,
+  or wants a review note hidden as well.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>W40 and W41 differ from HEAD only by log entries; no work session committed them
+    because a node commit stages only its own task file. The runner's session and end
+    lines name no work, only that a session ran.</p>
+</details>
+
+<script>
+  var tag = {
+    today:  { runner: 'uncommitted edits', note: 'uncommitted edits', author: 'uncommitted edits', tree: 'uncommitted edits', 'new': 'uncommitted edits' },
+    mine:   { runner: '(none)', note: 'uncommitted log entries', author: 'uncommitted log entries', tree: 'uncommitted edits', 'new': 'uncommitted edits' },
+    strict: { runner: '(none)', note: '(none)', author: '(none)', tree: 'uncommitted edits', 'new': 'uncommitted edits' }
+  };
+  var said = {
+    today: 'Every task a chain touched is tagged, whatever it holds.',
+    mine: 'Runner bookkeeping is not shown. Notes and answers still show, labelled as log entries, so they are not mistaken for node work.',
+    strict: 'Only tree changes show. A raise or an answer left uncommitted is hidden until a node commit, which is the risk.'
+  };
+  var rule = 'mine';
+  function show() {
+    var w = document.getElementById('what').value;
+    document.getElementById('result').textContent = 'Tag: ' + tag[rule][w] + '. ' + said[rule];
+    document.querySelectorAll('[data-w]').forEach(function (td) { td.textContent = tag[rule][td.dataset.w]; });
+    document.querySelectorAll('[data-rule]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.rule === rule)); });
+  }
+  document.querySelectorAll('[data-rule]').forEach(function (b) {
+    b.addEventListener('click', function () { rule = b.dataset.rule; show(); });
+  });
+  document.getElementById('what').addEventListener('change', show);
+  show();
+</script>

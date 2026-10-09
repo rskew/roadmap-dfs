@@ -82,6 +82,8 @@ class Unpushed(unittest.TestCase):
         self.assertEqual(dfs_tui.ahead_cell({"ahead": 3}), "ahead 3")
         self.assertEqual(dfs_tui.ahead_cell({"uncommitted": 1}), "edits")
         self.assertEqual(dfs_tui.ahead_cell({"ahead": 3, "uncommitted": 1}), "ahead 3 +edits")
+        self.assertEqual(dfs_tui.ahead_cell({"uncommitted": "log"}), "log")
+        self.assertEqual(dfs_tui.ahead_cell({"ahead": 3, "uncommitted": "log"}), "ahead 3 +log")
 
     def test_task_files_with_uncommitted_edits_are_named(self):
         self.git("init", "-q")
@@ -91,11 +93,30 @@ class Unpushed(unittest.TestCase):
         (items / "W2.md").write_text("# W2\n")
         self.git("add", ".dfs")
         self.commit("W1.1: both")
-        self.assertEqual(dfs_tree.uncommitted(self.root, ttl=0), set())
+        self.assertEqual(dfs_tree.uncommitted(self.root, ttl=0), {})
         (items / "W1.md").write_text("# W1 edited\n")
         (items / "W3.md").write_text("# W3 new\n")
-        self.assertEqual(dfs_tree.uncommitted(self.root, ttl=0), {"W1", "W3"})
+        self.assertEqual(dfs_tree.uncommitted(self.root, ttl=0), {"W1": "edits", "W3": "edits"})
 
+    def test_the_runners_own_log_lines_do_not_tag_a_task(self):
+        """A chain writes session and end lines to every task it runs, and only a node
+        commit of that file takes them, so counting them tags every task it touched."""
+        self.git("init", "-q")
+        items = self.root / ".dfs" / "items"
+        items.mkdir(parents=True)
+        def base(t, goal="g"):
+            return "# %s · x\n\n## Goal\n\n%s\n\n## Tree\n\n## Log\n\n" % (t, goal)
+        for t in ("W1", "W2", "W3", "W4"):
+            (items / (t + ".md")).write_text(base(t))
+        self.git("add", ".dfs")
+        self.commit("W1.1: all")
+        run = "- 2026-10-09T09:00:00Z · session · work · r/run-1\n- 2026-10-09T09:01:00Z · end · work · ok · peak 1\n"
+        (items / "W1.md").write_text(base("W1") + run)
+        (items / "W2.md").write_text(base("W2") + run + "- 2026-10-09T09:02:00Z · review · ok\n  a note\n")
+        (items / "W3.md").write_text(base("W3", "changed goal") + run)
+        (items / "W4.md").write_text(base("W4") + "- 2026-10-09T09:03:00Z · raise · W4.1\n  which one?\n")
+        self.assertEqual(dfs_tree.uncommitted(self.root, ttl=0),
+                         {"W2": "log", "W3": "edits", "W4": "log"})
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

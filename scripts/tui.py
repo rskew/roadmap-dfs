@@ -1538,10 +1538,11 @@ def review_cell(it):
 
 def ahead_cell(it):
     """`ahead 3` when 3 of this task's node commits are not on origin/main, `edits` for
-    task-file changes not committed yet (`ahead 3 +edits` for both), else "".
-    Blank at zero for the reason `review_cell` is."""
+    task-file changes not committed yet, `log` when those are log entries alone
+    (`ahead 3 +edits` for both), else "". Blank at zero for the reason `review_cell` is."""
     n, edits = it.get("ahead") or 0, it.get("uncommitted")
-    return " ".join(p for p in ("ahead %d" % n if n else "", ("+edits" if n else "edits") if edits else "") if p)
+    word = "log" if edits == "log" else "edits"
+    return " ".join(p for p in ("ahead %d" % n if n else "", ("+" + word if n else word) if edits else "") if p)
 
 
 # ---- the look -----------------------------------------------------------------

@@ -128,7 +128,8 @@ def state_for(task: str):
         ahead=((dfs_tree.unpushed() or (set(), {}))[1]).get(task, 0),
         base=dfs_tree.default_ref() or "",
         # Edits to the task's files that are not committed: on no branch, so not on origin.
-        uncommitted=int(task in dfs_tree.uncommitted()),
+        # "edits", "log" (log entries beyond the runner's own lines) or "" for neither.
+        uncommitted=dfs_tree.uncommitted().get(task, ""),
         sessions=since_author, since_critic=since_critic,
         critic_due=int(since_critic >= dfs_tree.CRITIC_EVERY),
         review_due=int(dfs_tree.review_due(t) and status == "open"
