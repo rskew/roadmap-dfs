@@ -301,6 +301,9 @@ class Web(unittest.TestCase):
         self.put_artefact("other.html", "Another page")
         self.assume()
         self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["node"], {"task": "W1", "id": "W1.3"})
+        rows = {r["key"]: r for r in self.task()["rows"]}
+        self.assertEqual((rows["W1.3"]["page"], rows["W1.1"]["page"]), ("0a1b2c.html", ""),
+                         "the row tells the page which artefact is its node's")
         self.assertIsNone(self.page_call("GET", "other.html")[1]["node"])
         verdict = lambda page, **b: self.page_call("POST", page, b)[0]
         self.assertEqual(verdict("other.html", verdict="refuted", answer="From the wrong page."), 409)

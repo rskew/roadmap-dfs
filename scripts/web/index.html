@@ -788,8 +788,9 @@ document.addEventListener("change", e => { if (e.target.name === "verdict") verd
 async function wrote(res, msg) { S.task = res.task; S.sig = ""; toast(msg); await render(true); }
 
 /* The page a raise names to answer with (`Answer with: .dfs/artefacts/<name>.html`, one page even when the raise
-   shows several) opens beside the form. It is the server's sandboxed response and records the answer itself, to
-   `/artefact-state/<name>`; it tells this page with `{dfs: "answered"}` and only a message from that frame is read. */
+   shows several), and the page a node's Hypothesis names to confirm or refute it, open beside their forms. Each is
+   the server's sandboxed response and records the answer or the ruling itself, to `/artefact-state/<name>`; it
+   tells this page with `{dfs: "answered"}` and only a message from that frame is read. */
 function answerPage(r) {
   const m = /^[ \t]*Answer with:[ \t]*(?:\.dfs\/)?(?:artefacts\/)?([0-9A-Za-z][0-9A-Za-z._-]*\.html)/im.exec(r ? r.body : "");
   return (m && ((S.task && S.task.artefacts) || []).find(a => a.file === m[1] && a.kind === "page")) || null;
@@ -797,7 +798,11 @@ function answerPage(r) {
 addEventListener("message", ev => {
   const frame = $("#answerpage");
   if (!frame || ev.source !== frame.contentWindow || !ev.data || ev.data.dfs !== "answered") return;
-  toast("Answered by the page."); $("#form").close();
+  toast("Recorded by the page."); $("#form").close();
+});
+addEventListener("message", ev => {
+  const frame = document.querySelector("iframe.artview");
+  if (frame && ev.source === frame.contentWindow && ev.data && ev.data.dfs === "answered") toast("Recorded by the page.");
 });
 function answerForm(ts) {
   const r = S.task.rows.flatMap(x => x.kind === "raise" ? [x] : x.kind === "node" ? x.raises : []).find(x => x.ts === ts);
@@ -818,11 +823,13 @@ function correctForm(id) {
     confirmed: r.status === "confirmed" ? "Confirmed: nothing is dropped, and the work carries on under it with your note."
       : `Confirmed: ${sub} and the siblings made after it are dropped, and the work carries on under it.`,
   };
+  const page = r.assumes && ((S.task.artefacts || []).find(a => a.file === r.page && a.kind === "page"));
   form(`<h3>Refute/confirm ${esc(id)}</h3><p class="muted" style="margin:0">Currently ${esc(r.status)}.</p>
+    ${page ? `<iframe id="answerpage" class="answerpage" src="artefacts/${esc(page.file)}" title="${esc(page.title)}" sandbox="allow-scripts"></iframe>` : ""}
     <div class="seg"><label><input type="radio" name="verdict" value="refuted" required><span>Refute</span></label>
     <label><input type="radio" name="verdict" value="confirmed"><span>Confirm</span></label></div>
     <p class="muted" id="verdicthelp" style="margin:0"></p>
-    <div><label for="b">Why, and what the work should do from here</label><textarea id="b" name="body" required></textarea></div>${buttons("Save")}`,
+    <div><label for="b">${page ? "Or in your own words, instead of the page: why, and what the work should do from here" : "Why, and what the work should do from here"}</label><textarea id="b" name="body" required></textarea></div>${buttons("Save")}`,
     async fd => wrote(await api("/api/correct", { task: S.task.id, node: id, verdict: fd.get("verdict"), body: fd.get("body") }), (fd.get("verdict") === "refuted" ? "Refuted" : "Confirmed") + "; the task reopens."));
   verdictHelp();
 }

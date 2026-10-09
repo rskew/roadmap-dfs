@@ -250,6 +250,20 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // The page a node's Hypothesis names rules on the node itself, from beside the refute/confirm form.
+  async rule_page(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("[data-id='W9.2'].main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=correct]"); await dialog(page);
+    assert(await page.locator("dialog #answerpage").count() === 1, "the node's page opens beside the form");
+    await page.frameLocator("dialog #answerpage").locator("#refute").click();
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 });
+    await page.waitForFunction(() => /overruled by you/.test(document.body.textContent), null, { timeout: 5000 });
+    same(errors, [], "no page errors");
+  },
+
   // Refute/confirm: the form says what each choice does, then writes the correction.
   async correct(b) {
     const { page, errors } = await open(b, PHONE);

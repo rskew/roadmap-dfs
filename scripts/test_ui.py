@@ -44,6 +44,15 @@ document.getElementById('send').addEventListener('click', function () {
 });</script></body></html>"""
 
 
+RULE = """<!doctype html><html><head><meta charset="utf-8"><title>Is WAL safe</title></head>
+<body><button id="refute">Refute</button><script>
+document.getElementById('refute').addEventListener('click', function () {
+  fetch('/artefact-state/c0ffee-rule.html', {method: 'POST', body: JSON.stringify(
+    {verdict: 'refuted', answer: 'WAL loses commits we cannot lose.'})})
+  .then(function (r) { if (r.ok) parent.postMessage({dfs: 'answered'}, '*'); });
+});</script></body></html>"""
+
+
 def browser_env():
     """(node, env) able to `import playwright`, or None."""
     pw = shutil.which("playwright")
@@ -165,6 +174,18 @@ class Flows(unittest.TestCase):
         corr = [e for e in self.log("W9") if e["kind"] == "correct"]
         self.assertEqual([(e["args"], e["body"].strip()) for e in corr],
                          [(["W9.2", "refuted"], "WAL is wrong on this disk.")])
+
+    def test_the_page_a_hypothesis_names_rules_on_its_node(self):
+        (self.root / ".dfs" / "artefacts" / "c0ffee-rule.html").write_text(RULE)
+        w9 = self.root / ".dfs" / "items" / "W9.md"
+        text = w9.read_text()
+        head = "Hypothesis: WAL with synchronous=NORMAL"
+        self.assertIn(head, text)
+        w9.write_text(text.replace(head, "Hypothesis: .dfs/artefacts/c0ffee-rule.html WAL with synchronous=NORMAL", 1))
+        self.flow("rule_page")
+        corr = [e for e in self.log("W9") if e["kind"] == "correct"]
+        self.assertEqual([(e["args"], e["body"].strip()) for e in corr],
+                         [(["W9.2", "refuted"], "WAL loses commits we cannot lose.")])
 
     def test_adding_a_node(self):
         self.flow("add")

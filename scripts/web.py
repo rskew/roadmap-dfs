@@ -296,6 +296,7 @@ def task_json(task):
                 raises=[raise_json(r) for r in row["raises"]],
                 raises_below=row["raises_below"],
                 assumes=row["assumes"], ask=row["asks"],
+                page=next(iter(dfs_tree.ARTEFACT_REF.findall(f.get("Hypothesis") or "")), ""),
                 answered=bool(story["answered"]), overruled=bool(story["overruled"]),
                 card=plain(card[1:])))      # [1:]: the heading is the row
     nodes = dfs_tree.by_id(t)
