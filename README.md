@@ -38,3 +38,11 @@ A chat the terminal screen runs in the background is ended (its conversation is 
 next message resumes it) after DFS_CHAT_IDLE seconds without output, default 1800; 0 never ends
 one. Quitting the screen ends the chats with SIGTERM, as ctrl-c ends a claude in a terminal, and
 waits for them.
+
+Every chat keeps a log, `.dfs/runs/chat/<scope>.log` (the scope is a task id or `project`; it moves to
+`.log.1` at 1 MB). It records when the chat started and what it ran, each message the page sent and
+whether it was typed, refused or dropped, each headless turn with its duration and, if it failed, why,
+and when the agent exited (code or signal) with the last of what it had drawn, and who closed it (idle,
+new chat, the screen ending). A message followed by DFS_CHAT_STALL seconds (default 90; 0 off) of silence
+from the agent is logged once with its last screen, which shows a dialog it is stuck at or a hang. Read the
+log of a chat that stopped answering first.

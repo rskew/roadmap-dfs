@@ -16,6 +16,10 @@ the screen, with "New chat", or after DFS_CHAT_IDLE seconds (30 minutes; 0 never
 them: the conversation stays, and the next message resumes it. With no screen (web.py alone) the page runs its own turns. A claude
 running on the session in some OTHER terminal would tangle it, so then the page does not send.
 
+Each scope keeps a log, `<run root>/chat/<scope>.log` (chatlog.py): what the page sent and what became of
+it, each headless turn and why one failed, and, for a background chat, its start, its exit with the agent's
+last screen, who closed it and a note when it went quiet after a message (DFS_CHAT_STALL).
+
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
 walk (`--no-walk`): a server that may not start agents does not chat either.
 """
