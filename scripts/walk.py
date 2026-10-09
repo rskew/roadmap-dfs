@@ -307,7 +307,7 @@ class WalkMixin:
             self.reload()
             moved = bool(set(self.data.get("content", ())) - self.walk_content)
             action, why = walk_decide(run["stop"], moved,
-                                      self.walk_next or self.data.get("next_item"))
+                                      self.walk_target())
             self.walk_spent += int(run["run"] or 0)
             self.walk_dir = None
             if action == "hold":
@@ -331,7 +331,8 @@ class WalkMixin:
         if left < 1:
             self.walk_off("%d sessions spent" % self.walk_spent)
             return
-        item = self.walk_pinned() or self.data.get("next_item")
+        self.walk_pinned()          # drops a pin that cannot be worked, and says so
+        item = self.walk_target()
         if item is None:
             self.walk_off("every branch is blocked or finished")
             return
@@ -344,6 +345,17 @@ class WalkMixin:
         self.walk_dir = self.start_chain(item, str(left))
         if self.walk_dir is None:
             self.walk_off("could not start a chain on %s" % item)
+
+    def walk_target(self):
+        """The one answer to "which task does the walk take next": the pin while that
+        task is open, else the order's answer (`next_item`). The screen's header and walk
+        preview, the page's `next`, and the chain the walk starts all read this, so
+        what is shown is what is taken. Reads only; `walk_pinned` is what drops a dead pin."""
+        pin = self.walk_next
+        if pin is not None and any(i["id"] == pin and i["status"] == "open"
+                                   for i in self.items):
+            return pin
+        return self.data.get("next_item")
 
     def walk_pinned(self):
         """The pinned item, while it can still be worked; a pin that cannot is dropped.
@@ -546,10 +558,8 @@ class WalkMixin:
         items = list(self.items)
         auto = self.data.get("next_item")
         goal = next((i["goal"] for i in items if i["id"] == auto), "")
-        # The task the walk takes next: its pin while that task is open, else the order's answer.
-        pin_open = any(i["id"] == self.walk_next and i["status"] == "open" for i in items)
         return dict(
-            next=self.walk_next if pin_open else auto,
+            next=self.walk_target(),
             on=self.walk_on, budget=self.walk_budget, used=self.walk_used(),
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS),

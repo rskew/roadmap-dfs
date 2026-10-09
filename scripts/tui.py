@@ -2340,7 +2340,7 @@ class UI(WalkMixin):
         live = len(self.live())
         # What a depth-first walk would take next, which is the whole point of the
         # tree and is otherwise only derivable by reading every row's blocked_by.
-        nxt = self.data.get("next_item")
+        nxt = self.walk_target()
         # ⚠️ The walk goes in the HEADER, not the message line: a message is the last
         # thing that happened and scrolls away, while "something is spending money
         # unattended right now" is a state, and one nobody should have to remember
@@ -3558,10 +3558,10 @@ class UI(WalkMixin):
 
         ⚠️ A FORECAST, and it says so: a chain that raises hands the walk the next
         branch instead, and the order can change under it. What is certain is the
-        FIRST item — the pin, else `next_item` — and that is the line in the accent."""
+        FIRST item — `walk_target`, the pin else `next_item` — and that is the line in the accent."""
         out, para = self.wrapper(width)
         grey = look("chrome")
-        first = self.walk_next or self.data.get("next_item")
+        first = self.walk_target()
         take, held, blocked, done = [], [], [], 0
         for it in self.items:
             state = row_state(it)

@@ -486,6 +486,19 @@ class ThePlan(unittest.TestCase):
         self.assertIn("a raise above it, on W1", text)
         self.assertIn("waiting on your answer: W4", text)
 
+    def test_one_answer_to_which_task_the_walk_takes_next(self):
+        # The header's `next`, the plan's first line and the chain the walk starts all
+        # read `walk_target`: the pin while it is open, else the order's answer.
+        items = [item("W1"), item("W3"), item("W5", status="done")]
+        ui = a_screen(items, walk_next="W3")
+        ui.data["next_item"] = "W1"
+        self.assertEqual(ui.walk_target(), "W3")
+        ui.walk_next = "W5"             # a pin on a finished task is no pin
+        self.assertEqual(ui.walk_target(), "W1")
+        self.assertEqual(ui.walk_next, "W5", "reading the target does not drop the pin")
+        ui.walk_next = None
+        self.assertEqual(ui.walk_target(), "W1")
+
 
 class TheKeysPane(unittest.TestCase):
     def test_every_key_act_answers_to_is_listed(self):
