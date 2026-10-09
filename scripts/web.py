@@ -60,7 +60,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -307,12 +307,59 @@ def task_json(task):
         assumed.append(dict(task=task, id=nid, title=nodes[nid]["title"],
                             assumption=assumption, wrong=wrong, ask=f.get("Ask", "")))
     return dict(id=task, goal=t["name"] or (t["goal"].splitlines() or [""])[0],
-                name=t["name"], goal_text=t["goal"],
+                name=t["name"], goal_text=t["goal"], runs=runs_for(task),
                 artefacts=artefacts_for("\n".join(strings(t))),
                 status=status, why=humanize(why), accepted=accepted,
                 acceptable=status == "done" and not accepted, rows=rows, assumed=assumed,
                 notes=[dict(kind=k, verdict=v, body=b) for k, _ts, v, b in dfs_tree.notes(t)],
                 sessions=dfs_tree.sessions_since_author(t))
+
+
+RUN_LISTED = 12             # the newest chains a task page lists
+RUN_CHUNK = 128 * 1024     # the most of a run's log one answer carries
+
+
+def run_entry(r):
+    """What the page needs of one chain: no path, only the directory's name, which `run_log`
+    finds again among the run directories rather than joining onto a root."""
+    return dict(name=os.path.basename(r["dir"]), item=r["item"], state=r["state"],
+                progress=dfs_runs.progress(r), mode=r["mode"], agent=r["agent"],
+                started=r["started"], finished=r["finished"], stop=r["stop"], rc=r["rc"],
+                peak=r["peak"], turns=r["turns"], has_log=bool(r["console"]),
+                age=dfs_runs.age(r))
+
+
+def runs_for(task):
+    """The newest chains that worked this task, newest first."""
+    return [run_entry(r) for r in dfs_runs.run_dirs() if r["item"] == task][:RUN_LISTED]
+
+
+def run_log(name, start=None):
+    """A chain's console log. With no `start` the last `RUN_CHUNK` bytes, from a line start;
+    with one, what has been written since that byte, so a live log is followed by asking
+    again from the `end` the last answer gave. `name` is matched against the run directories
+    that exist, never joined onto a path."""
+    run = next((r for r in dfs_runs.run_dirs() if os.path.basename(r["dir"]) == name), None)
+    if run is None:
+        raise Refused("no such run", 404)
+    if not run["console"]:
+        return dict(run_entry(run), text="", start=0, end=0)
+    try:
+        size = os.stat(run["console"]).st_size
+        first = start is None or start > size   # first look, or the file is not the one we saw
+        if first:
+            start = max(0, size - RUN_CHUNK)
+        with open(run["console"], "rb") as fh:
+            fh.seek(start)
+            data = fh.read(RUN_CHUNK)
+    except OSError as e:
+        raise Refused("cannot read that log: %s" % e, 500)
+    if first and start and b"\n" in data:
+        cut = data.index(b"\n") + 1            # a cut tail begins at a line, not mid-line
+        start, data = start + cut, data[cut:]
+    if run["live"] and not data.endswith(b"\n") and b"\n" in data:
+        data = data[:data.rindex(b"\n") + 1]   # a half-written line waits for the next ask
+    return dict(run_entry(run), text=data.decode("utf-8", "replace"), start=start, end=start + len(data))
 
 
 def assumptions_json():
@@ -893,6 +940,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, assumptions_json())
         if path.startswith("/api/task/"):
             return self.json(200, task_json(path[len("/api/task/"):]))
+        if path.startswith("/api/run/"):
+            from_ = parse_qs(urlparse(self.path).query).get("from", [""])[0]
+            return self.json(200, run_log(path[len("/api/run/"):], int(from_) if from_.isdigit() else None))
         if path.startswith("/artefacts/"):
             return self.artefact(path[len("/artefacts/"):])
         if path in STATIC:

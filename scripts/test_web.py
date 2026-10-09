@@ -965,6 +965,69 @@ class Web(unittest.TestCase):
         self.assertEqual(self.fake.started_chains, [])
         self.assertEqual(self.call("GET", "/api/state")[0], 200)
 
+    def make_run(self, name, item="W1", console="", **meta):
+        d = self.root / ".dfs" / "runs" / name
+        d.mkdir(parents=True)
+        (d / "meta.json").write_text(json.dumps(dict(
+            item=item, agent="claude", mode="work", cap="5", run="2", started="2026-10-09T03:47:39+00:00",
+            pid="4000000", finished="2026-10-09T03:54:17+00:00", rc="0", **meta)))
+        if console is not None:
+            (d / "console.log").write_text(console)
+        return d
+
+    def test_a_tasks_runs_are_listed_and_a_runs_log_is_read_by_its_name(self):
+        self.make_run("dfs_run_aaa", console="$ run.sh W1 5\n── run 1/5 · work ──\n   exit 0\n")
+        self.make_run("dfs_run_bbb", item="W2", console="other task\n")
+        self.make_run("dfs_run_ccc", console=None, stop="limit")
+        status, task, _ = self.call("GET", "/api/task/W1")
+        self.assertEqual(status, 200)
+        self.assertEqual(sorted(r["name"] for r in task["runs"]), ["dfs_run_aaa", "dfs_run_ccc"])
+        ccc = next(r for r in task["runs"] if r["name"] == "dfs_run_ccc")
+        self.assertEqual((ccc["state"], ccc["stop"], ccc["has_log"], ccc["progress"]), ("finished", "limit", False, "run 2/5"))
+        self.assertNotIn("dir", ccc, "the page is given a name, not a path")
+        status, log, _ = self.call("GET", "/api/run/dfs_run_aaa")
+        self.assertEqual(status, 200)
+        self.assertIn("── run 1/5 · work ──", log["text"])
+        self.assertEqual((log["start"], log["end"]), (0, len(log["text"].encode())))
+        self.assertEqual(self.call("GET", "/api/run/dfs_run_ccc")[1]["text"], "")
+
+    def test_a_runs_log_is_refused_for_a_name_that_is_not_a_run_directory(self):
+        self.make_run("dfs_run_aaa", console="x\n")
+        (self.root / "secret.txt").write_text("no")
+        for name in ("nope", "..%2F..%2Fsecret.txt", "..", "dfs_run_aaa%2F..%2F..%2Fitems"):
+            self.assertEqual(self.call("GET", "/api/run/" + name)[0], 404, name)
+
+    def test_a_long_log_is_cut_to_its_tail_at_a_line_and_followed_from_its_end(self):
+        lines = "".join("line %06d\n" % i for i in range(30000))        # 360 KB
+        self.make_run("dfs_run_aaa", console=lines)
+        _, log, _ = self.call("GET", "/api/run/dfs_run_aaa")
+        self.assertLessEqual(len(log["text"].encode()), dfs_web.RUN_CHUNK)
+        self.assertTrue(log["text"].startswith("line "), "the tail begins at a line")
+        self.assertTrue(log["text"].endswith("line 029999\n"))
+        self.assertEqual(log["end"], len(lines))
+        with open(self.root / ".dfs" / "runs" / "dfs_run_aaa" / "console.log", "a") as fh:
+            fh.write("more\n")
+        _, more, _ = self.call("GET", "/api/run/dfs_run_aaa?from=%d" % log["end"])
+        self.assertEqual((more["text"], more["start"]), ("more\n", log["end"]))
+        _, again, _ = self.call("GET", "/api/run/dfs_run_aaa?from=%d" % more["end"])
+        self.assertEqual(again["text"], "")
+        _, reset, _ = self.call("GET", "/api/run/dfs_run_aaa?from=99999999")
+        self.assertTrue(reset["text"].endswith("more\n"), "a log shorter than the reader's offset is read afresh")
+
+    def test_a_live_chains_half_written_line_waits_for_the_next_ask(self):
+        d = self.make_run("dfs_run_live", console="one\ntw")
+        meta = json.loads((d / "meta.json").read_text())
+        meta.pop("finished"); meta["pid"] = str(os.getpid())
+        (d / "meta.json").write_text(json.dumps(meta))
+        import runs as dfs_runs
+        orig = dfs_runs.pid_is_chain
+        dfs_runs.pid_is_chain = lambda pid: True
+        try:
+            _, log, _ = self.call("GET", "/api/run/dfs_run_live")
+            self.assertEqual((log["state"], log["text"], log["end"]), ("live", "one\n", 4))
+        finally:
+            dfs_runs.pid_is_chain = orig
+
     def test_the_page_is_served_with_no_login(self):
         status, body, r = self.call("GET", "/")
         self.assertEqual(status, 200)
