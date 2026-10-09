@@ -73,6 +73,15 @@ box (`overflow-x: auto`) rather than widening the page, and says so in its capti
    below; no way back to its own controls), because an artefact is a page an agent wrote.
    That is what "self-contained" is for.
 
+## A screenshot of the finished work
+
+A task whose finished work changes what the user sees embeds a screenshot in its
+`## Summary`: `![what it shows](.dfs/artefacts/<uuid>.png)`, from
+`artefact_check.sh <page> --out .dfs/artefacts/<uuid>.png` or any screenshot copied
+there under a uuid name. The web page draws it in the Summary on the item, tap for full
+size. `check.py` refuses a Summary without one when the task's commits touched UI
+files; where no browser will start, `No screenshot:` and the reason stand in for it.
+
 How the author opens one is in the README, under "Raise artefacts".
 
 ## An assumption's artefact

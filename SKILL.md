@@ -157,6 +157,11 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   it to the author above the Goal, once the task is done, to answer "did it
   get there?" without reading the tree. When what the finished work does is a shape (what now talks to what), name an
   artefact in the Summary by its path.
+  **When the finished work changes what the user sees** (a page, a screen, a layout),
+  the Summary embeds a screenshot of it, `![what it shows](.dfs/artefacts/<uuid>.png)`,
+  so the item shows the change itself. `check.py` refuses a Summary that has none
+  when the task's commits touched UI files (`.html`, `.css`, `.js` and the like);
+  when no browser will start, write `No screenshot:` and why in the Summary instead.
 
 ## When `.dfs/` is gitignored
 
