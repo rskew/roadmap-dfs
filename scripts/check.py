@@ -39,11 +39,6 @@ edited log line or a rewritten determination erases what the author reviews. So:
       (addEventListener or onclick and the like) answering it (`check_assumptions`).
       A node already at HEAD is judged as committed, and a merge commit judges none
       (the other branch's commits were judged there)
-    - a `## Summary` new or changed in this commit, on a task whose commits (those whose
-      subject starts with one of its node ids, and the staged files) touched a UI file
-      (`.html`, `.css`, `.js`, `.jsx`, `.ts`, `.tsx`, `.vue`, `.svelte` outside `.dfs`),
-      that embeds no screenshot (`![..](.dfs/artefacts/<name>.png)` naming a file that
-      exists) and has no `No screenshot:` line saying why (`check_screenshot`)
     - a task file or an archive HEAD holds, deleted (the limit case of the two
       rules above; a staged rename is followed, not refused). A task retired on
       purpose is the author's rewrite of history, committed with --no-verify
@@ -461,51 +456,6 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
     return bad
 
 
-# A finished task that changes what the user sees shows it: its Summary embeds a screenshot.
-# Whether the task changed what the user sees is judged from the files its commits touched,
-# which is a floor (a terminal screen is Python): the author reads what the check cannot.
-UI_FILE = re.compile(r"\.(?:html?|css|jsx?|tsx?|vue|svelte)$", re.I)
-SHOT_REF = re.compile(r"!\[[^\]\n]*\]\(\.dfs/artefacts/([\w.-]+\.(?:png|jpe?g|gif|webp))\)")
-NO_SHOT = re.compile(r"^\s*No screenshot:\s*\S", re.M)
-
-
-def ui_files_of(task, staged_files):
-    """The UI files among those the task's commits touched and `staged_files`."""
-    r = subprocess.run(["git", "log", "--format=%x00%s", "--name-only"],
-                       cwd=dfs_paths.work_root(), capture_output=True, text=True)
-    mine = re.compile(r"^%s\.\d+" % re.escape(task))
-    files, keep = set(staged_files), False
-    for line in r.stdout.splitlines():
-        if line.startswith("\x00"):
-            keep = bool(mine.match(line[1:]))
-        elif keep and line.strip():
-            files.add(line.strip())
-    return sorted(f for f in files if UI_FILE.search(f) and not re.match(r"(?:.*/)?\.dfs/", f))
-
-
-def check_screenshot(task, text, head, exists, ui_files):
-    """A Summary new or changed in this commit, on a task that touched UI files, must embed
-    a screenshot that exists, or say `No screenshot:` and why. `exists` says whether a path
-    in `.dfs/artefacts` is there as it will be committed; `ui_files` gives `ui_files_of`,
-    asked only once a Summary has changed."""
-    summary = dfs_tree.split_sections(text)[1].get("Summary", "").strip()
-    was = dfs_tree.split_sections(head)[1].get("Summary", "").strip() if head else ""
-    if not summary or summary == was or NO_SHOT.search(summary):
-        return []
-    ui_files = ui_files()
-    if not ui_files:
-        return []
-    names = SHOT_REF.findall(summary)
-    gone = [n for n in names if not exists(dfs_paths.artefacts() / n)]
-    if names and not gone:
-        return []
-    why = ("names %s, which does not exist" % ", ".join(gone)) if gone else "embeds no screenshot"
-    return ["%s's Summary %s, and the task touched UI files (%s). Take a screenshot of the "
-            "change (`artefact_check.sh <page> --out .dfs/artefacts/<uuid>.png`) and embed it "
-            "as `![what it shows](.dfs/artefacts/<uuid>.png)`, or write `No screenshot:` and "
-            "why" % (task, why, ", ".join(ui_files[:3]) + (", ..." if len(ui_files) > 3 else ""))]
-
-
 # A node that points at another instead of saying the thing. SKILL.md: a session, the
 # critic and the screen each read ONE node without the rest of the tree.
 BACKREF = re.compile(r"^\s*(see|as in|same as|as for|fix what|the other|per|like)\b|"
@@ -550,18 +500,6 @@ def main() -> int:
     def names(sub):
         return staged_names(sub) if from_index else disk_names(sub)
 
-    def exists(path):
-        if not from_index:
-            return path.exists()
-        rel = path.relative_to(dfs_paths.state())
-        return subprocess.run(["git", "cat-file", "-e", f":./{rel}"], cwd=dfs_paths.state(),
-                              capture_output=True).returncode == 0
-
-    def changed():
-        r = subprocess.run(["git", "diff", "--name-only"] + (["--cached"] if from_index else ["HEAD"]),
-                           cwd=dfs_paths.work_root(), capture_output=True, text=True)
-        return r.stdout.split()
-
     fatal, bad = [], []
     items_dir = dfs_paths.items()
     arc_dir = dfs_paths.state() / "archive" / "items"
@@ -604,10 +542,6 @@ def main() -> int:
                 fatal += ["%s: %s" % (rel, b)
                           for b in check_assumptions(task, text, head, read, arc,
                                                      at_head(arc_dir / tasks[task][tag]) or "")]
-            if judge_writer:
-                fatal += ["%s: %s" % (rel, b)
-                          for b in check_screenshot(task, text, head, exists,
-                                                    lambda t=task: ui_files_of(t, changed()))]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
                 fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, head)]
             now_tok = len(text) // 4

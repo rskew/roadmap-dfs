@@ -489,9 +489,7 @@ def brief(task: str) -> str:
            "`## Summary` in the task file, above `## Goal`, in the same commit (rewrite "
            "it if one is there): two to four plain sentences saying what the finished "
            "work does, whether the Goal was fully met, and what was left out or done "
-           "differently and why. No node ids or commit hashes. If the work changes what the "
-           "user sees, embed a screenshot in it, `![what it shows](.dfs/artefacts/<uuid>.png)`, "
-           "or say `No screenshot:` and why.",
+           "differently and why. No node ids or commit hashes.",
            "- **Session %d of %d** since the author last spoke on this task; at %d the "
            "task raises for their review. The critic reviews after %d more."
            % (st["sessions"] + 1, dfs_tree.SESSION_LIMIT, dfs_tree.SESSION_LIMIT,
