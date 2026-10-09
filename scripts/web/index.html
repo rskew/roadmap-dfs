@@ -62,6 +62,8 @@ html[data-loading] #stripe { opacity: 1; }
 #layout { max-width: var(--page); margin: 0 auto; }
 #view { padding: var(--s3) var(--s4) 28px; min-width: 0; }
 #view.col { max-width: var(--col); margin: 0 auto; }
+iframe.artview { display: block; width: 100%; height: calc(100dvh - var(--bar) - var(--tabs) - 3rem); min-height: 50dvh; border: var(--rule) solid var(--line); background: #fff; }
+img.artview { max-width: 100%; height: auto; }
 
 /* tabs: two words; the current one carries a line */
 #tabs {
@@ -317,9 +319,14 @@ function route() {
   const p = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   if (p[0] === "t" && p[1]) return { view: "task", task: p[1], node: p[2] || null };
   if (p[0] === "chats") return { view: "chats" };
+  if (p[0] === "a" && p[1] && p[2]) return { view: "artefact", task: p[1], name: p[2] };
   return { view: "tasks" };
 }
 const go = (h, replace) => replace ? location.replace("#/" + h) : (location.hash = "/" + h);
+/* An artefact opens here, in this app's own window, since an installed app has no browser bar to come
+   back from a bare file. `NAVS` counts the moves made in this page, so Back can tell "the screen I came
+   from" (history.back) from "opened by a reload or a link", which goes to the task. */
+let NAVS = 0;
 
 /* Each screen's page scroll is kept for the tab's session (so Back to the list, and a reload, land
    where the reader was). Scrolls are not recorded while a screen is changing: the short page that
@@ -358,6 +365,11 @@ async function render(force) {
       const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + JSON.stringify(walkOf(r.task));
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
+    } else if (r.view === "artefact") {
+      const t = await api("/api/task/" + encodeURIComponent(r.task));
+      if (mine !== RENDERS) return;
+      S.task = t; S.taskId = r.task; S.node = null;
+      drawArtefact(r);
     } else if (r.view === "chats") {
       const [list, state] = await Promise.all([api("/api/chats"), api("/api/state")]);
       if (mine !== RENDERS) return;
@@ -390,7 +402,10 @@ function drawBar(r) {
   const cell = (attrs, label, cur) => `<button ${attrs} ${cur ? 'aria-current="page"' : ""}>${label}</button>`;
   const list = r.view === "tasks";
   let html, mode;
-  if (r.view !== "task" || wide()) {
+  if (r.view === "artefact") {
+    mode = "artefact";
+    html = `<button data-act="up">Back</button>`;
+  } else if (r.view !== "task" || wide()) {
     mode = "tabs";
     html = cell('data-act="only" data-v="0"', "All", list && !S.only && !S.reorder)
       + cell('data-act="only" data-v="1"', `Needs you <span class="count">${S.needs || ""}</span>`, list && S.only)
@@ -412,9 +427,10 @@ function chrome(r) {
   $("#back").hidden = r.view === "tasks" || r.view === "chats";
   const t = $("#title");
   if (r.view === "task" && S.task) t.innerHTML = `${esc(S.task.id)}<small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
+  else if (r.view === "artefact") { const a = artefactOf(r); t.innerHTML = `${esc(a ? a.title : r.name)}<small>${esc(r.task)}, artefact</small>`; }
   else if (r.view === "chats") t.innerHTML = `Chats<small>${S.chats ? S.chats.length : 0} going, any of them yours to pick up</small>`;
   else if (S.state) t.innerHTML = `<button class="rename" data-act="rename" aria-label="Rename the project">${esc(PROJECT)}</button><small>${S.state.items.length} tasks, ${S.state.needs_you} need you</small>`;
-  document.title = (r.view === "task" ? r.task + " · " : "") + PROJECT;
+  document.title = (r.view === "task" ? r.task + " · " : r.view === "artefact" ? r.name + " · " : "") + PROJECT;
   const open = r.view === "task" && !!r.node && !!S.task && S.task.rows.some(x => x.key === r.node);
   $("#sheet").classList.toggle("open", open);
   $("#scrim").classList.toggle("open", open && !wide());
@@ -475,6 +491,19 @@ function chainStopForm(item) {
 /* ── the task list ──────────────────────────────────────────────────────────── */
 /* ── chats: every conversation there is, to leave and come back to ──────────────────── */
 const ago = ts => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 129600 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
+/* The viewer: the artefact in the same sandbox the server gives it (the frame adds `allow-scripts` and no
+   origin, as the answer form's frame does), filling the screen between the bars. Drawn once per artefact,
+   so a push that changes the roadmap does not reload the page and lose what the reader did on it. */
+const artefactOf = r => ((S.task && S.task.artefacts) || []).find(a => a.file === r.name);
+function drawArtefact(r) {
+  const view = $("#view"), a = artefactOf(r), src = "artefacts/" + encodeURIComponent(r.name);
+  view.classList.remove("col");
+  if (view.querySelector(".artview") && view.dataset.art === r.name) return;
+  view.dataset.art = r.name;
+  view.innerHTML = a && a.kind === "image"
+    ? `<img class="artview shot" src="${src}" alt="${esc(a.title)}">`
+    : `<iframe class="artview" src="${src}" title="${esc(a ? a.title : r.name)}" sandbox="allow-scripts"></iframe>`;
+}
 function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
   const who = { you: "You", agent: "Agent", error: "Not answered", note: "Note" };
@@ -585,9 +614,10 @@ function drawTask() {
   $("#view").className = ""; $("#view").innerHTML = html + `</div>`;
   if (thumbScale) document.querySelectorAll("#view .thumb").forEach(el => thumbScale.observe(el));
 }
+/* An artefact opens in this page's own viewer, `#/a/<task>/<name>` (drawArtefact), not in a window of its own. */
+const artHref = name => `#/a/${encodeURIComponent(S.task.id)}/${encodeURIComponent(name)}`;
 /* An artefact named in prose (`.dfs/artefacts/<name>.html`, the bare `<name>.html`, or the localhost URL
-   older raises carry) becomes an <a> whose href is the relative path `artefacts/<name>`, since the text
-   is read in this page, which serves it there; it links only when the task has the file. A screenshot
+   older raises carry) becomes an <a> to that viewer; it links only when the task has the file. A screenshot
    (`<name>.png`, or `![alt](.dfs/artefacts/<name>.png)`) is drawn in place, tap for full size. Text is
    escaped first. */
 const ART_RE = /(?<![0-9A-Za-z._\/-])(!\[([^\]\n]*)\]\()?(?:https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/|(?:\.dfs\/)?artefacts\/)?([0-9A-Za-z][0-9A-Za-z._-]*\.(?:html|png|jpe?g|gif|webp|svg))(\))?/gi;
@@ -596,10 +626,10 @@ function rich(text) {
   return esc(text).replace(ART_RE, (m, md, alt, name, close) => {
     const a = have.get(name);
     if (!a || (md && !close)) return m;
-    const href = `artefacts/${name}`;
+    const href = artHref(name);
     if (a.kind === "image")
-      return `<a class="shot" href="${href}" target="_blank" rel="noopener"><img src="${href}" alt="${alt || esc(a.title)}" loading="lazy"></a>`;
-    return `<a class="art" href="${href}" target="_blank" rel="noopener">${esc(a.title)}</a>`;
+      return `<a class="shot" href="${href}"><img src="artefacts/${name}" alt="${alt || esc(a.title)}" loading="lazy"></a>`;
+    return `<a class="art" href="${href}">${esc(a.title)}</a>`;
   });
 }
 /* Prose is markdown as the task files and chat replies write it: fenced blocks, `code`, **bold**,
@@ -646,7 +676,7 @@ function artefactsHtml(t) {
   const arts = t.artefacts || [];
   if (!arts.length) return "";
   const href = a => `artefacts/${esc(a.file)}`;
-  const card = a => `<a class="tile" href="${href(a)}" target="_blank" rel="noopener"><span class="thumb">${a.kind === "image"
+  const card = a => `<a class="tile" href="${artHref(a.file)}"><span class="thumb">${a.kind === "image"
     ? `<img src="${href(a)}" alt="" loading="lazy">`
     : `<iframe src="${href(a)}" title="${esc(a.title)}" tabindex="-1" loading="lazy" scrolling="no" width="${THUMB_W}" height="${THUMB_W * 2 / 3}"></iframe>`}</span><span class="name">${esc(a.title)}</span></a>`;
   return `<details class="sec arts" open><summary class="cap">Artefacts ${arts.length}</summary><div class="body">
@@ -960,7 +990,11 @@ document.addEventListener("click", e => {
 });
 // The bar's All, Needs you and Reorder set how the list is drawn; from another screen they take you to it.
 function showList() { if (route().view !== "tasks") return go(""); drawTasks(); drawBar(route()); }
-const up = () => { if (S.node) go(`t/${S.task.id}`, true); else go(""); };
+const up = () => {
+  const r = route();
+  if (r.view === "artefact") return NAVS ? history.back() : go(`t/${r.task}`, true);
+  if (S.node) go(`t/${S.task.id}`, true); else go("");
+};
 $("#back").onclick = up;
 $("#sheet").addEventListener("scroll", e => { if (S.node && e.target.isConnected && e.target.classList.contains("sheet-body")) keepScroll(sheetKey(), e.target.scrollTop); }, true);
 $("#chat-log").addEventListener("scroll", e => {
@@ -968,7 +1002,7 @@ $("#chat-log").addEventListener("scroll", e => {
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
-addEventListener("hashchange", () => render(true));
+addEventListener("hashchange", () => { NAVS++; render(true); });
 setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
 addEventListener("keydown", e => {
   if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey) return;

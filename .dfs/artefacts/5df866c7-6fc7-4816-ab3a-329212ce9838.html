@@ -1,0 +1,94 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Opening an artefact inside the installed app</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  .phone { margin: 10px 0; border: 1.5px solid #333; border-radius: 10px; background: #fff; overflow: hidden; }
+  .phone .bar { display: flex; align-items: center; gap: 10px; padding: 6px 12px; min-height: 36px; border-bottom: 1.5px solid #333; font-size: 14px; }
+  .phone .bar b { border: 1.5px solid #333; border-radius: 4px; padding: 0 8px; }
+  .phone .bar b.none { border-style: dashed; color: #999; }
+  .phone .page { padding: 12px; font-size: 14px; color: #444; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; }
+</style>
+
+<h1>Opening an artefact inside the installed app</h1>
+<p class="lede">The assumption: an artefact link opens in the installed app's own window, and
+  the artefact page, being an agent's page, has no control that returns to the app. Pick how
+  the app opens it and where it runs.</p>
+
+<h2>How the app opens it</h2>
+<div class="choices" role="group" aria-label="How the link opens">
+  <button type="button" data-how="blank" aria-pressed="true">Link, new tab (today)</button>
+  <button type="button" data-how="same" aria-pressed="false">Link, same window</button>
+  <button type="button" data-how="viewer" aria-pressed="false">In-app viewer with Back</button>
+</div>
+<h2>Where it runs</h2>
+<div class="choices" role="group" aria-label="Where it runs">
+  <button type="button" data-where="ios" aria-pressed="true">iPhone home-screen app</button>
+  <button type="button" data-where="android" aria-pressed="false">Android installed app</button>
+  <button type="button" data-where="desk" aria-pressed="false">Desktop installed app</button>
+</div>
+
+<div class="phone" aria-hidden="true">
+  <div class="bar"><b id="mock-back">Back</b><span id="mock-title"></span></div>
+  <div class="page" id="mock-page"></div>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">Wrong if, in the installed app, tapping an artefact link already opens a
+  window or sheet with its own close or back control. Then the viewer adds nothing and the
+  link stays as it is.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>Read in the code: the page links artefacts with <code>target="_blank"</code> to
+  <code>/artefacts/&lt;name&gt;</code>, inside the manifest's scope <code>/</code> with
+  <code>display: standalone</code>; the server sends that file with a sandbox CSP and no
+  page of its own around it. Not tried on a real phone: that is what you can tell me.</p>
+</details>
+
+<script>
+  var how = 'blank', where = 'ios';
+  var back = {
+    blank: { ios: false, android: true, desk: true },
+    same:  { ios: false, android: true, desk: true },
+    viewer: { ios: true, android: true, desk: true }
+  };
+  var text = {
+    blank: { ios: 'In scope, so it replaces the app view in the same window. No browser chrome, no back button; only an edge swipe, if you know it.',
+             android: 'In scope, it opens in the app, usually a new window; the system Back gesture closes it, but nothing on the page says so.',
+             desk: 'A new app window opens with a title-bar back arrow. Works, but a second window to close.' },
+    same:  { ios: 'Same as today, without the stray window. Edge swipe is the only way back.',
+             android: 'System Back returns to the app, the page itself shows nothing.',
+             desk: 'Title-bar back arrow returns. Fine.' },
+    viewer: { ios: 'The artefact sits under the app\'s own bar, which has Back. It does not depend on a browser control.',
+              android: 'Same bar and Back; the system Back gesture also returns.',
+              desk: 'Same bar and Back; the title-bar arrow also returns.' }
+  };
+  function show() {
+    document.getElementById('result').textContent = text[how][where];
+    var b = document.getElementById('mock-back');
+    b.className = how === 'viewer' ? '' : 'none';
+    b.textContent = how === 'viewer' ? 'Back' : '(no bar)';
+    document.getElementById('mock-title').textContent = how === 'viewer' ? 'Artefact' : '';
+    document.getElementById('mock-page').textContent = how === 'viewer'
+      ? 'The artefact, framed and sandboxed under the app bar.' : 'The artefact fills the window by itself.';
+    document.querySelectorAll('[data-how]').forEach(function (e) { e.setAttribute('aria-pressed', String(e.dataset.how === how)); });
+    document.querySelectorAll('[data-where]').forEach(function (e) { e.setAttribute('aria-pressed', String(e.dataset.where === where)); });
+  }
+  document.querySelectorAll('[data-how]').forEach(function (e) { e.addEventListener('click', function () { how = e.dataset.how; show(); }); });
+  document.querySelectorAll('[data-where]').forEach(function (e) { e.addEventListener('click', function () { where = e.dataset.where; show(); }); });
+  show();
+</script>

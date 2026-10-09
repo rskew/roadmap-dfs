@@ -673,10 +673,29 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.click(".row.hasraise .main");
     await page.waitForSelector("#sheet.open");
     assert((await page.$$("#sheet a.art")).length >= 1, "the raise links it inline");
-    const [popup] = await Promise.all([ctx.waitForEvent("page"), page.click("#sheet a.art >> nth=0")]);
-    await popup.waitForLoadState(); await popup.waitForTimeout(400);
-    same(await popup.title(), "Where the fsync lands", "it opens");
-    same(await popup.textContent("#r"), "blocked", "its script could not reach the page's API");
+    // It opens in this page's own viewer, under the app's bar: an installed app has no browser Back for a bare file.
+    await page.click("#sheet a.art >> nth=0");
+    await page.waitForSelector("iframe.artview");
+    assert(/#\/a\/W9\//.test(page.url()), "the viewer has its own address: " + page.url());
+    assert(!(await page.$("a.art[target]")), "no artefact link opens a window of its own");
+    const frame = page.frames().find(f => f.url().includes("/artefacts/"));
+    await frame.waitForSelector("#r"); await page.waitForTimeout(400);
+    same(await frame.title(), "Where the fsync lands", "it opens");
+    same(await frame.textContent("#r"), "blocked", "its script could not reach the page's API");
+    assert((await page.textContent("#title")).includes("Where the fsync lands"), "the bar names it");
+    // Back, in the bar, returns to the screen it was opened from.
+    await page.click("#tabs [data-act=up]");
+    await page.waitForSelector("#sheet.open");
+    assert(!(await page.$("iframe.artview")), "Back leaves the viewer");
+    assert(/#\/t\/W9\/W9\.3/.test(page.url()), "and lands on the card it was opened from: " + page.url());
+    await page.keyboard.press("Escape"); await page.waitForSelector(".arts");
+    // Opened afresh (a reload, a pasted address), Back has no history to use and goes to the task.
+    await page.click(".tile >> nth=0");
+    await page.waitForSelector("iframe.artview");
+    await page.reload(); await page.waitForSelector("iframe.artview");
+    await page.click("#tabs [data-act=up]");
+    await page.waitForSelector(".arts");
+    assert(/#\/t\/W9/.test(page.url()), "after a reload Back goes to the task: " + page.url());
     same(errors, [], "no page errors");
   },
 

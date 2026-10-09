@@ -343,21 +343,21 @@ class Web(unittest.TestCase):
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's rich()")
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("const ART_RE"):src.index("/* Prose is markdown")]
+        body = src[src.index("const artHref"):src.index("/* Prose is markdown")]
         js = ("const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;');"
-              "const S = {task: {artefacts: [{file:'s.png',title:'s.png',kind:'image'},"
+              "const S = {task: {id: 'W1', artefacts: [{file:'s.png',title:'s.png',kind:'image'},"
               "{file:'m.html',title:'The map',kind:'page'}]}};" + body +
               "console.log(JSON.stringify([rich('a ![the bar](.dfs/artefacts/s.png) b'),"
               "rich('.dfs/artefacts/m.html'), rich('artefacts/gone.png <i>'), rich('![x](artefacts/s.png'),"
               "rich('see m.html, or s.png'), rich('not-m.html x/m.html gone.html')]))")
         out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(out[0], 'a <a class="shot" href="artefacts/s.png" target="_blank" rel="noopener">'
+        self.assertEqual(out[0], 'a <a class="shot" href="#/a/W1/s.png">'
                                  '<img src="artefacts/s.png" alt="the bar" loading="lazy"></a> b')
-        self.assertIn('<a class="art" href="artefacts/m.html"', out[1])
+        self.assertIn('<a class="art" href="#/a/W1/m.html"', out[1])
         self.assertEqual(out[2:4], ["artefacts/gone.png &lt;i>", "![x](artefacts/s.png"])
         # a bare filename of an artefact the task has is linked the same way, relative to the page
-        self.assertIn('see <a class="art" href="artefacts/m.html"', out[4])
-        self.assertIn('or <a class="shot" href="artefacts/s.png"', out[4])
+        self.assertIn('see <a class="art" href="#/a/W1/m.html"', out[4])
+        self.assertIn('or <a class="shot" href="#/a/W1/s.png"', out[4])
         # but not one inside a longer name or path, nor a file the task does not have
         self.assertEqual(out[5], "not-m.html x/m.html gone.html")
 
@@ -427,15 +427,18 @@ class Web(unittest.TestCase):
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's artefactsHtml()")
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("const THUMB_W"):src.index("function raiseCard")]
+        body = src[src.index("const artHref"):src.index("\n", src.index("const artHref"))] + src[src.index("const THUMB_W"):src.index("function raiseCard")]
         js = ("const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;');"
-              + body + "console.log(artefactsHtml({artefacts: ["
+              "const S = {task: {id: 'W1'}};" + body + "console.log(artefactsHtml({artefacts: ["
               "{file:'s.png',title:'s.png',kind:'image'},"
               "{file:'m.html',title:'The <map>',kind:'page'}]}), artefactsHtml({artefacts: []}))")
         out = subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout
         self.assertIn('<img src="artefacts/s.png"', out)
         self.assertIn('<iframe src="artefacts/m.html" title="The &lt;map>"', out)
         self.assertEqual(out.count("<iframe"), 1)
+        # a tile opens the page's own viewer, with its Back, and never a window the installed app cannot leave
+        self.assertIn('<a class="tile" href="#/a/W1/m.html">', out)
+        self.assertNotIn("_blank", out)
         self.assertNotIn("project", out)
         self.assertNotIn("<li>", out)
 
