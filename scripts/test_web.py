@@ -360,6 +360,36 @@ class Web(unittest.TestCase):
         self.assertIn('or <a class="shot" href="#/a/W1/s.png"', out[4])
         # but not one inside a longer name or path, nor a file the task does not have
         self.assertEqual(out[5], "not-m.html x/m.html gone.html")
+        # a link in prose opens the viewer in the page: none opens a window of its own
+        self.assertNotIn("target", "".join(out))
+
+    def test_the_viewer_route_and_its_frame_are_keyed_on_task_and_name(self):
+        """route() and drawArtefact() in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawArtefact()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = (src[src.index("function route() {"):src.index("const go =")]
+                + src[src.index("const artefactOf"):src.index("function drawChats")])
+        js = ("const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\"/g,'&quot;');"
+              "const location = {hash: '#/a/W1/m%20x.html'};"
+              "const view = {dataset: {}, innerHTML: '', classList: {remove() {}},"
+              "  querySelector(q) { return /artview/.test(q) && /artview/.test(this.innerHTML) ? 1 : null; }};"
+              "const $ = () => view; const S = {task: null};" + body +
+              "const out = [route()];"
+              "S.task = {artefacts: [{file: 'm.html', title: 'A map', kind: 'page'}]};"
+              "drawArtefact({task: 'W1', name: 'm.html'}); out.push(view.innerHTML);"
+              "view.innerHTML += '<!-- kept -->'; drawArtefact({task: 'W1', name: 'm.html'}); out.push(view.innerHTML.includes('kept'));"
+              "drawArtefact({task: 'W2', name: 'm.html'}); out.push(view.innerHTML.includes('kept'));"
+              "drawArtefact({task: 'W2', name: 'gone.html'}); out.push(view.innerHTML);"
+              "console.log(JSON.stringify(out))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(out[0], {"view": "artefact", "task": "W1", "name": "m x.html"})
+        self.assertIn('<iframe class="artview" src="artefacts/m.html" title="A map" sandbox="allow-scripts">', out[1])
+        self.assertTrue(out[2], "the same artefact is not drawn again, so a push does not reload it")
+        self.assertFalse(out[3], "the same name under another task is drawn afresh")
+        self.assertIn("No such artefact: gone.html", out[4])
+        self.assertNotIn("<iframe", out[4])
 
     def test_flagged_only_keeps_the_nodes_that_want_the_author(self):
         """visibleRows() in index.html, run under node (skipped when there is none)."""

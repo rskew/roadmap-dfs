@@ -324,8 +324,9 @@ function route() {
 }
 const go = (h, replace) => replace ? location.replace("#/" + h) : (location.hash = "/" + h);
 /* An artefact opens here, in this app's own window, since an installed app has no browser bar to come
-   back from a bare file. `NAVS` counts the moves made in this page, so Back can tell "the screen I came
-   from" (history.back) from "opened by a reload or a link", which goes to the task. */
+   back from a bare file. `NAVS` counts every hashchange in this page (replacements too), so it is only
+   ever tested for nonzero: Back can tell "the screen I came from" (history.back) from "opened by a
+   reload or a link", which goes to the task. */
 let NAVS = 0;
 
 /* Each screen's page scroll is kept for the tab's session (so Back to the list, and a reload, land
@@ -496,13 +497,13 @@ const ago = ts => { const s = Math.max(0, Date.now() / 1000 - ts); return s < 90
    so a push that changes the roadmap does not reload the page and lose what the reader did on it. */
 const artefactOf = r => ((S.task && S.task.artefacts) || []).find(a => a.file === r.name);
 function drawArtefact(r) {
-  const view = $("#view"), a = artefactOf(r), src = "artefacts/" + encodeURIComponent(r.name);
+  const view = $("#view"), a = artefactOf(r), src = "artefacts/" + encodeURIComponent(r.name), key = r.task + "/" + r.name;
   view.classList.remove("col");
-  if (view.querySelector(".artview") && view.dataset.art === r.name) return;
-  view.dataset.art = r.name;
-  view.innerHTML = a && a.kind === "image"
-    ? `<img class="artview shot" src="${src}" alt="${esc(a.title)}">`
-    : `<iframe class="artview" src="${src}" title="${esc(a ? a.title : r.name)}" sandbox="allow-scripts"></iframe>`;
+  if (view.querySelector(".artview, .hint") && view.dataset.art === key) return;
+  view.dataset.art = key;
+  view.innerHTML = !a ? `<p class="hint">No such artefact: ${esc(r.name)} is not one of ${esc(r.task)}'s.</p>`
+    : a.kind === "image" ? `<img class="artview shot" src="${src}" alt="${esc(a.title)}">`
+    : `<iframe class="artview" src="${src}" title="${esc(a.title)}" sandbox="allow-scripts"></iframe>`;
 }
 function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
