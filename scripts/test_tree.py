@@ -788,6 +788,33 @@ class Check(InARepo):
         code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
 
+    def test_start_marks_an_open_node_in_the_working_copy_only(self):
+        self.write(task(node(1, "confirmed", extra="Approach: done.\nDetermination: Confirmed: ok.\n")
+                        + node(2, parent=1, extra="Approach: next.\n") + node(3, "parked", parent=1)
+                        + "### W1.4 · bare\nParent: W1.2\n\n", self.LOG))
+        self.commit()
+        self.assertEqual(dfs_tree.start_node("W1", "W1.2"), "W1.2")
+        dfs_tree.start_node("W1", "W1.2")
+        dfs_tree.start_node("W1", "W1.4")
+        t = dfs_tree.by_id(dfs_tree.load("W1"))
+        self.assertEqual((t["W1.2"]["status"], t["W1.4"]["status"]), ("started", "started"))
+        self.assertEqual(t["W1.2"]["raw"][1:4], ["Parent: W1.1", "Status: started", "Approach: next."])
+        self.assertEqual(t["W1.4"]["raw"][1:3], ["Parent: W1.2", "Status: started"])
+        self.assertEqual(t["W1.1"]["raw"], dfs_tree.by_id(dfs_tree.parse(
+            subprocess.run(["git", "show", "HEAD:.dfs/items/W1.md"], cwd=self.root,
+                           capture_output=True, text=True, check=True).stdout, "W1"))["W1.1"]["raw"])
+        for nid in ("W1.1", "W1.3", "W1.9"):
+            with self.assertRaises(ValueError, msg=nid):
+                dfs_tree.start_node("W1", nid)
+        self.assertEqual(dfs_tree.main(["tree.py", "start", "W1", "W1.2"]), 0)
+
+    def test_the_work_briefing_tells_a_session_to_mark_its_node_started(self):
+        self.write(task(node(1, extra="Approach: go.\n"), self.LOG))
+        self.commit()
+        brief = dfs_state.brief("W1")
+        self.assertIn("tree.py start W1 <node>", brief)
+        self.assertIn("commits nothing", brief)
+
     def test_the_authors_words_stay_with_the_node(self):
         log = (self.LOG + "- 2026-09-25T09:10:00Z · raise · W1.1\n  Which way?\n"
                "- 2026-09-25T09:11:00Z · answer · 2026-09-25T09:10:00Z\n  The second.\n"

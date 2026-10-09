@@ -491,6 +491,11 @@ def brief(task: str) -> str:
            "it if one is there): two to four plain sentences saying what the finished "
            "work does, whether the Goal was fully met, and what was left out or done "
            "differently and why. No node ids or commit hashes.",
+           "- **Mark the node you work on started** before you change code for it: "
+           "`python3 %s/tree.py start %s <node>`. It edits the task file and commits "
+           "nothing; the node's commit replaces `started` with its ruling, and a "
+           "session cut off mid-node leaves it for the next to see."
+           % (dfs_paths.rel(dfs_paths.SCRIPTS), task),
            "- **Session %d of %d** since the author last spoke on this task; at %d the "
            "task raises for their review. The critic reviews after %d more."
            % (st["sessions"] + 1, dfs_tree.SESSION_LIMIT, dfs_tree.SESSION_LIMIT,

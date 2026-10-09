@@ -74,6 +74,7 @@ Usage:
     tree.py log <task> <kind> [args...] < body   append one log entry
     tree.py show <task>                          the tree, one line per node
     tree.py add <task> <parent|-> <title> [< approach]   add an open node
+    tree.py start <task> <node>                  mark an open node started (uncommitted)
     tree.py compact <task>                       move the log's past to the archive
     tree.py shelve <task> [<ids>]                move determined nodes' Approach
                                                      and Hypothesis to the archive
@@ -704,6 +705,31 @@ def edit_node(task, nid, title, approach=""):
         kept.insert(at, "Approach: %s" % approach)
     nd["raw"] = ["### %s · %s" % (nid, title)] + kept
     nd["title"] = title
+    p.write_text(render(t))
+    return nid
+
+
+def start_node(task, nid):
+    """Mark an open node `started`, in the working copy and nothing else: the session
+    that begins to change code for it says so, and the node's own commit then rules it
+    confirmed or refuted. A node already started stays so. Returns the id."""
+    parts = split_id(nid)
+    if not parts or parts[0] != task or not exists(task):
+        raise ValueError("no node %s in %s" % (nid, task))
+    p = part_path(task, parts[2])
+    t = parse(p.read_text(), task) if p.exists() else None
+    nd = by_id(t).get(nid) if t else None
+    if not nd:
+        raise ValueError("no node %s in %s" % (nid, task))
+    if nd["status"] not in ("open", "started"):
+        raise ValueError("%s is %s: only an open node can be started" % (nid, nd["status"]))
+    if any(l.startswith("Status:") for l in nd["raw"]):
+        nd["raw"] = [("Status: started" if l.startswith("Status:") else l) for l in nd["raw"]]
+    else:
+        at = 1 + (len(nd["raw"]) > 1 and nd["raw"][1].startswith("Parent:"))
+        nd["raw"].insert(at, "Status: started")
+    nd["status"] = "started"
+    nd["fields"]["Status"] = "started"
     p.write_text(render(t))
     return nid
 
@@ -1351,6 +1377,9 @@ def _main(argv):
     if len(argv) >= 5 and argv[1] == "add":
         approach = "" if sys.stdin.isatty() else sys.stdin.read()
         print(add_node(argv[2], " ".join(argv[4:]), None if argv[3] == "-" else argv[3], approach))
+        return 0
+    if len(argv) == 4 and argv[1] == "start":
+        print("dfs_tree: %s started" % start_node(argv[2], argv[3]))
         return 0
     if len(argv) == 3 and argv[1] == "compact":
         print("dfs_tree: moved %d log entries to %s"
