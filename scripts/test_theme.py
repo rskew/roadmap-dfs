@@ -72,6 +72,21 @@ class Theme(unittest.TestCase):
         dfs_paths.background_file().write_text("blue\n")
         self.assertEqual(dfs_paths.read_background(), "")
 
+    def test_the_text_on_any_background_reads_and_the_mode_follows_it(self):
+        self.assertEqual(dfs_paths.background_palette(""), {})
+        n = 0
+        for r in range(0, 256, 15):
+            for g in range(0, 256, 15):
+                for b in range(0, 256, 15):
+                    bg = "#%02x%02x%02x" % (r, g, b)
+                    p = dfs_paths.background_palette(bg)
+                    self.assertGreaterEqual(dfs_paths.contrast(bg, p["ink"]), 4.5, bg)
+                    self.assertGreaterEqual(dfs_paths.contrast(bg, p["muted"]), 4.5, bg)
+                    n += 1
+        self.assertEqual(dfs_paths.background_palette("#fff2cc")["mode"], "light")
+        self.assertEqual(dfs_paths.background_palette("#10243a")["mode"], "dark")
+        self.assertGreater(n, 4000)
+
     def test_the_made_colours_hold_white_text(self):
         def lum(c):
             ch = [int(c[i:i + 2], 16) / 255 for i in (1, 3, 5)]

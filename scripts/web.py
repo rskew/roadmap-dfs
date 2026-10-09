@@ -102,6 +102,7 @@ def index_html():
             .replace("{{colour_chosen}}", "true" if dfs_paths.read_theme() else "false")
             .replace("{{colour}}", dfs_paths.project_colour())
             .replace("{{background}}", dfs_paths.read_background())
+            .replace("{{palette_json}}", json.dumps(dfs_paths.background_palette(dfs_paths.read_background())))
             .replace("{{project}}", html.escape(name))).encode()
 
 
@@ -127,7 +128,8 @@ def state_json():
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
-                background=dfs_paths.read_background())
+                background=dfs_paths.read_background(),
+                palette=dfs_paths.background_palette(dfs_paths.read_background()))
 
 
 _commit_cache = {}
@@ -342,7 +344,7 @@ def set_background(body):
     except OSError as e:
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_file()), e), 500)
     HUB.notify()
-    return dict(background=background)
+    return dict(background=background, palette=dfs_paths.background_palette(background))
 
 
 def set_theme(body):

@@ -468,6 +468,37 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // The page's background is chosen in the same dialog and lives in .dfs/background, apart from
+  // the colour: the paper changes and light/dark follows it (so the switch goes), while the
+  // bar's stripe stays the project's colour; clearing it returns the design's paper.
+  async background(b) {
+    const { page, errors } = await open(b, PHONE);
+    const stripe = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--project"));
+    const line = await stripe(), paper = await bg(page);
+    await page.click("[data-act=rename]"); await dialog(page);
+    assert(await page.isChecked("#pd"), "it is the design's paper until one is chosen");
+    await page.fill("#pb", "#10243a");
+    assert(!(await page.isChecked("#pd")), "choosing a background stops using the design's paper");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === "rgb(16, 36, 58)");
+    same(await stripe(), line, "the project's colour stays what it was");
+    assert(await page.evaluate(() => getComputedStyle(document.querySelector("#bar")).borderTopWidth !== "0px"), "and the bar keeps its stripe");
+    assert(!(await page.isVisible("#theme")), "the light/dark switch has nothing to say");
+    assert(await page.evaluate(() => document.documentElement.dataset.theme === "dark"), "a dark background makes the page dark");
+    const ink = await page.evaluate(() => getComputedStyle(document.body).color);
+    assert(ink !== "rgb(26, 29, 33)", "the text is light on a dark background, got " + ink);
+    await page.waitForSelector("dialog[open]", { state: "hidden" });
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    await page.reload(); await page.waitForSelector(".item");
+    same(await bg(page), "rgb(16, 36, 58)", "it survives a reload without a flash of the paper");
+    await page.click("[data-act=rename]"); await dialog(page);
+    await page.check("#pd");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(p => getComputedStyle(document.body).backgroundColor === p, paper);
+    assert(await page.isVisible("#theme"), "the switch returns with the paper");
+    same(errors, [], "no page errors");
+  },
+
   // Reorder: the list's Reorder switch gives each row tap-sized moves, a move writes order.md and
   // redraws the list, a move that cannot be made says why, and switching it off restores the rows.
   async reorder(b) {

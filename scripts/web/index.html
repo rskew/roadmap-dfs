@@ -15,6 +15,20 @@
 <link rel="stylesheet" href="/design.css">
 <script>
 try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+// A background chosen for this project (`.dfs/background`) decides the page's surface and text
+// colours, and with them light or dark, so the light/dark switch has nothing to say.
+function paintBackground(p) {
+  const root = document.documentElement, keys = ["paper", "panel", "sel", "ink", "muted", "line", "faint"];
+  keys.forEach(k => root.style.removeProperty("--" + k));
+  if (p && p.paper) {
+    keys.forEach(k => root.style.setProperty("--" + k, p[k]));
+    root.dataset.theme = p.mode; root.dataset.bg = "";
+  } else {
+    delete root.dataset.bg; delete root.dataset.theme;
+    try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") root.dataset.theme = t; } catch (e) {}
+  }
+}
+paintBackground({{palette_json}});
 </script>
 <style>
 /* The page's own layout. What things ARE (type, colour, buttons, tags, fields, cards,
@@ -35,7 +49,7 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 #bar h1 .rename:hover, #bar h1 .rename:focus-visible { text-decoration-color: var(--ink); }
 #bar h1 small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--fs-label); font-weight: 400; color: var(--muted); letter-spacing: .04em; }
 #bar .iconbtn { margin-right: -10px; }
-#back[hidden], #live[hidden] { display: none; }
+#back[hidden], #live[hidden], #theme[hidden] { display: none; }
 @media (max-width: 899px) { #back, .desk { display: none; } }          /* the bottom bar has these */
 #live, #loading { font-size: var(--fs-label); color: var(--attention); letter-spacing: .08em; }
 #loading { color: var(--muted); }
@@ -268,7 +282,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 "use strict";
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}}, BACKGROUND = "{{background}}";
+let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}}, BACKGROUND = "{{background}}", PALETTE = {{palette_json}};
 const S = { walk: null, state: null, task: null, taskId: null, asm: null, folded: {}, only: false, reorder: false, moved: null, flagged: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
@@ -858,6 +872,9 @@ function syncColour(state) {
   if (state.colour && (state.colour !== COLOUR || state.colour_chosen !== CHOSEN)) {
     COLOUR = state.colour; CHOSEN = state.colour_chosen; paintColour();
   }
+  if (state.background !== undefined && state.background !== BACKGROUND) {
+    BACKGROUND = state.background; PALETTE = state.palette; paintBackground(PALETTE); themeLabel();
+  }
 }
 function paintColour() {
   document.documentElement.style.setProperty("--project", COLOUR);
@@ -868,15 +885,20 @@ function renameForm() {
     <p class="muted" style="margin:0">Shown on this page and under the installed app's icon. Kept in <code>.dfs/title</code>, so it travels with the repo.</p>${isSecureContext ? "" : `<p class="muted" style="margin:0">${esc(NO_INSTALL)}</p>`}
     <div><label for="pn">Name</label><input type="text" id="pn" name="title" value="${esc(PROJECT)}" maxlength="80" required autocomplete="off"></div>
     <div><label for="pc">Colour</label><input type="color" id="pc" name="colour" value="${COLOUR}"></div>
+    <div><label for="pb">Background</label><input type="color" id="pb" name="background" value="${BACKGROUND || (dark() ? "#171a1d" : "#f5f4ef")}"></div>
+    <label><input type="checkbox" id="pd" name="plain"${BACKGROUND ? "" : " checked"}> Use the design's own paper</label>
     <label><input type="checkbox" id="pa" name="auto"${CHOSEN ? "" : " checked"}> Take the colour from the name</label>
-    <p class="muted" style="margin:0">Marks the top of this page, the browser's bar and the installed app, so projects are not mistaken for one another. Kept in <code>.dfs/theme</code>.</p>${buttons("Save")}`,
+    <p class="muted" style="margin:0">Marks the top of this page, the browser's bar and the installed app, so projects are not mistaken for one another. Kept in <code>.dfs/theme</code>. The background colours the page itself, and light or dark follows it; kept in <code>.dfs/background</code>.</p>${buttons("Save")}`,
     async fd => {
       const res = await api("/api/title", { title: fd.get("title") }); PROJECT = res.title;
       const auto = fd.get("auto") === "on", want = auto ? "" : fd.get("colour");
       if (auto ? CHOSEN : (!CHOSEN || want !== COLOUR)) { const c = await api("/api/theme", { colour: want }); CHOSEN = c.chosen; }
+      const plain = fd.get("plain") === "on", bg = plain ? "" : fd.get("background");
+      if (bg !== BACKGROUND) { const b = await api("/api/background", { background: bg }); BACKGROUND = b.background; PALETTE = b.palette; paintBackground(PALETTE); themeLabel(); }
       const st = await api("/api/state"); COLOUR = st.colour; paintColour();
       toast("Saved."); S.sig = ""; await render(true); });
   $("#pc").addEventListener("input", () => { $("#pa").checked = false; });
+  $("#pb").addEventListener("input", () => { $("#pd").checked = false; });
 }
 function newTaskForm() {
   form(`<h3>Add a task</h3>
@@ -990,6 +1012,7 @@ const SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12"
 const MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/></svg>';
 function themeLabel() {
   const b = $("#theme"), d = dark();
+  b.hidden = "bg" in document.documentElement.dataset;     // a chosen background decides it
   b.innerHTML = d ? MOON : SUN;                         // the icon is the mode you are in
   b.title = b.ariaLabel = d ? "Dark. Switch to light" : "Light. Switch to dark";
 }

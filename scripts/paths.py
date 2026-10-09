@@ -213,6 +213,47 @@ def write_background(value: str) -> str:
     return v
 
 
+def _rgb(c: str):
+    return [int(c[i:i + 2], 16) for i in (1, 3, 5)]
+
+
+def _lum(c: str) -> float:
+    ch = [x / 255 for x in _rgb(c)]
+    ch = [x / 12.92 if x <= .03928 else ((x + .055) / 1.055) ** 2.4 for x in ch]
+    return .2126 * ch[0] + .7152 * ch[1] + .0722 * ch[2]
+
+
+def contrast(a: str, b: str) -> float:
+    hi, lo = sorted((_lum(a), _lum(b)), reverse=True)
+    return (hi + .05) / (lo + .05)
+
+
+def _mix(a: str, b: str, t: float) -> str:
+    """`a` with a share `t` of `b` mixed in, as `#rrggbb`."""
+    return "#%02x%02x%02x" % tuple(round(x + (y - x) * t) for x, y in zip(_rgb(a), _rgb(b)))
+
+
+def background_palette(bg: str) -> dict:
+    """The surface and text colours a page takes on the background `bg`, {} for none: the
+    design's own light or dark text, whichever reads better (pure black or white when
+    neither reaches 4.5:1), with muted text, rules and raised surfaces mixed from the two."""
+    if not bg:
+        return {}
+    ink = max(("#1a1d21", "#e9e7e1"), key=lambda c: contrast(bg, c))
+    if contrast(bg, ink) < 4.5:
+        ink = max(("#000000", "#ffffff"), key=lambda c: contrast(bg, c))
+    dark = _lum(ink) > .5
+    muted = ink
+    for pct in range(35, 0, -1):          # as far toward the page as 4.5:1 allows
+        m = _mix(ink, bg, pct / 100)
+        if contrast(bg, m) >= 4.5:
+            muted = m
+            break
+    return dict(mode="dark" if dark else "light", paper=bg, ink=ink, muted=muted,
+                panel=_mix(bg, "#ffffff", .05 if dark else .5), sel=_mix(bg, ink, .1),
+                line=_mix(bg, ink, .3), faint=_mix(bg, ink, .12))
+
+
 def colour_from_name(name: str) -> str:
     """A colour for a name: its hash picks the hue, and lightness and saturation are fixed
     so white text reads on it. The same name is always the same colour."""
