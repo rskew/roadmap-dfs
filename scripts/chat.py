@@ -33,6 +33,7 @@ import paths as dfs_paths    # noqa: E402
 import runs as dfs_runs      # noqa: E402
 import tree as dfs_tree      # noqa: E402
 import context as dfs_context   # noqa: E402
+import chatlog   # noqa: E402
 import uuid
 from walk import agent_file, read_agent   # noqa: E402
 
@@ -200,14 +201,18 @@ class Chats:
         with self.lock:
             # A chat running on this screen has the session: type into it, as the keyboard does.
             if scope not in self.busy and w and w.chat_send(scope, message):
+                chatlog.log(scope, "page: message of %d characters handed to the screen's chat" % len(message))
                 self.pending[scope] = message
                 self.notes.pop(scope, None)
                 self.on_change()
                 return self.state(scope)
             if scope in self.busy:
+                chatlog.log(scope, "page: message refused, the last turn (%ds) is still answering"
+                            % (time.time() - self.busy[scope]))
                 raise ValueError("it is still answering the last message")
             sid = self.sid(scope)
             if sid and running_elsewhere(sid):
+                chatlog.log(scope, "page: message refused, another terminal has session %s open" % sid)
                 raise ValueError("another terminal has this conversation open: type there, or "
                                  "close it and send from here")
             self.pending[scope] = message
@@ -221,7 +226,10 @@ class Chats:
         return [str(dfs_paths.SCRIPTS / "run.sh")]
 
     def turn(self, scope, message, sid, opening=False):
-        error, new_sid = "", sid
+        error, new_sid, began = "", sid, time.time()
+        chatlog.log(scope, "turn: %s, %d characters, session %s" % (
+            "opening" if opening else "message", len(message), sid or "(new)"))
+        rc = None
         try:
             env = dict(os.environ)
             if opening:
@@ -237,6 +245,7 @@ class Chats:
                 if p and os.path.exists(p):
                     env["CHAT_RESUME"] = "1"
             r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env)
+            rc = r.returncode
             out = {}
             try:
                 out = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
@@ -251,6 +260,11 @@ class Chats:
             error = "no answer in %d minutes" % (TURN_TIMEOUT // 60)
         except OSError as e:
             error = "could not start the agent: %s" % e
+        except Exception as e:      # the turn's thread would die unseen, and the page wait forever
+            error = "the turn failed: %s: %s" % (type(e).__name__, e)
+        chatlog.log(scope, "turn: %s after %ds, rc=%s, session %s" % (
+            "FAILED" if error else "answered", time.time() - began, rc, new_sid or "(none)"),
+            error)
         with self.lock:
             if new_sid and new_sid != sid:
                 self.save_sid(scope, new_sid)
@@ -271,11 +285,13 @@ class Chats:
             p = dfs_context.transcript_path(sid, "claude") if sid else None
             began = bool(p and os.path.exists(p)) or bool(w and w.chat_live(scope))
             if not began:
+                chatlog.log(scope, "page: opened a new chat%s" % (", on the screen" if w and w.has_screen else ""))
                 if w and w.has_screen:
                     try:
                         w.chat_open(scope)
                     except ValueError as e:
                         note = str(e)
+                        chatlog.log(scope, "page: the screen would not start the chat: %s" % e)
                 else:
                     with self.lock:
                         if scope not in self.busy:
@@ -317,6 +333,7 @@ class Chats:
             if scope in self.busy:
                 raise ValueError("it is still answering: wait for it")
             w = self.walker()
+            chatlog.log(scope, "page: new chat, ending the old one (session %s)" % (self.sid(scope) or "none"))
             if w:
                 w.chat_close(scope)                  # the agent running on it goes with it
             try:

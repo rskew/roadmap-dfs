@@ -303,6 +303,33 @@ class Chat(unittest.TestCase):
         self.assertEqual(st["messages"][-1]["role"], "agent")
         self.assertNotIn("error", [m["role"] for m in st["messages"]], "the error goes once the chat moves on")
 
+    def record(self, scope):
+        return (self.chats.path(scope).with_suffix(".log")).read_text()
+
+    def test_a_turn_leaves_a_record_and_a_failed_one_keeps_its_reason_past_a_restart(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        log = self.record("W1")
+        self.assertIn("turn: message, 5 characters, session (new)", log)
+        self.assertIn("turn: answered after", log)
+        os.environ["CHAT_STUB_FAIL"] = "1"
+        self.chats.send("W1", "again")
+        self.settle("W1")
+        log = self.record("W1")
+        self.assertIn("turn: FAILED after", log)
+        self.assertIn("rc=1", log)
+        self.assertIn("boom: not logged in", log)           # the reason is on disk, not only in `notes`
+        self.assertIn("| ", log)
+
+    def test_a_refused_send_and_a_new_chat_are_recorded(self):
+        self.chats.busy["W1"] = time.time()
+        with self.assertRaises(ValueError):
+            self.chats.send("W1", "second")
+        self.chats.busy.clear()
+        self.assertIn("message refused, the last turn", self.record("W1"))
+        self.chats.clear("W1")
+        self.assertIn("page: new chat", self.record("W1"))
+
     def test_one_turn_at_a_time_and_clear_waits_for_it(self):
         os.environ["CHAT_STUB_SAY"] = "slowly"
         self.chats.busy["W1"] = time.time()                  # a turn in flight

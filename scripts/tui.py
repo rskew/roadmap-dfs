@@ -4856,7 +4856,7 @@ class UiWalker:
 
     def chat_close(self, scope):
         if self.ui.chat_host:
-            self.ui.chat_host.close(scope)
+            self.ui.chat_host.close(scope, why="new chat")
 
     def loop(self, stop, interval=1.0):
         stop.wait()             # the screen's own poll steps the walk
