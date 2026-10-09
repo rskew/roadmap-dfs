@@ -460,23 +460,29 @@ class Web(unittest.TestCase):
         self.assertEqual((status, body), (200, dict(colour=made, chosen=False)))
         self.assertFalse((self.root / ".dfs" / "theme").exists())
 
-    def test_the_page_background_is_choosable_apart_from_the_project_colour(self):
+    def test_the_page_background_is_choosable_per_mode_apart_from_the_project_colour(self):
         (self.root / ".dfs" / "title").write_text("Gateway\n")
         made = dfs_paths.colour_from_name("Gateway")
-        self.assertIn('BACKGROUND = ""', self.call("GET", "/")[1].decode())
-        self.assertEqual(self.call("GET", "/api/state")[1]["background"], "")
-        status, body, _ = self.call("POST", "/api/background", dict(background="#FFF2CC"))
-        self.assertEqual((status, body["background"]), (200, "#fff2cc"))
-        self.assertEqual(body["palette"]["mode"], "light")
-        self.assertEqual((self.root / ".dfs" / "background").read_text(), "#fff2cc\n")
-        self.assertIn('BACKGROUND = "#fff2cc"', self.call("GET", "/")[1].decode())
-        self.assertIn('paintBackground({"mode": "light", "paper": "#fff2cc"', self.call("GET", "/")[1].decode())
+        none = dict(light="", dark="")
+        self.assertIn('BACKGROUND = {"light": "", "dark": ""}', self.call("GET", "/")[1].decode())
+        self.assertEqual(self.call("GET", "/api/state")[1]["background"], none)
+        status, body, _ = self.call("POST", "/api/background", dict(light="#FFF2CC"))
+        self.assertEqual((status, body["background"], body["palettes"]["dark"]), (200, dict(light="#fff2cc", dark=""), {}))
+        self.assertEqual(body["palettes"]["light"]["paper"], "#fff2cc")
+        status, body, _ = self.call("POST", "/api/background", dict(dark="#10243a"))
+        self.assertEqual(body["background"], dict(light="#fff2cc", dark="#10243a"))
+        self.assertEqual((self.root / ".dfs" / "background").read_text(), "light #fff2cc\ndark #10243a\n")
+        page = self.call("GET", "/")[1].decode()
+        self.assertIn('BACKGROUND = {"light": "#fff2cc", "dark": "#10243a"}', page)
+        self.assertIn('"dark": {"paper": "#10243a"', page)
         st = self.call("GET", "/api/state")[1]
-        self.assertEqual((st["background"], st["colour"], st["colour_chosen"]), ("#fff2cc", made, False))
-        for bad in ("red", "#fff", None, 5):
-            self.assertEqual(self.call("POST", "/api/background", dict(background=bad))[0], 400, bad)
-        status, body, _ = self.call("POST", "/api/background", dict(background=""))
-        self.assertEqual((status, body), (200, dict(background="", palette={})))
+        self.assertEqual((st["background"], st["colour"], st["colour_chosen"]),
+                         (dict(light="#fff2cc", dark="#10243a"), made, False))
+        for bad in (dict(light="red"), dict(dark="#fff"), dict(light=None), dict(dark=5), dict(), dict(sepia="#ffffff")):
+            self.assertEqual(self.call("POST", "/api/background", bad)[0], 400, bad)
+        self.call("POST", "/api/background", dict(light=""))
+        status, body, _ = self.call("POST", "/api/background", dict(dark=""))
+        self.assertEqual((status, body["background"]), (200, none))
         self.assertFalse((self.root / ".dfs" / "background").exists())
 
     def test_the_dark_washes_stay_visible_and_their_text_readable(self):

@@ -101,8 +101,8 @@ def index_html():
     return (INDEX.read_text().replace("{{project_json}}", json.dumps(name).replace("</", "<\\/"))
             .replace("{{colour_chosen}}", "true" if dfs_paths.read_theme() else "false")
             .replace("{{colour}}", dfs_paths.project_colour())
-            .replace("{{background}}", dfs_paths.read_background())
-            .replace("{{palette_json}}", json.dumps(dfs_paths.background_palette(dfs_paths.read_background())))
+            .replace("{{background_json}}", json.dumps(dfs_paths.read_background()))
+            .replace("{{palettes_json}}", json.dumps(dfs_paths.background_palettes()))
             .replace("{{project}}", html.escape(name))).encode()
 
 
@@ -128,8 +128,7 @@ def state_json():
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
-                background=dfs_paths.read_background(),
-                palette=dfs_paths.background_palette(dfs_paths.read_background()))
+                background=dfs_paths.read_background(), palettes=dfs_paths.background_palettes())
 
 
 _commit_cache = {}
@@ -332,19 +331,20 @@ def set_title(body):
 
 
 def set_background(body):
-    """Choose the page background (`#rrggbb`), or clear it with an empty string so the page
-    keeps the design's paper. The project's colour, which marks the top, is not touched."""
-    value = body.get("background")
-    if not isinstance(value, str):
-        raise Refused("a background is needed")
+    """Choose the page background for light mode (`light`) and for dark mode (`dark`), each
+    `#rrggbb`, or clear one with an empty string so that mode keeps the design's paper; a
+    mode left out is unchanged. The project's colour, which marks the top, is not touched."""
+    given = {m: body[m] for m in dfs_paths.MODES if m in body}
+    if not given or not all(isinstance(v, str) for v in given.values()):
+        raise Refused("a light or a dark background is needed")
     try:
-        background = dfs_paths.write_background(value)
+        have = dfs_paths.write_background(**given)
     except ValueError as e:
         raise Refused(str(e))
     except OSError as e:
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_file()), e), 500)
     HUB.notify()
-    return dict(background=background, palette=dfs_paths.background_palette(background))
+    return dict(background=have, palettes=dfs_paths.background_palettes())
 
 
 def set_theme(body):

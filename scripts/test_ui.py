@@ -209,7 +209,7 @@ class Flows(unittest.TestCase):
         self.flow("colour")
         self.assertEqual((self.root / ".dfs" / "theme").read_text(), "#aa3355\n")
 
-    def test_the_page_background_is_chosen_in_the_dialog_and_writes_dfs_background(self):
+    def test_a_background_per_mode_is_chosen_in_the_dialog_and_writes_dfs_background(self):
         self.flow("background")
         self.assertFalse((self.root / ".dfs" / "background").exists())
         self.assertFalse((self.root / ".dfs" / "theme").exists())

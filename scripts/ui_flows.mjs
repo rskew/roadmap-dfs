@@ -468,34 +468,37 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
-  // The page's background is chosen in the same dialog and lives in .dfs/background, apart from
-  // the colour: the paper changes and light/dark follows it (so the switch goes), while the
-  // bar's stripe stays the project's colour; clearing it returns the design's paper.
+  // The page's background is chosen in the same dialog, one for light mode and one for dark, and
+  // lives in .dfs/background apart from the colour: the paper follows the mode the switch picks,
+  // the bar's stripe stays the project's colour, and clearing both returns the design's paper.
   async background(b) {
     const { page, errors } = await open(b, PHONE);
     const stripe = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--project"));
+    await page.evaluate(() => { document.documentElement.dataset.theme = "light"; localStorage.setItem("theme", "light"); });
     const line = await stripe(), paper = await bg(page);
     await page.click("[data-act=rename]"); await dialog(page);
-    assert(await page.isChecked("#pd"), "it is the design's paper until one is chosen");
-    await page.fill("#pb", "#10243a");
-    assert(!(await page.isChecked("#pd")), "choosing a background stops using the design's paper");
+    assert(await page.isChecked("#pd-light") && await page.isChecked("#pd-dark"), "each mode is the design's paper until one is chosen");
+    await page.fill("#pb-light", "#fff2cc"); await page.fill("#pb-dark", "#10243a");
+    assert(!(await page.isChecked("#pd-light")) && !(await page.isChecked("#pd-dark")), "choosing a background stops using the paper");
     await page.click("dialog button[value=ok]");
-    await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === "rgb(16, 36, 58)");
+    await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === "rgb(255, 242, 204)");
     same(await stripe(), line, "the project's colour stays what it was");
     assert(await page.evaluate(() => getComputedStyle(document.querySelector("#bar")).borderTopWidth !== "0px"), "and the bar keeps its stripe");
-    assert(!(await page.isVisible("#theme")), "the light/dark switch has nothing to say");
-    assert(await page.evaluate(() => document.documentElement.dataset.theme === "dark"), "a dark background makes the page dark");
-    const ink = await page.evaluate(() => getComputedStyle(document.body).color);
-    assert(ink !== "rgb(26, 29, 33)", "the text is light on a dark background, got " + ink);
+    assert(await page.isVisible("#theme"), "the light/dark switch stays");
     await page.waitForSelector("dialog[open]", { state: "hidden" });
+    await page.click("#theme");
+    await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === "rgb(16, 36, 58)");
+    const ink = await page.evaluate(() => getComputedStyle(document.body).color);
+    assert(ink !== "rgb(26, 29, 33)", "the text is light on the dark background, got " + ink);
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
     await page.reload(); await page.waitForSelector(".item");
     same(await bg(page), "rgb(16, 36, 58)", "it survives a reload without a flash of the paper");
+    await page.click("#theme");
+    await page.waitForFunction(() => getComputedStyle(document.body).backgroundColor === "rgb(255, 242, 204)");
     await page.click("[data-act=rename]"); await dialog(page);
-    await page.check("#pd");
+    await page.check("#pd-light"); await page.check("#pd-dark");
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(p => getComputedStyle(document.body).backgroundColor === p, paper);
-    assert(await page.isVisible("#theme"), "the switch returns with the paper");
     same(errors, [], "no page errors");
   },
 

@@ -51,28 +51,34 @@ class Theme(unittest.TestCase):
         dfs_paths.theme_file().write_text("blue\n")
         self.assertEqual(dfs_paths.project_colour(), dfs_paths.colour_from_name("Gateway"))
 
-    def test_a_chosen_background_is_kept_apart_from_the_project_colour(self):
-        self.assertEqual(dfs_paths.read_background(), "")
+    def test_a_background_per_mode_is_kept_apart_from_the_project_colour(self):
+        none = dict(light="", dark="")
+        self.assertEqual(dfs_paths.read_background(), none)
         line = dfs_paths.project_colour()
-        self.assertEqual(dfs_paths.write_background("#FFF2CC"), "#fff2cc")
-        self.assertEqual(dfs_paths.read_background(), "#fff2cc")
+        self.assertEqual(dfs_paths.write_background(light="#FFF2CC"), dict(light="#fff2cc", dark=""))
+        self.assertEqual(dfs_paths.write_background(dark="#10243a"), dict(light="#fff2cc", dark="#10243a"))
+        self.assertEqual(dfs_paths.read_background(), dict(light="#fff2cc", dark="#10243a"))
+        self.assertEqual(dfs_paths.background_file().read_text(), "light #fff2cc\ndark #10243a\n")
         self.assertEqual(dfs_paths.project_colour(), line)
         self.assertFalse(dfs_paths.theme_file().exists())
         dfs_paths.write_theme("#aa3355")
-        self.assertEqual(dfs_paths.read_background(), "#fff2cc")
-        self.assertEqual(dfs_paths.write_background(""), "")
+        self.assertEqual(dfs_paths.read_background(), dict(light="#fff2cc", dark="#10243a"))
+        self.assertEqual(dfs_paths.write_background(light=""), dict(light="", dark="#10243a"))
+        self.assertEqual(dfs_paths.write_background(dark=""), none)
         self.assertFalse(dfs_paths.background_file().exists())
         self.assertEqual(dfs_paths.project_colour(), "#aa3355")
 
     def test_what_is_not_a_background_is_refused_and_a_bad_file_is_ignored(self):
         for bad in ("red", "#fff", "#12345g", "fff2cc"):
             with self.assertRaises(ValueError):
-                dfs_paths.write_background(bad)
+                dfs_paths.write_background(light=bad)
         self.assertFalse(dfs_paths.background_file().exists())
-        dfs_paths.background_file().write_text("blue\n")
-        self.assertEqual(dfs_paths.read_background(), "")
+        dfs_paths.background_file().write_text("blue\nlight red\ndark #10243a\nsepia #ffffff\n")
+        self.assertEqual(dfs_paths.read_background(), dict(light="", dark="#10243a"))
+        dfs_paths.background_file().write_text("#fff2cc\n")             # a bare colour is both modes
+        self.assertEqual(dfs_paths.read_background(), dict(light="#fff2cc", dark="#fff2cc"))
 
-    def test_the_text_on_any_background_reads_and_the_mode_follows_it(self):
+    def test_the_text_on_any_background_reads(self):
         self.assertEqual(dfs_paths.background_palette(""), {})
         n = 0
         for r in range(0, 256, 15):
@@ -83,9 +89,10 @@ class Theme(unittest.TestCase):
                     self.assertGreaterEqual(dfs_paths.contrast(bg, p["ink"]), 4.5, bg)
                     self.assertGreaterEqual(dfs_paths.contrast(bg, p["muted"]), 4.5, bg)
                     n += 1
-        self.assertEqual(dfs_paths.background_palette("#fff2cc")["mode"], "light")
-        self.assertEqual(dfs_paths.background_palette("#10243a")["mode"], "dark")
         self.assertGreater(n, 4000)
+        dfs_paths.write_background(dark="#10243a")
+        pal = dfs_paths.background_palettes()
+        self.assertEqual((pal["light"], pal["dark"]["paper"]), ({}, "#10243a"))
 
     def test_the_made_colours_hold_white_text(self):
         def lum(c):

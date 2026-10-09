@@ -185,32 +185,51 @@ def background_file() -> Path:
     return state() / "background"
 
 
-def read_background() -> str:
-    """The page background `.dfs/background` holds as `#rrggbb`, "" when there is none (the
-    design's own paper) or it is not one."""
+MODES = ("light", "dark")
+
+
+def read_background() -> dict:
+    """The page backgrounds `.dfs/background` holds, one `light #rrggbb` or `dark #rrggbb`
+    line per mode: {"light": ..., "dark": ...}, "" for a mode with none (the design's own
+    paper) or a line that is not one. A bare `#rrggbb` line is both modes."""
+    out = dict.fromkeys(MODES, "")
     try:
-        v = (background_file().read_text().strip().splitlines() or [""])[0].strip().lower()
+        lines = background_file().read_text().lower().splitlines()
     except OSError:
-        return ""
-    return v if re.fullmatch(r"#[0-9a-f]{6}", v) else ""
+        return out
+    for line in lines:
+        w = line.split()
+        if len(w) == 1 and re.fullmatch(r"#[0-9a-f]{6}", w[0]):
+            out = dict.fromkeys(MODES, w[0])
+        elif len(w) == 2 and w[0] in MODES and re.fullmatch(r"#[0-9a-f]{6}", w[1]):
+            out[w[0]] = w[1]
+    return out
 
 
-def write_background(value: str) -> str:
-    """Choose the page background, `#rrggbb`; an empty value clears it back to the design's
-    paper. Separate from the project's colour, which only marks the top. Returns what is
-    now in force ("" for the paper)."""
-    v = str(value or "").strip().lower()
-    if not v:
+def write_background(light=None, dark=None) -> dict:
+    """Choose the page background for light mode and for dark mode, `#rrggbb` each; an
+    empty value clears that mode back to the design's paper and None leaves it as it is.
+    Separate from the project's colour, which only marks the top. Returns what is now in
+    force, as read_background does."""
+    new = dict(light=light, dark=dark)
+    have = read_background()
+    for m in MODES:
+        v = new[m]
+        if v is None:
+            continue
+        v = str(v).strip().lower()
+        if v and not re.fullmatch(r"#[0-9a-f]{6}", v):
+            raise ValueError("a background is #rrggbb")
+        have[m] = v
+    if not any(have.values()):
         try:
             background_file().unlink()
         except FileNotFoundError:
             pass
-        return ""
-    if not re.fullmatch(r"#[0-9a-f]{6}", v):
-        raise ValueError("a background is #rrggbb")
+        return have
     background_file().parent.mkdir(parents=True, exist_ok=True)
-    background_file().write_text(v + "\n")
-    return v
+    background_file().write_text("".join("%s %s\n" % (m, have[m]) for m in MODES if have[m]))
+    return have
 
 
 def _rgb(c: str):
@@ -249,9 +268,13 @@ def background_palette(bg: str) -> dict:
         if contrast(bg, m) >= 4.5:
             muted = m
             break
-    return dict(mode="dark" if dark else "light", paper=bg, ink=ink, muted=muted,
-                panel=_mix(bg, "#ffffff", .05 if dark else .5), sel=_mix(bg, ink, .1),
-                line=_mix(bg, ink, .3), faint=_mix(bg, ink, .12))
+    return dict(paper=bg, ink=ink, muted=muted, panel=_mix(bg, "#ffffff", .05 if dark else .5),
+                sel=_mix(bg, ink, .1), line=_mix(bg, ink, .3), faint=_mix(bg, ink, .12))
+
+
+def background_palettes() -> dict:
+    """The palette for each mode, from `.dfs/background`: {"light": {...}, "dark": {...}}."""
+    return {m: background_palette(v) for m, v in read_background().items()}
 
 
 def colour_from_name(name: str) -> str:
