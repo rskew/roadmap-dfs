@@ -1,0 +1,136 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What can a sandboxed page do to the server?</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  label.check { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 4px 0 0; }
+  input[type="checkbox"] { width: 32px; height: 32px; }
+  ol.gates { list-style: none; margin: 0; padding: 0; }
+  ol.gates li { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 8px 12px; margin: 0 0 8px; }
+  ol.gates li b { display: block; }
+  ol.gates li.pass { border-color: #1e6b34; }
+  ol.gates li.stop { border-color: #b3261e; background: #fdf1f0; }
+  ol.gates li.skip { border-style: dashed; color: #555; }
+  .verdict { border: 2px solid #1a1a1a; border-radius: 6px; background: #fff; padding: 10px 14px; margin: 14px 0 0; }
+  .verdict.bad { border-color: #b3261e; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; min-height: 28px; }
+</style>
+
+<h1>What can a sandboxed page do to the server?</h1>
+<p class="lede">The assumption: a page an agent wrote may reach one route,
+  <code>/artefact-state/&lt;itself&gt;</code>, and that is safe enough, because every other
+  write needs something a sandboxed page does not have. Pick who sends what and read the
+  four gates the request goes through.</p>
+
+<h2>Who sends it</h2>
+<div class="choices" role="group" aria-label="Who sends the request" id="who">
+  <button type="button" data-who="frame" aria-pressed="true">This page, in the answer form</button>
+  <button type="button" data-who="site" aria-pressed="false">An ordinary page on another website</button>
+  <button type="button" data-who="siteframe" aria-pressed="false">A sandboxed frame on another website</button>
+</div>
+
+<h2>What it sends</h2>
+<div class="choices" role="group" aria-label="What the request is" id="what">
+  <button type="button" data-what="state" aria-pressed="true">Save its state</button>
+  <button type="button" data-what="answer" aria-pressed="false">Answer the raise</button>
+  <button type="button" data-what="apijson" aria-pressed="false">JSON to /api/answer</button>
+  <button type="button" data-what="apitext" aria-pressed="false">Text to /api/answer</button>
+</div>
+<label class="check"><input type="checkbox" id="named" checked>
+  The open raise names this page: <code>Answer with:</code></label>
+
+<h2>The four gates</h2>
+<ol class="gates" id="gates"></ol>
+<div class="verdict" id="verdict" aria-live="polite"></div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">A sandboxed page makes any write the two routes above do not allow (answers
+  a raise that does not name it, or gets through to <code>/api</code>), or the author wants
+  no page, even the one the raise names, to answer without them pressing Record.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>In a real browser, the page in the answer form posts to its route and the raise is
+    answered; its JSON post to <code>/api/walk/start</code> is blocked at the preflight. The
+    server refuses <code>/api/answer</code> with origin <code>null</code> (403) whether the
+    body is JSON or text, an answer from a page the raise does not name (409), and a post
+    from another website's origin (403).</p>
+</details>
+
+<script>
+  var who = 'frame', what = 'state';
+  var named = document.getElementById('named');
+  var gatesEl = document.getElementById('gates');
+  var verdictEl = document.getElementById('verdict');
+
+  function run() {
+    var api = what === 'apijson' || what === 'apitext';
+    var steps = [], stopped = '', status = '', wrote = '';
+    function gate(title, pass, text) {
+      if (stopped) { steps.push({ t: title, k: 'skip', s: 'Not reached: ' + stopped }); return; }
+      steps.push({ t: title, k: pass ? 'pass' : 'stop', s: text });
+      if (!pass) stopped = title;
+    }
+    // 1. the browser
+    gate('1. The browser', what !== 'apijson',
+      what === 'apijson' ? 'JSON needs a preflight, which the server never grants: the request is not sent.'
+        : 'A plain-text request needs no preflight, and the page may connect to its own server.');
+    // 2. the origin
+    var origin = who === 'site' ? 'https://other.example' : 'null';
+    var okOrigin = api ? false : who !== 'site';
+    gate('2. The origin', okOrigin,
+      api ? 'Origin ' + origin + ': /api takes only this server’s own address. 403.'
+        : who === 'site' ? 'Origin ' + origin + ' is another website. 403.'
+          : 'Origin null is what a sandboxed page sends, and this route takes it.');
+    // 3. the content type
+    gate('3. The content type', !api || what === 'apijson',
+      api ? 'The /api routes want JSON; a text body is refused. 415.' : 'Not an /api route: nothing here asks for JSON.');
+    // 4. the route
+    var recorded = what === 'answer' && named.checked;
+    gate('4. The route', what === 'state' || recorded,
+      what === 'state' ? 'Keeps the JSON as this page’s own state file. Nothing else is written.'
+        : recorded ? 'An open raise names this page under Answer with:, so the answer entry is appended.'
+          : 'No open raise names this page. 409.');
+    gatesEl.innerHTML = '';
+    steps.forEach(function (s) {
+      var li = document.createElement('li');
+      li.className = s.k;
+      var b = document.createElement('b');
+      b.textContent = s.t + (s.k === 'pass' ? ' — passes' : s.k === 'stop' ? ' — stops it' : ' — skipped');
+      li.appendChild(b);
+      li.appendChild(document.createTextNode(s.s));
+      gatesEl.appendChild(li);
+    });
+    var bad = false, text;
+    if (stopped) text = 'Nothing is written. Stopped at gate ' + stopped.charAt(0) + '.';
+    else if (what === 'state') text = 'This page’s state file is written: the page reopens as it was left.';
+    else { text = 'The answer is recorded in the log, as if the author had typed it.'; bad = who === 'siteframe'; }
+    if (bad) text += ' This is the cost of the choice: a sandboxed frame on another website that knows this file name could do it while the raise is open.';
+    verdictEl.textContent = text;
+    verdictEl.className = 'verdict' + (bad ? ' bad' : '');
+    ['who', 'what'].forEach(function (g) {
+      document.querySelectorAll('#' + g + ' button').forEach(function (b) {
+        b.setAttribute('aria-pressed', String(b.dataset[g] === (g === 'who' ? who : what)));
+      });
+    });
+  }
+  document.querySelectorAll('#who button').forEach(function (b) {
+    b.addEventListener('click', function () { who = b.dataset.who; run(); });
+  });
+  document.querySelectorAll('#what button').forEach(function (b) {
+    b.addEventListener('click', function () { what = b.dataset.what; run(); });
+  });
+  named.addEventListener('change', run);
+  run();
+</script>

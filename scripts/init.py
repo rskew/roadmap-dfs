@@ -6,7 +6,7 @@ directory, `paths.py`). It creates only what is missing and never overwrites:
 
     .dfs/ROADMAP.md          the law, from templates/ROADMAP.md: edit it to suit
     .dfs/items/              where tasks go (`run.sh --open` writes them)
-    .dfs/.gitignore          keeps `runs/`, the chain logs, out of git
+    .dfs/.gitignore          keeps `runs/`, the chain logs, and `artefact-state/` out of git
     .dfs/playwright-shell    only with --playwright-shell <flake ref>: the dev shell
                              that supplies playwright for the artefact check
     <hooks>/pre-commit       the roadmap guard (`hook.sh`), in the hooks directory
@@ -135,11 +135,14 @@ def main(argv):
         say("made", dfs_paths.items())
     ignore = dfs_paths.state() / ".gitignore"
     have = ignore.read_text() if ignore.exists() else ""
-    if "runs/" in have.split():
+    wanted = (("runs/", "chain logs: one directory per run.sh run"),
+              ("artefact-state/", "what a reader left on an artefact page: local, not the roadmap"))
+    missing = [(name, why) for name, why in wanted if name not in have.split()]
+    if not missing:
         say("kept", ignore)
     else:
         ignore.write_text(have + ("" if not have or have.endswith("\n") else "\n")
-                          + "# chain logs: one directory per run.sh run\nruns/\n")
+                          + "".join("# %s\n%s\n" % (why, name) for name, why in missing))
         say("wrote", ignore)
     if shell is not None:
         dfs_paths.playwright_shell().write_text(shell + "\n")

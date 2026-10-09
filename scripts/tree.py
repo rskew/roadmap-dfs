@@ -551,11 +551,28 @@ def make_entry(ts, kind, args=(), body=""):
         [head] + ["  " + b if b.strip() else "" for b in (body or "").strip("\n").splitlines()]))[0]
 
 
+# The page that answers a raise is named on a line of its own in the raise: `Answer with:
+# .dfs/artefacts/<name>.html`. A raise may name other pages to look at; only this one can
+# answer it (web.py's `/artefact-state/<name>`).
+ANSWER_PAGE = re.compile(r"^[ \t]*Answer with:[ \t]*(?:\.dfs/)?(?:artefacts/)?([0-9A-Za-z][0-9A-Za-z._-]*\.html)",
+                         re.I | re.M)
+
+
+def answer_page(body):
+    """The file name of the page a raise names as its answer (`Answer with:`), else None."""
+    m = ANSWER_PAGE.search(body or "")
+    return m.group(1) if m else None
+
+
 def append_log(task, kind, args=(), body=""):
     """Append one entry, keyed by a timestamp later than every other in this file,
     and re-render: the Log section is found by name, wherever it is."""
     if kind not in KINDS:
         raise ValueError("unknown log kind %r (one of %s)" % (kind, ", ".join(KINDS)))
+    page = answer_page(body) if kind == "raise" else None
+    if page and not (dfs_paths.artefacts() / page).is_file():
+        raise ValueError("the raise says to answer with %s, which is not in %s"
+                         % (page, dfs_paths.rel(dfs_paths.artefacts())))
     p = ensure_part(task)
     t = parse(p.read_text(), task)
     ts = now_ts()

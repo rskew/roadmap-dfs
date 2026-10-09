@@ -193,9 +193,10 @@ EOF
 picture would let the author decide, or check, faster than prose can.** The page for an
 assumption starts from `<scripts>/../templates/_TEMPLATE_ASSUMPTION.html`: it states the
 assumption, lets the reader change what it depends on, shows what follows, and says what
-would make it wrong. A page the reader can only look at does not meet the rule. A page
-for a raise can carry the author's choice back: `parent.postMessage({dfs: "answer",
-body: "<text>"}, "*")` fills the web page's answer form, and the author records it.
+would make it wrong. A page the reader can only look at does not meet the rule. To let
+the author answer on the page, name it in the raise on a line of its own, `Answer with:
+.dfs/artefacts/<uuid>.html` (one page, even when the raise shows several): the page posts
+the answer itself and keeps where the reader left off (docs/artefacts.md).
 
 Wiring and data flow, before and after, two or three options set side by side on the
 same axes, a sequence of what ran and what it showed, a layout, measured

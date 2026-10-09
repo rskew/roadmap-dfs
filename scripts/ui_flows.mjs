@@ -63,8 +63,10 @@ async function open(browser, opts, scheme = "light") {
   PAGES.push(page);
   const errors = [];
   page.on("pageerror", e => errors.push(String(e)));
-  // What an artefact's own page logs is not the web page's: the fixture's tries its network on purpose.
-  page.on("console", m => { if (m.type() === "error" && !/\/artefacts\//.test(m.location().url || "")) errors.push(m.text()); });
+  // What an artefact's own page logs is not the web page's: the fixture's tries the API on purpose, from the
+  // opaque origin `null`, and the browser reports the refusal against the API's address.
+  const theirs = m => /\/artefacts\//.test(m.location().url || "") || /origin 'null'/.test(m.text()) || /\/api\/walk\/start$/.test(m.location().url || "");
+  page.on("console", m => { if (m.type() === "error" && !theirs(m)) errors.push(m.text()); });
   await page.goto(URL_);
   await page.waitForSelector(".item");
   return { ctx, page, errors };
@@ -215,27 +217,26 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
-  // A page the raise names sends its result to the answer form: only its own frame is heard, the text waits
-  // in the textarea to be edited, and the log gets an entry only when the author records it.
+  // The page a raise names ("Answer with:") records the answer itself: it is a sandboxed frame, yet its POST to
+  // /artefact-state reaches the server and the form closes when the page says so. Nothing else it sends does.
   async answer_page(b) {
     const { page, errors } = await open(b, PHONE);
     await task(page, "W9");
     await page.click(".row.hasraise .main");
     await page.waitForSelector("#sheet.open");
     await page.click("#sheet [data-act=answer]"); await dialog(page);
-    await page.evaluate(() => postMessage({ dfs: "answer", body: "forged" }, "*"));
-    await page.waitForTimeout(150);
-    same(await page.inputValue("dialog textarea"), "", "a message from another window is not read");
+    const frame = page.frames().find(f => f.url().includes("/artefacts/c0ffee-choose.html"));
+    assert(frame, "the named page opens beside the form");
+    same(await frame.evaluate(() => fetch("/api/walk/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+      .then(r => "reached " + r.status, () => "blocked")), "blocked", "the page still cannot reach the API");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });   // for a node's screenshot
+    await page.evaluate(() => postMessage({ dfs: "answered" }, "*"));
+    await page.waitForTimeout(200);
+    assert(await page.locator("dialog[open] #answerpage").count() === 1, "a message from another window does not close the form");
+    assert(await page.locator(".row.hasraise").count() > 0, "the raise is still open");
     await page.frameLocator("dialog #answerpage").locator("#send").click();
-    await page.waitForFunction(() => document.querySelector("dialog textarea").value !== "", null, { timeout: 4000 });
-    same(await page.inputValue("dialog textarea"), "Spinning disks. Test on one.", "the page's text fills the form");
-    assert(await page.locator("dialog #frompage:not([hidden])").count() === 1, "the form says where the text came from");
-    assert(await page.locator(".row.hasraise").count() > 0, "the raise is still open: nothing is recorded yet");
-    // The author's edit is set directly: Playwright's second keystroke into this textarea is dropped here, as in the
-    // plain answer flow, which also fills it once.
-    await page.evaluate(() => { document.querySelector("dialog textarea").value += " (checked)"; });
-    await page.click("dialog button[value=ok]");
-    await page.waitForFunction(() => !document.querySelector(".row.hasraise"));
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 });
+    await page.waitForFunction(() => !document.querySelector(".row.hasraise"), null, { timeout: 5000 });
     same(errors, [], "no page errors");
   },
 

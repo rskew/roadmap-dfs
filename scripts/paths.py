@@ -8,8 +8,8 @@ Two roots, and they are different questions:
     work_root()  THE CURRENT DIRECTORY. The repo being worked on, and the CWD every
                  session runs at and every prompt path is relative to.
     state()      `<work root>/.dfs` — that project's roadmap, items, artefacts and
-                 chain logs. Committed, except `runs/` — or gitignored whole, which is
-                 supported: see `ignored()`.
+                 chain logs. Committed, except `runs/` and `artefact-state/` — or
+                 gitignored whole, which is supported: see `ignored()`.
 
 ⚠️ **THE WORK ROOT IS `pwd`, WITH NO OVERRIDE AND NOTHING REMEMBERED.** The tool
 serves whichever repo you run it in, so which project's roadmap you are working must
@@ -69,6 +69,12 @@ def items() -> Path:
 
 def artefacts() -> Path:
     return state() / "artefacts"
+
+
+def artefact_state() -> Path:
+    """What a reader left on an artefact page, one `<page>.json` each: kept by the web
+    server so a page comes back as it was left. Local to this checkout, not committed."""
+    return state() / "artefact-state"
 
 
 def order() -> Path:

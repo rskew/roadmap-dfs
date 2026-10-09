@@ -68,8 +68,9 @@ box (`overflow-x: auto`) rather than widening the page, and says so in its capti
    `http://localhost:<port>/<uuid>.html` (`DFS_ARTEFACT_PORT`, 3016 unless set), still
    works in both, but it needs something serving that port, and the path does not.
 
-   The web page serves artefacts sandboxed (no network, no way back to its own controls),
-   because an artefact is a page an agent wrote. That is what "self-contained" is for.
+   The web page serves artefacts sandboxed (no network but its own state and answer route,
+   below; no way back to its own controls), because an artefact is a page an agent wrote.
+   That is what "self-contained" is for.
 
 How the author opens one is in the README, under "Raise artefacts".
 
@@ -88,20 +89,32 @@ applies unchanged. What `check.py` tests is only that the page exists, has a con
 answers it (`addEventListener`, or an `onclick`-style attribute). It does not judge that
 the controls tell the reader anything; the screenshot and the author do.
 
-## What a reader does on a page, and answering with it
+## A page that answers, and keeps where the reader left off
 
-A page is served sandboxed (no network, no storage, no way to `/api`), so nothing the
-reader does on it is kept: the only record of a decision is the `answer` entry in the
-task's log. A page can still hand its result to the web page. When the author taps
-Answer on a raise that names the page, the answer form opens with the page beside it, and
-`parent.postMessage({dfs: "answer", body: "<text>"}, "*")` from the page puts `body` in
-the form's text box. The author reads it, edits it and presses Record, and the log gets
-their words; the page cannot answer by itself, and the form hears only the frame it
-opened. The template's "Send as my answer" button does this with the result on the page.
-Opened alone, or from the terminal, there is no form and the message is ignored. The
-form opens only the first page a raise names, and the form that confirms or refutes a
-node hosts none, so a page named only in a Hypothesis is operated from its link and its
-button does nothing there; the author states the verdict in their own words.
+The web page serves a page sandboxed (an opaque origin, no storage, no way to `/api`), with
+one exception: it may reach `/artefact-state/<its own file name>`, and nothing else on the
+server. There it can
+- **keep its state**: `POST` a JSON body `{"state": <anything>}` and `GET` returns it as
+  `{"state": ..., "raise": ...}` the next time, in any tab, so the page opens as the reader
+  left it. It is kept in `.dfs/artefact-state/<file>.json`, which is local and not committed
+  (`init.py` gitignores it);
+- **answer a raise**: `POST {"answer": "<text>"}` appends the `answer` entry to the log,
+  the same entry the terminal writes, but only for an open raise that names this page on a
+  line of its own, `Answer with: .dfs/artefacts/<uuid>.html`. A raise may link several
+  pages to look at; the `Answer with:` line picks the one that answers, and `tree.py log
+  raise` refuses one that names a page that is not there. `raise` in the GET is that raise
+  while it is open, so the page can show its send button only when there is something to
+  answer.
+
+Send the body as plain text (`fetch(url, {method: "POST", body: JSON.stringify(...)})`, no
+header): a JSON content type needs a preflight, which this server never grants. When the page
+sits in the web page's answer form (tapping Answer on a raise that has an `Answer with:`
+page opens it beside a text box), `parent.postMessage({dfs: "answered"}, "*")` after a
+successful answer closes the form; opened alone, that message goes nowhere. The text box
+stays, for answering in words instead. The template's "Send as my answer" button does all of
+this. The page that answers is the one the author is shown, so write the answer as the
+decision, not as a dump of the state. An agent's page can therefore answer its own raise;
+the author reads the log entry, and a raise that names no page is answered by none.
 
 ## Conventions the checker relies on
 

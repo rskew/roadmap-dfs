@@ -198,8 +198,12 @@ ART_TYPES = {".html": "text/html", ".png": "image/png", ".svg": "image/svg+xml",
 # start agents. So it is served sandboxed: an opaque origin, no network, no way to reach
 # `/api` as this page (and a cross-origin write is refused, `same_origin`). The checker
 # (artefact_check.sh) already holds them to self-contained, which is all they need.
+# One thing a page may do: `connect-src 'self'` lets it reach `/artefact-state/<itself>`, which
+# keeps what the reader left on it and, from the page the raise names, records the answer. Every
+# `/api` write still needs JSON from this server's own origin, and a sandboxed page has neither
+# (JSON asks a preflight this server never grants; its origin is `null`).
 ART_CSP = ("sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; "
-           "style-src 'unsafe-inline'; img-src data: 'self'; font-src data:")
+           "style-src 'unsafe-inline'; img-src data: 'self'; font-src data:; connect-src 'self'")
 
 
 def strings(obj):
@@ -407,6 +411,52 @@ def reorder(body):
             raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.order()), e), 500)
     HUB.notify()
     return state_json()
+
+
+def answering_raise(page):
+    """The open raise that names `page` as its answer (`Answer with:`), as (task, entry), else None."""
+    for task in dfs_tree.task_ids():
+        for r in dfs_tree.open_raises(dfs_tree.load(task)):
+            if dfs_tree.answer_page(r["body"]) == page:
+                return task, r
+    return None
+
+
+def artefact_state(page, body=None):
+    """What `/artefact-state/<page>` says and does. Without a body it tells the page what the reader
+    left on it (`state`) and the raise it answers (`raise`, while that is open). A body `{state, answer}`
+    keeps the state, and records `answer` as the author's answer to the raise the page is named for."""
+    root = dfs_paths.artefacts()
+    if not re.fullmatch(ART_NAME, page) or not page.lower().endswith(".html") or not (root / page).is_file():
+        raise Refused("no such page", 404)
+    f = dfs_paths.artefact_state() / (page + ".json")
+    answered = None
+    if body is not None:
+        with LOCK:
+            if "state" in body:
+                f.parent.mkdir(parents=True, exist_ok=True)
+                tmp = f.with_suffix(".tmp")
+                tmp.write_text(json.dumps(body["state"]))
+                tmp.replace(f)
+            if "answer" in body:
+                text = body["answer"]
+                if not isinstance(text, str) or not text.strip():
+                    raise Refused("an answer is needed")
+                found = answering_raise(page)
+                if not found:
+                    raise Refused("no open raise names this page to answer with", 409)
+                task, r = found
+                dfs_tree.append_log(task, "answer", [r["ts"]], text.strip())
+                answered = dict(task=task, ts=r["ts"])
+        if answered:
+            HUB.notify()
+    found = answering_raise(page)
+    try:
+        saved = json.loads(f.read_text())
+    except (OSError, ValueError):
+        saved = None
+    return {"state": saved, "answered": answered,
+            "raise": dict(task=found[0], ts=found[1]["ts"]) if found else None}
 
 
 def act(name, body):
@@ -634,8 +684,31 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def json(self, status, obj):
-        self.send(status, json.dumps(obj, default=str))
+    def json(self, status, obj, extra=()):
+        self.send(status, json.dumps(obj, default=str), extra=extra)
+
+    def artefact_api(self, method, page):
+        """`/artefact-state/<page>`: the one thing a sandboxed page may reach. It answers anyone who
+        asks (`Access-Control-Allow-Origin: *`, since the page's origin is opaque) and reads a plain
+        text body, which needs no preflight; a write from another website is still refused."""
+        cors = [("Access-Control-Allow-Origin", "*")]
+        try:
+            body = None
+            if method != "GET":
+                if self.headers.get("Origin") not in (None, "", "null") and not self.same_origin():
+                    raise Refused("that request came from another site", 403)
+                n = int(self.headers.get("Content-Length") or 0)
+                if n > MAX_BODY:
+                    raise Refused("too large", 413)
+                try:
+                    body = json.loads(self.rfile.read(n) or b"{}")
+                except ValueError:
+                    raise Refused("that is not JSON")
+                if not isinstance(body, dict):
+                    raise Refused("that is not JSON")
+            return self.json(200, artefact_state(page, body), cors)
+        except Refused as e:
+            return self.json(e.status, dict(error=str(e)), cors)
 
     def artefact(self, name):
         """One file of `.dfs/artefacts`, by bare name: no path, no dotfile, a known type."""
@@ -698,6 +771,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if not self.host_ok():
                 raise Refused("this server answers to its own address only", 421)
+            if url.path.startswith("/artefact-state/"):
+                return self.artefact_api(method, url.path[len("/artefact-state/"):])
             if method == "GET":
                 return self.get(url.path)
             if not self.same_origin():

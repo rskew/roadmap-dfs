@@ -226,6 +226,69 @@ class Web(unittest.TestCase):
                     "/artefacts/.hidden.html", "/artefacts/0a1b2c.py", "/artefacts/sub/x.html", "/artefacts/"):
             self.assertEqual(self.call("GET", bad)[0], 404, bad)
 
+    def page_call(self, method, page, body=None, origin="null"):
+        """What a sandboxed page sends: a plain-text body (no preflight) and the origin `null`."""
+        headers = {"Origin": origin} if origin else {}
+        return self.call(method, "/artefact-state/" + page, None if body is None else json.dumps(body),
+                         ctype="text/plain", headers=headers)
+
+    def test_a_page_may_reach_only_its_own_state_and_is_served_with_the_right_to(self):
+        self.put_artefact()
+        csp = self.call("GET", "/artefacts/0a1b2c.html")[2].getheader("Content-Security-Policy")
+        self.assertIn("connect-src 'self'", csp)
+        status, data, r = self.page_call("GET", "0a1b2c.html")
+        self.assertEqual((status, data, r.getheader("Access-Control-Allow-Origin")),
+                         (200, {"state": None, "answered": None, "raise": None}, "*"))
+        status, data, r = self.page_call("POST", "0a1b2c.html", {"state": {"chosen": "b", "knob": 7}})
+        self.assertEqual((status, data["state"]), (200, {"chosen": "b", "knob": 7}))
+        self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["state"], {"chosen": "b", "knob": 7})
+        self.assertTrue((self.root / ".dfs" / "artefact-state" / "0a1b2c.html.json").is_file())
+        for bad in ("missing.html", "..%2fsecret.html", "0a1b2c.png", ".hidden.html", "sub/x.html", ""):
+            self.assertEqual(self.page_call("GET", bad)[0], 404, bad)
+            self.assertEqual(self.page_call("POST", bad, {"state": 1})[0], 404, bad)
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", {"state": 1}, origin="https://elsewhere.example")[0], 403)
+        self.assertEqual(self.call("POST", "/artefact-state/0a1b2c.html", "[1]", ctype="text/plain")[0], 400)
+        self.assertEqual(self.call("POST", "/artefact-state/0a1b2c.html", "{", ctype="text/plain")[0], 400)
+
+    def test_the_api_still_refuses_what_a_sandboxed_page_can_send(self):
+        self.put_artefact()
+        ts = dfs_tree.append_log("W1", "raise", (), "Which? Answer with: .dfs/artefacts/0a1b2c.html")
+        body = dict(task="W1", ts=ts, body="Forged.")
+        self.assertEqual(self.call("POST", "/api/answer", json.dumps(body), ctype="text/plain",
+                                   headers={"Origin": "null"})[0], 403)
+        self.assertEqual(self.call("POST", "/api/answer", body, headers={"Origin": "null"})[0], 403)
+        self.assertEqual([e for e in self.log() if e["kind"] == "answer"], [])
+
+    def test_the_page_a_raise_names_records_the_answer_and_no_other_page_can(self):
+        self.put_artefact()
+        self.put_artefact("other.html", "Another page")
+        ts = dfs_tree.append_log("W1", "raise", (), "Which design? Look at .dfs/artefacts/other.html, then\n"
+                                 "Answer with: .dfs/artefacts/0a1b2c.html\nI would pick A.")
+        self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["raise"], {"task": "W1", "ts": ts})
+        self.assertIsNone(self.page_call("GET", "other.html")[1]["raise"])
+        status, data, _ = self.page_call("POST", "other.html", {"answer": "From the wrong page."})
+        self.assertEqual((status, [e for e in self.log() if e["kind"] == "answer"]), (409, []))
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", {"answer": "  "})[0], 400)
+        status, data, _ = self.page_call("POST", "0a1b2c.html", {"state": {"pick": "A"}, "answer": "Design A, because it is smaller."})
+        self.assertEqual((status, data["answered"], data["raise"], data["state"]),
+                         (200, {"task": "W1", "ts": ts}, None, {"pick": "A"}))
+        answers = [e for e in self.log() if e["kind"] == "answer"]
+        self.assertEqual([(e["args"], e["body"].strip()) for e in answers], [([ts], "Design A, because it is smaller.")])
+        self.assertNotIn(ts, [r["ts"] for r in dfs_tree.open_raises(dfs_tree.load("W1"))])
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", {"answer": "Again."})[0], 409)
+
+    def test_a_raise_that_names_no_answering_page_is_answered_by_no_page(self):
+        self.put_artefact()
+        dfs_tree.append_log("W1", "raise", (), "Which design? See .dfs/artefacts/0a1b2c.html")
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", {"answer": "Mine."})[0], 409)
+        self.assertEqual([e for e in self.log() if e["kind"] == "answer"], [])
+
+    def test_a_raise_cannot_name_an_answering_page_that_does_not_exist(self):
+        with self.assertRaises(ValueError):
+            dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/nothing.html")
+        self.assertEqual(dfs_tree.answer_page("Answer with: gone.html"), "gone.html")
+        self.assertIsNone(dfs_tree.answer_page("Look at .dfs/artefacts/x.html. Answer with words."))
+
     def test_a_task_lists_only_the_artefacts_it_names(self):
         self.put_artefact()
         self.put_artefact("standing-map.html", "The standing map")

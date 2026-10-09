@@ -4,8 +4,8 @@
 <title>The assumption, in a sentence</title>
 <!--
   An assumption artefact: the page a node's Hypothesis names. Copy this file to
-  .dfs/artefacts/<uuid>.html, keep it SELF-CONTAINED (no CDN, no fetches: the web page
-  serves it sandboxed, with scripts allowed and the network off), and check it with
+  .dfs/artefacts/<uuid>.html, keep it SELF-CONTAINED (no CDN, and the one fetch below to
+  /artefact-state: the web page serves it sandboxed, scripts allowed, the network off), and check it with
       <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
   It must be INTERACTIVE: a control the reader changes (a button, input, select or
   details) and a handler on it (addEventListener or onclick), because check.py refuses a
@@ -28,6 +28,8 @@
   button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
   .result { border: 1.5px solid #333; border-radius: 6px; background: #fff;
             padding: 10px 14px; min-height: 3em; }
+  #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #answerbox p { margin: 0 0 8px; }
   .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
   details { margin: 8px 0; }
   summary { cursor: pointer; padding: 8px 0; }
@@ -46,8 +48,10 @@
 </div>
 <div class="result" id="result" aria-live="polite"></div>
 
-<div class="choices">
+<div id="answerbox" hidden>
+  <p>This page is the answer to a raise. Choose above, then send it.</p>
   <button type="button" id="answer">Send as my answer</button>
+  <p id="answer-status" aria-live="polite"></p>
 </div>
 
 <h2>The input it depends on</h2>
@@ -70,6 +74,21 @@
   };
   var chosen = 'holds';
   var knob = document.getElementById('knob');
+
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it, and records the answer when the raise names this page ("Answer with: ..."). Opened
+  // from a file (the artefact check) there is no server, and none of this runs. Send text/plain
+  // (a JSON string, no header): that needs no preflight, which the server never grants.
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen, knob: knob.value }; }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
   function show() {
     document.getElementById('knob-out').textContent = knob.value;
     document.getElementById('result').textContent = cases[chosen](knob.value);
@@ -78,14 +97,22 @@
     });
   }
   document.querySelectorAll('[data-case]').forEach(function (b) {
-    b.addEventListener('click', function () { chosen = b.dataset.case; show(); });
+    b.addEventListener('click', function () { chosen = b.dataset.case; show(); keep(); });
   });
-  knob.addEventListener('input', show);
-  // When the raise this page belongs to is open in the web page's answer form, this fills the form with
-  // the result; the author reads and edits it there, and nothing is recorded until they press Record.
-  // Opened alone, there is no form to hear it and nothing happens.
-  document.getElementById('answer').addEventListener('click', function () {
-    parent.postMessage({ dfs: 'answer', body: document.getElementById('result').textContent }, '*');
+  knob.addEventListener('input', function () { show(); keep(); });
+  // The answer is the text the author reads on the page: make it say the decision.
+  var send = document.getElementById('answer');
+  send.addEventListener('click', function () {
+    var note = document.getElementById('answer-status');
+    send.disabled = true;
+    call('POST', { state: mine(), answer: document.getElementById('result').textContent }).then(function () {
+      note.textContent = 'Recorded as your answer.';
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }).catch(function (e) { send.disabled = false; note.textContent = 'Not recorded: ' + e.message; });
   });
   show();
+  call('GET').then(function (j) {
+    if (j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
+    document.getElementById('answerbox').hidden = !j.raise;
+  }).catch(function () {});
 </script>

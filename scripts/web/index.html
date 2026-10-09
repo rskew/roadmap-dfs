@@ -760,27 +760,24 @@ document.addEventListener("toggle", e => { if (e.target.id !== "walkbox") return
 document.addEventListener("change", e => { if (e.target.name === "verdict") verdictHelp(); });
 async function wrote(res, msg) { S.task = res.task; S.sig = ""; toast(msg); await render(true); }
 
-/* A page a raise names can hand its result to the form: `parent.postMessage({dfs: "answer", body})` from
-   the page's frame fills the textarea, and nothing is recorded until the author presses Record. The frame is
-   the server's sandboxed response, so the page cannot reach `/api`; only a message from that frame is read. */
-function answerPages(r) {
-  const have = new Map(((S.task && S.task.artefacts) || []).filter(a => a.kind === "page").map(a => [a.file, a]));
-  return [...new Set([...(r ? r.body : "").matchAll(new RegExp(ART_RE.source, "gi"))].map(m => m[3]))].filter(n => have.has(n)).map(n => have.get(n));
+/* The page a raise names to answer with (`Answer with: .dfs/artefacts/<name>.html`, one page even when the raise
+   shows several) opens beside the form. It is the server's sandboxed response and records the answer itself, to
+   `/artefact-state/<name>`; it tells this page with `{dfs: "answered"}` and only a message from that frame is read. */
+function answerPage(r) {
+  const m = /^[ \t]*Answer with:[ \t]*(?:\.dfs\/)?(?:artefacts\/)?([0-9A-Za-z][0-9A-Za-z._-]*\.html)/im.exec(r ? r.body : "");
+  return (m && ((S.task && S.task.artefacts) || []).find(a => a.file === m[1] && a.kind === "page")) || null;
 }
 addEventListener("message", ev => {
-  const frame = $("#answerpage"), box = $("#b");
-  if (!frame || !box || ev.source !== frame.contentWindow) return;
-  const d = ev.data;
-  if (!d || d.dfs !== "answer" || typeof d.body !== "string") return;
-  box.value = d.body.slice(0, 20000); $("#frompage").hidden = false; box.focus();
+  const frame = $("#answerpage");
+  if (!frame || ev.source !== frame.contentWindow || !ev.data || ev.data.dfs !== "answered") return;
+  toast("Answered by the page."); $("#form").close();
 });
 function answerForm(ts) {
   const r = S.task.rows.flatMap(x => x.kind === "raise" ? [x] : x.kind === "node" ? x.raises : []).find(x => x.ts === ts);
-  const page = answerPages(r)[0];
+  const page = answerPage(r);
   form(`<h3>Answer the raise</h3><div class="quote">${esc(r ? r.body : "")}</div>
     ${page ? `<iframe id="answerpage" class="answerpage" src="/artefacts/${esc(page.file)}" title="${esc(page.title)}" sandbox="allow-scripts"></iframe>` : ""}
-    <div><label for="b">Your answer, in your own words</label><textarea id="b" name="body" required></textarea>
-      <p id="frompage" class="muted" hidden>Sent by the page above. Read it, change it as you like, then record it.</p></div>${buttons("Record answer")}`,
+    <div><label for="b">${page ? "Or in your own words, instead of the page" : "Your answer, in your own words"}</label><textarea id="b" name="body" required></textarea></div>${buttons("Record answer")}`,
     async fd => wrote(await api("/api/answer", { task: S.task.id, ts, body: fd.get("body") }), "Answered."));
 }
 function correctForm(id) {

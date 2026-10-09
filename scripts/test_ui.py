@@ -10,6 +10,7 @@ NODE_PATH or /opt/node-tools/node_modules naming it. Skipped, saying so, when th
 
 Run:  python3 roadmap-dfs/scripts/test_ui.py
 """
+import json
 import os
 import re
 import shutil
@@ -34,7 +35,13 @@ ARTEFACT = """<!doctype html><html><head><meta charset="utf-8"><title>Where the 
 .catch(()=>document.getElementById('r').textContent='blocked')</script></body></html>"""
 
 CHOOSE = """<!doctype html><html><head><meta charset="utf-8"><title>Which disk</title></head>
-<body><button id="send" onclick="parent.postMessage({dfs:'answer',body:'Spinning disks. Test on one.'},'*')">Send as my answer</button></body></html>"""
+<body><button id="send">Send as my answer</button><p id="r"></p><script>
+document.getElementById('send').addEventListener('click', function () {
+  fetch('/artefact-state/c0ffee-choose.html', {method: 'POST', body: JSON.stringify(
+    {state: {picked: 'spinning'}, answer: 'Spinning disks. Test on one.'})})
+  .then(function (r) { document.getElementById('r').textContent = 'status ' + r.status;
+                       if (r.ok) parent.postMessage({dfs: 'answered'}, '*'); });
+});</script></body></html>"""
 
 
 def browser_env():
@@ -76,10 +83,9 @@ class Flows(unittest.TestCase):
         (self.root / ".dfs" / "title").write_text("Gateway\n")
         (self.root / ".dfs" / "artefacts").mkdir()
         (self.root / ".dfs" / "artefacts" / "7f3a9c1e-fsync.html").write_text(ARTEFACT)
-        (self.root / ".dfs" / "artefacts" / "c0ffee-choose.html").write_text(CHOOSE)
         w9 = items / "W9.md"
         w9.write_text(w9.read_text().replace("Strongest case against:",
-                                             "Picture: .dfs/artefacts/c0ffee-choose.html and .dfs/artefacts/7f3a9c1e-fsync.html. Strongest case against:", 1))
+                                             "Picture: .dfs/artefacts/7f3a9c1e-fsync.html. Strongest case against:", 1))
         subprocess.run("git init -q -b main && git add -A && git -c user.name=t -c user.email=t@t commit -qm x",
                        shell=True, cwd=self.root, check=True)
         import test_chat
@@ -135,10 +141,18 @@ class Flows(unittest.TestCase):
     def test_the_node_sheet_keeps_prev_and_next_where_they_are(self):
         self.flow("node_sheet")
 
-    def test_a_page_a_raise_names_hands_its_text_to_the_form_and_the_author_records_it(self):
+    def test_the_page_a_raise_names_records_the_answer_and_keeps_its_state(self):
+        (self.root / ".dfs" / "artefacts" / "c0ffee-choose.html").write_text(CHOOSE)
+        w9 = self.root / ".dfs" / "items" / "W9.md"
+        text = w9.read_text()
+        tail = "WAL checkpoints may stall readers anyway."
+        self.assertIn(tail, text)
+        w9.write_text(text.replace(tail, tail + "\n  Answer with: .dfs/artefacts/c0ffee-choose.html", 1))
         self.flow("answer_page")
         answers = [e for e in self.log("W9") if e["kind"] == "answer"]
-        self.assertEqual([e["body"].strip() for e in answers], ["Spinning disks. Test on one. (checked)"])
+        self.assertEqual([e["body"].strip() for e in answers], ["Spinning disks. Test on one."])
+        self.assertEqual(json.loads((self.root / ".dfs" / "artefact-state" / "c0ffee-choose.html.json").read_text()),
+                         {"picked": "spinning"})
 
     def test_answering_a_raise_writes_the_terminals_log_entry(self):
         self.flow("answer")
