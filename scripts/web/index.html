@@ -697,6 +697,12 @@ function drawAsm() {
       ${a.assumption ? `<span class="asm">${esc(a.assumption)}</span>` : ""}
       ${a.wrong ? `<span style="display:block;margin-top:6px"><span class="cap c-assumption">Wrong if</span> ${esc(a.wrong)}</span>` : ""}
       ${a.ask ? `<span class="c-attention" style="display:block;margin-top:6px"><span class="cap c-attention">Ask</span> ${esc(a.ask)}</span>` : ""}</span></button>`;
+    // the page a Hypothesis names, to operate from here; a link cannot sit inside the button, and the
+    // server serves an artefact by bare name whichever task is open
+    const pages = [...new Set([...`${a.assumption || ""} ${a.wrong || ""}`.matchAll(new RegExp(ART_RE.source, "gi"))]
+      .filter(m => /\.html$/i.test(m[3])).map(m => m[3]))];
+    if (pages.length) html += `<div style="margin:2px 0 8px 52px">${pages.map(n =>
+      `<a class="art" href="/artefacts/${esc(n)}" target="_blank" rel="noopener">Open the page</a>`).join(" ")}</div>`;
   }
   $("#view").innerHTML = html;
 }

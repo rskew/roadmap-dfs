@@ -83,7 +83,10 @@ Answer on a raise that names the page, the answer form opens with the page besid
 the form's text box. The author reads it, edits it and presses Record, and the log gets
 their words; the page cannot answer by itself, and the form hears only the frame it
 opened. The template's "Send as my answer" button does this with the result on the page.
-Opened alone, or from the terminal, there is no form and the message is ignored.
+Opened alone, or from the terminal, there is no form and the message is ignored. The
+form opens only the first page a raise names, and the form that confirms or refutes a
+node hosts none, so a page named only in a Hypothesis is operated from its link and its
+button does nothing there; the author states the verdict in their own words.
 
 ## Conventions the checker relies on
 

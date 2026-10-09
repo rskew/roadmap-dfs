@@ -39,7 +39,7 @@ session carries it out.
 Parent: W13.3
 Status: open | parked | confirmed | refuted
 Approach: <what the node does and how: the files, the change, the check>
-Hypothesis: <only if the work rests on an assumption: "<it>. Wrong if <what would show it wrong>.">
+Hypothesis: <only if the work rests on an assumption: "<it>. Wrong if <what would show it wrong>. .dfs/artefacts/<uuid>.html">
 Evidence:
 - for: <only with a Hypothesis: an observation that bears on it, and what it shows>
 - against: <the same>
