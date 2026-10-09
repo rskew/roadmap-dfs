@@ -230,6 +230,23 @@ class Sizing(unittest.TestCase):
             ui.follow_terminal_size()       # the poll tick, which a prompt or dialog does not stop
         self.assertEqual(sizes, [(30, 100), (24, 60)])
 
+    def test_the_poll_tick_follows_the_terminal_size_before_anything_else(self):
+        import tui
+        calls = []
+
+        class Stop(Exception):
+            pass
+
+        def stop():
+            raise Stop
+
+        ui = object.__new__(tui.UI)
+        ui.follow_terminal_size = lambda: calls.append("follow")
+        ui.agent_update_tick = stop         # the next thing `poll` does, so it ends here
+        with self.assertRaises(Stop):
+            ui.poll()
+        self.assertEqual(calls, ["follow"])
+
 
 class Leaving(unittest.TestCase):
     """Ending a chat is a SIGTERM, as ctrl-c is to a claude in a terminal, with a SIGKILL behind
