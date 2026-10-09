@@ -1,0 +1,4 @@
+# chain logs: one directory per dfs_run.sh run
+runs/
+# what a reader left on an artefact page: local, not the roadmap
+artefact-state/
