@@ -106,8 +106,8 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 .iconbtn { width: var(--hit); height: var(--hit); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
 .iconbtn:hover, .iconbtn:focus-visible { color: var(--ink); }
 .iconbtn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-/* the dfs mark, top left of the bar: the app icon's four shapes in ink, not a pressed thing */
-.mark { flex: none; width: 24px; height: 24px; fill: var(--ink); }
+/* the dfs mark, top left of the bar: the app icon's descent (a path, a node, a stopped branch, an end) in ink, not a pressed thing */
+.mark { flex: none; width: 24px; height: 24px; fill: var(--ink); color: var(--ink); }
 /* a link in prose: blue, underlined, as big as its words */
 a.art, .link { color: var(--settled); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: var(--rule); }
 

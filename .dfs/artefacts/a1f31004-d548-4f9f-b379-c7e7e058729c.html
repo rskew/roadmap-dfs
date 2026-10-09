@@ -1,0 +1,164 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>App icon concepts</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0; }
+  .lede { margin: 0 0 14px; color: #444; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 16px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .card { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 12px 14px; margin: 0 0 14px; }
+  .card.picked { border-width: 3px; padding: 10.5px 12.5px; border-color: #3f6aa1; }
+  .card p { margin: 4px 0 10px; color: #333; }
+  .card .why { color: #555; font-size: 15px; }
+  .stage { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; padding: 14px; border-radius: 6px;
+           background: #e9e7df; margin: 0 0 10px; }
+  .dark .stage { background: #14181c; }
+  .stage figure { margin: 0; text-align: center; font-size: 12px; color: #555; }
+  .dark .stage figure { color: #c6c9ce; }
+  .stage svg { display: block; margin: 0 auto 4px; }
+  .circle { border-radius: 50%; overflow: hidden; }
+  .squircle { border-radius: 22%; overflow: hidden; }
+  .raw { border-radius: 0; overflow: hidden; }
+  .say { min-height: 1.5em; margin: 6px 0 0; font-size: 15px; color: #333; }
+</style>
+
+<h1>App icon concepts</h1>
+<p class="lede">Five directions for the installed app's icon. Each is shown the way a phone may draw it
+  (circle, rounded square, as drawn) and small, since an icon has to read at 32px. Everything sits
+  inside the circle a launcher may cut, so one drawing serves the plain and the maskable icon.
+  Today's icon, first, for comparison.</p>
+
+<div class="row" id="bg" role="group" aria-label="Background behind the icons">
+  <button type="button" data-bg="light" aria-pressed="true">Light home screen</button>
+  <button type="button" data-bg="dark" aria-pressed="false">Dark home screen</button>
+</div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 512 x 512, paper ground, content inside a circle of radius ~200 from the centre -->
+    <symbol id="c0" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#efede7"/>
+      <rect x="72" y="72" width="132" height="30" fill="#16191c"/>
+      <circle cx="318" cy="174" r="102" fill="#b94c40"/>
+      <rect x="72" y="297" width="184" height="143" fill="#c99f30"/>
+      <rect x="276" y="358" width="164" height="31" fill="#3f6aa1"/>
+    </symbol>
+
+    <!-- A · Descent: a path steps down, one sibling dead-ends -->
+    <symbol id="a" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#efede7"/>
+      <path d="M150 140H256V236H362V336M256 236V318" fill="none" stroke="#16191c" stroke-width="26" stroke-linejoin="miter"/>
+      <rect x="128" y="118" width="44" height="44" fill="#16191c"/>
+      <circle cx="256" cy="236" r="30" fill="#c99f30"/>
+      <rect x="208" y="318" width="96" height="30" fill="#b94c40"/>
+      <circle cx="362" cy="352" r="40" fill="#3f6aa1"/>
+    </symbol>
+
+    <!-- B · The four shapes, joined into a tree -->
+    <symbol id="b" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#efede7"/>
+      <path d="M256 190V262M154 262H358M154 262V304M358 262V304" fill="none" stroke="#16191c" stroke-width="22"/>
+      <circle cx="256" cy="140" r="58" fill="#b94c40"/>
+      <rect x="104" y="300" width="100" height="76" fill="#c99f30"/>
+      <rect x="308" y="300" width="100" height="76" fill="#3f6aa1"/>
+      <rect x="226" y="364" width="60" height="22" fill="#16191c"/>
+    </symbol>
+
+    <!-- C · Outline: indented rows, a status colour on each -->
+    <symbol id="c" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#efede7"/>
+      <rect x="120" y="130" width="40" height="40" fill="#3f6aa1"/><rect x="176" y="136" width="206" height="28" fill="#16191c"/>
+      <rect x="156" y="202" width="40" height="40" fill="#3f6aa1"/><rect x="212" y="208" width="170" height="28" fill="#16191c"/>
+      <rect x="192" y="274" width="40" height="40" fill="#c99f30"/><rect x="248" y="280" width="134" height="28" fill="#16191c"/>
+      <rect x="156" y="346" width="40" height="40" fill="#b94c40"/><rect x="212" y="352" width="170" height="28" fill="#16191c"/>
+    </symbol>
+
+    <!-- D · A lowercase d: a bowl and a stem, with a node -->
+    <symbol id="d" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#efede7"/>
+      <circle cx="222" cy="302" r="76" fill="none" stroke="#16191c" stroke-width="44"/>
+      <rect x="296" y="108" width="46" height="288" fill="#16191c"/>
+      <rect x="296" y="108" width="46" height="46" fill="#b94c40"/>
+      <circle cx="222" cy="302" r="30" fill="#3f6aa1"/>
+    </symbol>
+
+    <!-- E · Fork: one way taken (blue), one cut (red) -->
+    <symbol id="e" viewBox="0 0 512 512">
+      <rect width="512" height="512" fill="#efede7"/>
+      <path d="M256 420V300" fill="none" stroke="#16191c" stroke-width="40"/>
+      <path d="M256 300L150 190" fill="none" stroke="#3f6aa1" stroke-width="40"/>
+      <path d="M256 300L362 190" fill="none" stroke="#b94c40" stroke-width="40"/>
+      <circle cx="146" cy="170" r="42" fill="#3f6aa1"/>
+      <rect x="320" y="170" width="96" height="30" fill="#b94c40" transform="rotate(44 368 185)"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="cards"></div>
+
+<p class="say" id="say" aria-live="polite"></p>
+
+<script>
+(function () {
+  var concepts = [
+    { id: 'c0', name: 'Today', note: 'Four loose shapes on paper. The page\'s own mark is the same four shapes in ink.', why: 'Not a concept to pick: here to compare against.' },
+    { id: 'a', name: 'A · Descent', note: 'A path that steps down and to the right. The amber dot is where the work is, the blue circle is the end of the way taken, the red bar is a branch that was tried and stopped.', why: 'Says "depth-first" and "refuted branch" at once. Busiest of the five; the red stub is thin at 32px.' },
+    { id: 'b', name: 'B · The four shapes, joined', note: 'Today\'s circle, two blocks and a bar, now a tree: one root, two leaves.', why: 'Keeps today\'s look and the page\'s mark. Least new; reads as a tree at every size.' },
+    { id: 'c', name: 'C · Outline', note: 'The roadmap as a list: indented rows with a status square each. Blue is settled, amber an assumption, red refuted.', why: 'Matches the page\'s status colours and what you see inside. Looks like a generic list icon at a glance.' },
+    { id: 'd', name: 'D · A "d"', note: 'A lowercase d from a ring and a stem, a blue node in the bowl, a red cap on the stem.', why: 'A letter is the easiest to find among many icons. Says "dfs" and nothing about trees.' },
+    { id: 'e', name: 'E · Fork', note: 'One stem splits: the way taken in blue, the way cut off in red.', why: 'Boldest at 32px; the one idea of the app (a branch refuted, a sibling taken). Least detail.' }
+  ];
+  var cards = document.getElementById('cards'), say = document.getElementById('say');
+  var picked = null, touched = false;
+  function icon(id, px, cls) {
+    return '<figure><svg class="' + cls + '" width="' + px + '" height="' + px + '" viewBox="0 0 512 512"><use href="#' + id + '"/></svg></figure>';
+  }
+  function draw() {
+    cards.innerHTML = '';
+    concepts.forEach(function (c) {
+      var d = document.createElement('div');
+      d.className = 'card' + (picked === c.id ? ' picked' : '');
+      var stage = '<div class="stage">'
+        + '<figure><svg class="circle" width="112" height="112" viewBox="0 0 512 512"><use href="#' + c.id + '"/></svg>circle</figure>'
+        + '<figure><svg class="squircle" width="112" height="112" viewBox="0 0 512 512"><use href="#' + c.id + '"/></svg>rounded</figure>'
+        + '<figure><svg class="raw" width="112" height="112" viewBox="0 0 512 512"><use href="#' + c.id + '"/></svg>as drawn</figure>'
+        + '<figure><svg class="squircle" width="48" height="48" viewBox="0 0 512 512"><use href="#' + c.id + '"/></svg>48</figure>'
+        + '<figure><svg class="squircle" width="32" height="32" viewBox="0 0 512 512"><use href="#' + c.id + '"/></svg>32</figure>'
+        + '</div>';
+      d.innerHTML = '<h2>' + c.name + '</h2><p>' + c.note + '</p>' + stage + '<p class="why">' + c.why + '</p>'
+        + (c.id === 'c0' ? '' : '<button type="button" data-pick="' + c.id + '" aria-pressed="' + (picked === c.id) + '">'
+        + (picked === c.id ? 'Picked' : 'Pick this direction') + '</button>');
+      cards.appendChild(d);
+    });
+  }
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  cards.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-pick]');
+    if (!b) return;
+    touched = true; picked = b.dataset.pick; draw();
+    say.textContent = 'Picked ' + concepts.filter(function (c) { return c.id === picked; })[0].name + '. Tell the session which, or it will read this page\'s saved choice.';
+    call('POST', { state: { picked: picked } }).catch(function () {});
+  });
+  document.getElementById('bg').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-bg]');
+    if (!b) return;
+    document.body.classList.toggle('dark', b.dataset.bg === 'dark');
+    document.querySelectorAll('[data-bg]').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+  });
+  draw();
+  call('GET').then(function (j) {
+    if (!touched && j.state && j.state.picked) { picked = j.state.picked; draw(); }
+  }).catch(function () {});
+})();
+</script>
