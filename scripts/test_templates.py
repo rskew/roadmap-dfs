@@ -29,6 +29,13 @@ class MobileFirst(unittest.TestCase):
         self.assertNotRegex(css, r"(?<!-)width: *\d{3,}px", "a box wider than a phone")
         self.assertNotIn("position: absolute", css)
 
+    def test_the_assumption_template_can_confirm_or_refute_its_node(self):
+        page = (TEMPLATES / "_TEMPLATE_ASSUMPTION.html").read_text()
+        self.assertIn("/artefact-state/", page)
+        for verdict in ("'confirmed'", "'refuted'"):
+            self.assertIn("rule(%s)" % verdict, page)
+        self.assertIn("j.node", page, "the buttons show only while a node waits on this page")
+
 
 if __name__ == "__main__":
     unittest.main()

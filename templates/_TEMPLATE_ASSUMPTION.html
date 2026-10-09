@@ -28,8 +28,8 @@
   button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
   .result { border: 1.5px solid #333; border-radius: 6px; background: #fff;
             padding: 10px 14px; min-height: 3em; }
-  #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
-  #answerbox p { margin: 0 0 8px; }
+  #rulebox, #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p, #answerbox p { margin: 0 0 8px; }
   .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
   details { margin: 8px 0; }
   summary { cursor: pointer; padding: 8px 0; }
@@ -48,8 +48,18 @@
 </div>
 <div class="result" id="result" aria-live="polite"></div>
 
+<div id="rulebox" hidden>
+  <p>Rule on this node: what the work takes to be true is settled by the choice above.</p>
+  <label for="note">Your note, sent with it (optional)</label>
+  <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
 <div id="answerbox" hidden>
-  <p>This page is the answer to a raise. Choose above, then send it.</p>
+  <p>This page is also the answer to a raise. Choose above, then send it.</p>
   <button type="button" id="answer">Send as my answer</button>
   <p id="answer-status" aria-live="polite"></p>
 </div>
@@ -76,7 +86,8 @@
   var knob = document.getElementById('knob');
 
   // The server this page came from keeps what the reader chose, so the page opens as they
-  // left it, and records the answer when the raise names this page ("Answer with: ..."). Opened
+  // left it, rules on the node whose Hypothesis names this page (verdict: confirmed or refuted), and
+  // records the answer when a raise names it ("Answer with: ..."). Opened
   // from a file (the artefact check) there is no server, and none of this runs. Send text/plain
   // (a JSON string, no header): that needs no preflight, which the server never grants.
   var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
@@ -100,6 +111,22 @@
     b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
   });
   knob.addEventListener('input', function () { touched = true; show(); keep(); });
+  // The node's Hypothesis names this page, so the buttons below rule on that node: the same
+  // refute/confirm the web page's form writes. Say the decision, then the author's note.
+  function rule(verdict) {
+    var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    var text = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: mine(), verdict: verdict, answer: text }).then(function () {
+      note.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      note.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
   // The answer is the text the author reads on the page: make it say the decision.
   var send = document.getElementById('answer');
   send.addEventListener('click', function () {
@@ -113,6 +140,7 @@
   show();
   call('GET').then(function (j) {
     if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
     document.getElementById('answerbox').hidden = !j.raise;
   }).catch(function () {});
 </script>
