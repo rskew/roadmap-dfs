@@ -256,7 +256,7 @@ const FLOWS = {
 
   // The chat's Top button goes to the top of the message being read, and on again to the one before.
   async chat_top(b) {
-    const { page, errors } = await open(b, { viewport: { width: 360, height: 360 }, hasTouch: true });
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
     const long = n => Array.from({ length: n }, (_, i) => `row ${i} of an answer`).join("\n");
     const state = { messages: [{ role: "you", text: "first" }, { role: "agent", text: long(60) }, { role: "you", text: "second" }, { role: "agent", text: long(60) }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
     await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
@@ -267,7 +267,7 @@ const FLOWS = {
     // where each message starts, and where the log is, in the log's own scroll coordinates
     const at = () => page.$eval("#chat-log", log => {
       const box = log.getBoundingClientRect().top, pad = parseFloat(getComputedStyle(log).paddingTop);
-      return { y: Math.round(log.scrollTop), tops: [...log.querySelectorAll(".msg")].map(m => Math.round(m.getBoundingClientRect().top - box + log.scrollTop - pad)) };
+      return { y: Math.round(log.scrollTop), tops: [...log.querySelectorAll(".msg:not(.wait)")].map(m => Math.round(m.getBoundingClientRect().top - box + log.scrollTop - pad)) };
     });
     let s = await at();
     assert(s.tops[3] > 200, "the last answer is far down the log");
@@ -287,6 +287,22 @@ const FLOWS = {
     state.busy_for = 2; await page.waitForFunction(() => /Thinking… 2s/.test(document.querySelector("#chat-log .wait").textContent));
     await settle();
     same((await at()).y, s.tops[1], "a redraw of the Thinking line leaves the reader where Top put them");
+    // short messages last: the reader's question under the Thinking line, then short answers that start below the top of
+    // the view, where the log cannot scroll to them. Each press of Top must still move up, to the nearest message above the view.
+    const toEnd = () => page.$eval("#chat-log", e => { e.scrollTo(0, e.scrollHeight); });
+    const nearest = ({ y, tops }) => Math.max(...tops.filter(v => v <= y - 4));
+    const press = async () => { const before = await at(); await page.click("[data-act=chattop]"); await settle(); return [(await at()).y, nearest(before)]; };
+    state.messages.push({ role: "you", text: "third" });
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg:not(.wait)").length === 5); await toEnd(); await settle();
+    let [y, want] = await press();
+    same(y, want, "at its end under a short question, Top goes to the nearest message above the view");
+    state.busy = false;
+    state.messages.push({ role: "agent", text: "short" }, { role: "you", text: "fourth" }, { role: "agent", text: "tiny" });
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg:not(.wait)").length === 8); await toEnd(); await settle();
+    const t = await at();
+    assert(t.tops[6] > t.y && t.tops[7] > t.y, "the last two messages both start below the top of the view");
+    for (let n = 0; n < 3; n++) { [y, want] = await press(); same(y, want, `press ${n + 1} after short messages, Top goes to the nearest message above the view`); }
+    assert(y < t.y - 100, "and has left the end");
     same(errors, [], "no page errors");
   },
 
