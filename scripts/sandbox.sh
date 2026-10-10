@@ -38,7 +38,9 @@
 # also needs podman-restart.service). Running it again replaces the daemon; `sandbox
 # stop` removes it for good, as does `docker stop` (a stopped container is not
 # restarted). Its output is `docker logs <name>`; nothing else of it is kept, as with
-# any mode, and there is no terminal, so the agent modes are not daemons.
+# any mode, and there is no terminal, so only `daemon` is detached: shell, the agent
+# modes, exec, run and app stay throwaway. The command is the main process, so
+# CONTAINER_START_APP's background app is not started.
 # The store paths it runs from (nix, the tool's commands) must survive garbage
 # collection, or the restart fails.
 #
@@ -266,8 +268,11 @@ stop_nix_proxy() {
   [[ -n "${NIX_PROXY_DIR}" ]] && rm -rf "${NIX_PROXY_DIR}"
 }
 
+# A restarted sidecar makes its socket over the old one's file, which `nix daemon`
+# unlinks first; start wipes the directory anyway, and stop removes it.
 stop_daemon() {
   "${CONTAINER_ENGINE}" rm -f "${CONTAINER_NAME}" "${NIX_PROXY_NAME}" >/dev/null 2>&1 || true
+  rm -rf "${CONTAINER_STATE_DIR}/nix-proxy"
 }
 
 run_in_container() {

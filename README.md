@@ -19,11 +19,14 @@ nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 detached, with the engine's `--restart unless-stopped`, so it comes back after a reboot. The nix sidecar gets the same
 policy. The engine must itself start at boot (`systemctl enable docker`; rootless podman needs
 `podman-restart.service`). The container mounts the host's `/nix/store` and runs the tool from a store path, so keep
-that path from garbage collection (a GC root, e.g. `nix profile install`) or the restart after a GC fails. Running it again replaces the daemon; `sandbox stop` removes it and its sidecar for good.
+that path from garbage collection (a GC root, e.g. `nix profile install`) or the restart after a GC fails. Running it
+again replaces the daemon; `sandbox stop` removes it and its sidecar for good. Only `daemon` itself is detached: the
+other modes (`shell`, `claude`, `exec`, `run`, `app`) stay throwaway, and `daemon` does not start the background app
+that `exec` does, since its command is the container's main process.
 
 ```sh
 nix run github:rskew/roadmap-dfs#sandbox daemon dfs-web   # the web page, up from now on
-docker logs <repo>-dev                                    # its output
+docker logs <repo>-dev                                    # its output (podman logs with CONTAINER_ENGINE=podman)
 nix run github:rskew/roadmap-dfs#sandbox stop
 ```
 

@@ -84,7 +84,7 @@ class Daemon(unittest.TestCase):
         self.assertIn(f"-v {state}:/proxy", sidecar)
         self.assertIn(f"-v {state}:/nix/var/nix/daemon-socket ", main + " ")
         # No trap removing the sidecar when the script exits.
-        self.assertFalse([c for c in calls if c.startswith("rm") and c.endswith("-nix") and calls.index(c) > calls.index(main)], calls)
+        self.assertEqual(calls[-1], main, calls)  # nothing removes the sidecar after the main run
 
     def test_daemon_replaces_an_earlier_one(self):
         p, calls = self.sandbox("daemon", config="CONTAINER_APP_CMD=true\n")
@@ -122,9 +122,11 @@ class Daemon(unittest.TestCase):
         self.assertEqual(calls[-1], "rm -f app-dev app-dev-nix")
 
     def test_stop_removes_both_containers(self):
+        (self.repo / ".container-state" / "nix-proxy").mkdir(parents=True)
         p, calls = self.sandbox("stop")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(calls, ["rm -f app-dev app-dev-nix"])
+        self.assertFalse((self.repo / ".container-state" / "nix-proxy").exists())
 
     def test_the_ordinary_modes_stay_throwaway(self):
         p, calls = self.sandbox("run", "true")
