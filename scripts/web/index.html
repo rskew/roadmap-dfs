@@ -1089,7 +1089,8 @@ function chatTop() {
   let i = atEnd ? tops.length - 1 : tops.reduce((n, t, j) => t <= at ? j : n, 0);
   // a last message shorter than the view starts below the scroll position (the log cannot scroll to it): go on to the one before
   while (tops[i] > at - 4 && i > 0) i--;
-  log.scrollTo({ top: tops[i], behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  // none starts above the view (a note sits above the first message and the reader is in it): the top of the log
+  log.scrollTo({ top: tops[i] > at - 4 ? 0 : tops[i], behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 }
 async function chatLoad() {
   if (!CHAT.scope) return;

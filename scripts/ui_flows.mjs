@@ -309,6 +309,15 @@ const FLOWS = {
     state.messages = [{ role: "you", text: "hi" }];
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg:not(.wait)").length === 1); await settle();
     same((await press())[0], 0, "in a chat that fits the view, Top leaves it where it is");
+    same(await page.$$eval("#chat .chat-nav button", e => e.map(x => x.dataset.act)), ["chattop", "chatclear", "chatlist", "chatclose"], "the chat's bar: Up, New, Chats, Back");
+    // a note above the first message: a reader scrolled into it is taken up to the top of the log, never down to the first message
+    state.note = "A note that is long enough to run over a good many lines of the narrow view, so that the log can be scrolled while only it is in sight. ".repeat(6);
+    state.messages = [{ role: "you", text: "first" }, { role: "agent", text: long(60) }];
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg:not(.wait)").length === 2 && /A note/.test(document.querySelector("#chat-log").textContent)); await settle();
+    const first = (await at()).tops[0];
+    assert(first > 60, `the first message starts below a note (${first})`);
+    await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y); }, Math.round(first / 2)); await settle();
+    same((await press())[0], 0, "inside a note above the first message, Top goes up to the top of the log");
     same(errors, [], "no page errors");
   },
 
@@ -674,7 +683,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => /first about W9/.test(document.querySelector("#chat-log")?.textContent || ""), null, { timeout: 5000 });
     assert(!(await page.$eval("#chat-send", e => e.disabled)), "and can be gone on with");
     const nav = await page.$$eval("#chat .chat-nav button", e => e.map(x => x.dataset.act));
-    same(nav, ["chatclear", "chatlist", "chatclose"], "the chat's bar: New, Chats, Back at the right");
+    same(nav, ["chattop", "chatclear", "chatlist", "chatclose"], "the chat's bar: Up, New, Chats, Back at the right");
     await page.click("#chat [data-act=chatclose]");
     same(errors, [], "no page errors");
   },
