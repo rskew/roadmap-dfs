@@ -692,7 +692,7 @@ KEYS = [
     ("items", "D", ord("D"), "delete", "delete this item; its files are kept under .dfs/archive/deleted (asks first)"),
     ("items", "r", ord("r"), "review", "review: open the tree to answer and correct"),
     ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (run.sh --review)"),
-    ("items", "c", ord("c"), "chat", "chat about this item (run.sh --chat)"),
+    ("items", "c", ord("c"), "chat", "chat about this item (run.sh --chat); ctrl-] comes back and leaves it running"),
     ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (run.sh --chat project)"),
     ("items", "o", ord("o"), "open", "open a new task (run.sh --open)"),
     ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
@@ -4134,7 +4134,6 @@ class UI(WalkMixin):
         self.event("run", "chat %s" % scope)
         curses.def_prog_mode()
         curses.endwin()
-        print("\n[chat %s: ctrl-] returns to the roadmap and leaves it running]\n" % scope, flush=True)
         try:
             kept = relay.attach()
         except KeyboardInterrupt:
