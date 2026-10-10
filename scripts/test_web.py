@@ -302,7 +302,7 @@ class Web(unittest.TestCase):
         self.put_artefact()
         self.put_artefact("other.html", "Another page")
         self.assume()
-        self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["node"], {"task": "W1", "id": "W1.3"})
+        self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["node"], {"task": "W1", "id": "W1.3", "parks": []})
         rows = {r["key"]: r for r in self.task()["rows"]}
         self.assertEqual((rows["W1.3"]["page"], rows["W1.1"]["page"]), ("0a1b2c.html", ""),
                          "the row tells the page which artefact is its node's")
@@ -897,6 +897,39 @@ class Web(unittest.TestCase):
         self.assertTrue(row["overruled"])
         self.assertTrue(row["skim"].startswith("overruled by you:"))
         self.assertFalse(row["assumes"], "a refuted node's assumption is moot")
+
+    def add_worked_sibling(self):
+        f = self.root / ".dfs" / "items" / "W1.md"
+        f.write_text(f.read_text().replace(
+            "## Log", "### W1.4 · Another way\nParent: W1.2\nStatus: confirmed\n"
+            "Determination: Done.\n\n### W1.5 · Idle\nParent: W1.2\nStatus: open\n\n## Log"))
+
+    def test_confirming_over_siblings_with_work_needs_the_author_to_agree_to_park_them(self):
+        self.add_worked_sibling()
+        rows = {r["key"]: r for r in self.task()["rows"] if r["kind"] == "node"}
+        self.assertEqual((rows["W1.3"]["parks"], rows["W1.4"]["parks"]), (["W1.4"], []))
+        ask = dict(task="W1", node="W1.3", verdict="confirmed", body="Fine as it is.")
+        status, data, _ = self.call("POST", "/api/correct", ask)
+        self.assertEqual(status, 409)
+        self.assertIn("W1.4", data["error"])
+        self.assertEqual(self.call("POST", "/api/correct", dict(ask, park="yes"))[0], 409)
+        self.assertEqual([e for e in self.log() if e["kind"] == "correct"], [])
+        self.assertEqual(self.call("POST", "/api/correct", dict(
+            task="W1", node="W1.3", verdict="refuted", body="No."))[0], 200, "a refutation prunes no sibling")
+        self.assertEqual(self.call("POST", "/api/correct", dict(ask, park=True))[0], 200)
+        e = self.log()[-1]
+        self.assertEqual((e["kind"], e["args"]), ("correct", ["W1.3", "confirmed"]))
+
+    def test_a_page_confirming_over_siblings_with_work_needs_park_too(self):
+        self.put_artefact()
+        self.assume()
+        self.add_worked_sibling()
+        self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["node"],
+                         {"task": "W1", "id": "W1.3", "parks": ["W1.4"]})
+        body = {"verdict": "confirmed", "answer": "Fine."}
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", body)[0], 409)
+        self.assertEqual([e for e in self.log() if e["kind"] == "correct"], [])
+        self.assertEqual(self.page_call("POST", "0a1b2c.html", dict(body, park=True))[0], 200)
 
     def test_a_node_the_author_confirmed_is_not_ticked(self):
         """Confirming an open node is the author's word; nothing may be built, so no tick."""

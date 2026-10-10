@@ -311,6 +311,7 @@ def task_json(task):
                 raises=[raise_json(r) for r in row["raises"]],
                 raises_below=row["raises_below"],
                 assumes=row["assumes"], ask=row["asks"],
+                parks=dfs_tree.actioned_siblings(t, nd["id"]),
                 page=next(iter(dfs_tree.ARTEFACT_REF.findall(f.get("Hypothesis") or "")), ""),
                 answered=bool(story["answered"]), overruled=bool(story["overruled"]),
                 card=plain(card[1:])))      # [1:]: the heading is the row
@@ -545,13 +546,19 @@ def answering_raise(page):
     return None
 
 
-def record_correction(task, nid, verdict, why):
-    """The author's ruling on a node, as the web form and an assumption's page both give it."""
+def record_correction(task, nid, verdict, why, park=False):
+    """The author's ruling on a node, as the web form and an assumption's page both give it.
+    Confirming prunes the later siblings; those that hold work are pruned only once the author
+    has agreed to park them (`park`)."""
     t = dfs_tree.load(task)
     if nid not in dfs_tree.by_id(t) or verdict not in ("confirmed", "refuted"):
         raise Refused("a node, and confirmed or refuted, are needed")
     if not isinstance(why, str) or not why.strip():
         raise Refused("a directive is needed")
+    parks = dfs_tree.actioned_siblings(t, nid, verdict)
+    if parks and park is not True:
+        raise Refused("confirming %s prunes %s, which hold work: agree to park them first"
+                      % (nid, ", ".join(parks)), 409)
     dfs_tree.append_log(task, "correct", [nid, verdict], why.strip())
 
 
@@ -594,7 +601,7 @@ def artefact_state(page, body=None):
                 dfs_tree.append_log(task, "answer", [r["ts"]], text.strip())
                 answered = dict(task=task, ts=r["ts"])
             if ruling:
-                record_correction(*ruling, body["verdict"], body["answer"])
+                record_correction(*ruling, body["verdict"], body["answer"], body.get("park"))
                 answered = dict(task=ruling[0], node=ruling[1], verdict=body["verdict"])
         if answered:
             HUB.notify()
@@ -606,7 +613,8 @@ def artefact_state(page, body=None):
     node = dfs_tree.deciding_node(page)
     return {"state": saved, "answered": answered,
             "raise": dict(task=found[0], ts=found[1]["ts"]) if found else None,
-            "node": dict(task=node[0], id=node[1]) if node else None}
+            "node": dict(task=node[0], id=node[1],
+                         parks=dfs_tree.actioned_siblings(dfs_tree.load(node[0]), node[1])) if node else None}
 
 
 def act(name, body):
@@ -623,7 +631,8 @@ def act(name, body):
             dfs_tree.append_log(task, "answer", [ts], need(body, "body", "an answer"))
         elif name == "correct":
             nid = need(body, "node", "the node")
-            record_correction(task, nid, body.get("verdict"), need(body, "body", "a directive"))
+            record_correction(task, nid, body.get("verdict"), need(body, "body", "a directive"),
+                              body.get("park"))
         elif name == "accept":
             if not (dfs_tree.status_of(t)[0] == "done" and not dfs_tree.accepted(t)):
                 raise Refused("%s is not a finished tree waiting to be accepted" % task, 409)
