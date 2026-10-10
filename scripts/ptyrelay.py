@@ -249,17 +249,22 @@ class Relay:
     def attach(self):
         """Wire the real terminal to it until it ends or ctrl-] is pressed. Returns True if it
         was detached (still running), False if it ended."""
+        if not self.live:                       # it ended before anyone looked: `fit` has no pty to size
+            return False
         stdin, stdout = sys.stdin.fileno(), sys.stdout.fileno()
         saved = _try(termios.tcgetattr, stdin)
         if saved is not None:
             _try(tty.setraw, stdin)
 
         def fit(redraw=False):
+            fd = self.fd                        # `_pump` sets it to None when the agent ends, even mid-attach
+            if fd is None:
+                return
             rows, cols, x, y = struct.unpack("HHHH", _winsize(stdout))
             if redraw and cols > 1:             # a resize is what makes it draw itself again
-                _try(fcntl.ioctl, self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols - 1, x, y))
+                _try(fcntl.ioctl, fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols - 1, x, y))
                 time.sleep(0.05)
-            _try(fcntl.ioctl, self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, x, y))
+            _try(fcntl.ioctl, fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, x, y))
             _try(os.kill, self.pid, signal.SIGWINCH)
 
         try:

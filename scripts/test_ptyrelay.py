@@ -175,6 +175,12 @@ class Looking(unittest.TestCase):
         self.t.join(8)
         self.assertEqual(self.result, [False])
 
+    def test_attaching_to_a_chat_that_has_already_ended_returns_false(self):
+        gone = ptyrelay.Relay().start(["bash", "-c", "exit 127"])
+        self.addCleanup(gone.close)
+        self.assertTrue(until(lambda: gone.fd is None))
+        self.assertIs(gone.attach(), False)
+
 
 class Sizing(unittest.TestCase):
     """A chat wraps for the terminal it will be looked at in, not for a fixed 120 columns."""
