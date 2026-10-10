@@ -22,10 +22,11 @@ docker() {
   echo "${*//$'\n'/ }" >> "$ENGINE_LOG"
   [[ -z "${ENGINE_FAIL:-}" || "$*" != *"$ENGINE_FAIL"* ]] || return 1
   # The sidecar's nix daemon would make its socket in the directory mounted as /proxy.
-  if [[ "$*" =~ -v\ ([^ ]+):/proxy ]]; then
+  if [[ -z "${ENGINE_NO_SOCKET:-}" && "$*" =~ -v\ ([^ ]+):/proxy ]]; then
     python3 -c 'import socket,sys; socket.socket(socket.AF_UNIX).bind(sys.argv[1])' "${BASH_REMATCH[1]}/socket"
   fi
 }
+sleep() { :; }
 require_prereqs() { mkdir -p "${CONTAINER_STATE_DIR}/nix-cache"; }
 host_nix_bin_dir() { echo /host/nix/bin; }
 host_ca_bundle() { echo /etc/ca; }
@@ -45,13 +46,13 @@ class Daemon(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def sandbox(self, *args, config="", fail=""):
+    def sandbox(self, *args, config="", fail="", extra=None):
         (self.repo / ".container.env").write_text(config)
         self.log.write_text("")
         # The caller's own CONTAINER_* settings would win over the repo's file.
         env = {k: v for k, v in os.environ.items() if not k.startswith("CONTAINER_")}
         env.update(SANDBOX=str(HERE / "sandbox.sh"), ENGINE_LOG=str(self.log),
-                   CONTAINER_REPO=str(self.repo), CONTAINER_ENGINE="docker", ENGINE_FAIL=fail)
+                   CONTAINER_REPO=str(self.repo), CONTAINER_ENGINE="docker", ENGINE_FAIL=fail, **(extra or {}))
         p = subprocess.run(["bash", "-c", DRIVER, "sandbox", *args], env=env, text=True,
                            capture_output=True, stdin=subprocess.DEVNULL)
         return p, self.log.read_text().splitlines()
@@ -104,6 +105,20 @@ class Daemon(unittest.TestCase):
     def test_a_failed_start_removes_what_it_started(self):
         p, calls = self.sandbox("daemon", config="CONTAINER_APP_CMD=true\n", fail="--name app-dev ")
         self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(calls[-1], "rm -f app-dev app-dev-nix")
+
+    def test_a_sidecar_that_never_makes_its_socket_is_removed(self):
+        p, calls = self.sandbox("daemon", config="CONTAINER_APP_CMD=true\n", extra={"ENGINE_NO_SOCKET": "1"})
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("did not come up", p.stderr)
+        self.assertEqual(calls[-1], "rm -f app-dev app-dev-nix")
+
+    def test_a_bad_ollama_socket_removes_the_sidecar_already_started(self):
+        p, calls = self.sandbox("daemon", config="CONTAINER_APP_CMD=true\n",
+                                extra={"OLLAMA_SOCKET": str(self.tmp / "no-such.sock")})
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("is not a unix socket", p.stderr)
+        self.assertEqual(len([c for c in calls if c.startswith("run ")]), 1, calls)  # only the sidecar
         self.assertEqual(calls[-1], "rm -f app-dev app-dev-nix")
 
     def test_stop_removes_both_containers(self):

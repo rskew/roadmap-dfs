@@ -207,7 +207,7 @@ NIX_PROXY_DIR=""
 # socket it serves. Its own nix config is pinned empty: the host daemon trusts
 # the sidecar, so any setting it carried would reach the host with that trust.
 # A daemon's sidecar outlives this script and the next boot, so it gets a restart
-# policy, no EXIT trap, and a directory that is not wiped on reboot.
+# policy, no EXIT trap once it is running, and a directory that is not wiped on reboot.
 start_nix_proxy() {
   local nix_bin_dir
   local -a lifetime=(--rm)
@@ -218,6 +218,10 @@ start_nix_proxy() {
     rm -rf "${NIX_PROXY_DIR}"
     mkdir -p -m 700 "${NIX_PROXY_DIR}"
     lifetime=(--restart unless-stopped)
+    # Whatever fails from here until the daemon is running must not leave the sidecar
+    # behind: with its restart policy it would come back at every boot. run_in_container
+    # clears this once the main container is up.
+    trap stop_daemon EXIT
   else
     NIX_PROXY_DIR="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/${NIX_PROXY_NAME}.XXXXXX")"
     trap stop_nix_proxy EXIT
@@ -421,10 +425,8 @@ run_in_container() {
   )
 
   if [[ "${CONTAINER_DAEMON}" == "1" ]]; then
-    if ! "${CONTAINER_ENGINE}" "${docker_args[@]}" >/dev/null; then
-      stop_daemon
-      exit 1
-    fi
+    "${CONTAINER_ENGINE}" "${docker_args[@]}" >/dev/null
+    trap - EXIT
     echo "[container] ${CONTAINER_NAME} is running detached and restarts on boot; logs: ${CONTAINER_ENGINE} logs ${CONTAINER_NAME}; remove: sandbox stop" >&2
     return
   fi
