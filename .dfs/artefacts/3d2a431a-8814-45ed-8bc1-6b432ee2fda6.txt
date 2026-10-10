@@ -1,0 +1,204 @@
+W48.10 · a real claude (2.1.289, /nix/store/3hm7i7932rk5mavvqmnzpv9x8q0nmg2a-claude-code-2.1.289/bin/claude) driven through Relay.start / Relay.attach in a tmux 3.7c pane
+Setup: HOME=/tmp/w48obs/home (a scratch dir; .claude.json has hasCompletedOnboarding, an approved fake ANTHROPIC_API_KEY, the trust dialog accepted for the cwd, bypassPermissionsModeAccepted; settings.json skipDangerousModePermissionPrompt), so claude reaches its chat screen without a login (an API call fails with 'Invalid API key', which the chat shows). /tmp is noexec here, so the scratch copy of the repo that tui.py was run in had walk.py's runner argv prefixed with 'bash'.
+A resumed conversation (a hand-made transcript in HOME/.claude/projects) gives long wrapped paragraphs, bullets and a code block.
+
+RESULTS (visible screen compared with claude run directly in the same pane, the old 'c'):
+ * relay vs direct, 24x80 pane, 6 claude versions 2.1.238 2.1.257 2.1.270 2.1.283 2.1.289 2.1.293, started at 40x120 (the old fixed default), clear on: the visible screen is the same at every step (initial, after widening to 104x30, after narrowing to 60x20, each settled 3 s). Scrollback differs: direct hist=0 (alt screen), relay hist~133 (claude's frames pile up).
+ * 2.1.289, relay, start at 40x120 / at the terminal's 24x80, attach's clear on / off: the four visible screens equal each other and the direct run (only claude's random 'Worked/Brewed for 0s' verb differs); scrollback equal in all four. So the clear changes nothing; so does the start width.
+ * env COLUMNS=120 LINES=40 on the claude: no change. A terminal wider (140x40 through tui.py) than 120: wraps at the terminal's width, before (18c7bfe^) and after W48.1 alike.
+ * the actual tui.py, a chat started in the background (W48_BG), then 'c': visible screen right with 18c7bfe^ code (fixed 40x120, no follow), with HEAD (clear), and with the clear reverted; fullscreen and inline claude.
+
+BYTES (claude writes, 2.1.289, from the relay's tail, split at the moment of attach):
+ * fullscreen (default): PRE (background) = ESC[?1049h ESC[2J ESC[H then absolute/relative-down frames ('ESC[H', CR, ESC[nB, text), mouse modes ?1000h ?1002h ?1003h ?1006h, ?2004h, ?1004h, ?2031h, DA/kitty/XTVERSION queries. None of it reaches the real terminal (the pump forwards only while attached).
+   On a resize: ESC[?1000h.. ESC[?25l ESC[2J ESC[H then the whole frame, ending ESC[24;1H ESC[22;3H ESC[?25h. 0 relative cursor-up for the redraw. attach's cols-1 then cols = two complete frames (79 and 80 wide).
+ * inline (CLAUDE_CODE_NO_FLICKER=0): no ?1049h; PRE is plain text with LF; on a resize: ESC[?25l ESC[2D ESC[3B ESC[H, then 24 x (ESC[2K ESC[1B) = erase the screen's rows downward from home, ESC[H, and the whole transcript again with LFs (59 LF, so it scrolls). 4 ESC[nA in all, none used to erase.
+ * SIGWINCH at an unchanged size: 0 bytes (no redraw). A size change: one ESC[2J ESC[H and a full frame. So the redraw on attach needs a size change, which is what fit(redraw=True)'s cols-1 then cols is for.
+
+TERMINAL STATE: through the relay the real terminal never gets ?1049h/?2004h/?1004h; after ctrl-] it is left with claude's mouse modes (tmux: mouse_all_flag=1 mouse_sgr_flag=1), the tui uses no mouse. Direct run: alt screen, no scrollback.
+SCROLLBACK: with attach's cols-1 then cols, a 79-column frame is left above the 80-column one (tmux history_size 24-26 through tui.py, hist=0 direct), wrapped one column narrower than the terminal; in inline mode the transcript is printed at both widths.
+CRASH: tui.py 'c' on a chat whose agent died at once (run.sh not executable, rc=127): Relay.attach -> fit() -> fcntl.ioctl(None, ...) raises TypeError (_try catches OSError, ValueError, termios.error only), the screen ends with a traceback.
+
+
+=================== drive.py
+#!/usr/bin/env python3
+"""Run a real claude through Relay.start and Relay.attach in this terminal (a tmux pane).
+usage: drive.py NAME start=default|term clear=on|off bg=SECONDS [resize=pair|none]"""
+import os, sys, time, json
+sys.path.insert(0, "/workspace/roadmap-dfs/scripts")
+import ptyrelay
+name = sys.argv[1]; opts = dict(a.split("=") for a in sys.argv[2:])
+ptyrelay.TAIL = 10**8
+if opts.get("clear") == "off":
+    ptyrelay.CLEAR = b""
+CL = os.environ.get("CLAUDE_BIN", "/nix/store/3hm7i7932rk5mavvqmnzpv9x8q0nmg2a-claude-code-2.1.289/bin/claude")
+env = {"PATH": "/usr/bin:/bin", "HOME": "/tmp/w48obs/home", "TERM": "xterm-256color",
+       "ANTHROPIC_API_KEY": "sk-ant-xxxxxxxxxxabcdefghijklmnopqrst"}
+if opts.get("envsize"):
+    env["COLUMNS"], env["LINES"] = opts["envsize"].split("x")
+if opts.get("xenv"):
+    k, v = opts["xenv"].split(":"); env[k] = v
+prompt = ("Read .dfs/ROADMAP.md and discuss the roadmap tool with the author. Start by summarising "
+          "its current goal, open decisions, and the next question worth discussing.")
+argv = [CL, "--session-id", "11111111-2222-4333-8444-5555555555%02d" % (os.getpid() % 100),
+        "--dangerously-skip-permissions", prompt]
+if opts.get("resume"):
+    argv = [CL, "--resume", "aaaaaaaa-0000-4000-8000-000000000001", "--dangerously-skip-permissions"]
+size = (40, 120) if opts.get("start") == "default" else None
+r = ptyrelay.Relay().start(argv, env=env, cwd="/tmp/w48obs/home/work", size=size)
+time.sleep(float(opts.get("bg", 8)))
+if opts.get("resize") == "pair":        # a terminal resized while the chat ran in the background
+    pass
+# what the terminal shows when the screen hands it over: the shell's own text, then the cursor
+for i in range(6):
+    print("shell line %d" % i)
+print("$ roadmap-tui   (this row stands for the screen's last line)")
+sys.stdout.flush()
+mark = r.total_out
+open("/tmp/w48obs/out/%s.mark" % name, "w").write(str(mark))
+kept = r.attach()
+time.sleep(0.5)
+open("/tmp/w48obs/out/%s.bin" % name, "wb").write(bytes(r.tail))
+sys.stdout.write("\x1b[0m\r\nDRIVER DONE kept=%s\r\n" % kept)
+sys.stdout.flush()
+r.close(wait=True)
+time.sleep(600)
+
+=================== cmp.py
+#!/usr/bin/env python3
+"""cmp.py ROWS COLS SCENARIO [driveopts...]: the same actions on claude directly in a tmux pane and through Relay;
+prints, per step, whether the visible screens are equal and the diff when not."""
+import subprocess, sys, time, difflib, os
+T = ["/nix/store/499dwp4ljzzbx5i5fhlxm6lwzncgqz61-tmux-3.7c/bin/tmux", "-L", "w48", "-f", "/dev/null"]
+CL = os.environ.get("CLAUDE_BIN", "/nix/store/3hm7i7932rk5mavvqmnzpv9x8q0nmg2a-claude-code-2.1.289/bin/claude")
+def t(*a): return subprocess.run(T + list(a), capture_output=True, text=True).stdout
+rows, cols, scen = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+dopts = sys.argv[4:]
+LONG = "this is a long line typed into the chat to see how the input box wraps at the edge of the terminal and again after a resize " * 2
+SCEN = {
+  "resize": [("wait", 2), ("resize", cols + 24, rows + 6), ("wait", 3), ("resize", cols - 20, rows - 4), ("wait", 3)],
+  "type": [("wait", 2), ("type", LONG), ("wait", 3), ("resize", cols - 20, rows), ("wait", 3)],
+  "none": [("wait", 2)],
+}[scen]
+def run(kind):
+    t("kill-server"); time.sleep(1)
+    if kind == "direct":
+        xe = " ".join(o.split("=", 1)[1].replace(":", "=") for o in dopts if o.startswith("xenv="))
+        cmd = ("cd /tmp/w48obs/home/work && env -i PATH=/usr/bin:/bin HOME=/tmp/w48obs/home TERM=xterm-256color " + xe + " "
+               "ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxabcdefghijklmnopqrst %s --resume aaaaaaaa-0000-4000-8000-000000000001 "
+               "--dangerously-skip-permissions; sleep 600" % CL)
+        wait = 14
+    else:
+        cmd = "python3 /tmp/w48obs/drive.py cmp resume=1 bg=8 %s; sleep 600" % " ".join(dopts)
+        wait = 14
+    t("new-session", "-d", "-s", "o", "-x", str(cols), "-y", str(rows), cmd)
+    time.sleep(wait)
+    shots = [t("capture-pane", "-p", "-t", "o")]
+    for a in SCEN:
+        if a[0] == "wait": time.sleep(a[1])
+        elif a[0] == "resize": t("resize-window", "-t", "o", "-x", str(a[1]), "-y", str(a[2])); time.sleep(3)
+        elif a[0] == "type": t("send-keys", "-t", "o", "-l", a[1]); time.sleep(3)
+        shots.append(t("capture-pane", "-p", "-t", "o"))
+        info = t("display", "-p", "-t", "o", "#{pane_width}x#{pane_height} hist=#{history_size} alt=#{alternate_on}")
+    return shots, info
+d, di = run("direct"); r, ri = run("relay")
+print("direct:", di.strip(), "| relay:", ri.strip())
+for i, (a, b) in enumerate(zip(d, r)):
+    step = "initial" if i == 0 else str(SCEN[i - 1])[:40]
+    if a == b: print("step %d (%s): SAME" % (i, step)); continue
+    print("step %d (%s): DIFFERENT" % (i, step))
+    print("".join(difflib.unified_diff(a.splitlines(1), b.splitlines(1), "direct", "relay", n=1)))
+if os.environ.get("SHOW"):
+    for i, s in enumerate(r): print("---- relay step", i); print(s)
+
+=================== trace.py
+import subprocess, sys, time
+T = ["/nix/store/499dwp4ljzzbx5i5fhlxm6lwzncgqz61-tmux-3.7c/bin/tmux", "-L", "w48", "-f", "/dev/null"]
+def t(*a): return subprocess.run(T + list(a), capture_output=True, text=True).stdout
+rows, cols = int(sys.argv[1]), int(sys.argv[2]); dopts = sys.argv[3:]
+t("kill-server"); time.sleep(1)
+t("new-session", "-d", "-s", "o", "-x", str(cols), "-y", str(rows), "python3 /tmp/w48obs/drive.py trace resume=1 bg=6 %s; sleep 600" % " ".join(dopts))
+seen, t0, last = [], time.time(), None
+while time.time() - t0 < 13:
+    s = t("capture-pane", "-p", "-t", "o")
+    if s != last:
+        seen.append((time.time() - t0, s)); last = s
+    time.sleep(0.02)
+for ts, s in seen:
+    if "shell line" in s or ts > 5.5:
+        print("==== t=%.2f" % ts); print(s.rstrip())
+print(len(seen), "distinct screens")
+
+=================== winch.py
+import os, sys, time, signal, fcntl, termios, struct
+sys.path.insert(0, "/workspace/roadmap-dfs/scripts")
+import ptyrelay
+ptyrelay.TAIL = 10**8
+CL = "/nix/store/3hm7i7932rk5mavvqmnzpv9x8q0nmg2a-claude-code-2.1.289/bin/claude"
+env = {"PATH": "/usr/bin:/bin", "HOME": "/tmp/w48obs/home", "TERM": "xterm-256color", "ANTHROPIC_API_KEY": "sk-ant-xxxxxxxxxxabcdefghijklmnopqrst"}
+r = ptyrelay.Relay().start([CL, "--resume", "aaaaaaaa-0000-4000-8000-000000000001", "--dangerously-skip-permissions"], env=env, cwd="/tmp/w48obs/home/work", size=(40, 120))
+time.sleep(8)
+def count(label, fn):
+    n = r.total_out; fn(); time.sleep(1.5)
+    d = bytes(r.tail)[n:]
+    print("%-34s bytes=%5d 2J=%d H=%d" % (label, len(d), d.count(b"\x1b[2J"), d.count(b"\x1b[H")))
+count("SIGWINCH, same size", lambda: os.kill(r.pid, signal.SIGWINCH))
+count("resize to 24x80 (kernel SIGWINCH)", lambda: fcntl.ioctl(r.fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0)))
+count("SIGWINCH again, same size", lambda: os.kill(r.pid, signal.SIGWINCH))
+count("resize to 24x79", lambda: fcntl.ioctl(r.fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 79, 0, 0)))
+count("resize to 24x80", lambda: fcntl.ioctl(r.fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0)))
+r.close(wait=True)
+
+=================== variant.sh
+#!/bin/bash
+# variant.sh head|pre : put that ptyrelay.py and tui.py (patched to start W48_BG in the background) in the scratch project
+cd /workspace/roadmap-dfs
+if [ "$1" = pre ]; then REV=18c7bfe^; else REV=HEAD; fi
+for f in ptyrelay tui; do if [ "$1" = work ]; then cp /workspace/roadmap-dfs/scripts/$f.py /tmp/w48obs/proj/scripts/$f.py; else git show $REV:scripts/$f.py > /tmp/w48obs/proj/scripts/$f.py; fi; done
+python3 - <<'PY'
+p='/tmp/w48obs/proj/scripts/tui.py'; s=open(p).read()
+s=s.replace("    ui.web = start_web(ui)\n","    ui.web = start_web(ui)\n    if os.environ.get('W48_BG'):\n        ui.start_chat(os.environ['W48_BG'])\n",1)
+open(p,'w').write(s)
+PY
+
+=================== tuirun.sh
+#!/bin/bash
+# tuirun.sh NAME head|pre fullscreen|inline bg|fresh [ROWS COLS]
+NAME=$1; V=$2; MODE=$3; WHEN=$4; ROWS=${5:-24}; COLS=${6:-80}
+T="/nix/store/499dwp4ljzzbx5i5fhlxm6lwzncgqz61-tmux-3.7c/bin/tmux -L w48 -f /dev/null"
+CL=/nix/store/3hm7i7932rk5mavvqmnzpv9x8q0nmg2a-claude-code-2.1.289/bin/claude
+bash /tmp/w48obs/variant.sh $V
+XE=""; [ "$MODE" = inline ] && XE="CLAUDE_CODE_NO_FLICKER=0"
+BG=""; [ "$WHEN" = bg ] && BG="W48_BG=W1"
+rm -rf /tmp/w48obs/proj/.dfs/runs/chat
+cat > /tmp/w48obs/tui2.sh <<EOS
+cd /tmp/w48obs/proj && env -i PATH=$PATH HOME=/tmp/w48obs/home TERM=xterm-256color ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxabcdefghijklmnopqrst CLAUDE_CMD=$CL $XE $BG python3 scripts/tui.py; echo TUI-EXITED; sleep 600
+EOS
+$T kill-server 2>/dev/null; sleep 1
+$T new-session -d -s o -x $COLS -y $ROWS "bash /tmp/w48obs/tui2.sh"
+sleep 12; $T send-keys -t o c; sleep 8
+$T capture-pane -p -t o > /tmp/w48obs/out/$NAME.vis; $T capture-pane -p -t o -S - > /tmp/w48obs/out/$NAME.all
+$T display -p -t o 'hist=#{history_size} alt=#{alternate_on}' > /tmp/w48obs/out/$NAME.state
+$T send-keys -t o C-]; sleep 3; $T capture-pane -p -t o > /tmp/w48obs/out/$NAME.after
+cat /tmp/w48obs/out/$NAME.state
+
+=================== run1.sh
+#!/bin/bash
+# run1.sh NAME ROWS COLS drive-opts...   one tmux pane of ROWSxCOLS; waits for attach, snapshots, detaches
+NAME=$1; ROWS=$2; COLS=$3; shift 3
+T="/nix/store/499dwp4ljzzbx5i5fhlxm6lwzncgqz61-tmux-3.7c/bin/tmux -L w48 -f /dev/null"
+$T kill-server 2>/dev/null; sleep 1
+$T new-session -d -s o -x $COLS -y $ROWS "python3 /tmp/w48obs/drive.py $NAME $* ; sleep 600"
+
+=================== exp.sh
+#!/bin/bash
+# exp.sh NAME ROWS COLS drive-opts... : run, wait for attach to settle, save pane dumps in out/NAME.*
+T="/nix/store/499dwp4ljzzbx5i5fhlxm6lwzncgqz61-tmux-3.7c/bin/tmux -L w48 -f /dev/null"
+NAME=$1; ROWS=$2; COLS=$3; shift 3
+bash /tmp/w48obs/run1.sh $NAME $ROWS $COLS "$@"
+sleep 14
+$T capture-pane -p -t o > /tmp/w48obs/out/$NAME.vis
+$T capture-pane -p -t o -S - > /tmp/w48obs/out/$NAME.all
+$T display -p -t o 'hist=#{history_size} cursor=#{cursor_x},#{cursor_y} alt=#{alternate_on} mouse=#{mouse_any_flag} bpaste=#{pane_in_mode}' > /tmp/w48obs/out/$NAME.state
+$T send-keys -t o C-]; sleep 2
+$T capture-pane -p -t o > /tmp/w48obs/out/$NAME.vis2
+cat /tmp/w48obs/out/$NAME.state

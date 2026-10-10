@@ -23,7 +23,6 @@ import tty
 import chatlog
 
 DETACH = b"\x1d"            # ctrl-]
-CLEAR = b"\x1b[2J\x1b[H"    # blank screen, cursor home: what a chat is attached to
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
 TAIL = 16384                # bytes of the agent's last output kept, for the log
@@ -268,9 +267,6 @@ class Relay:
         except ValueError:                      # not the main thread: only a test is
             old = None
         self.out_fd = stdout
-        # the chat's redraw erases upward over as many lines as it last drew, so hand it a screen
-        # with nothing of ours above the cursor to be erased
-        _try(os.write, stdout, CLEAR)
         self.attached = True
         fit(redraw=True)
         detached = False

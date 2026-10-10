@@ -4,16 +4,11 @@ from the terminal (attach) and left running (detach), and a host that keeps many
 
 Run:  python3 roadmap-dfs/scripts/test_ptyrelay.py
 """
-import fcntl
 import os
-import pty
-import re
 import select
-import struct
 import shutil
 import sys
 import tempfile
-import termios
 import threading
 import time
 import types
@@ -270,169 +265,6 @@ class Sizing(unittest.TestCase):
         ui.follow_terminal_size = lambda: calls.append("follow")
         ui.loop()
         self.assertEqual(calls, ["follow"])
-
-
-class Screen:
-    """Just enough terminal to read what an agent left on it: autowrap, CR, LF, cursor moves, erases."""
-
-    def __init__(self, rows, cols):
-        self.rows, self.cols, self.r, self.c, self.pend = rows, cols, 0, 0, False
-        self.g = [[" "] * cols for _ in range(rows)]
-
-    def feed(self, data):
-        d, i = data.decode("utf8", "replace"), 0
-        while i < len(d):
-            ch = d[i]
-            m = re.compile(r"[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]").match(d, i + 2) if d[i:i + 2] == "\x1b[" else None
-            if m:
-                self.csi(m.group()[:-1], m.group()[-1])
-                i = m.end()
-                continue
-            self.pend = self.pend and ch >= " "
-            if ch == "\r":
-                self.c = 0
-            elif ch == "\n":
-                self.down()
-            elif ch >= " ":
-                if self.pend:
-                    self.c = 0
-                    self.down()
-                self.g[self.r][self.c] = ch
-                self.pend = self.c == self.cols - 1
-                self.c = min(self.c + 1, self.cols - 1)
-            i += 1
-
-    def down(self):
-        if self.r == self.rows - 1:
-            self.g = self.g[1:] + [[" "] * self.cols]
-        else:
-            self.r += 1
-
-    def csi(self, p, f):
-        n, self.pend = int(p) if p.isdigit() else 1, False
-        if f == "A":
-            self.r = max(0, self.r - n)
-        elif f == "K":
-            for x in range(self.cols) if p == "2" else range(self.c + 1) if p == "1" else range(self.c, self.cols):
-                self.g[self.r][x] = " "
-        elif f == "J" and p == "2":
-            self.g = [[" "] * self.cols for _ in range(self.rows)]
-        elif f == "H":
-            self.r = self.c = 0
-
-    def text(self):
-        return "\n".join(("".join(r)).rstrip() for r in self.g).rstrip()
-
-
-# an inline-redrawing agent: its live region is wrapped lines drawn at the width it believes it
-# has; on SIGWINCH it moves up over what it drew, erases it and draws it again
-REDRAWER = r"""
-import os, signal, time
-TEXT = ["w%d " % i + "x" * 90 for i in range(3)] + ["> prompt"]
-drawn = 0
-def draw(*a):
-    global drawn
-    w, out = os.get_terminal_size(0).columns, ""
-    if drawn:
-        out = "\r" + "\x1b[2K\x1b[1A" * (drawn - 1) + "\x1b[2K"
-    drawn = sum(max(1, -(-len(t) // w)) for t in TEXT)
-    os.write(1, (out + "\r\n".join(TEXT)).encode())
-signal.signal(signal.SIGWINCH, draw)
-draw()
-while True: time.sleep(0.1)
-"""
-
-
-class ScreenReader(unittest.TestCase):
-    """The reader the Redrawing tests look through knows only these sequences; one it does not know
-    would be dropped silently, so each it does know is shown to do what it says."""
-
-    def test_cursor_up_erase_line_erase_screen_and_home(self):
-        s = Screen(4, 10)
-        s.feed(b"aaaa\r\nbbbb\r\ncccc")
-        s.feed(b"\x1b[1A\x1b[2K")             # up one row, erase it whole
-        self.assertEqual(s.text(), "aaaa\n\ncccc")
-        s.feed(b"\x1b[Hzz\x1b[K")              # home, write, erase to the end of the line
-        self.assertEqual(s.text(), "zz\n\ncccc")
-        s.feed(b"\x1b[2J\x1b[Hx")
-        self.assertEqual(s.text(), "x")
-
-
-class Redrawing(unittest.TestCase):
-    """What a chat that redraws itself in place leaves on a terminal it is looked at in (24x80,
-    with five lines of the screen's own above), for the pty it was started at."""
-    ROWS, COLS, ABOVE = 24, 80, ["screen %d" % i for i in range(5)]
-
-    def terminal(self):
-        master, slave = pty.openpty()
-        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", self.ROWS, self.COLS, 0, 0))
-        screen = Screen(self.ROWS, self.COLS)
-        screen.feed(("\r\n".join(self.ABOVE) + "\r\n").encode())
-
-        def pump():
-            while True:
-                try:
-                    screen.feed(os.read(master, 65536))
-                except OSError:
-                    return
-        threading.Thread(target=pump, daemon=True).start()
-        self.addCleanup(lambda: [os.close(fd) for fd in (master, slave)])
-        return slave, screen
-
-    def looked_at(self, size):
-        """The screen after attaching, a moment later, to a chat started at `size` and drawn at it."""
-        slave, screen = self.terminal()
-        relay = ptyrelay.Relay().start([sys.executable, "-c", REDRAWER], size=size)
-        self.addCleanup(relay.close)
-        time.sleep(0.5)
-        keys_r, keys_w = os.pipe()
-        self.addCleanup(os.close, keys_w)
-        saved = sys.stdin, sys.stdout
-        sys.stdin, sys.stdout = os.fdopen(keys_r, "r"), os.fdopen(slave, "w", closefd=False)
-        try:
-            t = threading.Thread(target=relay.attach, daemon=True)
-            t.start()
-            time.sleep(0.8)
-            os.write(keys_w, ptyrelay.DETACH)
-            t.join(3)
-        finally:
-            mine, sys.stdin, sys.stdout = sys.stdin, saved[0], saved[1]
-            mine.close()
-        return screen.text()
-
-    def test_a_chat_started_at_120_columns_wraps_after_attach_as_one_started_at_the_terminals_width(self):
-        wide, fitted = self.looked_at((40, 120)), self.looked_at((self.ROWS, self.COLS))
-        frame = lambda text: text[text.index("w0"):]
-        self.assertEqual(frame(wide), frame(fitted))
-        self.assertEqual(len(frame(wide).splitlines()), 7)  # 3 lines of 94 columns wrap in two, then the prompt
-
-    def test_attaching_leaves_none_of_the_rows_above_overwritten_because_none_is_left(self):
-        # the redraw erases as many lines as it drew, which on a screen it never drew on would be
-        # the screen's own: attach clears first, so it erases only blank rows, at either width
-        for size in ((40, 120), (self.ROWS, self.COLS)):
-            text = self.looked_at(size)
-            self.assertEqual([l for l in text.splitlines() if l.startswith("screen")], [], size)
-            self.assertTrue(text.startswith("w0"), (size, text))
-
-    def test_attaching_to_a_plain_agent_clears_the_screen_and_shows_what_it_prints(self):
-        slave, screen = self.terminal()
-        relay = ptyrelay.Relay().start([sys.executable, "-c", "import time; print('hello'); time.sleep(30)"])
-        self.addCleanup(relay.close)
-        time.sleep(0.5)
-        keys_r, keys_w = os.pipe()
-        self.addCleanup(os.close, keys_w)
-        saved = sys.stdin, sys.stdout
-        sys.stdin, sys.stdout = os.fdopen(keys_r, "r"), os.fdopen(slave, "w", closefd=False)
-        try:
-            t = threading.Thread(target=relay.attach, daemon=True)
-            t.start()
-            time.sleep(0.5)
-            os.write(keys_w, ptyrelay.DETACH)
-            t.join(3)
-        finally:
-            mine, sys.stdin, sys.stdout = sys.stdin, saved[0], saved[1]
-            mine.close()
-        self.assertNotIn("screen 0", screen.text())
 
 
 class Leaving(unittest.TestCase):
