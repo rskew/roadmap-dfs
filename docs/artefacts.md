@@ -88,7 +88,11 @@ decide it, so it has to be **interactive**, a page they operate and not one they
 Start from `templates/_TEMPLATE_ASSUMPTION.html`. Give the reader the thing the
 assumption turns on to change (the options to switch between, the input to move, the
 evidence to open) and show what follows from each setting, ending on what would show the
-assumption wrong. The rest of this file (self-contained, checked, screenshot read once)
+assumption wrong. Every control earns its place: it changes something the reader can see on the page.
+The template has no slider, because a stock one is copied into every page and moves
+nothing. Add a slider (or any input) only when the assumption turns on a quantity and the
+result text or a drawing changes as it moves; otherwise the case buttons and `<details>`
+are the controls. The rest of this file (self-contained, checked, screenshot read once)
 applies unchanged. What `check.py` tests is that the page exists, has a control
 (`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`), a handler that answers it
 (`addEventListener`, or an `onclick`-style attribute), and can **rule on its node**: it

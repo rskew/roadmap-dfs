@@ -30,6 +30,10 @@ class MobileFirst(unittest.TestCase):
         self.assertNotRegex(css, r"(?<!-)width: *\d{3,}px", "a box wider than a phone")
         self.assertNotIn("position: absolute", css)
 
+    def test_the_assumption_template_has_no_slider_to_leave_pointless_in_a_copy(self):
+        page = (TEMPLATES / "_TEMPLATE_ASSUMPTION.html").read_text()
+        self.assertNotRegex(page, r"type=[\"']?range", "a stock slider is copied into every page")
+
     def test_the_assumption_template_can_confirm_or_refute_its_node(self):
         page = (TEMPLATES / "_TEMPLATE_ASSUMPTION.html").read_text()
         self.assertIn("/artefact-state/", page)

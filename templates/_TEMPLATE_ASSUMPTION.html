@@ -34,7 +34,6 @@
   details { margin: 8px 0; }
   summary { cursor: pointer; padding: 8px 0; }
   label { display: block; margin: 8px 0 2px; }
-  input[type="range"] { width: 100%; min-height: 44px; }
 </style>
 
 <h1>The assumption, in a sentence</h1>
@@ -64,10 +63,6 @@
   <p id="answer-status" aria-live="polite"></p>
 </div>
 
-<h2>The input it depends on</h2>
-<label for="knob">How many of them: <output id="knob-out">3</output></label>
-<input id="knob" type="range" min="1" max="10" value="3">
-
 <h2>What would show it wrong</h2>
 <p class="wrong">The observation that refutes it, stated the way the Hypothesis states it.</p>
 <details>
@@ -77,13 +72,14 @@
 
 <script>
   // Replace these with what each case means for THIS assumption; the parts of the
-  // page above stay as they are.
+  // page above stay as they are. Add a slider only when the assumption turns on a
+  // quantity and the result below (or a drawing) changes as it moves: a control that
+  // moves nothing the reader can see is noise (docs/artefacts.md).
   var cases = {
-    holds: function (n) { return 'With ' + n + ' of them, the work goes ahead as planned.'; },
-    fails: function (n) { return 'With ' + n + ' of them, the work takes the parked alternative.'; }
+    holds: 'The work goes ahead as planned.',
+    fails: 'The work takes the parked alternative.'
   };
   var chosen = 'holds', touched = false;
-  var knob = document.getElementById('knob');
 
   // The server this page came from keeps what the reader chose, so the page opens as they
   // left it, rules on the node whose Hypothesis names this page (verdict: confirmed or refuted), and
@@ -97,12 +93,11 @@
       return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
     });
   }
-  function mine() { return { chosen: chosen, knob: knob.value }; }
+  function mine() { return { chosen: chosen }; }
   var saving;
   function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
   function show() {
-    document.getElementById('knob-out').textContent = knob.value;
-    document.getElementById('result').textContent = cases[chosen](knob.value);
+    document.getElementById('result').textContent = cases[chosen];
     document.querySelectorAll('[data-case]').forEach(function (b) {
       b.setAttribute('aria-pressed', String(b.dataset.case === chosen));
     });
@@ -110,7 +105,6 @@
   document.querySelectorAll('[data-case]').forEach(function (b) {
     b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
   });
-  knob.addEventListener('input', function () { touched = true; show(); keep(); });
   // The node's Hypothesis names this page, so the buttons below rule on that node: the same
   // refute/confirm the web page's form writes. Say the decision, then the author's note.
   function rule(verdict) {
@@ -139,7 +133,7 @@
   });
   show();
   call('GET').then(function (j) {
-    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; show(); }
     document.getElementById('rulebox').hidden = !j.node;
     document.getElementById('answerbox').hidden = !j.raise;
   }).catch(function () {});
