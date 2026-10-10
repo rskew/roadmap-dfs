@@ -1059,6 +1059,7 @@ const chatOn = () => !!(S.walk && S.walk.enabled);
 const CHAT = { scope: null, busyT: null, last: "", fresh: false, follow: false };
 const chatKey = () => "chat:" + CHAT.scope;
 function chatDraw(st) {
+  // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { you: "You", agent: "Agent", error: "Not answered" };
   const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note]);
@@ -1118,7 +1119,7 @@ $("#chat-form").addEventListener("submit", async ev => {
   if (!message || !CHAT.scope) return;
   $("#chat-send").disabled = true; CHAT.follow = true;
   try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatLoad(); }
-  catch (e) { toast(e.message, true); $("#chat-send").disabled = false; }
+  catch (e) { toast(e.message, true); $("#chat-send").disabled = false; CHAT.follow = false; }
 });
 $("#chat-stop").addEventListener("click", async () => {
   if (!CHAT.scope) return;

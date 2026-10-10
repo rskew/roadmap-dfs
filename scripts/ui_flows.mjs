@@ -303,6 +303,10 @@ const FLOWS = {
     assert(t.tops[6] > t.y && t.tops[7] > t.y, "the last two messages both start below the top of the view");
     for (let n = 0; n < 3; n++) { [y, want] = await press(); same(y, want, `press ${n + 1} after short messages, Top goes to the nearest message above the view`); }
     assert(y < t.y - 100, "and has left the end");
+    // a chat that fits the view has nowhere to go: Top leaves it at the top and breaks nothing
+    state.messages = [{ role: "you", text: "hi" }];
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg:not(.wait)").length === 1); await settle();
+    same((await press())[0], 0, "in a chat that fits the view, Top leaves it where it is");
     same(errors, [], "no page errors");
   },
 
