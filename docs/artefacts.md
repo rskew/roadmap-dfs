@@ -57,7 +57,9 @@ box (`overflow-x: auto`) rather than widening the page, and says so in its capti
    360px touch screen (`--mobile-width N`, `0` to skip), and fails on overlapping boxes,
    text that does not fit, text below 12px, console errors, failed requests, a blank page,
    a missing `width=device-width` viewport meta, content wider than the phone, and
-   controls under 32px high — then writes `/tmp/artefact-check/<uuid>.png` and
+   controls under 32px high, and a slider that changes nothing on the page but its own
+   number (each range input is moved to its minimum and its maximum and the page compared
+   without the slider's own label and `<output>`) — then writes `/tmp/artefact-check/<uuid>.png` and
    `<uuid>-mobile.png`. Read the mobile image first once the checks are clean; it
    catches what no assertion does (a diagram that is legible and still says the
    wrong thing), and reading it costs context, so not on every iteration.

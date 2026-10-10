@@ -150,6 +150,40 @@ async function pass(w, h, mobile) {
   }, [minFont, mobile, MIN_TARGET]);
 
   for (const f of report.fails) fails.push(tag + f);
+  // A slider is there to change what the reader sees: a result sentence, a drawing, a size. One
+  // that moves only its own number is noise the author has to work out is noise, so each range
+  // input is dragged to its minimum and then its maximum and the page, less the slider's own label
+  // and <output>, is compared.
+  if (!mobile) {
+    const dead = await page.evaluate(() => {
+      const snap = (id) => {
+        const c = document.body.cloneNode(true);
+        c.querySelectorAll('output, script, style').forEach((e) => e.remove());
+        if (id) c.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((e) => e.remove());
+        const canvases = [...document.querySelectorAll('canvas')].map((e) => {
+          try { return e.toDataURL(); } catch (_) { return ''; }
+        });
+        return c.innerHTML + canvases.join('|');
+      };
+      const set = (el, v) => {
+        el.value = v;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const dead = [];
+      for (const el of document.querySelectorAll('input[type=range]')) {
+        const keep = el.value;
+        set(el, el.min || 0);
+        const lo = snap(el.id);
+        set(el, el.max || 100);
+        const hi = snap(el.id);
+        set(el, keep);
+        if (lo === hi) dead.push(el.id || el.getAttribute('aria-label') || 'a slider');
+      }
+      return dead;
+    });
+    for (const d of dead) fails.push(`${tag}slider: "${d}" changes nothing on the page but its own number; give it an effect the reader sees or take it out`);
+  }
   const meta = await page.evaluate(() => {
     const m = document.querySelector('meta[name=viewport]');
     return m ? m.getAttribute('content') || '' : null;
