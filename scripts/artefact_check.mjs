@@ -153,17 +153,31 @@ async function pass(w, h, mobile) {
   // A slider is there to change what the reader sees: a result sentence, a drawing, a size. One
   // that moves only its own number is noise the author has to work out is noise, so each range
   // input is dragged to its minimum and then its maximum and the page, less the slider's own label
-  // and <output>, is compared.
+  // and <output>, is compared. A redraw may wait for a frame or a timer, so the page settles
+  // before each snapshot; and the snapshot takes in the root element's attributes and each
+  // element's size and look, since a bar's width can ride on a CSS variable set on <html>.
   if (!mobile) {
-    const dead = await page.evaluate(() => {
+    const dead = await page.evaluate(async () => {
+      const settle = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 120))));
+      const attrs = (e) => [...e.attributes].map((a) => a.name + '=' + a.value).join(';');
       const snap = (id) => {
+        const own = new Set();
+        if (id) document.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((e) => own.add(e));
+        document.querySelectorAll('output').forEach((e) => own.add(e));
         const c = document.body.cloneNode(true);
         c.querySelectorAll('output, script, style').forEach((e) => e.remove());
         if (id) c.querySelectorAll(`label[for="${CSS.escape(id)}"]`).forEach((e) => e.remove());
+        const look = [];
+        for (const e of document.body.querySelectorAll('*')) {
+          if (own.has(e) || [...own].some((o) => e.contains(o))) continue;
+          const cs = getComputedStyle(e), r = e.getBoundingClientRect();
+          look.push([Math.round(r.width * 10), Math.round(r.height * 10), cs.color, cs.backgroundColor,
+            cs.opacity, cs.display, cs.visibility, cs.transform].join(','));
+        }
         const canvases = [...document.querySelectorAll('canvas')].map((e) => {
           try { return e.toDataURL(); } catch (_) { return ''; }
         });
-        return c.innerHTML + canvases.join('|');
+        return [attrs(document.documentElement), attrs(document.body), c.innerHTML, look.join('|'), canvases.join('|')].join('\n');
       };
       const set = (el, v) => {
         el.value = v;
@@ -174,10 +188,13 @@ async function pass(w, h, mobile) {
       for (const el of document.querySelectorAll('input[type=range]')) {
         const keep = el.value;
         set(el, el.min || 0);
+        await settle();
         const lo = snap(el.id);
         set(el, el.max || 100);
+        await settle();
         const hi = snap(el.id);
         set(el, keep);
+        await settle();
         if (lo === hi) dead.push(el.id || el.getAttribute('aria-label') || 'a slider');
       }
       return dead;

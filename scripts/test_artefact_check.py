@@ -41,6 +41,20 @@ class ASliderMustChangeWhatTheReaderSees(unittest.TestCase):
             "document.getElementById('r').textContent = 'With ' + k.value + ' the work goes ahead.';"))
         self.assertNotIn("slider:", out)
 
+    def test_a_slider_whose_redraw_waits_for_a_frame_or_timer_is_accepted(self):
+        out = self.run_check(PAGE % (
+            "With 3 the work goes ahead.",
+            "setTimeout(function () { requestAnimationFrame(function () { "
+            "document.getElementById('r').textContent = 'With ' + k.value + ' the work goes ahead.'; }); }, 30);"))
+        self.assertNotIn("slider:", out)
+
+    def test_a_slider_that_sets_a_variable_on_the_root_element_is_accepted(self):
+        page = (PAGE % ("The work goes ahead.",
+                        "document.documentElement.style.setProperty('--w', k.value * 10 + '%');")
+                ).replace("<p id=\"r\">", "<style>#bar{height:20px;background:#07c;width:var(--w,30%)}</style>"
+                          "<div id=\"bar\"></div><p id=\"r\">")
+        self.assertNotIn("slider:", self.run_check(page))
+
 
 if __name__ == "__main__":
     unittest.main()
