@@ -639,8 +639,8 @@ def _record_block(task, kind):
                 "    %s log %s backtrack <node> <<'EOF'" % (tree_cmd, task),
                 "    <what does not hold, what you checked, and what the redo must show>",
                 "    EOF", "",
-                "- **Where something is missing rather than wrong** (an alternative parked "
-                "or refuted without a fair try, a check nobody ran), add an open node to "
+                "- **Where something is missing rather than wrong** (a real alternative "
+                "parked or refuted without a fair try, a check nobody ran), add an open node to "
                 "the Tree, one past the highest id with this branch's tag:", ""] + node_shape
     else:
         out += ["- **A finding is a node only if it shows the Goal is not met**: "
@@ -730,8 +730,8 @@ def critic_brief(task: str) -> str:
            "hypothesis confirmed on reasoning alone, never put where it could fail. A "
            "hypothesis that restates the approach (\"the fix works\") instead of naming "
            "what it assumes has nothing that could fail.",
-           "3. **Was a branch pruned too early?** **Premature branch pruning**: an "
-           "alternative refuted or parked on thin or indirect evidence, or never tried "
+           "3. **Was a branch pruned too early?** **Premature branch pruning**: a "
+           "real alternative refuted or parked on thin or indirect evidence, or never tried "
            "at all, while the branch taken was given every chance.",
            "4. **Is agreement standing in for evidence?** **False convergence**: several "
            "sessions agreeing because they share "

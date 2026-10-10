@@ -35,10 +35,10 @@ pointers. On a branch other than main or master every id carries the branch's ta
 (`W13.4@fix-sync`, `dfs_paths.branch_tag`), and the branch writes only its own PART
 of the task, `.dfs/items/<task>/<tag>.md`: the default branch's part is
 `.dfs/items/<task>.md`. A task is the union of its parts, so two branches working one
-task merge with no conflict unless both edited the same node. Numbers count per tag. Siblings are ALTERNATIVE ways to reach their parent's end: the one being
-pursued is `open`, the others `parked` with the reason, and evidence against the
-pursued one is what says to jump to a parked sibling. A linear chain of steps is each
-node naming the one before it. Most nodes only say that something was done, and have no Hypothesis or Evidence. A
+task merge with no conflict unless both edited the same node. Numbers count per tag. Siblings are ALTERNATIVE ways to reach their parent's end, where there is a real
+fork: the one being pursued is `open`, the others `parked` with the reason, and
+evidence against the pursued one is what says to jump to a sibling. No alternative is
+made up to have one. A linear chain of steps is each node naming the one before it. Most nodes only say that something was done, and have no Hypothesis or Evidence. A
 Hypothesis is for the few where the session decided something it could not settle
 itself and the work now rests on it: the Evidence bears on it, the author reads those
 nodes before accepting the tree, and the screen marks them. A node's commit is found by

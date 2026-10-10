@@ -6,14 +6,15 @@ order tasks are worked in is `.dfs/order.md`.
 
 ## §0 How work is done
 
-Each task is a decision tree, and the tree is for planning: its branches are the
-different ways the goal could be reached. Lay the alternatives out as sibling nodes,
-pursue one and park the others with the reason. Each node's approach says what it
+Each task is a decision tree, and the tree is for planning. Most work is a chain of
+steps. Where there is a real fork, ways to the goal that you could not choose between
+beforehand, lay them out as sibling nodes, pursue one and park the others with the
+reason; never invent an alternative to have one. Each node's approach says what it
 does. Most nodes need nothing more: something was done, and the check it named
 passed. Where the work rests on an important assumption you could not settle yourself,
 its hypothesis says what that is, and what would show it wrong; the author reads those
 before accepting the tree. As you work, append evidence for and against it. Evidence against the branch you are on is what tells you
-to jump to a parked sibling: refute the branch and unpark the alternative. Evidence
+to jump: refute it and unpark an alternative, or add one. Evidence
 for it lets you confirm the node and go deeper. Add nodes as the work reveals them,
 and after each node re-plan what is ahead.
 

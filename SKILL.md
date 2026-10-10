@@ -94,8 +94,9 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   knew. Refer to another node only beside the substance, never in place of it, and
   keep it short: one or two sentences, not the history of how you got there. Keep the
   Evidence as short: a node with ten evidence lines is usually a log of the work.
-- `parked` is an alternative not being pursued: its Determination says why it is not
-  first. It is not determined, so it may be edited and reopened, and neither it nor
+- `parked` is a real alternative not being pursued: its Determination says why it is not
+  first. Park one only if you would take it were the branch refuted; do not make up
+  alternatives to have a sibling. It is not determined, so it may be edited and reopened, and neither it nor
   what is planned under it holds the task open.
 - A node is **live** unless it is pruned: below a refuted node, or cut off by a
   correction or backtrack.
@@ -108,7 +109,7 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   refute your own hypothesis. The critic looks for a node confirmed on reasoning
   alone, your own reading of something offered as an observation, several pieces of
   evidence that are really one, a hypothesis that restates the approach instead of
-  naming what it assumes, and an alternative parked or refuted without a fair try.
+  naming what it assumes, and a real alternative parked or refuted without a fair try.
 - Add nodes freely and keep them small. After each node, re-plan the open nodes ahead:
   edit, add or refute them. Backing up is normal.
 - **A determined node is history.** Once confirmed or refuted and committed, it is not
