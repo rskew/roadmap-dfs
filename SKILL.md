@@ -68,15 +68,15 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   answers. Not a second description of the work. The Evidence is the
   observations that bear on it, one line each: what was run or read, what it showed,
   and which way it cuts. **A Hypothesis names an interactive artefact**, as
-  `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself (see Raising): a page the
-  author can operate, with the options to switch between, the inputs to move and the
-  evidence to open, so that it explains the assumption and lets them decide whether
-  it holds, and with Confirm and Refute buttons that submit their ruling on the node
-  (the template does). `check.py` refuses a commit that adds a Hypothesis naming no such
-  page, or one with no control a handler answers, or that cannot post a verdict. A node with no assumption needs none. The
-  screen marks a node with a Hypothesis (⚑) and names those nodes when the author
-  accepts the tree, so keep it for what is both important and open to question: an
-  ordinary choice the check settles is not one.
+  `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself: a page the author can
+  operate, with the options to switch between, the inputs to move and the evidence to
+  open, and with Confirm and Refute buttons that submit their ruling on the node (the
+  template does; see Raising). `check.py` refuses a commit that adds a Hypothesis
+  naming no such page, or one with no control a handler answers, or that cannot post a
+  verdict. A node with no assumption needs none. The screen marks a node with a
+  Hypothesis (⚑) and names those nodes when the author accepts the tree, so keep it for
+  what is both important and open to question: an ordinary choice the check settles is
+  not one.
   What you built, the steps you took and every test you ran belong in the Approach
   and the commit, not here.
 - **A choice the author may want made the other way is a Hypothesis**, never an `Ask:`:
@@ -192,28 +192,28 @@ EOF
 ```
 
 **A Hypothesis always has an interactive artefact; a raise reaches for one whenever a
-picture would let the author decide, or check, faster than prose can.** The page for an
-assumption starts from `<scripts>/../templates/_TEMPLATE_ASSUMPTION.html`: it states the
-assumption, lets the reader change what it depends on, shows what follows, and says what
-would make it wrong. A page the reader can only look at does not meet the rule. To let
-the author answer on the page, name it in the raise on a line of its own, `Answer with:
-.dfs/artefacts/<uuid>.html` (one page, even when the raise shows several): the page posts
-the answer itself and keeps where the reader left off (docs/artefacts.md); a raise
-naming a page that cannot post an answer is refused.
+picture would let the author decide, or check, faster than prose can.** Wiring and data
+flow before and after, options set side by side on the same axes, a sequence of what
+ran and what it showed, a layout, measured results as a chart or a table: if you would
+otherwise be describing a shape in words, draw it. Skip it only for what has no shape:
+a budget, a tooling bug, a choice between two wordings.
 
-Wiring and data flow, before and after, two or three options set side by side on the
-same axes, a sequence of what ran and what it showed, a layout, measured
-results as a chart or a table: if you would otherwise be describing a shape in words, draw
-it. It is one self-contained HTML page in `.dfs/artefacts/`, **written mobile-first**
-(the author reads on a phone: start from the templates, which stack at 360px and widen
-from 720px), checked with `<scripts>/artefact_check.sh`, which also renders it at 360px,
-and its screenshot looked at. Name it in the raise by its
-path, `.dfs/artefacts/<uuid>.html`: the author's web page turns that into a link (a bare filename links too), and
-the screen's `v` pane lists it. (`http://localhost:<port>/<uuid>.html` still works.) How to
-write one is `<scripts>/../docs/artefacts.md`; read it before starting one. The raise must
-still be answerable with the artefact gone, so the options and your recommendation stay
-written out in the raise itself. Skip it only for what has no shape to draw: a budget, a
-tooling bug, a choice between two wordings.
+- **For an assumption, or a raise the author should answer on the page**, start from
+  `<scripts>/../templates/_TEMPLATE_ASSUMPTION.html`: it states the assumption or
+  decision, lets the reader change what it depends on, shows what follows, says what
+  would make it wrong, and posts the ruling itself. A page the reader can only look at
+  does not meet the rule. To make it a raise's answer, name it in the raise on a line of
+  its own, `Answer with: .dfs/artefacts/<uuid>.html` (one page, even when the raise
+  shows several); a raise naming a page that cannot post an answer is refused.
+- **For a picture alone**, start from `_TEMPLATE.html` and name the page in the raise by
+  its path, `.dfs/artefacts/<uuid>.html` (the web page links it and the screen's `v`
+  pane lists it).
+- **Either way**: the page is one self-contained HTML file in `.dfs/artefacts/`, written
+  mobile-first (the author reads on a phone) and checked with
+  `<scripts>/artefact_check.sh`, whose screenshot you look at. How to write one is
+  `<scripts>/../docs/artefacts.md`; read it before starting. The raise must still be
+  answerable with the artefact gone, so the options and your recommendation stay
+  written out in the raise itself.
 
 **A node that changes what the user sees names a screenshot.** Save the picture beside the
 artefacts (`<scripts>/artefact_check.sh <page> --out .dfs/artefacts/<uuid>.png`, or any
