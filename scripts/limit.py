@@ -230,9 +230,10 @@ def classify(raw, agent):
     if not m:
         return False, ""
     if agent == "codex":
-        # Read from the limit sentence on, so a "try again at" earlier in the stream
-        # (the session's own words) is not taken for it.
-        return True, resets_in(raw) or try_again_in(raw[m.start():])
+        # Read from the limit sentence on, so a "try again at" or "resets" earlier in the
+        # stream (the session's own words, or a file it printed) is not taken for it.
+        tail = raw[m.start():]
+        return True, try_again_in(tail) or resets_in(tail)
     return True, resets_in(raw)
 
 

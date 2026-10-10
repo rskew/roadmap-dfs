@@ -107,6 +107,12 @@ class Codex(unittest.TestCase):
             + "\n" + self.stream(self.SAME_DAY)
         self.assertEqual(LIM.classify(raw, "codex"), (True, "try again at 5:59 PM"))
 
+    def test_a_resets_before_the_limit_sentence_is_not_the_reset(self):
+        item = {"type": "item.completed", "item": {
+            "type": "command_execution", "aggregated_output": "# resets 8pm (UTC)\n"}}
+        raw = json.dumps(item) + "\n" + self.stream(self.SAME_DAY)
+        self.assertEqual(LIM.classify(raw, "codex"), (True, "try again at 5:59 PM"))
+
     def test_a_limit_with_no_time_has_no_reset(self):
         raw = self.stream("You've hit your usage limit. Try again later.")
         self.assertEqual(LIM.classify(raw, "codex"), (True, ""))
