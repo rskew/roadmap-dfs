@@ -313,7 +313,7 @@ class Screen:
         if f == "A":
             self.r = max(0, self.r - n)
         elif f == "K":
-            for x in range(self.cols if p == "2" else self.c, self.cols) if p != "1" else range(self.c + 1):
+            for x in range(self.cols) if p == "2" else range(self.c + 1) if p == "1" else range(self.c, self.cols):
                 self.g[self.r][x] = " "
         elif f == "J" and p == "2":
             self.g = [[" "] * self.cols for _ in range(self.rows)]
@@ -343,6 +343,21 @@ while True: time.sleep(0.1)
 """
 
 
+class ScreenReader(unittest.TestCase):
+    """The reader the Redrawing tests look through knows only these sequences; one it does not know
+    would be dropped silently, so each it does know is shown to do what it says."""
+
+    def test_cursor_up_erase_line_erase_screen_and_home(self):
+        s = Screen(4, 10)
+        s.feed(b"aaaa\r\nbbbb\r\ncccc")
+        s.feed(b"\x1b[1A\x1b[2K")             # up one row, erase it whole
+        self.assertEqual(s.text(), "aaaa\n\ncccc")
+        s.feed(b"\x1b[Hzz\x1b[K")              # home, write, erase to the end of the line
+        self.assertEqual(s.text(), "zz\n\ncccc")
+        s.feed(b"\x1b[2J\x1b[Hx")
+        self.assertEqual(s.text(), "x")
+
+
 class Redrawing(unittest.TestCase):
     """What a chat that redraws itself in place leaves on a terminal it is looked at in (24x80,
     with five lines of the screen's own above), for the pty it was started at."""
@@ -369,7 +384,7 @@ class Redrawing(unittest.TestCase):
         slave, screen = self.terminal()
         relay = ptyrelay.Relay().start([sys.executable, "-c", REDRAWER], size=size)
         self.addCleanup(relay.close)
-        time.sleep(0.8)
+        time.sleep(0.5)
         keys_r, keys_w = os.pipe()
         self.addCleanup(os.close, keys_w)
         saved = sys.stdin, sys.stdout

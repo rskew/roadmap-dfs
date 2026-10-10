@@ -97,8 +97,8 @@ class Relay:
         self.pid, self.fd, self.started = pid, master, time.time()
         self.log("start pid=%d cwd=%s argv=%s" % (pid, cwd or os.getcwd(), " ".join(
             a if len(a) <= 60 else a[:57] + "..." for a in argv)))
-        rows, cols = size or _terminal_size()
-        _try(fcntl.ioctl, master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        rows, cols = size or _terminal_size()       # set after the fork: the child can read 0x0 until
+        _try(fcntl.ioctl, master, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))  # now, then gets a SIGWINCH
         threading.Thread(target=self._pump, daemon=True).start()
         threading.Thread(target=self._typist, daemon=True).start()
         threading.Thread(target=self._watch, daemon=True).start()
@@ -178,7 +178,7 @@ class Relay:
         """Tell the agent its terminal is now `size` (rows, cols), by default this process's own,
         so that what it wraps in the background is wrapped for the width it will be looked at."""
         rows, cols = size or _terminal_size()
-        with self.lock:
+        with self.lock:             # the SIGWINCH redraw below refreshes `last_out`, so a screen resize counts as activity
             if self.fd is None or self.attached:        # attached, `attach` follows the terminal itself
                 return
             _try(fcntl.ioctl, self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
