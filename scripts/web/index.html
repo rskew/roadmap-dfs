@@ -39,6 +39,8 @@ paintBackground();
    dialogs) is the design system, /design.css; what is here is where they go. */
 :root { --bar: calc(56px * var(--z)); --tabs: calc(52px * var(--z)); --col: calc(880px * var(--z)); --page: calc(1180px * var(--z)); }
 body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
+:root { scroll-padding: calc(var(--bar) + var(--s3)) 0 calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s3)); }
+:root:has(body.pad) { scroll-padding-bottom: calc(var(--tabs) + var(--hit) + env(safe-area-inset-bottom, 0px) + var(--s3)); }
 
 /* the bar: the mark, a name, a way back, and the three colours as one thin line */
 #bar {
@@ -304,6 +306,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 #ctx button:hover, #ctx button:focus-visible { background: var(--sel); }
 #padbar { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: none; align-items: center; gap: var(--s5); padding: var(--s2) var(--s4); background: var(--panel); border-top: var(--rule) solid var(--line); font-size: var(--fs-small); color: var(--muted); }
 body.pad #padbar { display: flex; }
+@media (max-width: 520px) { #padbar { gap: var(--s3); padding-inline: var(--s3); } #padbar span:nth-child(5), #padbar span:nth-child(-n+4) i { display: none; } }   /* a phone has room for the four glyphs and the legend, not their words */
 body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
 #padbar span, #padlegend li { display: inline-flex; align-items: center; gap: var(--s2); }
 #padbar b, #padlegend b { display: inline-flex; align-items: center; justify-content: center; min-width: calc(28px * var(--z)); height: calc(28px * var(--z)); padding: 0 var(--s1); border: var(--rule-strong) solid var(--ink); border-radius: calc(14px * var(--z)); color: var(--ink); font-size: var(--fs-label); font-weight: 600; }
@@ -335,7 +338,7 @@ body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
   <aside id="sheet" role="dialog" aria-label="Node" aria-modal="false"></aside>
 </div>
 <div id="scrim"></div>
-<div id="padbar" aria-hidden="true"><span><b>A</b>press</span><span><b>B</b>back</span><span><b>X</b>add</span><span><b>Y</b>flagged</span><span><b>LB</b><b>RB</b>node</span><span><b>☰</b>buttons</span></div>
+<div id="padbar" aria-hidden="true"><span><b>A</b><i>press</i></span><span><b>B</b><i>back</i></span><span><b>X</b><i>add</i></span><span><b>Y</b><i>flagged</i></span><span><b>LB</b><b>RB</b>node</span><span><b>☰</b>buttons</span></div>
 <ul id="padlegend" aria-label="Controller buttons" hidden>
   <li><b>✥</b>d-pad or left stick: move focus</li><li><b>A</b>press the focused control</li><li><b>B</b>close, then go back</li>
   <li><b>X</b>add a node</li><li><b>Y</b>flagged nodes only, and back</li><li><b>LB</b><b>RB</b>previous and next node</li><li><b>☰</b>this list</li>
@@ -1326,7 +1329,7 @@ document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpe
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
 setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
 addEventListener("keydown", e => {
-  if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey) return;
+  if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
   if (!S.task || route().view !== "task") return;
   const open = S.node && S.task.rows.find(x => x.key === S.node);
   if (e.key === "j") step(1); else if (e.key === "k") step(-1); else if (e.key === "n") nextFlag();
@@ -1369,14 +1372,16 @@ function padTargets() {
   return [...padScope().querySelectorAll(FOCUSABLE)].filter(el => {
     if (el.disabled || el.closest("[hidden], [inert], details:not([open]) > :not(summary)")) return false;
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden" && r.bottom > 0 && r.top < innerHeight;
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
   });
 }
-/* Of the controls lying wholly past the focused one in `dir`, the nearest, counting a step off the line twice over; a
+/* Every control in scope is a candidate, on screen or not: the page scrolls to the one chosen, clear of the fixed bars (`scroll-padding`).
+   Of the controls lying wholly past the focused one in `dir`, the nearest, counting a step off the line twice over; a
    control that overlaps it (a wide row, its indented child) is not "to the right" of it, so none past it falls back to the centres. */
 function padMove(dir) {
   const all = padTargets(), cur = document.activeElement;
-  if (!cur || cur === document.body || !all.includes(cur)) { const first = all.find(el => el.closest(".row.sel, #sheet")) || all[0]; if (first) first.focus(); return; }
+  if (!cur || cur === document.body || !all.includes(cur)) { const seen = all.filter(el => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; });
+    const first = seen.find(el => el.closest(".row.sel, #sheet")) || seen[0] || all[0]; if (first) first.focus(); return; }
   const c = cur.getBoundingClientRect(), cx = c.left + c.width / 2, cy = c.top + c.height / 2, horiz = dir === "left" || dir === "right";
   const pick = strict => {
     let best = null, bestScore = Infinity;
@@ -1414,8 +1419,9 @@ const PAD_BUTTON = {
 };
 const PAD_DIRS = { 12: "up", 13: "down", 14: "left", 15: "right" };
 function padPoll(now) {
-  const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean);
-  if (!pads.length) { PAD.on = false; PAD.raf = 0; document.body.classList.remove("pad"); $("#padlegend").hidden = true; return; }
+  // only the standard layout has the d-pad, A/B/X/Y and bumpers where the buttons below say they are
+  const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(p => p && p.mapping === "standard");
+  if (!pads.length) { PAD.held = new Set(); PAD.on = false; PAD.raf = 0; document.body.classList.remove("pad"); $("#padlegend").hidden = true; return; }
   const down = new Set();
   for (const p of pads) {
     p.buttons.forEach((b, i) => { if (b.pressed) down.add(i); });
@@ -1434,7 +1440,7 @@ function padPoll(now) {
   PAD.raf = requestAnimationFrame(padPoll);
 }
 function padStart() {
-  const any = navigator.getGamepads && [...navigator.getGamepads()].some(Boolean);
+  const any = navigator.getGamepads && [...navigator.getGamepads()].some(p => p && p.mapping === "standard");
   if (!any) return;
   PAD.on = true; document.body.classList.add("pad");
   if (!PAD.raf) PAD.raf = requestAnimationFrame(padPoll);

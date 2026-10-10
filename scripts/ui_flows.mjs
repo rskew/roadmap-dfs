@@ -1300,6 +1300,43 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert(!(await shown("#padbar")), "no hint bar once the pad is gone");
     same(errors, [], "no page errors");
     await ctx.close();
+
+    // A phone, with a task list taller than the screen: the d-pad walks to the last task, which scrolls into view clear of the bars.
+    // A pad whose mapping is not "standard" is ignored.
+    const pctx = await b.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true });
+    await pctx.addInitScript(() => {
+      window.__pad = null;
+      navigator.getGamepads = () => window.__pad ? [window.__pad, null, null, null] : [null, null, null, null];
+      window.__press = (...ix) => { window.__pad.buttons = Array.from({ length: 17 }, (_, i) => ({ pressed: ix.includes(i), value: ix.includes(i) ? 1 : 0 })); };
+    });
+    const ph = await pctx.newPage(); PAGES.push(ph);
+    const perrors = [];
+    ph.on("pageerror", e => perrors.push(String(e)));
+    await ph.goto(URL_); await ph.waitForSelector(".item");
+    await ph.evaluate(() => { window.__pad = { id: "odd", index: 0, connected: true, mapping: "", axes: [0, 0, 0, 0], buttons: [] }; window.__press(); window.dispatchEvent(new Event("gamepadconnected")); });
+    await ph.waitForTimeout(200);
+    assert(!(await ph.evaluate(() => document.body.classList.contains("pad"))), "a pad that is not standard-mapped is ignored");
+    await ph.evaluate(() => { window.__pad.mapping = "standard"; window.dispatchEvent(new Event("gamepadconnected")); });
+    await ph.waitForSelector("#padbar", { state: "visible" });
+    const ptap = async i => {
+      await ph.evaluate(i => window.__press(i), i); await ph.waitForFunction(i => PAD.held.has(i), i);
+      await ph.evaluate(() => window.__press()); await ph.waitForFunction(i => !PAD.held.has(i), i);
+    };
+    const tasks = await ph.$$eval(".item[data-id]", els => els.map(e => e.dataset.id));
+    const last = tasks[tasks.length - 1];
+    assert(await ph.evaluate(() => document.documentElement.scrollHeight > innerHeight + 50), "the task list is taller than the phone screen");
+    let reached = "";
+    for (let i = 0; i < tasks.length * 3 && reached !== last; i++) { await ptap(13); reached = await ph.evaluate(() => document.activeElement.dataset.id || ""); }
+    assert(reached === last, `down reaches the last task (${last}), got ${reached || "nothing"}`);
+    const clear = await ph.evaluate(() => {
+      const r = document.activeElement.getBoundingClientRect(), top = c => Math.min(...["#tabs", "#padbar"].map(s => { const e = document.querySelector(s); return e && getComputedStyle(e).display !== "none" ? e.getBoundingClientRect().top : Infinity; }));
+      return { bottom: r.bottom, bar: top(), h: innerHeight };
+    });
+    assert(clear.bottom <= clear.bar + 0.5 && clear.bottom <= clear.h, `the focused task ends at ${clear.bottom}, above the fixed bars at ${clear.bar}`);
+    for (let i = 0; i < tasks.length * 3 && reached !== tasks[0]; i++) { await ptap(12); reached = await ph.evaluate(() => document.activeElement.dataset.id || ""); }
+    assert(reached === tasks[0], "up walks back to the first task");
+    same(perrors, [], "no page errors on the phone");
+    await pctx.close();
   },
 
   // Every screen, both themes, five widths (a phone, a narrow one, a laptop, a monitor, a big monitor): nothing overflows, text can be read, targets can be hit.
