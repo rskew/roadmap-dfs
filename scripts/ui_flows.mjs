@@ -254,6 +254,33 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // The chat's Top button goes to the top of the message being read, and on again to the one before.
+  async chat_top(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 360 }, hasTouch: true });
+    const long = n => Array.from({ length: n }, (_, i) => `row ${i} of an answer`).join("\n");
+    const state = { messages: [{ role: "you", text: "first" }, { role: "agent", text: long(60) }, { role: "you", text: "second" }, { role: "agent", text: long(60) }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    const settle = () => page.waitForTimeout(700);
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 4); await settle();
+    // where each message starts, and where the log is, in the log's own scroll coordinates
+    const at = () => page.$eval("#chat-log", log => {
+      const box = log.getBoundingClientRect().top, pad = parseFloat(getComputedStyle(log).paddingTop);
+      return { y: Math.round(log.scrollTop), tops: [...log.querySelectorAll(".msg")].map(m => Math.round(m.getBoundingClientRect().top - box + log.scrollTop - pad)) };
+    });
+    let s = await at();
+    assert(s.tops[3] > 200, "the last answer is far down the log");
+    await page.click("[data-act=chattop]"); await settle();
+    same((await at()).y, s.tops[3], "at its end, Top goes to the top of the last message");
+    await page.click("[data-act=chattop]"); await settle();
+    same((await at()).y, s.tops[2], "already there, Top goes to the message before");
+    await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
+    await page.click("[data-act=chattop]"); await settle();
+    same((await at()).y, s.tops[1], "in the middle of an answer, Top goes to that answer's top");
+    same(errors, [], "no page errors");
+  },
+
   // The node sheet: prev and next move, and stay exactly where they are.
   async node_sheet(b) {
     const { page, errors } = await open(b, PHONE);

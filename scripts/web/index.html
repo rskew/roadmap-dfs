@@ -237,7 +237,7 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 #chat { width: min(720px, 100vw); max-width: 100vw; margin: auto; padding: 0; flex-direction: column; }
 #chat[open] { display: flex; }
 .chat-top { flex: none; display: flex; align-items: center; justify-content: center; min-height: calc(48px * var(--z)); padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); }
-.chat-nav { grid-template-columns: repeat(3, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.chat-nav { grid-template-columns: repeat(4, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .chat-nav button[data-act=chatclose] { font-weight: 700; }
 #chat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4); overscroll-behavior: contain; }
 .msg { margin: 0 0 var(--s3); max-width: var(--measure); }
@@ -333,7 +333,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   <div class="chat-top"><span class="cap" id="chat-title"></span></div>
   <div id="chat-log" role="log" aria-live="polite"></div>
   <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn" id="chat-stop" type="button" hidden>Stop</button><button class="btn primary" id="chat-send" type="submit">Send</button></form>
-  <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
+  <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chattop" aria-label="Scroll to the top of this message">↑ Top</button><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
 </dialog>
 <div id="ctx" role="menu" hidden></div>
 <div id="toast" role="status"></div>
@@ -1077,6 +1077,17 @@ function chatDraw(st) {
   if (was !== undefined) log.scrollTop = was;
   else if (atEnd || st.busy) log.scrollTop = log.scrollHeight;
 }
+// The Top button: to the top of the message being read. That is the last one when the log is at its end
+// (a long answer has just landed there), else the one crossing the log's top edge; already at its top, the one before.
+function chatTop() {
+  const log = $("#chat-log"), box = log.getBoundingClientRect().top, pad = parseFloat(getComputedStyle(log).paddingTop) || 0;
+  const tops = [...log.querySelectorAll(".msg:not(.wait)")].map(m => Math.max(0, Math.round(m.getBoundingClientRect().top - box + log.scrollTop - pad)));
+  if (!tops.length) return;
+  const at = log.scrollTop, atEnd = log.scrollHeight - at - log.clientHeight < 4;
+  let i = atEnd ? tops.length - 1 : tops.reduce((n, t, j) => t <= at ? j : n, 0);
+  if (at - tops[i] < 4 && i > 0) i--;
+  log.scrollTo({ top: tops[i], behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+}
 async function chatLoad() {
   if (!CHAT.scope) return;
   try {
@@ -1244,7 +1255,7 @@ document.addEventListener("click", e => {
     close: () => leave(`t/${S.task.id}`), up,
     prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
     answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, deletetask: deleteTaskForm, deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
-    chat: () => chatOpen(d.scope), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
+    chat: () => chatOpen(d.scope), chattop: chatTop, chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
     chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStartForm, walkstop: async () => { try { S.walk = await api("/api/walk/stop", {}); toast("Walk stopped; its chain ends after this run."); drawTasks(); } catch (e) { toast(e.message, true); } },

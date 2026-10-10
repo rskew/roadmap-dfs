@@ -150,6 +150,9 @@ class Flows(unittest.TestCase):
     def test_the_node_sheet_and_the_chat_log_keep_their_scroll(self):
         self.flow("scroll_memory_areas")
 
+    def test_the_chats_top_button_goes_to_the_top_of_the_message_being_read(self):
+        self.flow("chat_top")
+
     def test_the_node_sheet_keeps_prev_and_next_where_they_are(self):
         self.flow("node_sheet")
 
