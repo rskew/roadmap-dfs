@@ -1033,6 +1033,9 @@ let VERDICT = {};
 function verdictHelp() {
   const el = $("#verdicthelp"), v = document.querySelector('input[name="verdict"]:checked');
   if (el) el.innerHTML = (v ? [VERDICT[v.value]] : [VERDICT.refuted, VERDICT.confirmed]).map(t => `<span style="display:block;margin-top:6px">${esc(t)}</span>`).join("");
+  // confirming prunes the later siblings; those holding work are pruned only once agreed to
+  const pk = $("#parkbox");
+  if (pk) { const on = !!v && v.value === "confirmed"; pk.hidden = !on; pk.querySelector("input").required = on; }
 }
 try { const w = sessionStorage.getItem("walkOpen"); if (w !== null) S.walkOpen = w === "1"; } catch (e) {}
 document.addEventListener("toggle", e => { if (e.target.id !== "walkbox") return; S.walkOpen = e.target.open; try { sessionStorage.setItem("walkOpen", e.target.open ? "1" : "0"); } catch (x) {} }, true);
@@ -1081,8 +1084,9 @@ function correctForm(id) {
     <div class="seg"><label><input type="radio" name="verdict" value="refuted" required><span>Refute</span></label>
     <label><input type="radio" name="verdict" value="confirmed"><span>Confirm</span></label></div>
     <p class="muted" id="verdicthelp" style="margin:0"></p>
+    ${r.parks && r.parks.length ? `<div id="parkbox" hidden><label><input type="checkbox" name="park"> Park ${r.parks.map(esc).join(", ")}: they hold work, and confirming ${esc(id)} prunes them.</label></div>` : ""}
     <div><label for="b">${page ? "Or in your own words, instead of the page: why, and what the work should do from here" : "Why, and what the work should do from here"}</label><textarea id="b" name="body" required></textarea></div>${buttons("Save")}`,
-    async fd => wrote(await api("/api/correct", { task: S.task.id, node: id, verdict: fd.get("verdict"), body: fd.get("body") }), (fd.get("verdict") === "refuted" ? "Refuted" : "Confirmed") + "; the task reopens."));
+    async fd => wrote(await api("/api/correct", { task: S.task.id, node: id, verdict: fd.get("verdict"), body: fd.get("body"), park: fd.get("park") === "on" }), (fd.get("verdict") === "refuted" ? "Refuted" : "Confirmed") + "; the task reopens."));
   verdictHelp();
 }
 /* ── chat: basic, read-only, one agent turn at a time ──────────────────────────────── */

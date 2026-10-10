@@ -184,6 +184,25 @@ class Flows(unittest.TestCase):
         self.assertEqual([(e["args"], e["body"].strip()) for e in corr],
                          [(["W9.2", "refuted"], "WAL is wrong on this disk.")])
 
+    def test_confirming_over_a_sibling_that_holds_work_asks_to_park_it(self):
+        dfs_tree.start_node("W9", "W9.10")
+        self.flow("park")
+        corr = [e for e in self.log("W9") if e["kind"] == "correct"]
+        self.assertEqual([(e["args"], e["body"].strip()) for e in corr],
+                         [(["W9.9", "confirmed"], "Spinning disks are fine.")])
+
+    def test_the_assumption_template_holds_confirm_until_the_siblings_are_parked(self):
+        shutil.copy(HERE.parent / "templates" / "_TEMPLATE_ASSUMPTION.html", self.root / ".dfs" / "artefacts" / "c0ffee-tpl.html")
+        w9 = self.root / ".dfs" / "items" / "W9.md"
+        text = w9.read_text()
+        head = "### W9.9 \u00b7 Check the spinning-disk case\nParent: W9.8\nStatus: open\n"
+        self.assertIn(head, text)
+        w9.write_text(text.replace(head, head + "Hypothesis: .dfs/artefacts/c0ffee-tpl.html Disks are fine.\n", 1))
+        dfs_tree.start_node("W9", "W9.10")
+        self.flow("park_page")
+        corr = [e for e in self.log("W9") if e["kind"] == "correct"]
+        self.assertEqual([e["args"] for e in corr], [["W9.9", "confirmed"]])
+
     def test_the_page_a_hypothesis_names_rules_on_its_node(self):
         (self.root / ".dfs" / "artefacts" / "c0ffee-rule.html").write_text(RULE)
         w9 = self.root / ".dfs" / "items" / "W9.md"

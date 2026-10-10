@@ -49,6 +49,7 @@
 
 <div id="rulebox" hidden>
   <p>Rule on this node: what the work takes to be true is settled by the choice above.</p>
+  <label id="parkbox" hidden><input type="checkbox" id="park"> Confirming prunes <span id="parks"></span>, which hold work: park them</label>
   <label for="note">Your note, sent with it (optional)</label>
   <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
   <div class="choices" style="margin-top:8px">
@@ -109,9 +110,13 @@
   // refute/confirm the web page's form writes. Say the decision, then the author's note.
   function rule(verdict) {
     var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    if (verdict === 'confirmed' && !document.getElementById('parkbox').hidden && !document.getElementById('park').checked) {
+      note.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+      return;
+    }
     var text = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
     document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
-    call('POST', { state: mine(), verdict: verdict, answer: text }).then(function () {
+    call('POST', { state: mine(), verdict: verdict, answer: text, park: document.getElementById('park').checked }).then(function () {
       note.textContent = 'Recorded: ' + verdict + '.';
       parent.postMessage({ dfs: 'answered' }, '*');
     }).catch(function (e) {
@@ -135,6 +140,10 @@
   call('GET').then(function (j) {
     if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; show(); }
     document.getElementById('rulebox').hidden = !j.node;
+    // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+    var parks = (j.node && j.node.parks) || [];
+    document.getElementById('parks').textContent = parks.join(', ');
+    document.getElementById('parkbox').hidden = !parks.length;
     document.getElementById('answerbox').hidden = !j.raise;
   }).catch(function () {});
 </script>

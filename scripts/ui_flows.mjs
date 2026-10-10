@@ -453,6 +453,48 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Confirming over a later sibling that holds work asks first: the box shows only for Confirm and Confirm needs it ticked.
+  async park(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("[data-id='W9.9'].main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=correct]"); await dialog(page);
+    assert(await page.locator("#parkbox").count() === 1, "the form lists the siblings it would park");
+    assert(/W9\.10/.test(await page.textContent("#parkbox")), "and names W9.10");
+    assert(!(await page.isVisible("#parkbox")), "not before a choice");
+    await page.click("dialog label:has(input[value=refuted])");
+    assert(!(await page.isVisible("#parkbox")), "nor for a refutation, which prunes nothing");
+    await page.click("dialog label:has(input[value=confirmed])");
+    assert(await page.isVisible("#parkbox"), "but for a confirmation");
+    await page.fill("dialog textarea", "Spinning disks are fine.");
+    await page.click("dialog button[value=ok]");
+    assert(await page.locator("dialog[open]").count() === 1, "the form stays open until the box is ticked");
+    await page.check("#parkbox input");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 });
+    same(errors, [], "no page errors");
+  },
+
+  // The assumption template's own Confirm waits for the park box when the node would prune sibling work.
+  async park_page(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("[data-id='W9.9'].main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=correct]"); await dialog(page);
+    const f = page.frameLocator("dialog #answerpage");
+    await f.locator("#parkbox").waitFor({ state: "visible" });
+    assert(/W9\.10/.test(await f.locator("#parks").textContent()), "the page names W9.10");
+    await f.locator("#confirm").click();
+    assert(/park/i.test(await f.locator("#rule-status").textContent()), "Confirm is held until the box is ticked");
+    assert(await page.locator("dialog[open]").count() === 1, "and nothing was recorded");
+    await f.locator("#park").check();
+    await f.locator("#confirm").click();
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 });
+    same(errors, [], "no page errors");
+  },
+
   // A keyboard leaves a short screen: the action buttons of a form are still on it, unscrolled.
   async keyboard(b) {
     const { page, errors } = await open(b, PHONE);
