@@ -264,6 +264,8 @@ const FLOWS = {
     await task(page, "W9");
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 4); await settle();
+    same(await page.$eval("[data-act=chattop]", e => e.textContent.trim()), "↑", "the Top button is the up arrow alone, since a word reads as the top of the whole chat");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
     // where each message starts, and where the log is, in the log's own scroll coordinates
     const at = () => page.$eval("#chat-log", log => {
       const box = log.getBoundingClientRect().top, pad = parseFloat(getComputedStyle(log).paddingTop);
