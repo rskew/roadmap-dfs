@@ -302,6 +302,13 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 #ctx button { min-height: var(--hit); padding: 0 var(--s4); font-size: var(--fs-control); font-weight: 500; letter-spacing: var(--track-control); }
 #ctx button + button { border-top: var(--rule) solid var(--faint); }
 #ctx button:hover, #ctx button:focus-visible { background: var(--sel); }
+#padbar { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: none; align-items: center; gap: var(--s5); padding: var(--s2) var(--s4); background: var(--panel); border-top: var(--rule) solid var(--line); font-size: var(--fs-small); color: var(--muted); }
+body.pad #padbar { display: flex; }
+body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
+#padbar span, #padlegend li { display: inline-flex; align-items: center; gap: var(--s2); }
+#padbar b, #padlegend b { display: inline-flex; align-items: center; justify-content: center; min-width: calc(28px * var(--z)); height: calc(28px * var(--z)); padding: 0 var(--s1); border: var(--rule-strong) solid var(--ink); border-radius: calc(14px * var(--z)); color: var(--ink); font-size: var(--fs-label); font-weight: 600; }
+#padlegend { position: fixed; z-index: 21; right: var(--s4); bottom: calc(var(--hit) + var(--s5)); margin: 0; padding: var(--s4) var(--s5); list-style: none; background: var(--panel); border: var(--rule) solid var(--ink); font-size: var(--fs-small); display: grid; gap: var(--s2); }
+#padlegend[hidden] { display: none; }
 @media (min-width: 1500px) {
   /* three panes and no page cap: the screen is the layout. Tasks, then the tree, then the node. */
   #layout { max-width: none; }
@@ -328,6 +335,11 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   <aside id="sheet" role="dialog" aria-label="Node" aria-modal="false"></aside>
 </div>
 <div id="scrim"></div>
+<div id="padbar" aria-hidden="true"><span><b>A</b>press</span><span><b>B</b>back</span><span><b>X</b>add</span><span><b>Y</b>flagged</span><span><b>LB</b><b>RB</b>node</span><span><b>☰</b>buttons</span></div>
+<ul id="padlegend" aria-label="Controller buttons" hidden>
+  <li><b>✥</b>d-pad or left stick: move focus</li><li><b>A</b>press the focused control</li><li><b>B</b>close, then go back</li>
+  <li><b>X</b>add a node</li><li><b>Y</b>flagged nodes only, and back</li><li><b>LB</b><b>RB</b>previous and next node</li><li><b>☰</b>this list</li>
+</ul>
 <dialog id="form"></dialog>
 <dialog id="chat" aria-label="Chat">
   <div class="chat-top"><span class="cap" id="chat-title"></span></div>
@@ -436,7 +448,23 @@ addEventListener("pagehide", () => { try { sessionStorage.setItem("scroll", JSON
 
 let lastView = "";
 let RENDERS = 0;
+/* With a pad focus is the cursor, and a draw replaces the controls: put focus back on the same one (by id, or its action
+   and target, else its place among the focusable controls) when the draw left it on the page, so a push from the
+   server does not send the cursor home. */
+const FOCUSABLE = "button, a[href], summary, textarea, input:not([type=hidden]), select, [tabindex]:not([tabindex='-1'])";
+function focusKey(el) {
+  if (!el || el === document.body) return null;
+  const sel = el.id ? "#" + CSS.escape(el.id) : el.dataset.act ? `${el.tagName}[data-act="${el.dataset.act}"]` + (el.dataset.id ? `[data-id="${CSS.escape(el.dataset.id)}"]` : "") : "";
+  return { sel, at: [...document.querySelectorAll(FOCUSABLE)].indexOf(el) };
+}
 async function render(force) {
+  const key = PAD.on ? focusKey(document.activeElement) : null;
+  await renderDraw(force);
+  if (key && (!document.activeElement || document.activeElement === document.body)) {
+    const el = (key.sel && $(key.sel)) || document.querySelectorAll(FOCUSABLE)[key.at]; if (el) el.focus();
+  }
+}
+async function renderDraw(force) {
   // A render is a fetch and then a draw, and a newer one can start before an older one
   // lands: an older list render finishing after the tap on a task drew the list over it.
   // Only the newest draws.
@@ -1312,6 +1340,7 @@ function ctxClose() { const m = $("#ctx"); if (!m.hidden) { m.hidden = true; m.i
 document.addEventListener("contextmenu", e => {
   const main = e.target.closest && e.target.closest(".row .main[data-act=node]");
   if (!main || !S.task) return ctxClose();
+  if (!matchMedia("(hover: hover)").matches) return;      // a long-press on a touch screen keeps the browser's own menu
   e.preventDefault();
   const id = main.dataset.id, r = S.task.rows.find(x => x.id === id), m = $("#ctx");
   m.innerHTML = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>
@@ -1329,6 +1358,89 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#ctx")
 addEventListener("scroll", ctxClose, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
+
+/* ── a game controller: the Gamepad API, polled each frame while one is connected ──────────────────────────────────────
+   The d-pad and left stick move focus to the nearest control in that direction (inside the open dialog or menu when
+   there is one), A presses it, B closes then goes back, X adds a node, Y shows the flagged ones, the bumpers step through
+   the nodes, Start lists the buttons. The hint bar and the bigger focus ring (`body.pad`) are there only while a pad is. */
+const PAD = { on: false, held: new Set(), next: 0, raf: 0 };
+function padScope() { const d = [...document.querySelectorAll("dialog[open]")].pop(); return d || (!$("#ctx").hidden ? $("#ctx") : document); }
+function padTargets() {
+  return [...padScope().querySelectorAll(FOCUSABLE)].filter(el => {
+    if (el.disabled || el.closest("[hidden], [inert], details:not([open]) > :not(summary)")) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden" && r.bottom > 0 && r.top < innerHeight;
+  });
+}
+/* Of the controls lying wholly past the focused one in `dir`, the nearest, counting a step off the line twice over; a
+   control that overlaps it (a wide row, its indented child) is not "to the right" of it, so none past it falls back to the centres. */
+function padMove(dir) {
+  const all = padTargets(), cur = document.activeElement;
+  if (!cur || cur === document.body || !all.includes(cur)) { const first = all.find(el => el.closest(".row.sel, #sheet")) || all[0]; if (first) first.focus(); return; }
+  const c = cur.getBoundingClientRect(), cx = c.left + c.width / 2, cy = c.top + c.height / 2, horiz = dir === "left" || dir === "right";
+  const pick = strict => {
+    let best = null, bestScore = Infinity;
+    for (const el of all) {
+      if (el === cur) continue;
+      const r = el.getBoundingClientRect(), dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+      const past = dir === "right" ? r.left - c.right : dir === "left" ? c.left - r.right : dir === "down" ? r.top - c.bottom : c.top - r.bottom;
+      const along = strict ? past : dir === "right" ? dx : dir === "left" ? -dx : dir === "down" ? dy : -dy;
+      if (strict ? along < -2 : along <= 2) continue;
+      const score = Math.max(along, 0) + 2 * Math.abs(horiz ? dy : dx);
+      if (score < bestScore) { best = el; bestScore = score; }
+    }
+    return best;
+  };
+  const best = pick(true) || pick(false);
+  if (best) { best.focus(); best.scrollIntoView({ block: "nearest", inline: "nearest" }); }
+}
+function padBack() {
+  const d = [...document.querySelectorAll("dialog[open]")].pop();
+  if (!$("#padlegend").hidden) $("#padlegend").hidden = true;
+  else if (d) d.close();
+  else if (!$("#ctx").hidden) ctxClose();
+  else if (S.task && route().view === "task" && S.node) leave(`t/${S.task.id}`);
+  else { const up = $("#tabs [data-act=up]") || $("#back:not([hidden])"); if (up) up.click(); }
+}
+const PAD_BUTTON = {
+  0: () => { const el = document.activeElement; if (el && el !== document.body) el.click(); else padMove("down"); },
+  1: padBack,
+  2: () => { if (!S.task || route().view !== "task" || $("dialog[open]")) return; const b = $("#sheet [data-act=add]") || $(".actions [data-act=add]"); if (b) b.click(); },
+  3: () => { if (!S.task || route().view !== "task" || $("dialog[open]")) return; S.flagged = !S.flagged; S.sig = ""; render(true); },
+  4: () => { if (S.task && route().view === "task" && !$("dialog[open]")) step(-1); },
+  5: () => { if (S.task && route().view === "task" && !$("dialog[open]")) step(1); },
+  9: () => { $("#padlegend").hidden = !$("#padlegend").hidden; },
+  12: () => padMove("up"), 13: () => padMove("down"), 14: () => padMove("left"), 15: () => padMove("right"),
+};
+const PAD_DIRS = { 12: "up", 13: "down", 14: "left", 15: "right" };
+function padPoll(now) {
+  const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(Boolean);
+  if (!pads.length) { PAD.on = false; PAD.raf = 0; document.body.classList.remove("pad"); $("#padlegend").hidden = true; return; }
+  const down = new Set();
+  for (const p of pads) {
+    p.buttons.forEach((b, i) => { if (b.pressed) down.add(i); });
+    const x = p.axes[0] || 0, y = p.axes[1] || 0;
+    if (Math.abs(x) > .5 || Math.abs(y) > .5) down.add(Math.abs(x) > Math.abs(y) ? (x > 0 ? 15 : 14) : (y > 0 ? 13 : 12));
+  }
+  for (const i of down) {
+    const fresh = !PAD.held.has(i);
+    // a direction held down repeats: after 400ms, then every 120ms
+    if (fresh || (PAD_DIRS[i] && now >= PAD.next)) {
+      if (PAD_BUTTON[i]) PAD_BUTTON[i]();
+      if (PAD_DIRS[i]) PAD.next = now + (fresh ? 400 : 120);
+    }
+  }
+  PAD.held = down;
+  PAD.raf = requestAnimationFrame(padPoll);
+}
+function padStart() {
+  const any = navigator.getGamepads && [...navigator.getGamepads()].some(Boolean);
+  if (!any) return;
+  PAD.on = true; document.body.classList.add("pad");
+  if (!PAD.raf) PAD.raf = requestAnimationFrame(padPoll);
+}
+addEventListener("gamepadconnected", padStart);
+padStart();                                              // a pad pressed before the page loaded is already connected
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
 let pushT;

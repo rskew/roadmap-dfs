@@ -51,6 +51,14 @@ icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes
   TV gets bigger things, not more of them. From 1500px a task shows three panes (the tasks, the tree,
   the node) and the 1180px page cap goes.
 
+## Game controller
+
+While a pad is connected the page shows a bar of button glyphs and a 4px focus ring (`body.pad`); with none it shows
+neither. The d-pad and left stick move focus to the nearest control in that direction (inside the open dialog or menu
+when there is one), A presses it, B closes the legend, dialog, menu or node and then goes back, X adds a node, Y
+shows the flagged nodes only, LB and RB step through the nodes and Start lists the buttons. Focus is the cursor, so a
+control a pad can reach is one `Tab` reaches: no hover-only controls.
+
 ## Components
 
 `.btn` (default, `.primary` the one thing the screen wants done, `.danger`), `.textbtn`,

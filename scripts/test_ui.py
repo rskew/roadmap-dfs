@@ -322,6 +322,9 @@ class Flows(unittest.TestCase):
     def test_a_big_screen_gets_a_rail_scaled_type_and_a_pointer_and_keys(self):
         self.flow("wide")
 
+    def test_a_game_controller_moves_focus_presses_backs_out_and_shows_hints_only_while_connected(self):
+        self.flow("pad")
+
     def test_every_screen_in_both_themes_and_five_widths_is_readable_and_reachable(self):
         self.flow("layout")
 

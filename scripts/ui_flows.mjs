@@ -1240,6 +1240,68 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await ctx.close();
   },
 
+  // A game controller: nothing of it shows until a pad connects; then the d-pad moves focus, A presses, B backs out,
+  // the bumpers step nodes, Y shows the flagged ones, X adds, Start lists the buttons. The pad is faked on `navigator`.
+  async pad(b) {
+    const ctx = await b.newContext({ ...DESKTOP, colorScheme: "light" });
+    await ctx.addInitScript(() => {
+      window.__pad = null;
+      navigator.getGamepads = () => window.__pad ? [window.__pad, null, null, null] : [null, null, null, null];
+      window.__press = (...ix) => { window.__pad.buttons = Array.from({ length: 17 }, (_, i) => ({ pressed: ix.includes(i), value: ix.includes(i) ? 1 : 0 })); };
+    });
+    const page = await ctx.newPage(); PAGES.push(page);
+    const errors = [];
+    page.on("pageerror", e => errors.push(String(e)));
+    await page.goto(URL_); await page.waitForSelector(".item");
+    // hold the button until the page's loop has seen it, then let go and wait for it to see that, so a busy machine cannot lose a press
+    const tap = async i => {
+      await page.evaluate(i => window.__press(i), i); await page.waitForFunction(i => PAD.held.has(i), i);
+      await page.evaluate(() => window.__press()); await page.waitForFunction(i => !PAD.held.has(i), i);
+    };
+    const at = () => page.evaluate(() => { const e = document.activeElement, r = e.getBoundingClientRect(); return { x: r.left, y: r.top, id: e.dataset.id || "", act: e.dataset.act || "", tag: e.tagName, ring: parseFloat(getComputedStyle(e).outlineWidth) }; });
+    const shown = sel => page.evaluate(s => { const e = document.querySelector(s); return !!e && getComputedStyle(e).display !== "none" && !e.hidden; }, sel);
+    assert(!(await shown("#padbar")) && !(await page.evaluate(() => document.body.classList.contains("pad"))), "no hint bar before a pad connects");
+    await page.evaluate(() => { window.__pad = { id: "fake", index: 0, connected: true, mapping: "standard", axes: [0, 0, 0, 0], buttons: [] }; window.__press(); window.dispatchEvent(new Event("gamepadconnected")); });
+    await page.waitForSelector("#padbar", { state: "visible" });
+    // d-pad: the first press lands on a control, down goes lower, a ring of 4px or more shows where it is
+    await tap(13); const a = await at(); assert(a.tag !== "BODY", "the d-pad puts focus on a control");
+    assert(a.ring >= 4, `the focus ring is ${a.ring}px with a pad`);
+    await tap(13); const b2 = await at(); assert(b2.y > a.y, `down moves focus lower (${a.y} to ${b2.y})`);
+    await tap(12); const c = await at(); assert(c.y < b2.y, "up moves it back");
+    // A presses the focused task, which opens it
+    await page.focus(".item[data-id=W9]"); await tap(0);
+    await page.waitForSelector(".row"); assert(await page.evaluate(() => location.hash.startsWith("#/t/W9")), "A opens the task");
+    // A on a node opens it; the right of a tree row is the sheet
+    await page.focus(".row .main"); await tap(0); await page.waitForSelector("#sheet.open");
+    const open1 = await page.evaluate(() => location.hash);
+    await page.focus(".row .main"); const row = await at(); await tap(15); const right = await at();
+    assert(right.x > row.x + 100, `right moves focus across, to the node (${row.x} to ${right.x})`);
+    // bumpers step through the nodes
+    await tap(5); await page.waitForFunction(h => location.hash !== h, open1);
+    const open2 = await page.evaluate(() => location.hash);
+    await tap(4); await page.waitForFunction(h => location.hash !== h, open2);
+    assert(await page.evaluate(h => location.hash === h, open1), "RB then LB return to the node");
+    // B closes the node
+    await tap(1); await page.waitForFunction(() => !document.querySelector("#sheet.open"));
+    // Y shows the flagged nodes only, and again all of them
+    const all = (await page.$$(".row")).length;
+    await tap(3); await page.waitForFunction(n => document.querySelectorAll(".row").length < n, all);
+    await tap(3); await page.waitForFunction(n => document.querySelectorAll(".row").length === n, all);
+    // X adds a node: a dialog; the d-pad stays inside it; B closes it
+    await tap(2); await dialog(page);
+    for (let i = 0; i < 4; i++) { await tap(13); assert(await page.evaluate(() => !!document.activeElement.closest("dialog")), "focus stays in the open dialog"); }
+    await tap(1); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    // Start lists the buttons; B closes the list before anything else
+    await tap(9); assert(await shown("#padlegend"), "Start shows the legend");
+    await tap(1); assert(!(await shown("#padlegend")), "B closes the legend");
+    // the pad goes: the hint bar and the big ring go with it
+    await page.evaluate(() => { window.__pad = null; window.dispatchEvent(new Event("gamepaddisconnected")); });
+    await page.waitForFunction(() => !document.body.classList.contains("pad"));
+    assert(!(await shown("#padbar")), "no hint bar once the pad is gone");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // Every screen, both themes, five widths (a phone, a narrow one, a laptop, a monitor, a big monitor): nothing overflows, text can be read, targets can be hit.
   async layout(b) {
     for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW], ["desktop", DESKTOP]]) {

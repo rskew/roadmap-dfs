@@ -96,6 +96,8 @@ html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 400 var(--fs-body)/1.5 var(--font); letter-spacing: var(--track-body); }
 button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; letter-spacing: inherit; }
 :is(button, a, textarea, input, select):focus-visible { outline: var(--rule) solid var(--ink); outline-offset: 3px; }
+/* A game controller is connected (`body.pad`): focus is the only cursor, so the ring grows and shows whatever moved it. */
+body.pad :is(button, a, summary, textarea, input, select, [tabindex]):focus { outline: calc(4px * var(--z)) solid var(--ink); outline-offset: 3px; }
 .muted { color: var(--muted); }
 .cap { font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); color: var(--muted); }
 code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .92em; }
