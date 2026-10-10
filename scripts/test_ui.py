@@ -313,7 +313,10 @@ class Flows(unittest.TestCase):
     def test_the_design_system_specimen_passes_what_it_asks_of_the_page(self):
         self.flow("design")
 
-    def test_every_screen_in_both_themes_and_three_widths_is_readable_and_reachable(self):
+    def test_a_big_screen_gets_a_rail_scaled_type_and_a_pointer_and_keys(self):
+        self.flow("wide")
+
+    def test_every_screen_in_both_themes_and_five_widths_is_readable_and_reachable(self):
         self.flow("layout")
 
 

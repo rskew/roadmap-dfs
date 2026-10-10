@@ -37,7 +37,7 @@ paintBackground();
   background: linear-gradient(color-mix(in srgb, var(--paper) 90%, transparent), color-mix(in srgb, var(--paper) 90%, transparent)), var(--picture) center / cover no-repeat; }
 /* The page's own layout. What things ARE (type, colour, buttons, tags, fields, cards,
    dialogs) is the design system, /design.css; what is here is where they go. */
-:root { --bar: 56px; --tabs: 52px; --col: 880px; --page: 1180px; }
+:root { --bar: calc(56px * var(--z)); --tabs: calc(52px * var(--z)); --col: calc(880px * var(--z)); --page: calc(1180px * var(--z)); }
 body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 
 /* the bar: the mark, a name, a way back, and the three colours as one thin line */
@@ -75,7 +75,7 @@ img.artview { max-width: 100%; height: auto; }
 pre.runlog { margin: 0; padding: var(--s3); border: var(--rule) solid var(--line); background: var(--paper); font: var(--fs-small)/1.45 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; min-height: 40dvh; max-height: calc(100dvh - var(--bar) - var(--tabs) - 9rem); }
 .runhead { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; padding-bottom: var(--s3); }
-a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; min-height: 44px; padding: var(--s2) 0; color: inherit; text-decoration: none; border-top: var(--rule) solid var(--line); }
+a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; min-height: calc(44px * var(--z)); padding: var(--s2) 0; color: inherit; text-decoration: none; border-top: var(--rule) solid var(--line); }
 .runhead .muted, a.runrow .muted { font-size: var(--fs-small); }
 
 /* tabs: two words; the current one carries a line */
@@ -121,7 +121,7 @@ a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; 
 .moves .btn { min-width: var(--hit); padding: 0 var(--s3); }
 /* the grip at the row's right edge: drag it to a new place among the siblings; the strip's arrows change the parent */
 .grip { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-self: end; width: var(--hit); min-height: var(--hit); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
-.grip svg { width: 18px; height: 18px; fill: currentColor; pointer-events: none; }
+.grip svg { width: calc(18px * var(--z)); height: calc(18px * var(--z)); fill: currentColor; pointer-events: none; }
 .grip:focus-visible { outline: var(--rule-strong) solid var(--ink); }
 .item.reorder.dragging { position: relative; z-index: 2; background: var(--paper); box-shadow: 0 2px 12px rgba(0, 0, 0, .3); }
 .item.dragging .grip { cursor: grabbing; color: var(--ink); }
@@ -134,16 +134,16 @@ body.dragging { user-select: none; -webkit-user-select: none; }
 .hint { color: var(--muted); padding: 28px 0; }
 p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 /* Add a task floats at the bottom right, clear of the tab bar; the gap keeps the last row from hiding under it */
-.fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; min-height: 52px; padding: 0 var(--s5); }
+.fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; min-height: calc(52px * var(--z)); padding: 0 var(--s5); }
 .fab-gap { height: 72px; }
 .top-actions { margin: var(--s2) 0 0; }
 
 /* the walk */
 .walk { margin: 6px 0 10px; border-bottom: var(--rule) solid var(--line); }
-.walk > summary { min-height: 52px; display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
+.walk > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
 .walk > summary::-webkit-details-marker { display: none; }
 .walk > summary .state { font-size: var(--fs-body); font-weight: 500; }
-.walk > summary .brief { flex: 1; min-width: 0; color: var(--muted); font-size: 14px; }
+.walk > summary .brief { flex: 1; min-width: 0; color: var(--muted); font-size: calc(14px * var(--z)); }
 .walk > summary .chev { margin-left: auto; align-self: center; width: var(--s2); height: var(--s2); border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform var(--ease); }
 .walk[open] > summary .chev { transform: rotate(-135deg); }
 .walk .state .on { color: var(--settled); } .walk .state .hold { color: var(--assumption); }
@@ -154,11 +154,11 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 .walk .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
 .walk .chain span:first-child { overflow-wrap: anywhere; }
 .walk details { margin-top: 6px; }
-.walk details > summary { min-height: 40px; display: flex; align-items: center; cursor: pointer; list-style: none; }
+.walk details > summary { min-height: calc(40px * var(--z)); display: flex; align-items: center; cursor: pointer; list-style: none; }
 .walk details > summary::after { content: ""; margin-left: 10px; width: 6px; height: 6px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 .walk details[open] > summary::after { transform: rotate(-135deg); }
 .walk details summary::-webkit-details-marker { display: none; }
-.walk .ev { margin: 0; padding: 0 0 10px; list-style: none; font-size: 14px; color: var(--muted); }
+.walk .ev { margin: 0; padding: 0 0 10px; list-style: none; font-size: calc(14px * var(--z)); color: var(--muted); }
 .walk .ev li { padding: 2px 0; display: flex; gap: 10px; }
 .walk .ev time { flex: none; width: 5.5em; font-variant-numeric: tabular-nums; }
 
@@ -166,7 +166,7 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 .head h2 { margin: 10px 0 var(--s1); font-size: var(--fs-title); line-height: 1.25; font-weight: 500; text-wrap: balance; }
 .head p { margin: 2px 0 0; font-size: var(--fs-small); }
 details.sec.arts .body, details.sec.runs .body { white-space: normal; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s3); margin-bottom: var(--s3); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--z)), 1fr)); gap: var(--s3); margin-bottom: var(--s3); }
 a.tile { display: block; color: inherit; text-decoration: none; }
 a.tile .thumb { display: block; position: relative; aspect-ratio: 3 / 2; overflow: hidden; border: var(--rule) solid var(--line); background: var(--faint); }
 a.tile .thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
@@ -179,7 +179,7 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .tree { margin-top: var(--s2); }
 .row { display: flex; align-items: stretch; margin-left: calc(var(--i, 0) * 6px); border-bottom: var(--rule) solid var(--faint); }
 @media (min-width: 600px) { .row { margin-left: calc(var(--i, 0) * 10px); } }
-.row .fold { flex: 0 0 40px; min-height: 56px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 20px; }
+.row .fold { flex: 0 0 calc(40px * var(--z)); min-height: calc(56px * var(--z)); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: calc(20px * var(--z)); }
 .row .fold.none { visibility: hidden; }
 .row .main { flex: 1; min-width: 0; padding: var(--s3) 6px var(--s3) 14px; border-left: var(--rule-status) solid var(--st, var(--line)); }
 .row .main:active, .row.sel .main { background: var(--sel); }
@@ -212,7 +212,7 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .sheet-nav, .sheet-actions { flex: none; }
 /* the node's own bar, at the bottom: Back leftmost, Next where the right thumb rests */
 .sheet-nav { display: grid; grid-template-columns: repeat(4, 1fr); border-top: var(--rule) solid var(--line); }
-.sheet-nav button { min-height: 56px; display: flex; align-items: center; justify-content: center; font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-align: center; }
+.sheet-nav button { min-height: calc(56px * var(--z)); display: flex; align-items: center; justify-content: center; font-size: var(--fs-control); font-weight: 500; letter-spacing: .12em; text-align: center; }
 .sheet-nav button + button { border-left: var(--rule) solid var(--faint); }
 .sheet-nav button[data-act=next] { font-weight: 700; color: var(--ink); background: var(--sel); }
 .sheet-nav button:disabled { color: var(--muted); opacity: .45; cursor: default; background: none; }
@@ -220,7 +220,7 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .sheet-body .where { margin-bottom: var(--s1); font-variant-numeric: tabular-nums; }
 .sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4) var(--s4) 20px; overscroll-behavior: contain; }
 .sheet-body h3 { margin: 0 0 2px; font-size: var(--fs-title); line-height: 1.25; font-weight: 500; overflow-wrap: anywhere; }
-.sheet-body .meta { color: var(--muted); font-size: 14px; letter-spacing: .04em; margin-bottom: var(--s1); }
+.sheet-body .meta { color: var(--muted); font-size: calc(14px * var(--z)); letter-spacing: .04em; margin-bottom: var(--s1); }
 .sheet-body h4 { margin: 20px 0 var(--s1); font-size: var(--fs-label); font-weight: 500; letter-spacing: var(--track-label); color: var(--muted); }
 .sheet-body .raise h4 { margin: 0 0 var(--s2); }
 .sheet-body h4.amber { color: var(--assumption); } .sheet-body h4.red { color: var(--attention); }
@@ -231,12 +231,12 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .sheet-body .minus::before { content: "Against \2014  "; font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; }
 .sheet-body .red { color: var(--attention); } .sheet-body .dim { color: var(--muted); }
 .sheet-body .raise { margin: var(--s3) 0; }
-.sheet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
+.sheet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(96px * var(--z)), 1fr)); gap: 10px; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 
 /* chat: a conversation in a dialog of its own, full height on a phone */
 #chat { width: min(720px, 100vw); max-width: 100vw; margin: auto; padding: 0; flex-direction: column; }
 #chat[open] { display: flex; }
-.chat-top { flex: none; display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); }
+.chat-top { flex: none; display: flex; align-items: center; justify-content: center; min-height: calc(48px * var(--z)); padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); }
 .chat-nav { grid-template-columns: repeat(3, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .chat-nav button[data-act=chatclose] { font-weight: 700; }
 #chat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4); overscroll-behavior: contain; }
@@ -270,8 +270,8 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   #tabs { position: fixed; top: 0; left: auto; right: var(--s4); bottom: auto; width: auto; height: var(--bar); border: 0; background: transparent; padding: 0; gap: var(--s2); z-index: 7; }
   #tabs button { flex: none; padding: 0 14px; margin: 0; border-top: 0; border-bottom: var(--rule-strong) solid transparent; height: var(--bar); }
   #tabs button[aria-current="page"] { border-bottom-color: var(--ink); }
-  #bar { padding-right: 400px; }
-  #layout.has-node { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 44%); gap: 0 28px; align-items: start; }
+  #bar { padding-right: calc(400px * var(--z)); }
+  #layout.has-node { display: grid; grid-template-columns: minmax(0, 1fr) minmax(calc(380px * var(--z)), 44%); gap: 0 28px; align-items: start; }
   #sheet { position: sticky; top: calc(var(--bar) + var(--s3)); right: auto; left: auto; bottom: auto; height: calc(100dvh - var(--bar) - 28px); border: var(--rule) solid var(--line); margin: var(--s3) var(--s4) 0 0; display: none; }
   #layout.has-node #sheet.open { display: flex; }
   .sheet-nav { order: -1; border-top: 0; border-bottom: var(--rule) solid var(--line); }
@@ -279,6 +279,35 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   #scrim { display: none !important; }
   #toast { top: auto; bottom: var(--s5); }
   .fab { bottom: var(--s5); right: var(--s5); }
+}
+
+/* the rail: the tasks beside the tree, so a switch is a click and not a trip back to the list. Only on a screen wide enough for three panes. */
+#rail { display: none; }
+.railitem { display: grid; grid-template-columns: 2.6em minmax(0, 1fr); gap: 0 var(--s2); width: 100%; padding: var(--s2) var(--s2) var(--s2) var(--s3); border-left: var(--rule-status) solid var(--st, transparent); border-bottom: var(--rule) solid var(--faint); font-size: var(--fs-small); }
+.railitem .iid { font-weight: 600; }
+.railitem .goal { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.railitem.done { color: var(--muted); }
+.railitem.assumes { background: var(--assumption-wash); --st: var(--assumption-fill); }
+.railitem.blocks { background: var(--attention-wash); --st: var(--attention); }
+.railitem[aria-current="true"] { background: var(--sel); --st: var(--ink); box-shadow: inset 0 0 0 var(--rule) var(--ink); }
+/* where a pointer rests, the thing under it says it can be pressed */
+@media (hover: hover) {
+  .item:hover, .railitem:hover, .row .main:hover { background: var(--sel); }
+  .item.assumes:hover { background: var(--assumption-wash); filter: brightness(.96); }
+  .item.blocks:hover { background: var(--attention-wash); filter: brightness(.96); }
+}
+/* the menu a right-click on a node opens: the sheet's own actions, at the pointer */
+#ctx { position: fixed; z-index: 30; min-width: calc(180px * var(--z)); display: flex; flex-direction: column; background: var(--panel); border: var(--rule) solid var(--ink); }
+#ctx[hidden] { display: none; }
+#ctx button { min-height: var(--hit); padding: 0 var(--s4); font-size: var(--fs-control); font-weight: 500; letter-spacing: var(--track-control); }
+#ctx button + button { border-top: var(--rule) solid var(--faint); }
+#ctx button:hover, #ctx button:focus-visible { background: var(--sel); }
+@media (min-width: 1500px) {
+  /* three panes and no page cap: the screen is the layout. Tasks, then the tree, then the node. */
+  #layout { max-width: none; }
+  #layout.has-node { grid-template-columns: minmax(calc(230px * var(--z)), 19%) minmax(0, 1fr) minmax(calc(380px * var(--z)), 36%); gap: 0 var(--s5); }
+  #layout.has-node #rail { display: block; position: sticky; top: calc(var(--bar) + var(--s3)); height: calc(100dvh - var(--bar) - 28px); overflow-y: auto; margin: var(--s3) 0 0 var(--s4); border-top: var(--rule) solid var(--line); overscroll-behavior: contain; }
+  #bar { padding-left: var(--s5); }
 }
 </style>
 </head>
@@ -294,6 +323,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 </header>
 <nav id="tabs" aria-label="Navigate"></nav>
 <div id="layout">
+  <nav id="rail" aria-label="Tasks"></nav>
   <main id="view" aria-live="polite"><p class="wait">Loading…</p></main>
   <aside id="sheet" role="dialog" aria-label="Node" aria-modal="false"></aside>
 </div>
@@ -305,6 +335,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn" id="chat-stop" type="button" hidden>Stop</button><button class="btn primary" id="chat-send" type="submit">Send</button></form>
   <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
 </dialog>
+<div id="ctx" role="menu" hidden></div>
 <div id="toast" role="status"></div>
 
 <script>
@@ -454,7 +485,22 @@ async function render(force) {
 }
 // A task screen does not load the list, but the bar's Needs you carries the count.
 async function refreshNeeds() {
-  try { S.needs = (await api("/api/state")).needs_you; drawBar(route()); } catch (e) { /* a count is a convenience */ }
+  try { S.state = await api("/api/state"); S.needs = S.state.needs_you; drawBar(route()); drawRail(); } catch (e) { /* a count is a convenience */ }
+}
+/* The rail beside a task's tree on a wide screen: every task, the one you are in marked. It is drawn only when the
+   tasks changed, so a push does not take the scroll from under a pointer. */
+function drawRail() {
+  const rail = $("#rail"), r = route();
+  if (r.view !== "task" || !S.state) return;
+  const html = S.state.items.map(it => {
+    const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
+    return `<button class="railitem${blocks ? " blocks" : assumes ? " assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" aria-current="${it.id === r.task}" title="${esc(it.goal)}"><span class="iid">${esc(it.id)}</span><span class="goal">${esc(it.goal)}</span></button>`;
+  }).join("");
+  if (rail.dataset.sig !== html) {
+    const was = rail.scrollTop; rail.innerHTML = html; rail.dataset.sig = html; rail.scrollTop = was;
+  }
+  const cur = $('[aria-current="true"]', rail);
+  if (cur && rail.dataset.at !== r.task) { rail.dataset.at = r.task; rail.scrollTop = Math.max(0, cur.offsetTop - rail.offsetTop - rail.clientHeight / 3); }
 }
 /* The bar at the bottom is where the thumbs are, so it holds what you press to move: on a phone,
    Back is always its right cell, under the right thumb, with what moves you on the left, and what is next to it is what that screen leads to. On a wide
@@ -1238,9 +1284,33 @@ setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#cha
 addEventListener("keydown", e => {
   if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey) return;
   if (!S.task || route().view !== "task") return;
+  const open = S.node && S.task.rows.find(x => x.key === S.node);
   if (e.key === "j") step(1); else if (e.key === "k") step(-1); else if (e.key === "n") nextFlag();
   else if (e.key === "Escape" && S.node) leave(`t/${S.task.id}`);
+  else if (e.key === "Enter" && !S.node && e.target === document.body) { const first = visibleRows(S.task).find(x => x.kind === "node"); if (first) go(`t/${S.task.id}/${first.id}`); }
+  else if (e.key === "c" && open) correctForm(open.id);
+  else if (e.key === "f") { S.flagged = !S.flagged; S.sig = ""; render(true); }
 });
+/* Right-click on a node: its actions at the pointer, the same ones the sheet has. Any click, Escape or scroll closes it. */
+function ctxClose() { const m = $("#ctx"); if (!m.hidden) { m.hidden = true; m.innerHTML = ""; } }
+document.addEventListener("contextmenu", e => {
+  const main = e.target.closest && e.target.closest(".row .main[data-act=node]");
+  if (!main || !S.task) return ctxClose();
+  e.preventDefault();
+  const id = main.dataset.id, r = S.task.rows.find(x => x.id === id), m = $("#ctx");
+  m.innerHTML = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>
+    <button role="menuitem" data-act="correct" data-id="${esc(id)}">Refute/confirm</button>
+    ${r && r.editable ? `<button role="menuitem" data-act="editnode" data-id="${esc(id)}">Edit</button>` : ""}
+    <button role="menuitem" data-act="add" data-parent="${esc(id)}">Add under</button>
+    <button role="menuitem" data-act="deletenode" data-id="${esc(id)}">Delete</button>`;
+  m.hidden = false;
+  m.style.left = Math.max(0, Math.min(e.clientX, innerWidth - m.offsetWidth)) + "px";
+  m.style.top = Math.max(0, Math.min(e.clientY, innerHeight - m.offsetHeight)) + "px";
+  $("button", m).focus();
+});
+document.addEventListener("click", ctxClose, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#ctx").hidden) { ctxClose(); e.stopPropagation(); } }, true);
+addEventListener("scroll", ctxClose, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
 

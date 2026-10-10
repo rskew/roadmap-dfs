@@ -27,6 +27,9 @@ function chromiumPath() {
 const PHONE = { ...devices["iPhone 13"] };
 const NARROW = { viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true };
 const DESKTOP = { viewport: { width: 1280, height: 800 } };
+const FHD = { viewport: { width: 1920, height: 1080 } };
+const QHD = { viewport: { width: 2560, height: 1440 } };
+const UHD = { viewport: { width: 3840, height: 2160 } };
 
 // ── what a page is audited for, in either theme ───────────────────────────────────────
 const AUDIT = () => {
@@ -1057,7 +1060,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
 
   // The design system's own specimen: it must pass what it asks of the page, in both themes.
   async design(b) {
-    for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW], ["desktop", DESKTOP]]) {
+    for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW], ["desktop", DESKTOP], ["1920", FHD], ["2560", QHD]]) {
       for (const scheme of ["light", "dark"]) {
         const ctx = await b.newContext({ ...opts, colorScheme: scheme });
         const page = await ctx.newPage(); PAGES.push(page);
@@ -1079,7 +1082,51 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     }
   },
 
-  // Every screen, both themes, three widths: nothing overflows, text can be read, targets can be hit.
+  // A big screen: the page uses the width (a rail of tasks, the tree, the node), type scales with it, and a
+  // pointer and a keyboard reach what a thumb does.
+  async wide(b) {
+    for (const [name, opts, minType] of [["1920", FHD, 18.5], ["2560", QHD, 21.5], ["3840", UHD, 29]]) {
+      const { ctx, page, errors } = await open(b, opts);
+      const px = sel => page.evaluate(s => parseFloat(getComputedStyle(document.querySelector(s)).fontSize), sel);
+      assert(await px("body") >= minType, `${name}: body type ${await px("body")}px has grown`);
+      await task(page, "W9");
+      await page.waitForSelector("#rail .railitem");
+      const w = await page.evaluate(() => ({ layout: document.querySelector("#layout").offsetWidth, rail: document.querySelector("#rail").offsetWidth, view: document.querySelector("#view").offsetWidth }));
+      assert(w.layout > opts.viewport.width * .95, `${name}: the layout uses the screen, ${w.layout}px of ${opts.viewport.width}`);
+      assert(w.rail > 150 && w.view > w.rail, `${name}: a rail beside a wider tree (${w.rail}, ${w.view})`);
+      assert((await page.getAttribute("#rail .railitem[data-id=W9]", "aria-current")) === "true", `${name}: the rail marks the task you are in`);
+      assert((await page.$$("#rail .railitem")).length >= 3, `${name}: the rail lists the tasks`);
+      // Enter on the bare page opens the first node; c rules on it; Escape closes it
+      await page.keyboard.press("Enter"); await page.waitForSelector("#sheet.open");
+      await page.keyboard.press("c"); await dialog(page); await page.keyboard.press("Escape");
+      await page.waitForFunction(() => document.activeElement === document.body);     // the closed dialog gives its focus back
+      await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("#sheet.open"));
+      // f shows the flagged nodes only, and again all of them
+      const all = (await page.$$(".row")).length;
+      await page.keyboard.press("f"); await page.waitForFunction(c => document.querySelectorAll(".row").length < c, all);
+      await page.keyboard.press("f"); await page.waitForFunction(c => document.querySelectorAll(".row").length === c, all);
+      // right-click: the node's actions at the pointer; Escape closes the menu and leaves the page as it was
+      await page.click(".row .main", { button: "right" });
+      await page.waitForSelector("#ctx:not([hidden])");
+      assert((await page.$$("#ctx button")).length >= 4, `${name}: the menu offers the node's actions`);
+      await page.keyboard.press("Escape");
+      assert(await page.evaluate(() => document.querySelector("#ctx").hidden), `${name}: Escape closes the menu`);
+      await page.click(".row .main", { button: "right" });
+      await page.click("#ctx [data-act=node]"); await page.waitForSelector("#sheet.open");
+      // a click on another task in the rail goes there
+      const other = await page.evaluate(() => [...document.querySelectorAll("#rail .railitem")].map(e => e.dataset.id).find(i => i !== "W9"));
+      await page.click(`#rail .railitem[data-id=${other}]`);
+      await page.waitForFunction(t => location.hash.startsWith("#/t/" + t), other);
+      same(errors, [], `${name}: no page errors`);
+      await ctx.close();
+    }
+    const { ctx, page } = await open(b, DESKTOP);
+    await task(page, "W9");
+    assert(await page.evaluate(() => getComputedStyle(document.querySelector("#rail")).display === "none"), "a laptop has no rail");
+    await ctx.close();
+  },
+
+  // Every screen, both themes, five widths (a phone, a narrow one, a laptop, a monitor, a big monitor): nothing overflows, text can be read, targets can be hit.
   async layout(b) {
     for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW], ["desktop", DESKTOP]]) {
       for (const scheme of ["light", "dark"]) {

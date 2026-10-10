@@ -46,6 +46,10 @@ icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes
   `--rule-status 3` (what a node came to). **Shape**: `--radius 0`.
 - **Reach**: `--hit 44`, the smallest thing a thumb is asked to press. `--measure 68ch`, the
   longest line of prose.
+- **Scale**, `--z`: 1 up to 1700px wide, then 1.12, 1.3, 1.55 and 1.75 at 1700, 2300, 3000 and 3600px.
+  Type, space and `--hit` (and the bar) are written as the sizes above times `--z`, so a monitor or a
+  TV gets bigger things, not more of them. From 1500px a task shows three panes (the tasks, the tree,
+  the node) and the 1180px page cap goes.
 
 ## Components
 
