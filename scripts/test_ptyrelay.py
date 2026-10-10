@@ -391,13 +391,33 @@ class Redrawing(unittest.TestCase):
         self.assertEqual(frame(wide), frame(fitted))
         self.assertEqual(len(frame(wide).splitlines()), 7)  # 3 lines of 94 columns wrap in two, then the prompt
 
-    def test_attaching_redraws_over_the_rows_above_it_either_way(self):
-        # the redraw erases as many lines as it drew, which on a screen it never drew on are the
-        # screen's own: this is the same at 120 columns and at 80, so it is not the width
-        left = lambda text: [l for l in text.splitlines() if l.startswith("screen")]
-        wide, fitted = left(self.looked_at((40, 120))), left(self.looked_at((self.ROWS, self.COLS)))
-        self.assertLess(len(wide), len(self.ABOVE))
-        self.assertLess(len(fitted), len(self.ABOVE))
+    def test_attaching_leaves_none_of_the_rows_above_overwritten_because_none_is_left(self):
+        # the redraw erases as many lines as it drew, which on a screen it never drew on would be
+        # the screen's own: attach clears first, so it erases only blank rows, at either width
+        for size in ((40, 120), (self.ROWS, self.COLS)):
+            text = self.looked_at(size)
+            self.assertEqual([l for l in text.splitlines() if l.startswith("screen")], [], size)
+            self.assertTrue(text.startswith("w0"), (size, text))
+
+    def test_attaching_to_a_plain_agent_clears_the_screen_and_shows_what_it_prints(self):
+        slave, screen = self.terminal()
+        relay = ptyrelay.Relay().start([sys.executable, "-c", "import time; print('hello'); time.sleep(30)"])
+        self.addCleanup(relay.close)
+        time.sleep(0.5)
+        keys_r, keys_w = os.pipe()
+        self.addCleanup(os.close, keys_w)
+        saved = sys.stdin, sys.stdout
+        sys.stdin, sys.stdout = os.fdopen(keys_r, "r"), os.fdopen(slave, "w", closefd=False)
+        try:
+            t = threading.Thread(target=relay.attach, daemon=True)
+            t.start()
+            time.sleep(0.5)
+            os.write(keys_w, ptyrelay.DETACH)
+            t.join(3)
+        finally:
+            mine, sys.stdin, sys.stdout = sys.stdin, saved[0], saved[1]
+            mine.close()
+        self.assertNotIn("screen 0", screen.text())
 
 
 class Leaving(unittest.TestCase):

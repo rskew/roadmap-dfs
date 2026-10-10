@@ -1,0 +1,167 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attach clears the screen: does it stop the chat erasing rows it never drew?</title>
+<!--
+  An assumption artefact: the page a node's Hypothesis names. Copy this file to
+  .dfs/artefacts/<uuid>.html, keep it SELF-CONTAINED (no CDN, and the one fetch below to
+  /artefact-state: the web page serves it sandboxed, scripts allowed, the network off), and check it with
+      <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
+  It must be INTERACTIVE: a control the reader changes (a button, input, select or
+  details) and a handler on it (addEventListener or onclick), because check.py refuses a
+  Hypothesis whose page has none. The
+  page explains the assumption and lets the author decide it; the Hypothesis itself
+  still says it in words, since the node must read without the page.
+  MOBILE FIRST: the author reads this on a phone. Write the rules for a 360px screen
+  and widen them under @media (min-width: ...); the checker also renders it at 360px.
+-->
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff;
+            padding: 10px 14px; min-height: 3em; }
+  #rulebox, #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p, #answerbox p { margin: 0 0 8px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  pre.term { margin: 8px 0 0; padding: 8px 10px; background: #14161a; color: #d8dee9; border-radius: 6px;
+             font: 13px/1.35 ui-monospace, Menlo, Consolas, monospace; overflow-x: auto; }
+  pre.term .gone { color: #6b7380; text-decoration: line-through; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; }
+  label { display: block; margin: 8px 0 2px; }
+  input[type="range"] { width: 100%; min-height: 44px; }
+</style>
+
+<h1>Attach clears the screen: does it stop the chat erasing rows it never drew?</h1>
+<p class="lede">A chat that redraws in place erases its last frame with cursor-up moves, one per line it drew.
+  When you press <code>c</code> the cursor sits under the roadmap's own text, so those moves go over rows the
+  chat never drew. The fix writes a clear-and-home to the terminal as <code>attach</code> starts, so the
+  moves have only blank rows to go over. This assumes a real claude erases its frame the way the stand-in does.</p>
+
+<h2>What attach does</h2>
+<div class="choices" role="group" aria-label="What attach does">
+  <button type="button" data-case="holds" aria-pressed="true">Clear on attach (the fix)</button>
+  <button type="button" data-case="fails" aria-pressed="false">Leave the screen as it is (today)</button>
+</div>
+<pre class="term" id="term" aria-live="polite"></pre>
+<div class="result" id="result" aria-live="polite"></div>
+
+<div id="rulebox" hidden>
+  <p>Rule on this node: whether the fix, and the wrapping assumption under it, stand.</p>
+  <label for="note">Your note, sent with it (optional)</label>
+  <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
+<div id="answerbox" hidden>
+  <p>This page is also the answer to a raise. Choose above, then send it.</p>
+  <button type="button" id="answer">Send as my answer</button>
+  <p id="answer-status" aria-live="polite"></p>
+</div>
+
+<h2>Lines the chat last drew</h2>
+<label for="knob">The chat's frame is <output id="knob-out">7</output> lines tall (the stand-in drew 7)</label>
+<input id="knob" type="range" min="1" max="12" value="7">
+
+<h2>What would show it wrong</h2>
+<p class="wrong">A real claude's first screen after <code>c</code> still shows fragments of the roadmap's
+  banner, or still wraps oddly at the terminal's width (then the cause was neither the fixed 120 columns
+  nor the erase, and the parked replay of the chat's output is next). Also wrong if a real claude does not
+  erase upward on attach at all, in which case the clear only costs the <code>ctrl-]</code> hint.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>Stand-in agent at 24x80, started at 40x120 and at 24x80: same final frame, and 2 to 3 of the 5 rows above
+    overwritten at both widths, so the width is not what overwrites them. With the clear, none of the rows above
+    are left to overwrite and the frame is unchanged at both widths; the test goes red with the clear removed.
+    The fixed 40x120 start as the cause of the wrapping was read off the code and never seen: no real claude
+    is installed here, so the author is the one to look.</p>
+</details>
+
+<script>
+  var ABOVE = ['roadmap  W48  open', 'W48.7  attach hands over the terminal', '', '[chat W48: ctrl-] returns to the roadmap]', ''];
+  function frame(n) { var f = []; for (var i = 0; i < n; i++) f.push(i === n - 1 ? '> prompt' : 'w' + i + ' xxxxxxxxxxxx'); return f; }
+  var cases = {
+    holds: function (n) {
+      return 'Cleared first: the chat erases ' + n + ' rows from the top of a blank screen, so nothing of the roadmap is lost. You lose the ctrl-] hint line, which the chat now has the screen to itself without.';
+    },
+    fails: function (n) {
+      var over = Math.min(ABOVE.length, Math.max(0, n - 1));
+      return 'Not cleared: the cursor is under the ' + ABOVE.length + ' rows of the roadmap\'s text, so the chat\'s ' + n + '-line redraw erases ' + over + ' of them (the hint and the banner), at 120 columns and at 80 alike.';
+    }
+  };
+  var chosen = 'holds', touched = false;
+  var knob = document.getElementById('knob');
+  function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function term(n) {
+    var rows = [], over = Math.min(ABOVE.length, Math.max(0, n - 1));
+    if (chosen === 'holds') { rows = frame(n).map(esc); }
+    else {
+      ABOVE.forEach(function (r, i) { var erased = i >= ABOVE.length - over; rows.push(erased ? '<span class="gone">' + esc(r || ' ') + '</span>' : esc(r)); });
+      rows = rows.concat(frame(n).map(esc));
+    }
+    document.getElementById('term').innerHTML = rows.join('\n');
+  }
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen, knob: knob.value }; }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
+  function show() {
+    var n = +knob.value;
+    document.getElementById('knob-out').textContent = n;
+    document.getElementById('result').textContent = cases[chosen](n);
+    term(n);
+    document.querySelectorAll('[data-case]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.case === chosen));
+    });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
+  });
+  knob.addEventListener('input', function () { touched = true; show(); keep(); });
+  function rule(verdict) {
+    var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    var text = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: mine(), verdict: verdict, answer: text }).then(function () {
+      note.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      note.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
+  var send = document.getElementById('answer');
+  send.addEventListener('click', function () {
+    var note = document.getElementById('answer-status');
+    send.disabled = true;
+    call('POST', { state: mine(), answer: document.getElementById('result').textContent }).then(function () {
+      note.textContent = 'Recorded as your answer.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) { send.disabled = false; note.textContent = 'Not recorded: ' + e.message; });
+  });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; knob.value = j.state.knob; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
+    document.getElementById('answerbox').hidden = !j.raise;
+  }).catch(function () {});
+</script>
