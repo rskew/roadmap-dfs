@@ -85,6 +85,8 @@ RESETS_RE = re.compile(r"resets [^\"\\\n]*")
 # errors in ~/.codex/sessions). The clock time names no zone: it is codex's local one.
 # Missed by RESETS_RE, so a codex limit was recorded with no reset and the walk held the
 # flat hour instead of until the time codex gave.
+# A bare clock time is read when the walk reads the run's end (as for claude's "resets 8pm"),
+# so one read after that time is taken for tomorrow's.
 TRY_AGAIN_RE = re.compile(r"try again at [^\"\\\n.]*?[AP]M", re.I)
 
 
