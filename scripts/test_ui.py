@@ -153,6 +153,9 @@ class Flows(unittest.TestCase):
     def test_the_chats_top_button_goes_to_the_top_of_the_message_being_read(self):
         self.flow("chat_top")
 
+    def test_the_chat_follows_a_reader_near_its_end_or_just_after_sending_and_no_one_else(self):
+        self.flow("chat_follow")
+
     def test_the_node_sheet_keeps_prev_and_next_where_they_are(self):
         self.flow("node_sheet")
 

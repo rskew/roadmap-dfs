@@ -312,6 +312,48 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // The chat log carries a reader to the end only when within 80px of it or just after sending; a failed send carries no one.
+  async chat_follow(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
+    const long = n => Array.from({ length: n }, (_, i) => `row ${i} of an answer`).join("\n");
+    const state = { messages: [{ role: "you", text: "first" }, { role: "agent", text: long(60) }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", failSend: false };
+    await page.route("**/api/chat/**", r => {
+      if (r.request().url().includes("/send")) {
+        if (state.failSend) return r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "no agent" }) });
+        state.messages.push({ role: "you", text: "sent" });
+      }
+      return r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    const count = n => page.waitForFunction(k => document.querySelectorAll("#chat-log .msg").length === k, n);
+    await count(2); await page.waitForTimeout(700);
+    const from_end = () => page.$eval("#chat-log", e => Math.round(e.scrollHeight - e.scrollTop - e.clientHeight));
+    const scroll_to = async gap => { await page.$eval("#chat-log", (e, g) => { e.scrollTo(0, e.scrollHeight - e.clientHeight - g); }, gap); await page.waitForTimeout(400); };
+    // an agent message lands; the quiet poll (4s) draws it
+    const lands = async text => { state.messages.push({ role: "agent", text }); await count(state.messages.length); await page.waitForTimeout(500); };
+    assert((await from_end()) < 4, "a chat opens at its end");
+    await scroll_to(50); let was = await page.$eval("#chat-log", e => Math.round(e.scrollTop));
+    await lands("lands near the end");
+    assert((await from_end()) < 4, `a reader 50px from the end is carried to a new message (${await from_end()} from the end)`);
+    await scroll_to(120); was = await page.$eval("#chat-log", e => Math.round(e.scrollTop));
+    await lands("lands while reading up");
+    same(await page.$eval("#chat-log", e => Math.round(e.scrollTop)), was, "a reader 120px from the end stays put when an answer lands");
+    // sending carries a scrolled-up reader to their own question
+    await scroll_to(300);
+    await page.fill("#chat-input", "hello"); await page.click("#chat-send"); await count(state.messages.length); await page.waitForTimeout(500);
+    assert((await from_end()) < 4, `a reader scrolled up who sends is carried to the end (${await from_end()} from the end)`);
+    // a send that fails carries no one, now or on the next unrelated redraw
+    await scroll_to(300); was = await page.$eval("#chat-log", e => Math.round(e.scrollTop));
+    state.failSend = true;
+    await page.fill("#chat-input", "again"); await page.click("#chat-send");
+    await page.waitForTimeout(700);
+    same(await page.$eval("#chat-log", e => Math.round(e.scrollTop)), was, "a failed send leaves the reader where they were");
+    await lands("lands after a failed send");
+    same(await page.$eval("#chat-log", e => Math.round(e.scrollTop)), was, "and so does the next redraw");
+    same(errors.filter(e => !e.includes("status of 500")), [], "no page errors but the failed send's own");
+  },
+
   // The node sheet: prev and next move, and stay exactly where they are.
   async node_sheet(b) {
     const { page, errors } = await open(b, PHONE);
