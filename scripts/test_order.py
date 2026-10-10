@@ -118,6 +118,22 @@ class Tree(unittest.TestCase):
         self.assertEqual(dfs_order.moved(n, "W1", 1),
                          [("W5", 0), ("W1", 0), ("W2", 1), ("W3", 2), ("W4", 1)])
 
+    def test_place_puts_a_task_beside_any_sibling_and_carries_the_subtree(self):
+        n = self.nodes()
+        self.assertEqual(dfs_order.placed(n, "W1", "W5", True),
+                         [("W5", 0), ("W1", 0), ("W2", 1), ("W3", 2), ("W4", 1)])
+        self.assertEqual(dfs_order.placed(n, "W5", "W1", False),
+                         [("W5", 0), ("W1", 0), ("W2", 1), ("W3", 2), ("W4", 1)])
+        self.assertEqual(dfs_order.placed(n, "W4", "W2", False),
+                         [("W1", 0), ("W4", 1), ("W2", 1), ("W3", 2), ("W5", 0)])
+        self.assertEqual(dfs_order.placed(n, "W2", "W4", True),
+                         dfs_order.moved(n, "W2", 1))
+
+    def test_place_is_refused_beside_a_task_that_is_not_a_sibling_or_is_itself(self):
+        n = self.nodes()
+        for item, target in (("W4", "W5"), ("W5", "W3"), ("W2", "W2"), ("W2", "W9"), ("W9", "W1")):
+            self.assertIsNone(dfs_order.placed(n, item, target, True), (item, target))
+
     def test_down_is_refused_at_the_last_sibling_not_at_the_last_row(self):
         # W4 is the last child of W1 but nowhere near the last line of the file;
         # a move that walked the flattened list would silently promote it instead.

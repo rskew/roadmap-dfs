@@ -479,7 +479,7 @@ def new_task(body):
     return dict(added=task)
 
 
-MOVES = {"up", "down", "out", "in", "break"}
+MOVES = {"up", "down", "out", "in", "break", "place"}
 
 # Why a move that cannot be made cannot: the terminal's own words (tui.py reorder,
 # reparent, toggle_break), since it is the same rule refusing.
@@ -487,6 +487,7 @@ MOVE_REFUSAL = {
     "up": "is already first among its siblings", "down": "is already last among its siblings",
     "out": "is already at the root",
     "in": "has no sibling above it in this section to go under",
+    "place": "cannot go there: a drag stays among its own siblings",
 }
 
 
@@ -513,10 +514,17 @@ def reorder(body):
                        if dict(nodes).get(item) else
                        "is the first task — a break above it would gate nothing")
         else:
+            if move == "place":
+                target, where = need(body, "target", "the task to go beside"), body.get("where")
+                if where not in ("before", "after"):
+                    raise Refused("where is before or after")
+                if dfs_order.index_of(nodes, target) is None:
+                    raise Refused("no task %s" % target, 404)
             after = {"up": lambda: dfs_order.moved(nodes, item, -1),
                      "down": lambda: dfs_order.moved(nodes, item, 1),
                      "out": lambda: dfs_order.outdented(nodes, item),
-                     "in": lambda: dfs_order.indented(nodes, item)}[move]()
+                     "in": lambda: dfs_order.indented(nodes, item),
+                     "place": lambda: dfs_order.placed(nodes, item, target, where == "after")}[move]()
             refusal = MOVE_REFUSAL[move]
         if after is None:
             raise Refused("%s %s" % (item, refusal), 409)

@@ -924,6 +924,23 @@ class Web(unittest.TestCase):
         status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="down"))
         self.assertEqual((status, self.ids(data)), (200, ["W3", "W1", "W2"]))
 
+    def test_a_task_is_placed_beside_a_sibling_and_a_stranger_is_refused(self):
+        self.three_tasks()
+        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="place", target="W3", where="after"))
+        self.assertEqual((status, self.ids(data)), (200, ["W2", "W3", "W1"]))
+        self.assertEqual(self.order_file().splitlines()[-3:], ["- W2", "- W3", "- W1"])
+        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="place", target="W2", where="before"))
+        self.assertEqual((status, self.ids(data)), (200, ["W1", "W2", "W3"]))
+        self.call("POST", "/api/order", dict(item="W3", move="in"))      # W3 now under W2
+        before = self.order_file()
+        for body, code in ((dict(item="W3", target="W1", where="after"), 409),
+                           (dict(item="W1", target="W1", where="after"), 409),
+                           (dict(item="W1", target="W9", where="after"), 404),
+                           (dict(item="W1", target="W2", where="beside"), 400),
+                           (dict(item="W1", where="after"), 400)):
+            self.assertEqual(self.call("POST", "/api/order", dict(move="place", **body))[0], code, body)
+        self.assertEqual(self.order_file(), before)
+
     def test_a_task_goes_under_the_one_above_and_back_out(self):
         self.three_tasks()
         _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="in"))

@@ -280,6 +280,19 @@ def moved(nodes, item, step):
     return _replant(nodes, i, span(nodes, other)[1], 0)
 
 
+def placed(nodes, item, target, after):
+    """`item` moved to just after (or before) its sibling `target`, or None if `target` is
+    not one of its siblings, is the item itself, or either is not named.
+
+    What a drag does: the same reach as `moved` (among the siblings, subtree and all),
+    but to any slot at once. The parent never changes here; `indented` and `outdented` do that.
+    """
+    i, t = index_of(nodes, item), index_of(nodes, target)
+    if i is None or t is None or i == t or t not in siblings_of(nodes, i):
+        return None
+    return _replant(nodes, i, span(nodes, t)[1] if after else t, 0)
+
+
 def removed(nodes, item):
     """The tree without `item`, or None if it is not named. Its children stay where they
     were and take its place a level up: they are work in their own right, and deleting
