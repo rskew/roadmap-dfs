@@ -1,4 +1,5 @@
 """artefact_check.sh fails a slider that moves nothing but its own number."""
+import os
 import subprocess
 import tempfile
 import unittest
@@ -28,6 +29,8 @@ class ASliderMustChangeWhatTheReaderSees(unittest.TestCase):
                                capture_output=True, text=True, timeout=300)
         out = r.stdout + r.stderr
         if "dfs_artefact_check:" not in out:
+            if os.environ.get("DFS_REQUIRE_BROWSER"):
+                self.fail("no browser to render with: " + out[-200:])
             self.skipTest("no browser to render with: " + out[-200:])
         return out
 

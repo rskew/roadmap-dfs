@@ -58,8 +58,9 @@ box (`overflow-x: auto`) rather than widening the page, and says so in its capti
    text that does not fit, text below 12px, console errors, failed requests, a blank page,
    a missing `width=device-width` viewport meta, content wider than the phone, and
    controls under 32px high, and a slider that changes nothing on the page but its own
-   number (each range input is moved to its minimum and its maximum and the page compared
-   without the slider's own label and `<output>`) — then writes `/tmp/artefact-check/<uuid>.png` and
+   number (each range input is moved to its minimum and its maximum, the page is let to
+   settle, and what is compared is the page without the slider's own label and every
+   `<output>`, so put a result in an ordinary element, never an `<output>`) — then writes `/tmp/artefact-check/<uuid>.png` and
    `<uuid>-mobile.png`. Read the mobile image first once the checks are clean; it
    catches what no assertion does (a diagram that is legible and still says the
    wrong thing), and reading it costs context, so not on every iteration.
@@ -94,7 +95,8 @@ assumption wrong. Every control earns its place: it changes something the reader
 The template has no slider, because a stock one is copied into every page and moves
 nothing. Add a slider (or any input) only when the assumption turns on a quantity and the
 result text or a drawing changes as it moves; otherwise the case buttons and `<details>`
-are the controls. The rest of this file (self-contained, checked, screenshot read once)
+are the controls. The check refuses only a dead slider; one whose only effect is a figure
+inside a result sentence passes it, so that judgement is the author's. The rest of this file (self-contained, checked, screenshot read once)
 applies unchanged. What `check.py` tests is that the page exists, has a control
 (`<input>`, `<button>`, `<select>`, `<textarea>` or `<details>`), a handler that answers it
 (`addEventListener`, or an `onclick`-style attribute), and can **rule on its node**: it
