@@ -1,0 +1,152 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W60 · Which big-screen proposal to build first</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a; font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 760px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 14px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  ol#rank { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  ol#rank li { border: 1.5px solid #999; border-radius: 6px; background: #fff; padding: 8px 12px; }
+  ol#rank li.first { border-color: #1a1a1a; border-width: 2.5px; }
+  ol#rank .name { font-weight: 600; }
+  ol#rank .tag { font-size: 13px; color: #555; }
+  ol#rank li.first .tag { color: #1a1a1a; font-weight: 600; }
+  .bar { height: 8px; background: #e4e1d8; margin-top: 6px; border-radius: 4px; }
+  .bar i { display: block; height: 8px; background: #1a1a1a; border-radius: 4px; }
+  #rulebox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p { margin: 0 0 8px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; min-height: 44px; box-sizing: border-box; }
+  label { display: block; margin: 8px 0 2px; }
+</style>
+
+<h1>Which big-screen proposal first?</h1>
+<p class="lede">Eight ways to give the roadmap a good big-screen experience are written up as parked nodes. The recommendation assumes one setup: a phone docked to a monitor, driven by a game controller. Change the setup to see what would come first instead.</p>
+
+<h2>The big screen shows</h2>
+<div class="choices" role="group" aria-label="What the big screen shows" id="screen">
+  <button type="button" data-screen="dock" aria-pressed="true">A docked Android phone (own desktop windows)</button>
+  <button type="button" data-screen="mirror" aria-pressed="false">A mirrored phone (iPhone, cast)</button>
+  <button type="button" data-screen="tv" aria-pressed="false">A TV, console or Steam Deck browser</button>
+</div>
+<h2>It is driven by</h2>
+<div class="choices" role="group" aria-label="What drives it" id="input">
+  <button type="button" data-input="pad" aria-pressed="true">A game controller</button>
+  <button type="button" data-input="keys" aria-pressed="false">Keyboard and mouse</button>
+  <button type="button" data-input="remote" aria-pressed="false">The phone itself, as a remote</button>
+  <button type="button" data-input="none" aria-pressed="false">Nothing: glanced at</button>
+</div>
+
+<div class="result" id="result" aria-live="polite"></div>
+<ol id="rank"></ol>
+
+<div id="rulebox" hidden>
+  <p>Rule on the recommendation (build the wide layout and the controller layer first, keep the rest parked).</p>
+  <label for="note">Your note, sent with it (optional)</label>
+  <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The big screen is a mirror of the phone (so no wider page ever reaches it), or a second device or nothing at all drives it, so a controller layer on the page is not what is wanted.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>On 1920 and 3840 px screens today the page stays 1180 px wide and 17 px type, and nothing reads a gamepad: both pieces are unbuilt, so they are the gap for the docked and controller case. Android 16 desktop mode on a Pixel 8 or newer or a recent Samsung gives a phone floating windows on an external monitor, so a browser there gets a desktop-width page; the search found no iPhone equivalent, only mirroring, so for an iPhone the wide layout does not arrive and the mirror or remote proposals apply. The scores below are this page's own rule of thumb, not a measurement.</p>
+</details>
+
+<script>
+  var NAMES = {
+    mirror: ['Mirror the phone, change nothing', 'No code: the 360 px page letterboxed on the screen, landscape at best.'],
+    dock: ['Fluid wide layout for a docked phone', 'List, tree and node in three panes up to about 1800 px, type scaled with the screen.'],
+    pad: ['Game controller on the web page', 'Gamepad API with spatial focus: d-pad moves, A presses, B goes back, bumpers change node.'],
+    tv: ['Ten-foot TV mode', 'Large type, one pane at a time, big focus tile, overscan margins; pairs with the controller layer.'],
+    remote: ['Phone as the remote', 'The big screen shows the page; the phone opens /remote and sends moves and verdicts over the server.'],
+    board: ['Wall board', 'A read-only, self-cycling view of what needs you and what is running, glanceable from across a room.'],
+    tui: ['The terminal UI on the big screen', 'TUI in a big-font terminal; controller buttons mapped to its keys by the OS, with a documented preset.'],
+    review: ['Review mode', 'Walk the tree one node per screen with its artefact at full size; controller buttons confirm or refute.']
+  };
+  var SCREEN = {
+    dock:   { mirror: 0, dock: 3, pad: 0, tv: 1, remote: 0, board: 0, tui: 2, review: 1 },
+    mirror: { mirror: 3, dock: 1, pad: 0, tv: 2, remote: 1, board: 1, tui: 0, review: 1 },
+    tv:     { mirror: 0, dock: 2, pad: 0, tv: 3, remote: 1, board: 1, tui: 0, review: 1 }
+  };
+  var INPUT = {
+    pad:    { mirror: 0, dock: 1, pad: 3, tv: 2, remote: 0, board: 0, tui: 1, review: 2 },
+    keys:   { mirror: 0, dock: 2, pad: 0, tv: 0, remote: 0, board: 0, tui: 2, review: 1 },
+    remote: { mirror: 0, dock: 0, pad: 0, tv: 1, remote: 3, board: 1, tui: 0, review: 2 },
+    none:   { mirror: 1, dock: 0, pad: 0, tv: 1, remote: 0, board: 3, tui: 0, review: 0 }
+  };
+  var chosen = { screen: 'dock', input: 'pad' }, touched = false, text = '';
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: chosen }).catch(function () {}); }, 300); }
+  function show() {
+    var rows = Object.keys(NAMES).map(function (k) {
+      return { k: k, score: SCREEN[chosen.screen][k] + INPUT[chosen.input][k] };
+    }).sort(function (a, b) { return b.score - a.score; });
+    var top = rows.slice(0, 2).filter(function (r) { return r.score >= 3; });
+    var ol = document.getElementById('rank');
+    ol.innerHTML = '';
+    rows.forEach(function (r) {
+      var first = top.indexOf(r) >= 0;
+      var li = document.createElement('li');
+      if (first) li.className = 'first';
+      li.innerHTML = '<span class="name"></span> <span class="tag"></span><div style="font-size:14px;color:#444"></div><div class="bar"><i></i></div>';
+      li.querySelector('.name').textContent = NAMES[r.k][0];
+      li.querySelector('.tag').textContent = first ? 'build first' : 'keep parked';
+      li.children[2].textContent = NAMES[r.k][1];
+      li.querySelector('i').style.width = (r.score / 6 * 100) + '%';
+      ol.appendChild(li);
+    });
+    var built = top.map(function (r) { return NAMES[r.k][0]; });
+    text = 'Setup: ' + document.querySelector('[data-screen][aria-pressed=true]').textContent + ', driven by ' +
+      document.querySelector('[data-input][aria-pressed=true]').textContent.toLowerCase() + '. Build first: ' +
+      (built.length ? built.join('; ') : 'nothing clearly (no proposal fits well)') + '.';
+    document.getElementById('result').textContent = text;
+    document.querySelectorAll('[data-screen]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.screen === chosen.screen)); });
+    document.querySelectorAll('[data-input]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.input === chosen.input)); });
+  }
+  document.querySelectorAll('[data-screen]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen.screen = b.dataset.screen; show(); keep(); });
+  });
+  document.querySelectorAll('[data-input]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen.input = b.dataset.input; show(); keep(); });
+  });
+  function rule(verdict) {
+    var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    var body = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: chosen, verdict: verdict, answer: body }).then(function () {
+      note.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      note.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && SCREEN[j.state.screen] && INPUT[j.state.input]) { chosen = j.state; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
+  }).catch(function () {});
+</script>
