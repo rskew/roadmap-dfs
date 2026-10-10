@@ -79,11 +79,23 @@ KIRO_LIMIT_RE = re.compile(
 KIRO_OWN_WORDS = ("user_message_chunk", "agent_message_chunk", "agent_thought_chunk",
                   "tool_call", "tool_call_update", "plan")
 RESETS_RE = re.compile(r"resets [^\"\\\n]*")
+# ⚠️ CODEX does not say "resets". Its sentence is "You've hit your usage limit. Upgrade
+# to Pro (...), visit ... to purchase more credits or try again at 5:59 PM." and, for a
+# reset more than a day off, "try again at Oct 14th, 2026 4:01 AM." (read out of 39 limit
+# errors in ~/.codex/sessions). The clock time names no zone: it is codex's local one.
+# Missed by RESETS_RE, so a codex limit was recorded with no reset and the walk held the
+# flat hour instead of until the time codex gave.
+TRY_AGAIN_RE = re.compile(r"try again at [^\"\\\n.]*?[AP]M", re.I)
 
 
 def resets_in(text):
     m = RESETS_RE.search(text or "")
     return m.group(0).strip() if m else ""
+
+
+def try_again_in(text):
+    m = TRY_AGAIN_RE.search(text or "")
+    return m.group(0) if m else ""
 
 
 # ⚠️ WHEN IT LIFTS, AS AN INSTANT — because the walk held a flat hour and never read
@@ -96,6 +108,12 @@ RESET_AT_RE = re.compile(
     r"(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ap>am|pm)\s*\(UTC\)",
     re.I,
 )
+# Codex's shape: "try again at 5:59 PM" or "try again at Oct 14th, 2026 4:01 AM".
+TRY_AT_RE = re.compile(
+    r"try again at (?:(?P<mon>[A-Z][a-z]{2}) (?P<day>\d{1,2})(?:st|nd|rd|th)?, (?P<year>\d{4}) )?"
+    r"(?P<h>\d{1,2}):(?P<m>\d{2})\s*(?P<ap>am|pm)",
+    re.I,
+)
 RESET_MARGIN = 120              # seconds past the stated reset before retrying
 
 
@@ -103,6 +121,9 @@ def reset_at(resets, now):
     """The epoch second to retry at, or None if `resets` is not a shape we know."""
     import calendar
     import time as _t
+    m = TRY_AT_RE.search(resets or "")
+    if m:
+        return _try_again_at(m, now)
     m = RESET_AT_RE.search(resets or "")
     if not m:
         return None
@@ -119,6 +140,25 @@ def reset_at(resets, now):
             at = calendar.timegm((t.tm_year + 1, mon, int(m["day"]), h, mi, 0))
     else:
         at = calendar.timegm((t.tm_year, t.tm_mon, t.tm_mday, h, mi, 0))
+        if at <= now:           # a time of day already gone today is tomorrow's
+            at += 86400
+    return at + RESET_MARGIN
+
+
+def _try_again_at(m, now):
+    """Codex's stamp, which is on the local clock of the box it ran on (this one)."""
+    import time as _t
+    h = int(m["h"]) % 12 + (12 if m["ap"].lower() == "pm" else 0)
+    mi = int(m["m"])
+    t = _t.localtime(now)
+    if m["mon"]:
+        try:
+            mon = _t.strptime(m["mon"], "%b").tm_mon
+        except ValueError:
+            return None
+        at = _t.mktime((int(m["year"]), mon, int(m["day"]), h, mi, 0, 0, 0, -1))
+    else:
+        at = _t.mktime((t.tm_year, t.tm_mon, t.tm_mday, h, mi, 0, 0, 0, -1))
         if at <= now:           # a time of day already gone today is tomorrow's
             at += 86400
     return at + RESET_MARGIN
@@ -187,7 +227,13 @@ def classify(raw, agent):
                 return True, resets_in(result) or resets_in(raw)
             return False, ""
     m = LIMIT_RE.search(raw)
-    return (True, resets_in(raw)) if m else (False, "")
+    if not m:
+        return False, ""
+    if agent == "codex":
+        # Read from the limit sentence on, so a "try again at" earlier in the stream
+        # (the session's own words) is not taken for it.
+        return True, resets_in(raw) or try_again_in(raw[m.start():])
+    return True, resets_in(raw)
 
 
 def main(argv):

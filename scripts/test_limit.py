@@ -85,6 +85,32 @@ class Codex(unittest.TestCase):
         raw = json.dumps({"type": "thread.started", "thread_id": "t"})
         self.assertEqual(LIM.classify(raw, "codex"), (False, ""))
 
+    # The sentence as codex wrote it into ~/.codex/sessions on 2026-10-02 (15:15Z) and
+    # 2026-10-10 (02:44Z); neither says "resets".
+    SAME_DAY = ("You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), "
+                "visit https://chatgpt.com/codex/settings/usage to purchase more credits "
+                "or try again at 5:59 PM.")
+    LATER = SAME_DAY.replace("5:59 PM", "Oct 14th, 2026 4:01 AM")
+
+    def stream(self, message):
+        return "\n".join([json.dumps({"type": "thread.started", "thread_id": "t"}),
+                          json.dumps({"type": "error", "message": message})])
+
+    def test_the_try_again_time_is_the_reset(self):
+        self.assertEqual(LIM.classify(self.stream(self.SAME_DAY), "codex"),
+                         (True, "try again at 5:59 PM"))
+        self.assertEqual(LIM.classify(self.stream(self.LATER), "codex"),
+                         (True, "try again at Oct 14th, 2026 4:01 AM"))
+
+    def test_a_try_again_before_the_limit_sentence_is_not_the_reset(self):
+        raw = json.dumps({"type": "agent_message", "text": "I will try again at 9:00 AM."}) \
+            + "\n" + self.stream(self.SAME_DAY)
+        self.assertEqual(LIM.classify(raw, "codex"), (True, "try again at 5:59 PM"))
+
+    def test_a_limit_with_no_time_has_no_reset(self):
+        raw = self.stream("You've hit your usage limit. Try again later.")
+        self.assertEqual(LIM.classify(raw, "codex"), (True, ""))
+
 
 class TheRunnerContract(unittest.TestCase):
     """What `run.sh` evals: two lines, shell-quoted, always both."""
@@ -129,8 +155,31 @@ class ResetAt(unittest.TestCase):
         self.assertEqual(LIM.reset_at("resets 12am (UTC)", self.NOW) % 86400,
                          LIM.RESET_MARGIN)
 
+    def test_codex_try_again_is_read_on_the_local_clock(self):
+        import os, time
+        old = os.environ.get("TZ")
+        self.addCleanup(lambda: (os.environ.__setitem__("TZ", old) if old is not None
+                                 else os.environ.pop("TZ", None), time.tzset()))
+        now = self.calendar.timegm((2026, 10, 2, 15, 15, 21))      # the error's own time
+        os.environ["TZ"] = "UTC"
+        time.tzset()
+        at = LIM.reset_at("try again at 5:59 PM", now)
+        self.assertEqual(at - now, 2 * 3600 + 43 * 60 + 39 + LIM.RESET_MARGIN)
+        at = LIM.reset_at("try again at Oct 14th, 2026 4:01 AM", now)
+        self.assertEqual(at, self.calendar.timegm((2026, 10, 14, 4, 1, 0)) + LIM.RESET_MARGIN)
+        # a time already gone today is tomorrow's
+        at = LIM.reset_at("try again at 5:38 AM", now)
+        self.assertEqual(at - now, (24 + 5 - 15) * 3600 + 22 * 60 + 39 + LIM.RESET_MARGIN)
+        # a box ten hours ahead (POSIX zone, no tzdata needed): 17:59 there is 07:59 UTC
+        os.environ["TZ"] = "AEST-10"
+        time.tzset()
+        at = LIM.reset_at("try again at 5:59 PM", now)
+        self.assertEqual(at, self.calendar.timegm((2026, 10, 3, 7, 59, 0)) + LIM.RESET_MARGIN)
+
     def test_an_unknown_shape_is_none_not_a_guess(self):
         for s in ("", "resets Delivered by", "resets soon", "resets 8pm (PST)"):
+            self.assertIsNone(LIM.reset_at(s, self.NOW), s)
+        for s in ("try again later", "try again at Foo 9th, 2026 4:01 AM"):
             self.assertIsNone(LIM.reset_at(s, self.NOW), s)
 
 if __name__ == "__main__":
