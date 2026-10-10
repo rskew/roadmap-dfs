@@ -1056,7 +1056,7 @@ function correctForm(id) {
 }
 /* ── chat: basic, read-only, one agent turn at a time ──────────────────────────────── */
 const chatOn = () => !!(S.walk && S.walk.enabled);
-const CHAT = { scope: null, busyT: null, last: "", fresh: false };
+const CHAT = { scope: null, busyT: null, last: "", fresh: false, follow: false };
 const chatKey = () => "chat:" + CHAT.scope;
 function chatDraw(st) {
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -1072,10 +1072,11 @@ function chatDraw(st) {
   $("#chat-stop").hidden = !st.busy;
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
-  const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined;
-  CHAT.fresh = false;
+  // A busy turn redraws every poll ("Thinking… Ns"), so only a reader at the end, or one who has just sent, is carried down.
+  const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
+  CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
-  else if (atEnd || st.busy) log.scrollTop = log.scrollHeight;
+  else if (atEnd || follow) log.scrollTop = log.scrollHeight;
 }
 // The Top button: to the top of the message being read. That is the last one when the log is at its end
 // (a long answer has just landed there), else the one crossing the log's top edge; already at its top, the one before.
@@ -1114,7 +1115,7 @@ $("#chat-form").addEventListener("submit", async ev => {
   ev.preventDefault();
   const input = $("#chat-input"), message = input.value.trim();
   if (!message || !CHAT.scope) return;
-  $("#chat-send").disabled = true;
+  $("#chat-send").disabled = true; CHAT.follow = true;
   try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatLoad(); }
   catch (e) { toast(e.message, true); $("#chat-send").disabled = false; }
 });

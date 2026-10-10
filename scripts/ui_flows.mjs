@@ -278,6 +278,15 @@ const FLOWS = {
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
     await page.click("[data-act=chattop]"); await settle();
     same((await at()).y, s.tops[1], "in the middle of an answer, Top goes to that answer's top");
+    // a turn in progress redraws every poll as "Thinking… Ns"; that must not carry the reader back to the end
+    state.busy = true; state.busy_for = 1;
+    await page.waitForSelector("#chat-log .msg.wait"); await settle();
+    await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
+    await page.click("[data-act=chattop]"); await settle();
+    same((await at()).y, s.tops[1], "while the agent is busy, Top still goes to that answer's top");
+    state.busy_for = 2; await page.waitForFunction(() => /Thinking… 2s/.test(document.querySelector("#chat-log .wait").textContent));
+    await settle();
+    same((await at()).y, s.tops[1], "a redraw of the Thinking line leaves the reader where Top put them");
     same(errors, [], "no page errors");
   },
 
