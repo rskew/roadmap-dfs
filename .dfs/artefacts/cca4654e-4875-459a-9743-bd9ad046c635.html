@@ -1,0 +1,123 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confirming a node: which later siblings ask to be parked</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  ul { list-style: none; margin: 0 0 10px; padding: 0; }
+  li { border: 1.5px solid #999; border-radius: 6px; background: #fff; padding: 8px 12px; margin: 0 0 6px; }
+  li.ask { border-color: #b3261e; border-left-width: 6px; }
+  li small { display: block; color: #555; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  #rulebox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p { margin: 0 0 8px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  label { display: block; margin: 8px 0 2px; }
+</style>
+
+<h1>Which later siblings ask to be parked</h1>
+<p class="lede">Confirming W.3 already prunes the siblings made after it (W.4 to W.8 here), because they
+  were the alternatives taken while W.3 was wrongly abandoned. The author is now asked first, but only
+  about those with work in them. Choose what counts as work.</p>
+
+<h2>What counts as actioned</h2>
+<div class="choices" role="group" aria-label="What counts as actioned">
+  <button type="button" data-case="work" aria-pressed="true">Ruled on, started, or has such a step under it</button>
+  <button type="button" data-case="ruled" aria-pressed="false">Ruled on only</button>
+  <button type="button" data-case="any" aria-pressed="false">Every later sibling</button>
+</div>
+
+<h2>The later siblings of W.3</h2>
+<ul id="sibs"></ul>
+<div class="result" id="result" aria-live="polite"></div>
+
+<div id="rulebox" hidden>
+  <p>Rule on this node: the reading above is what the work takes "actioned" to mean.</p>
+  <label for="note">Your note, sent with it (optional)</label>
+  <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The author expects to be asked about every pruned sibling, or about none that is merely
+  ruled on, or wants the siblings parked in the file rather than pruned.</p>
+
+<script>
+  var sibs = [
+    { id: 'W.4', what: 'open, nothing done', ruled: false, started: false, deep: false },
+    { id: 'W.5', what: 'parked, with a reason', ruled: false, started: false, deep: false },
+    { id: 'W.6', what: 'confirmed (work committed)', ruled: true, started: false, deep: false },
+    { id: 'W.7', what: 'open, but a step under it is confirmed', ruled: false, started: false, deep: true },
+    { id: 'W.8', what: 'started, uncommitted work', ruled: false, started: true, deep: false }
+  ];
+  var tests = {
+    work: function (s) { return s.ruled || s.started || s.deep; },
+    ruled: function (s) { return s.ruled; },
+    any: function () { return true; }
+  };
+  var says = {
+    work: 'The author is asked about the siblings that hold work: the prompt lists them and pruning needs a yes.',
+    ruled: 'Only committed rulings are listed; uncommitted work in a started sibling is pruned without asking.',
+    any: 'Every later sibling is listed, even one with nothing in it; the question is asked almost every time.'
+  };
+  var chosen = 'work', touched = false;
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen }; }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
+  function show() {
+    var list = document.getElementById('sibs'), t = tests[chosen], n = 0;
+    list.innerHTML = '';
+    sibs.forEach(function (s) {
+      var li = document.createElement('li'), ask = t(s);
+      if (ask) { li.className = 'ask'; n++; }
+      li.innerHTML = '<b>' + s.id + '</b> ' + s.what + '<small>' + (ask ? 'listed: asks to be parked' : 'pruned silently') + '</small>';
+      list.appendChild(li);
+    });
+    document.getElementById('result').textContent = n + ' of ' + sibs.length + ' listed. ' + says[chosen];
+    document.querySelectorAll('[data-case]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.case === chosen));
+    });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
+  });
+  function rule(verdict) {
+    var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    var text = 'Actioned means: ' + document.querySelector('[data-case="' + chosen + '"]').textContent + '. ' + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: mine(), verdict: verdict, answer: text, park: true }).then(function () {
+      note.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      note.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && tests[j.state.chosen]) { chosen = j.state.chosen; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
+  }).catch(function () {});
+</script>

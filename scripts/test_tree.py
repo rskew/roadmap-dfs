@@ -121,6 +121,31 @@ class Derivation(unittest.TestCase):
                        "- 2026-09-25T10:00:00Z · correct · W1.1 · confirmed\n  yes after all\n")
         self.assertEqual(dfs_tree.effective(t)[1], {"W1.2"})
 
+    def test_actioned_siblings_are_the_later_ones_holding_work(self):
+        # W1.1 is open and being confirmed; later siblings: open, parked, ruled, an open one with
+        # a ruled child, a started one. Only the last three hold work. An earlier one is not asked.
+        t = self.t(node(1, "confirmed"), node(2, "open"), node(3, "open"),
+                   node(4, "parked"), node(5, "refuted"), node(6, "open"),
+                   node(7, "confirmed", 6), node(8, "started"))
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.2"), ["W1.5", "W1.6", "W1.8"])
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.1"), [])  # stands confirmed: keeps
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.8"), [])  # nothing after it
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.9"), [])  # no such node
+
+    def test_actioned_siblings_are_asked_only_when_confirming_prunes(self):
+        t = self.t(node(1, "refuted"), node(2, "confirmed"))
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.1"), ["W1.2"])
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.1", "refuted"), [])
+
+    def test_actioned_siblings_count_only_siblings_of_the_same_parent_still_live(self):
+        t = self.t(node(1, "confirmed"), node(2, "open", 1), node(3, "confirmed", 1),
+                   node(4, "confirmed"), node(5, "confirmed", 1),
+                   log="- 2026-09-25T09:00:00Z · backtrack · W1.5\n  not carried\n")
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.2"), ["W1.3"])
+        t = self.t(node(1, "confirmed"), node(2, "open", 1), node(3, "refuted", 1),
+                   node(4, "confirmed", 3))   # W1.4 is pruned under the refuted W1.3, which still counts
+        self.assertEqual(dfs_tree.actioned_siblings(t, "W1.2"), ["W1.3"])
+
     def test_keeps_is_the_one_rule_and_judges_by_what_the_node_stands_as_now(self):
         self.assertTrue(dfs_tree.keeps("confirmed", "confirmed"))
         for verdict, was in (("confirmed", "refuted"), ("confirmed", "parked"),

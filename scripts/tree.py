@@ -965,6 +965,32 @@ def effective(t):
     return status, pruned
 
 
+def actioned_siblings(t, nid, verdict="confirmed"):
+    """The later siblings that confirming node `nid` would prune and that hold work: live
+    siblings (same parent and tag, made after it) that are ruled on or started, or have such a
+    node under them. Open and parked siblings hold nothing and are pruned without asking. []
+    unless the correction prunes siblings at all: a refutation keeps them, and confirming what
+    already stands confirmed (`keeps`) prunes nothing. The author is asked to confirm parking
+    these first; they are ids in tree order."""
+    nodes = by_id(t)
+    nd = nodes.get(nid)
+    status, pruned = effective(t)
+    if nd is None or verdict != "confirmed" or keeps(verdict, status[nid]):
+        return []
+    gone = deleted_ids(t)
+
+    def worked(n):
+        return n["id"] not in pruned and n["id"] not in gone \
+            and (status[n["id"]] in DETERMINED or n["status"] == "started")
+    out = []
+    for s_ in sorted(t["nodes"], key=order_key):
+        if s_["parent"] == nd["parent"] and s_.get("tag", "") == nd.get("tag", "") \
+                and s_["n"] > nd["n"] and s_["id"] not in pruned and s_["id"] not in gone \
+                and (worked(s_) or any(worked(d) for d in descendants(t, s_["id"]))):
+            out.append(s_["id"])
+    return out
+
+
 def dormant(t):
     """Parked nodes and everything planned under them: live, but not being worked."""
     nodes = by_id(t)
