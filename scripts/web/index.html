@@ -347,15 +347,39 @@ function toast(msg, err) {
 }
 
 /* ── routing: #/  #/t/W3  #/t/W3/W3.2  #/chats ─────────────────────────── */
-function route() {
-  const p = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
+function route(hash = location.hash) {
+  const p = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   if (p[0] === "t" && p[1]) return { view: "task", task: p[1], node: p[2] || null };
   if (p[0] === "chats") return { view: "chats" };
   if (p[0] === "a" && p[1] && p[2]) return { view: "artefact", task: p[1], name: p[2] };
   if (p[0] === "r" && p[1] && p[2]) return { view: "run", task: p[1], name: p[2] };
   return { view: "tasks" };
 }
-const go = (h, replace) => replace ? location.replace("#/" + h) : (location.hash = "/" + h);
+const go = (h, replace) => {
+  if (!replace) return void (location.hash = "/" + h);
+  HIST.replacing = "#/" + h !== location.hash;           // a replacement to the same hash fires no hashchange to clear it
+  location.replace("#/" + h);
+};
+/* Back is a step back in history when the entry beneath is the screen it goes to, since pushing that screen
+   again leaves the one just left a Back away: the list, the task, the list. `HIST` keeps the hash of each entry
+   this tab has, by an index kept in `history.state` (which a reload and a traversal both bring back). */
+const HIST = { n: 0, at: {}, replacing: false };
+try { HIST.at = JSON.parse(sessionStorage.getItem("hist") || "{}") || {}; } catch (e) {}
+const hkey = h => h.replace(/^#\/?/, "").replace(/\/+$/, "");
+function histNote(first) {
+  const st = history.state;
+  if (st && typeof st.n === "number") HIST.n = st.n;
+  else {
+    if (!first && !HIST.replacing) HIST.n++;
+    history.replaceState({ n: HIST.n }, "");
+  }
+  HIST.replacing = false;
+  for (const k of Object.keys(HIST.at)) if (+k > HIST.n) delete HIST.at[k];
+  HIST.at[HIST.n] = hkey(location.hash);
+  try { sessionStorage.setItem("hist", JSON.stringify(HIST.at)); } catch (e) {}
+}
+histNote(true);
+const leave = h => HIST.at[HIST.n - 1] === hkey(h) ? history.back() : go(h, true);
 /* An artefact opens here, in this app's own window, since an installed app has no browser bar to come
    back from a bare file. `NAVS` counts every hashchange in this page (replacements too), so it is only
    ever tested for nonzero: Back can tell "the screen I came from" (history.back) from "opened by a
@@ -1159,7 +1183,7 @@ document.addEventListener("click", e => {
   if (tab) return go(tab.dataset.tab === "tasks" ? "" : tab.dataset.tab);
   // An artefact link in a dialog (the chat's replies) opens the viewer in #view, which a modal dialog covers: close it first.
   if (e.target.closest("a.art, a.shot")) for (const d of document.querySelectorAll("dialog[open]")) d.close();
-  if (e.target.id === "scrim") return go(`t/${S.task.id}`, true);
+  if (e.target.id === "scrim") return leave(`t/${S.task.id}`);
   if (!b || b.disabled) return;
   const d = b.dataset;
   ({
@@ -1171,7 +1195,7 @@ document.addEventListener("click", e => {
     task: () => go("t/" + d.id),
     node: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
     fold: () => { const s = S.folded[S.task.id] ||= new Set(); s.has(d.id) ? s.delete(d.id) : s.add(d.id); S.sig = ""; render(true); },
-    close: () => go(`t/${S.task.id}`, true), up,
+    close: () => leave(`t/${S.task.id}`), up,
     prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
     answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, deletetask: deleteTaskForm, deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
@@ -1198,7 +1222,7 @@ function showList() {
 const up = () => {
   const r = route();
   if (r.view === "artefact" || r.view === "run") return NAVS ? history.back() : go(`t/${r.task}`, true);
-  if (S.node) go(`t/${S.task.id}`, true); else go("");
+  if (S.node) leave(`t/${S.task.id}`); else leave("");
 };
 $("#back").onclick = up;
 $("#sheet").addEventListener("scroll", e => { if (S.node && e.target.isConnected && e.target.classList.contains("sheet-body")) keepScroll(sheetKey(), e.target.scrollTop); }, true);
@@ -1207,7 +1231,7 @@ $("#chat-log").addEventListener("scroll", e => {
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
-addEventListener("hashchange", () => { NAVS++; render(true); });
+addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
 setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
@@ -1215,7 +1239,7 @@ addEventListener("keydown", e => {
   if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey) return;
   if (!S.task || route().view !== "task") return;
   if (e.key === "j") step(1); else if (e.key === "k") step(-1); else if (e.key === "n") nextFlag();
-  else if (e.key === "Escape" && S.node) go(`t/${S.task.id}`, true);
+  else if (e.key === "Escape" && S.node) leave(`t/${S.task.id}`);
 });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });

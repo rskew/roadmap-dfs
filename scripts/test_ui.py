@@ -138,6 +138,9 @@ class Flows(unittest.TestCase):
     def test_the_list_the_filter_and_the_project_name(self):
         self.flow("list")
 
+    def test_going_back_from_a_task_draws_the_list_once_and_stays(self):
+        self.flow("backflash")
+
     def test_a_task_and_its_tree(self):
         self.flow("task_tree")
 

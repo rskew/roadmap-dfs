@@ -711,6 +711,30 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
 
   // Reorder: the list's Reorder switch gives each row left and right arrows and a grip on its right to drag it by.
   // A drag writes order.md and redraws the list, a move that cannot be made says why, and switching it off restores the rows.
+  // Going back from a task shows the list and stays on it: the screens drawn after Back are the list alone.
+  async backflash(b) {
+    for (const how of ["bar", "browser"]) {
+      const { page } = await open(b, PHONE);
+      await page.evaluate(() => {
+        window.__seen = [];
+        const note = () => { const v = document.querySelector("#view"); const k = v.querySelector(".item") ? "list" : v.querySelector(".row") ? "task" : "other"; const s = window.__seen; if (s[s.length - 1] !== k) s.push(k); };
+        new MutationObserver(note).observe(document.querySelector("#view"), { childList: true, subtree: true });
+        window.__note = note;
+      });
+      await task(page, "W9");
+      await page.evaluate(() => { window.__seen.length = 0; window.__note(); });
+      if (how === "bar") await page.click("#tabs [data-act=up]"); else await page.goBack();
+      await page.waitForTimeout(1200);
+      same(await page.evaluate(() => window.__seen), ["task", "list"], how + ": the task, then the list alone, after Back");
+      assert(await page.$(".item"), how + ": ends on the list");
+      // The list is the entry the task was opened from, so Back leaves no task entry ahead of it to be stepped onto:
+      // another Back goes before the app, not to the task and then (by the bar) to the list again.
+      await page.evaluate(() => { window.__seen.length = 0; });
+      await page.goBack();
+      await page.waitForTimeout(600);
+      assert(!(await page.evaluate(() => (window.__seen || []).includes("task"))), how + ": a second Back after Back drew the task");
+    }
+  },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
     const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
