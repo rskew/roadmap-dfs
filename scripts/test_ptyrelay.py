@@ -175,6 +175,25 @@ class Looking(unittest.TestCase):
         self.t.join(8)
         self.assertEqual(self.result, [False])
 
+    def test_modes_are_followed_across_two_reads(self):
+        r = ptyrelay.Relay()
+        r._follow_modes(b"x\x1b[?1049h\x1b[?20")
+        r._follow_modes(b"04h\x1b[?25l\x1b[?1000h\x1b[?1000l")
+        self.assertEqual(r.modes, {1049, 2004})
+
+    def test_attach_switches_the_terminal_to_them_and_back_on_detach(self):
+        self.relay.close()
+        self.relay = ptyrelay.Relay().start(["bash", "-c", r"printf '\033[?1049h\033[?2004h\033[?25l'; " + AGENT],
+                                            env=dict(os.environ, LOG=str(self.log)))
+        self.addCleanup(self.relay.close)
+        self.assertTrue(until(lambda: self.relay.modes == {1049, 2004}))
+        self.t = threading.Thread(target=lambda: self.result.append(self.relay.attach()), daemon=True)
+        self.t.start()
+        self.assertTrue(self.seen(b"\x1b[?1049h\x1b[?2004h"))
+        os.write(self.keys_w, b"\x1d")
+        self.t.join(5)
+        self.assertTrue(self.seen(b"\x1b[?1049l\x1b[?2004l"))
+
     def test_attaching_to_a_chat_that_has_already_ended_returns_false(self):
         gone = ptyrelay.Relay().start(["bash", "-c", "exit 127"])
         self.addCleanup(gone.close)

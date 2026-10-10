@@ -11,6 +11,7 @@ import fcntl
 import os
 import pty
 import queue
+import re
 import select
 import signal
 import struct
@@ -25,6 +26,8 @@ import chatlog
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
+MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004)      # private modes the terminal is brought in step with
+_MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
 TAIL = 16384                # bytes of the agent's last output kept, for the log
 STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a message before the log says so
 
@@ -71,6 +74,8 @@ class Relay:
         self.unsent = 0             # messages queued or taken by the typist and not yet typed
         self.stops = 0              # interrupts so far: a message taken before one is not typed after it
         self.out_fd = None          # where the terminal is, while attached
+        self.modes = set()          # the private modes (?1049 alt screen, mouse, paste ...) the agent has switched on
+        self._mode_carry = b""
 
     # ── life ───────────────────────────────────────────────────────────────────────────
     @property
@@ -103,6 +108,20 @@ class Relay:
         threading.Thread(target=self._watch, daemon=True).start()
         return self
 
+    def _follow_modes(self, data):
+        """Keep `modes` as the agent last left them; a sequence can straddle two reads, so the
+        end of the last one is scanned again (setting a mode twice is the same as once)."""
+        buf = self._mode_carry + data
+        for m in _MODE.finditer(buf):
+            for n in m.group(1).split(b";"):
+                if n.isdigit() and int(n) in MODES:
+                    (self.modes.add if m.group(2) == b"h" else self.modes.discard)(int(n))
+        self._mode_carry = buf[-32:]
+
+    def _mode_bytes(self, on):
+        """Switch the terminal to the modes the agent has on (`on`), or back off."""
+        return b"".join(b"\x1b[?%d%s" % (n, b"h" if on else b"l") for n in MODES if n in self.modes)
+
     def _pump(self):
         master = self.fd
         while True:
@@ -118,6 +137,7 @@ class Relay:
             self.total_out += len(data)
             self.tail += data
             del self.tail[:-TAIL]
+            self._follow_modes(data)
             if self.attached and self.out_fd is not None:
                 _try(os.write, self.out_fd, data)
         with self.lock:
@@ -261,7 +281,9 @@ class Relay:
             if fd is None:
                 return
             rows, cols, x, y = struct.unpack("HHHH", _winsize(stdout))
-            if redraw and cols > 1:             # a resize is what makes it draw itself again
+            # a size change is what makes it draw itself again; at an unchanged size it draws nothing,
+            # so only then the narrower size first, which paints a whole frame one column short
+            if redraw and cols > 1 and struct.unpack("HHHH", _winsize(fd))[:2] == (rows, cols):
                 _try(fcntl.ioctl, fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols - 1, x, y))
                 time.sleep(0.05)
             _try(fcntl.ioctl, fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, x, y))
@@ -271,6 +293,7 @@ class Relay:
             old = signal.signal(signal.SIGWINCH, lambda *a: fit())
         except ValueError:                      # not the main thread: only a test is
             old = None
+        _try(os.write, stdout, self._mode_bytes(True))      # what it switched on while nobody looked
         self.out_fd = stdout
         self.attached = True
         fit(redraw=True)
@@ -300,6 +323,7 @@ class Relay:
         finally:
             self.attached = False
             self.out_fd = None
+            _try(os.write, stdout, self._mode_bytes(False))     # and give the terminal back as the roadmap had it
             if old is not None:
                 signal.signal(signal.SIGWINCH, old)
             if saved is not None:

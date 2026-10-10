@@ -1,0 +1,8 @@
+W48.12 · the terminal brought in step with the chat's modes (a real claude 2.1.289 through Relay.start / attach in tmux 3.7c, 24x80 pane, resumed long transcript, drive.py and exp.sh of the W48.10 record, clear off)
+
+BEFORE (W48.10 record, same pane and run): fullscreen: tmux history ~133 lines after attach, alt=0, after ctrl-] mouse_all_flag=1 mouse_sgr_flag=1.
+AFTER (modes forwarded on attach and reset on detach, one resize when the chat's size differs):
+ fullscreen, started at 40x120: during attach hist=0 alt=1 mouse=1; after ctrl-] hist=0 alt=0 mouse=0 sgr=0
+ fullscreen, started at 24x80:  during attach hist=0 alt=1 mouse=1; after ctrl-] hist=0 alt=0 mouse=0 sgr=0
+ the two visible screens are byte-equal to each other.
+ inline (CLAUDE_CODE_NO_FLICKER=0), started at 24x80: hist=1 alt=0 mouse=0 during and after attach.
