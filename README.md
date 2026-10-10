@@ -13,6 +13,20 @@ nix run github:rskew/roadmap-dfs                         # the tui
 nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 ```
 
+## Running the sandbox as a daemon
+
+`sandbox daemon [command args]` runs the command (default: the repo's `CONTAINER_APP_CMD`, from `.container.env`)
+detached, with the engine's `--restart unless-stopped`, so it comes back after a reboot. The nix sidecar gets the same
+policy. The engine must itself start at boot (`systemctl enable docker`; rootless podman needs
+`podman-restart.service`). The container mounts the host's `/nix/store` and runs the tool from a store path, so keep
+that path from garbage collection (a GC root, e.g. `nix profile install`) or the restart after a GC fails. Running it again replaces the daemon; `sandbox stop` removes it and its sidecar for good.
+
+```sh
+nix run github:rskew/roadmap-dfs#sandbox daemon dfs-web   # the web page, up from now on
+docker logs <repo>-dev                                    # its output
+nix run github:rskew/roadmap-dfs#sandbox stop
+```
+
 ## Deleting
 
 An item or a node can be deleted from the tui (`D` on the item list, or on a node in the tree) and from the web

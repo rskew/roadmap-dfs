@@ -28,6 +28,19 @@
 #   sandbox app                    Just the app, in the foreground
 #   sandbox exec <command> [args]  App in background, then any command
 #   sandbox run <command> [args]   Any command, app NOT started
+#   sandbox daemon [command args]  Detached, and back after a reboot (see below)
+#   sandbox stop                   Remove the daemon and its nix sidecar
+#
+# Daemon mode runs the command (default: the app command, as the container's main
+# process) in a detached container with `--restart unless-stopped`, and the nix proxy
+# sidecar the same way, so the engine starts both again when it starts at boot. That
+# needs the engine itself enabled at boot (`systemctl enable docker`; rootless podman
+# also needs podman-restart.service). Running it again replaces the daemon; `sandbox
+# stop` removes it for good, as does `docker stop` (a stopped container is not
+# restarted). Its output is `docker logs <name>`; nothing else of it is kept, as with
+# any mode, and there is no terminal, so the agent modes are not daemons.
+# The store paths it runs from (nix, the tool's commands) must survive garbage
+# collection, or the restart fails.
 #
 # Environment:
 #   CONTAINER_ENGINE   docker|podman                     (default: docker)
@@ -130,6 +143,8 @@ CONTAINER_APP_READY_PORT="${CONTAINER_APP_READY_PORT:-}"
 CONTAINER_APP_READY_TIMEOUT="${CONTAINER_APP_READY_TIMEOUT:-300}"
 # Set by the modes that want the app running alongside them.
 CONTAINER_START_APP=0
+# Set by `daemon`: detached, restarted by the engine, outliving this script.
+CONTAINER_DAEMON=0
 
 CONTAINER_NAME="${CONTAINER_NAME:-${REPO_NAME}-dev}"
 CONTAINER_HOME="${CONTAINER_HOME:-/tmp/${REPO_NAME}-home}"
@@ -191,13 +206,24 @@ NIX_PROXY_DIR=""
 # Starts the sidecar and sets NIX_PROXY_DIR to the host directory holding the
 # socket it serves. Its own nix config is pinned empty: the host daemon trusts
 # the sidecar, so any setting it carried would reach the host with that trust.
+# A daemon's sidecar outlives this script and the next boot, so it gets a restart
+# policy, no EXIT trap, and a directory that is not wiped on reboot.
 start_nix_proxy() {
   local nix_bin_dir
+  local -a lifetime=(--rm)
   nix_bin_dir="$(host_nix_bin_dir)"
-  NIX_PROXY_DIR="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/${NIX_PROXY_NAME}.XXXXXX")"
-  trap stop_nix_proxy EXIT
+  if [[ "${CONTAINER_DAEMON}" == "1" ]]; then
+    NIX_PROXY_DIR="${CONTAINER_STATE_DIR}/nix-proxy"
+    "${CONTAINER_ENGINE}" rm -f "${NIX_PROXY_NAME}" >/dev/null 2>&1 || true
+    rm -rf "${NIX_PROXY_DIR}"
+    mkdir -p -m 700 "${NIX_PROXY_DIR}"
+    lifetime=(--restart unless-stopped)
+  else
+    NIX_PROXY_DIR="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/${NIX_PROXY_NAME}.XXXXXX")"
+    trap stop_nix_proxy EXIT
+  fi
 
-  "${CONTAINER_ENGINE}" run -d --rm --init \
+  "${CONTAINER_ENGINE}" run -d "${lifetime[@]}" --init \
     --name "${NIX_PROXY_NAME}" \
     --user "$(id -u):$(id -g)" \
     --read-only \
@@ -236,6 +262,10 @@ stop_nix_proxy() {
   [[ -n "${NIX_PROXY_DIR}" ]] && rm -rf "${NIX_PROXY_DIR}"
 }
 
+stop_daemon() {
+  "${CONTAINER_ENGINE}" rm -f "${CONTAINER_NAME}" "${NIX_PROXY_NAME}" >/dev/null 2>&1 || true
+}
+
 run_in_container() {
   local ca_bundle locale_archive nix_bin_dir port mount env_pair
   local -a docker_args
@@ -245,11 +275,18 @@ run_in_container() {
 
   start_nix_proxy
 
-  docker_args=(run --rm --init)
-  # Only ask for a TTY when there is one, so the script also works when driven
-  # from a script, CI, or an agent session.
-  if [[ -t 0 ]]; then
-    docker_args+=(-it)
+  if [[ "${CONTAINER_DAEMON}" == "1" ]]; then
+    # --rm and a restart policy do not go together: the engine would delete the
+    # container when it exits instead of starting it again.
+    "${CONTAINER_ENGINE}" rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+    docker_args=(run -d --restart unless-stopped --init)
+  else
+    docker_args=(run --rm --init)
+    # Only ask for a TTY when there is one, so the script also works when driven
+    # from a script, CI, or an agent session.
+    if [[ -t 0 ]]; then
+      docker_args+=(-it)
+    fi
   fi
 
   docker_args+=(
@@ -284,7 +321,7 @@ run_in_container() {
     -v "${nix_bin_dir}:/host-nix-bin:ro"
     -v "${ca_bundle}:/etc/ssl/certs/host-ca-bundle.crt:ro"
     -v "${locale_archive}:/usr/lib/locale/locale-archive:ro"
-    -v "${NIX_PROXY_DIR}/socket:/nix/var/nix/daemon-socket/socket"
+    -v "${NIX_PROXY_DIR}:/nix/var/nix/daemon-socket"
   )
 
   # "8006" publishes 8006:8006; "8080:80" is passed through as given.
@@ -383,6 +420,14 @@ run_in_container() {
     "$@"
   )
 
+  if [[ "${CONTAINER_DAEMON}" == "1" ]]; then
+    if ! "${CONTAINER_ENGINE}" "${docker_args[@]}" >/dev/null; then
+      stop_daemon
+      exit 1
+    fi
+    echo "[container] ${CONTAINER_NAME} is running detached and restarts on boot; logs: ${CONTAINER_ENGINE} logs ${CONTAINER_NAME}; remove: sandbox stop" >&2
+    return
+  fi
   # Not exec'd: the EXIT trap has to outlive the container to stop the sidecar.
   "${CONTAINER_ENGINE}" "${docker_args[@]}"
 }
@@ -463,6 +508,12 @@ main() {
       ;;
   esac
 
+  if [[ "${mode}" == "stop" ]]; then
+    command -v "${CONTAINER_ENGINE}" >/dev/null 2>&1 || { echo "${CONTAINER_ENGINE} not found" >&2; exit 1; }
+    stop_daemon
+    exit 0
+  fi
+
   require_prereqs
 
   # Modes that want the app running alongside them opt in here.
@@ -485,6 +536,15 @@ main() {
       # Run the app in the foreground instead of backgrounding it.
       CONTAINER_START_APP=0
       run_in_container bash -lc "exec ${CONTAINER_APP_CMD}"
+      ;;
+    daemon)
+      CONTAINER_DAEMON=1
+      if [[ $# -gt 0 ]]; then
+        run_in_container "$@"
+      else
+        [[ -n "${CONTAINER_APP_CMD}" ]] || { echo "sandbox daemon needs a command, CONTAINER_APP_CMD or scripts/start-dev.sh" >&2; exit 1; }
+        run_in_container bash -lc "exec ${CONTAINER_APP_CMD}"
+      fi
       ;;
     run|exec)
       [[ $# -gt 0 ]] || { echo "sandbox ${mode} requires a command" >&2; exit 1; }
@@ -517,4 +577,7 @@ main() {
   esac
 }
 
-main "$@"
+# Sourced by test_sandbox.py, which stubs the host lookups; run, it starts main.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main "$@"
+fi
