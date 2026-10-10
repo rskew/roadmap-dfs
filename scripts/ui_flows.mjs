@@ -318,6 +318,11 @@ const FLOWS = {
     assert(first > 60, `the first message starts below a note (${first})`);
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y); }, Math.round(first / 2)); await settle();
     same((await press())[0], 0, "inside a note above the first message, Top goes up to the top of the log");
+    // four buttons in a 320px-wide chat: each is tap-sized, inside the screen and shows its whole label
+    await page.setViewportSize({ width: 320, height: 520 }); await settle();
+    const nav = await page.$$eval(".chat-nav button", bs => bs.map(e => { const r = e.getBoundingClientRect(); return { act: e.dataset.act, x: r.x, w: r.width, clipped: e.scrollWidth > e.clientWidth || (() => { const g = document.createRange(); g.selectNodeContents(e); return g.getClientRects().length > 1; })() }; }));
+    same(nav.map(n => n.act), ["chattop", "chatclear", "chatlist", "chatclose"], "the chat's nav has the four buttons at 320px");
+    for (const n of nav) assert(n.w >= 44 && n.x >= 0 && n.x + n.w <= 320 && !n.clipped, `320px: ${n.act} is at least 44px wide, inside the screen and its label is on one line, not clipped (x ${Math.round(n.x)}, ${Math.round(n.w)}px, clipped ${n.clipped})`);
     same(errors, [], "no page errors");
   },
 

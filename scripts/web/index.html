@@ -1120,7 +1120,8 @@ $("#chat-form").addEventListener("submit", async ev => {
   if (!message || !CHAT.scope) return;
   $("#chat-send").disabled = true; CHAT.follow = true;
   try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatLoad(); }
-  catch (e) { toast(e.message, true); $("#chat-send").disabled = false; CHAT.follow = false; }
+  catch (e) { toast(e.message, true); $("#chat-send").disabled = false; }
+  finally { CHAT.follow = false; }  // follow is for the send's own draw; a draw that changed nothing must not leave it for a later poll
 });
 $("#chat-stop").addEventListener("click", async () => {
   if (!CHAT.scope) return;
