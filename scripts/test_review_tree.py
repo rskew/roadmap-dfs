@@ -647,6 +647,37 @@ class Pane(unittest.TestCase):
                                         "it was right; build on it")])
         self.assertIn("### W1.4 · A refuted sibling", ui.composed[0])
 
+    def test_confirming_over_a_sibling_that_holds_work_asks_to_park_it(self):
+        ui = self.ui
+        t = dfs_tree.parse(TREE.replace("## Log", "### W1.5 · A started sibling\nStatus: started\nApproach: begun.\n\n## Log"), "W1")
+        ui.tree_of = lambda task: (t, ARCHIVE, {})
+        ui.open_tree()
+        self.to("W1.4")
+        asked = []
+        answers = iter("cn")
+        ui.choose = lambda label, keys: (asked.append(label), next(answers))[1]
+        ui.typed = "it was right"
+        ui.act(ord("f"))
+        self.assertIn("W1.5", asked[1])
+        self.assertEqual((self.logged, ui.composed), ([], []), "anything but y parks nothing and corrects nothing")
+        answers = iter("cy")
+        ui.act(ord("f"))
+        self.assertEqual(self.logged, [("W1", "correct", ["W1.4", "confirmed"], "it was right")])
+        self.assertIn("Parked with it, as you agreed: W1.5.", ui.composed[0])
+
+    def test_refuting_asks_nothing_about_siblings(self):
+        ui = self.ui
+        t = dfs_tree.parse(TREE.replace("## Log", "### W1.5 · A started sibling\nStatus: started\nApproach: begun.\n\n## Log"), "W1")
+        ui.tree_of = lambda task: (t, ARCHIVE, {})
+        ui.open_tree()
+        self.to("W1.4")
+        asked = []
+        ui.choose = lambda label, keys: (asked.append(label), "r")[1]
+        ui.typed = "it was wrong"
+        ui.act(ord("f"))
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(self.logged[0][2], ["W1.4", "refuted"])
+
     def test_a_cancelled_verdict_corrects_nothing(self):
         ui = self.ui
         ui.open_tree()

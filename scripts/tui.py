@@ -4377,14 +4377,22 @@ class UI(WalkMixin):
             self.msg = "not corrected"
             return
         verdict = "confirmed" if v == "c" else "refuted"
+        # Confirming prunes the later siblings; those holding work go only once agreed to.
+        parks = dfs_tree.actioned_siblings(self.tree_of(item)[0], nid, verdict)
+        if parks and self.choose("confirming %s prunes %s, which hold work. Park them? "
+                                 "[y]es (any other key cancels)" % (nid, ", ".join(parks)),
+                                 "y") != "y":
+            self.msg = "not corrected: %s would not be parked" % ", ".join(parks)
+            return
         frame = (["Directive for %s, corrected to %s: what the work should do from here."
                   % (nid, verdict),
                   "%s, and %s reopens."
                   % ("Nothing is pruned: it already stands confirmed"
                      if dfs_tree.keeps(verdict, row["status"]) else
                      "Everything below it is pruned%s"
-                     % (" and so are the siblings made after it" if v == "c" else ""), item),
-                  "Lines starting # are dropped; an empty directive cancels.", ""]
+                     % (" and so are the siblings made after it" if v == "c" else ""), item)]
+                 + (["Parked with it, as you agreed: %s." % ", ".join(parks)] if parks else [])
+                 + ["Lines starting # are dropped; an empty directive cancels.", ""]
                  + row["node"]["raw"])
         body = self.compose(frame)
         if not body:
