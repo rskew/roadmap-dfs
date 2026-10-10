@@ -462,7 +462,7 @@ class Web(unittest.TestCase):
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
         body = src[src.index("function drawTasks() {"):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '';"
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '';"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment) => ({id, goal: 'g', depth: 0, status: 'open', segment, raises: 0,"
               " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
@@ -474,10 +474,14 @@ class Web(unittest.TestCase):
         self.assertNotIn("data-act=\"move\"", off)
         self.assertEqual(off.count('<button class="item'), 2, "a row is one button to open the task")
         self.assertNotIn('<button class="item', on, "a row holding buttons is not itself a button")
-        for move in ("up", "down", "out", "in", "break"):
+        for move in ("out", "in", "break"):
             self.assertEqual(on.count('data-move="%s"' % move), 2, move)
+        for move in ("up", "down"):
+            self.assertNotIn('data-move="%s"' % move, on, "a drag replaces the up and down buttons")
+        self.assertEqual(on.count('data-grip="W'), 2, "each row has a grip to drag it by")
+        self.assertEqual(on.count("\u2190"), 2, "out is a left arrow")
+        self.assertEqual(on.count("\u2192"), 2, "in is a right arrow")
         self.assertEqual(on.count("Remove break"), 1, "only W2 sits behind a fence")
-        self.assertIn('aria-pressed="true">Reorder', on)
 
     def test_the_walk_panel_is_collapsed_until_the_reader_opens_it(self):
         """walkHtml() in index.html, run under node (skipped when there is none): closed

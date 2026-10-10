@@ -116,8 +116,19 @@ a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; 
 .item.reorder { cursor: default; }
 .item.reorder:active { background: none; }
 .item.reorder.moved { background: var(--sel); }
+.item.reorder { grid-template-columns: 3.2rem minmax(0, 1fr) var(--hit); }
 .moves { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 .moves .btn { min-width: var(--hit); padding: 0 var(--s3); }
+/* the grip at the row's right edge: drag it to a new place among the siblings; the strip's arrows change the parent */
+.grip { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-self: end; width: var(--hit); min-height: var(--hit); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.grip svg { width: 18px; height: 18px; fill: currentColor; pointer-events: none; }
+.grip:focus-visible { outline: var(--rule-strong) solid var(--ink); }
+.item.reorder.dragging { position: relative; z-index: 2; background: var(--paper); box-shadow: 0 2px 12px rgba(0, 0, 0, .3); }
+.item.dragging .grip { cursor: grabbing; color: var(--ink); }
+.item.drop-before, .item.drop-after { position: relative; }
+.item.drop-before::after, .item.drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 4px; background: var(--ink); z-index: 3; }   /* above the lifted row, which covers what it passes over */
+.item.drop-before::after { top: -2px; } .item.drop-after::after { bottom: -2px; }
+body.dragging { user-select: none; -webkit-user-select: none; }
 .break { margin: 18px 0 6px; display: flex; align-items: center; gap: var(--s3); }
 .break::after { content: ""; flex: 1; border-top: var(--rule) solid var(--line); }
 .hint { color: var(--muted); padding: 28px 0; }
@@ -613,8 +624,9 @@ function drawTasks() {
     const style = `--ind:${Math.min(it.depth, 3) * 14}px`;
     if (S.reorder) {
       const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
+      const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
-        <span class="moves">${mv("up", "Up", "Move up")}${mv("down", "Down", "Move down")}${mv("out", "Out", "Move out of its parent:")}${mv("in", "In", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}</span></div>`;
+        <span class="moves">${mv("out", "\u2190", "Move out of its parent:")}${mv("in", "\u2192", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}</span>${grip}</div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
   }
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
@@ -624,10 +636,77 @@ function drawTasks() {
   if (row) row.scrollIntoView({ block: "nearest" });
 }
 // One tap, one move: the server writes order.md and answers with the new list, which is drawn at once.
-async function moveTask(id, move) {
-  try { S.state = await api("/api/order", { item: id, move }); S.moved = id; drawTasks(); }
+async function moveTask(id, move, more) {
+  try { S.state = await api("/api/order", { item: id, move, ...more }); S.moved = id; drawTasks(); }
   catch (e) { toast(e.message, true); }
 }
+// Dragging a row by its grip. The row (and its subtree) follows the pointer, a line shows the gap it will drop
+// into, and letting go posts a place. It stays among its siblings, as Up and Down did; the arrows change the parent.
+let DRAG = null;
+const rowOf = id => $(`[data-row="${CSS.escape(id)}"]`);
+// the ids from `id` to the end of its subtree, and the ids beside it under the same parent
+function spanOf(id) {
+  const its = S.state.items, i = its.findIndex(x => x.id === id);
+  let j = i + 1; while (j < its.length && its[j].depth > its[i].depth) j++;
+  return its.slice(i, j).map(x => x.id);
+}
+function siblingsOf(id) {
+  const its = S.state.items, i = its.findIndex(x => x.id === id), d = its[i].depth;
+  let lo = i; while (lo > 0 && its[lo - 1].depth >= d) lo--;
+  let hi = i + 1; while (hi < its.length && its[hi].depth >= d) hi++;
+  return its.slice(lo, hi).filter(x => x.depth === d).map(x => x.id);
+}
+function dragUpdate() {
+  const D = DRAG; if (!D) return;
+  const dy = D.y - D.y0 + window.scrollY - D.scroll0;
+  for (const id of D.span) { const r = rowOf(id); if (r) r.style.transform = `translateY(${dy}px)`; }
+  const others = D.sibs.filter(x => x !== D.id), mid = id => { const b = rowOf(id).getBoundingClientRect(); return b.top + b.height / 2; };
+  const at = others.findIndex(x => mid(x) > D.y), idx = at < 0 ? others.length : at;
+  for (const r of document.querySelectorAll(".drop-before, .drop-after")) r.classList.remove("drop-before", "drop-after");
+  D.drop = null;
+  if (!others.length || idx === D.sibs.indexOf(D.id)) return;
+  if (idx < others.length) { D.drop = { target: others[idx], where: "before" }; rowOf(others[idx]).classList.add("drop-before"); }
+  else { const t = others[idx - 1]; D.drop = { target: t, where: "after" }; rowOf(spanOf(t).pop()).classList.add("drop-after"); }
+}
+function dragEnd() {
+  if (!DRAG) return;
+  clearInterval(DRAG.timer);
+  for (const r of document.querySelectorAll("[data-row]")) { r.style.transform = ""; r.classList.remove("dragging", "drop-before", "drop-after"); }
+  document.body.classList.remove("dragging");
+  const D = DRAG; DRAG = null;
+  return D;
+}
+document.addEventListener("pointerdown", e => {
+  const g = e.target.closest("[data-grip]");
+  if (!g || e.button || DRAG) return;
+  const id = g.dataset.grip;
+  DRAG = { id, pointer: e.pointerId, y0: e.clientY, y: e.clientY, scroll0: window.scrollY, sibs: siblingsOf(id), span: spanOf(id), drop: null };
+  g.setPointerCapture(e.pointerId);
+  document.body.classList.add("dragging");
+  for (const x of DRAG.span) rowOf(x).classList.add("dragging");
+  // near the top or bottom edge the page scrolls under the pointer, so a long list can be crossed in one drag
+  DRAG.timer = setInterval(() => {
+    const room = 90, bottom = innerHeight - 130;
+    const by = DRAG.y < room ? -12 : DRAG.y > bottom ? 12 : 0;
+    if (by) { scrollBy(0, by); dragUpdate(); }
+  }, 16);
+  e.preventDefault();
+});
+document.addEventListener("pointermove", e => { if (DRAG && e.pointerId === DRAG.pointer) { DRAG.y = e.clientY; dragUpdate(); } });
+document.addEventListener("pointerup", e => {
+  if (!DRAG || e.pointerId !== DRAG.pointer) return;
+  const D = dragEnd();
+  if (D.drop) moveTask(D.id, "place", D.drop);
+});
+document.addEventListener("pointercancel", e => { if (DRAG && e.pointerId === DRAG.pointer) dragEnd(); });
+// Without a pointer the grip still moves the row: the up and down arrow keys, one place each.
+document.addEventListener("keydown", async e => {
+  const g = e.target.closest && e.target.closest("[data-grip]");
+  if (!g || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+  e.preventDefault();
+  await moveTask(g.dataset.grip, e.key === "ArrowUp" ? "up" : "down");
+  const again = $(`[data-grip="${CSS.escape(g.dataset.grip)}"]`); if (again) again.focus();
+});
 
 /* ── one task ───────────────────────────────────────────────────────────────── */
 // A node the author is there for: an open raise or an assumption (an old Ask counts).

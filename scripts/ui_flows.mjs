@@ -709,8 +709,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
-  // Reorder: the list's Reorder switch gives each row tap-sized moves, a move writes order.md and
-  // redraws the list, a move that cannot be made says why, and switching it off restores the rows.
+  // Reorder: the list's Reorder switch gives each row left and right arrows and a grip on its right to drag it by.
+  // A drag writes order.md and redraws the list, a move that cannot be made says why, and switching it off restores the rows.
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
     const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
@@ -718,19 +718,42 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert(before.length >= 3 && !(await page.$(".moves")), "the list has no moves until Reorder is on");
     await page.click("[data-act=reorder]");
     await page.waitForSelector(".moves");
-    same(await page.$$eval(".moves .btn", es => es.filter(e => e.getBoundingClientRect().height < 44).length), 0, "every move is tap-sized");
+    same(await page.$$eval(".moves .btn, .grip", es => es.filter(e => e.getBoundingClientRect().height < 44 || e.getBoundingClientRect().width < 44).length), 0, "every move and grip is tap-sized");
+    assert(!(await page.$("[data-move=up], [data-move=down]")), "up and down buttons are gone");
+    same(await page.$$eval(".moves [data-move=out], .moves [data-move=in]", es => es.map(e => e.textContent.trim())).then(a => a.join("")), "\u2190\u2192".repeat(before.length), "out and in are arrows");
     assert(!(await page.$("button.item")), "a row is not a button while the moves are on it");
-    await page.click(`[data-act=move][data-move=down][data-id=${before[0]}]`);
+    // the grip sits at the right edge of its row
+    const edge = await page.$eval(`[data-grip=${before[0]}]`, g => { const r = g.getBoundingClientRect(), row = g.closest("[data-row]").getBoundingClientRect(); return row.right - r.right; });
+    assert(edge >= 0 && edge < 20, "the grip is at the row's right edge, " + edge + "px in");
+    // drag the first row down past the middle of the second: it lands after it
+    const grip = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
+    const second = await (await page.$(`[data-row=${before[1]}]`)).boundingBox();
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2, second.y + second.height * 0.9, { steps: 6 });
+    assert(await page.$(".item.drop-before, .item.drop-after"), "a line shows where it will land");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    await page.mouse.up();
     await page.waitForFunction(first => document.querySelector(".item .iid").textContent.trim() !== first, before[0], { timeout: 8000 });
-    assert(fs.existsSync(path.join(DIR, ".dfs", "order.md")), "the move is written to order.md");
-    const after = await ids();
-    assert(after.indexOf(before[0]) > 0, "the moved task is no longer first");
-    await page.click(`[data-act=move][data-move=up][data-id=${after[0]}]`);
+    assert(fs.existsSync(path.join(DIR, ".dfs", "order.md")), "the drag is written to order.md");
+    same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "the dragged task now follows the one it was dropped past");
+    assert(!(await page.$(".item.dragging, .item.drop-after, .item.drop-before")), "the drag leaves no marks");
+    // dropped where it started, nothing moves
+    const g2 = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
+    await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+    await page.mouse.down(); await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2 + 4, { steps: 2 }); await page.mouse.up();
+    same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a drag that ends where it began changes nothing");
+    // without a pointer, the focused grip moves on the arrow keys
+    await page.focus(`[data-grip=${before[0]}]`);
+    await page.keyboard.press("ArrowUp");
+    await page.waitForFunction(first => document.querySelector(".item .iid").textContent.trim() === first, before[0], { timeout: 8000 });
+    same(await page.evaluate(() => document.activeElement.dataset.grip), before[0], "the grip keeps focus after the key moves the row");
+    await page.keyboard.press("ArrowUp");
     await page.waitForSelector("#toast.err");
     assert((await page.textContent("#toast")).includes("first"), "a refused move says why");
     await page.click("[data-act=reorder]");
     assert(await page.$("button.item") && !(await page.$(".moves")), "switching Reorder off restores the rows");
-    same(errors, [], "no page errors");
+    same(errors.filter(e => !/status of 409/.test(e)), [], "no page errors but the refused move's 409");
   },
 
   // Switching Reorder on or off keeps the list where the reader was: the rows grow a strip of moves, and the row
