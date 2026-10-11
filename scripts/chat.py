@@ -4,10 +4,10 @@
 One conversation per scope (a task, or `project`): a claude session whose id is kept in a
 small file under the run root. The terminal's `c` (and `C`) starts or RESUMES that session
 interactively; the web page resumes the same one a turn at a time, headless, with the same
-permission-skipping flags as the screen's chat (`run.sh --chat-turn`): every tool works and nothing
-is refused. What the page shows
-is read from the session's own transcript, so a message typed at the screen shows on the page
-and one typed on the page shows when `c` is next opened. It is the same conversation, not a copy.
+permission-skipping flags as the screen's chat (`run.sh --chat-turn`): every tool works and
+nothing is refused. What the page shows is read from the session's own transcript, so a message
+typed at the screen shows on the page and one typed on the page shows when `c` is next opened.
+It is the same conversation, not a copy.
 
 With the terminal screen serving the page, a chat started on the page is an interactive agent that
 screen runs in the BACKGROUND (ptyrelay.py): any number at once, one per task and one for the project,

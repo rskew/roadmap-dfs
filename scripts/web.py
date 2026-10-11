@@ -24,8 +24,8 @@ session budget, stop it, choose where it goes next, interrupt a chain.
 ⚠️ THERE IS NO LOGIN, so it listens on this machine only (127.0.0.1) unless you say
 otherwise. `--host 0.0.0.0` (or DFS_WEB_HOST) opens it to the network, and then anyone on
 that network can read the roadmap, answer, correct and accept, and, unless `--no-walk`,
-START AGENTS (the walk), which run with their permission prompts off: that is remote
-code execution on this machine, for whoever can reach the port. Do it on a network you
+START AGENTS (the walk, the chat), which run with their permission prompts off: that is
+remote code execution on this machine, for whoever can reach the port. Do it on a network you
 trust. Bound to loopback, a request whose `Host` is not a loopback name is refused (a
 page on another site can point its own name at 127.0.0.1: DNS rebinding), a write from
 another website is refused (it must be JSON, which a page elsewhere cannot send without a
@@ -1083,11 +1083,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--host", default=default_host(),
                     help="127.0.0.1 (this machine only, the default) or 0.0.0.0 (the network: "
-                         "no login, and the walk starts agents)")
+                         "no login, and the walk and the chat start agents)")
     ap.add_argument("--port", type=int, default=int(os.environ.get("DFS_WEB_PORT", 8765)))
     ap.add_argument("--no-walk", action="store_true",
                     help="no walk controls: the page can read and write the roadmap but "
-                         "cannot start an agent")
+                         "cannot start an agent (the chat is off too)")
     ap.add_argument("--allow-host", action="append", default=[], metavar="NAME",
                     help="a hostname a TLS proxy in front of this loopback server forwards "
                          "(e.g. the ts.net name `tailscale serve` gives); repeatable, or "
@@ -1110,8 +1110,8 @@ def main(argv=None):
               "or see the README")
     if handle.public:
         print("  no login: anyone on this network can answer, correct and accept"
-              + (", and start agents (the walk), which run with their permission prompts "
-                 "off. --no-walk removes that; --host 127.0.0.1 keeps it to this machine."
+              + (", and start agents (the walk, the chat), which run with their permission "
+                 "prompts off. --no-walk removes that; --host 127.0.0.1 keeps it to this machine."
                  if WALK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
     try:
         while handle.thread.is_alive():
