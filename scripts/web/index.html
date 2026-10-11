@@ -358,7 +358,7 @@ body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Set(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false };
+const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
 /* Loading: a request still outstanding after 250 ms shows "loading" and the stripe under the header
@@ -774,12 +774,15 @@ async function moveTask(id, move, more) {
   // each redraw replaces the rows, so a grip that had focus (the arrow keys) is given it back
   const redraw = () => { const g = document.activeElement && document.activeElement.dataset.grip; drawTasks(); const again = g && $(`[data-grip="${CSS.escape(g)}"]`); if (again) again.focus(); };
   const mine = ++SENT; LATEST = null;
-  S.pending.add(id); S.inflight++; S.moved = id; redraw();
+  S.pending.set(id, (S.pending.get(id) || 0) + 1); S.inflight++; S.moved = id;
   let state = null;
-  try { state = await api("/api/order", { item: id, move, ...more }); }
+  try { redraw(); state = await api("/api/order", { item: id, move, ...more }); }
   catch (e) { toast(e.message, true); }
-  if (mine === SENT) LATEST = state;
-  S.pending.delete(id);
+  finally {   // redraw is inside the try so a throw in it still reaches the count below, not leaving every list render dropped as stale
+    if (mine === SENT) LATEST = state;
+    const left = S.pending.get(id) - 1;   // the row stays marked until the last move of it is answered
+    if (left) S.pending.set(id, left); else S.pending.delete(id);
+  }
   if (--S.inflight === 0) {
     // the last move sent has the last word, whichever reply landed last; a refused one is read back from the server
     try { S.state = LATEST || await api("/api/state"); }

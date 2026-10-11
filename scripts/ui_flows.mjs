@@ -1040,6 +1040,20 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a refused move whose list cannot be read back still draws the old order");
     await page.unroute("**/api/state");
+    // two moves of one row in flight: the mark stays until the second is written, not just the first
+    const gates = []; let calls = 0;
+    await page.route("**/api/order", async r => { await gates[calls++]; await r.continue(); });
+    let open1, open2; gates.push(new Promise(r => { open1 = r; }), new Promise(r => { open2 = r; }));
+    await page.focus(`[data-grip=${before[0]}]`);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowUp");
+    await page.waitForFunction(() => S.inflight === 2, null, { timeout: 8000 });
+    open1();
+    await page.waitForFunction(() => S.inflight === 1, null, { timeout: 8000 });
+    assert(await page.$(".item.pending"), "the row is still marked saving while its second move is unwritten");
+    open2();
+    await page.waitForFunction(() => !document.querySelector(".item.pending") && !S.inflight, null, { timeout: 8000 });
+    await page.unroute("**/api/order");
     same(errors.filter(e => !/status of 409|Failed to load resource/.test(e)), [], "no page errors but the 409 and the aborted read");
   },
 
