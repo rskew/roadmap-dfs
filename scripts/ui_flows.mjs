@@ -280,16 +280,16 @@ const FLOWS = {
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
     await page.click("[data-act=chattop]"); await settle();
     same((await at()).y, s.tops[1], "in the middle of an answer, Top goes to that answer's top");
-    // a turn in progress redraws every poll as "Thinking… Ns"; that must not carry the reader back to the end
+    // a turn in progress redraws every poll as "processing (n seconds)"; that must not carry the reader back to the end
     state.busy = true; state.busy_for = 1;
     await page.waitForSelector("#chat-log .msg.wait"); await settle();
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
     await page.click("[data-act=chattop]"); await settle();
     same((await at()).y, s.tops[1], "while the agent is busy, Top still goes to that answer's top");
-    state.busy_for = 2; await page.waitForFunction(() => /Thinking… 2s/.test(document.querySelector("#chat-log .wait").textContent));
+    state.busy_for = 2; await page.waitForFunction(() => /processing \(2 seconds\)/.test(document.querySelector("#chat-log .wait").textContent));
     await settle();
-    same((await at()).y, s.tops[1], "a redraw of the Thinking line leaves the reader where Top put them");
-    // short messages last: the reader's question under the Thinking line, then short answers that start below the top of
+    same((await at()).y, s.tops[1], "a redraw of the processing line leaves the reader where Top put them");
+    // short messages last: the reader's question under the processing line, then short answers that start below the top of
     // the view, where the log cannot scroll to them. Each press of Top must still move up, to the nearest message above the view.
     const toEnd = () => page.$eval("#chat-log", e => { e.scrollTo(0, e.scrollHeight); });
     const nearest = ({ y, tops }) => Math.max(...tops.filter(v => v <= y - 4));

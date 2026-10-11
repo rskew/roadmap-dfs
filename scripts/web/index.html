@@ -1104,11 +1104,11 @@ function chatDraw(st) {
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
     + (st.messages.length ? "" : `<p class="muted">Ask about ${CHAT.scope === "project" ? "the project" : "this task"}: where the work is, what was refuted and why, what to do next. It can read the roadmap and the task; it changes nothing.</p>`)
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
-    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Thinking… ${st.busy_for}s</div></div>` : "");
+    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "");
   $("#chat-stop").hidden = !st.busy;
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
-  // A busy turn redraws every poll ("Thinking… Ns"), so only a reader at the end, or one who has just sent, is carried down.
+  // A busy turn redraws every poll ("processing (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
   CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
