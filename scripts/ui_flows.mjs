@@ -1044,6 +1044,31 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a refused move whose list cannot be read back still draws the old order");
     await page.unroute("**/api/state");
+    // a move made while a refused one is being read back is not drawn over by the read-back
+    let readBack, readDone = false, reads = 0, writes = 0, sendLast;
+    const readGate = new Promise(r => { readBack = r; }), lastGate = new Promise(r => { sendLast = r; });
+    await page.route("**/api/state", async r => { reads++; await readGate; await r.continue(); readDone = true; });
+    await page.route("**/api/order", async r => {
+      if (writes++ === 0) return r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) });
+      await lastGate; await r.continue();
+    });
+    await page.focus(`[data-grip=${before[0]}]`);
+    await page.keyboard.press("ArrowUp");
+    for (let i = 0; i < 80 && !reads; i++) await page.waitForTimeout(50);
+    same(reads, 1, "the refused move's list is being read back");
+    await page.focus(`[data-grip=${before[2]}]`);
+    await page.keyboard.press("ArrowUp");
+    const drawnNow = (await ids()).slice(0, 3).join();
+    same(drawnNow, [before[0], before[2], before[1]].join(), "the move made during the read-back is drawn at once");
+    readBack();
+    for (let i = 0; i < 80 && !readDone; i++) await page.waitForTimeout(50);
+    await page.waitForTimeout(200);
+    same((await ids()).slice(0, 3).join(), drawnNow, "the late read-back does not draw the old place over it");
+    assert(await page.$(`.item.pending [data-grip=${before[2]}], .item.pending .iid`), "and the row is still marked saving");
+    sendLast();
+    await page.waitForFunction(() => !document.querySelector(".item.pending") && !S.inflight, null, { timeout: 8000 });
+    await page.unroute("**/api/state");
+    await page.unroute("**/api/order");
     // two moves of one row in flight: the mark stays until the second is written, not just the first
     const gates = []; let calls = 0;
     await page.route("**/api/order", async r => { await gates[calls++]; await r.continue(); });
