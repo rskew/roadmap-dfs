@@ -224,7 +224,9 @@ class Chat(unittest.TestCase):
 
     def test_it_will_not_send_while_the_screens_chat_is_open_on_the_session(self):
         sid, _ = dfs_chat.claim("W1")
-        screen = subprocess.Popen(["bash", "-c", 'exec -a "claude --session-id %s" sleep 30' % sid])
+        # a bash under the screen's name, not sleep: a multicall sleep (nix coreutils) refuses to run as
+        # "claude", and without the "; :" bash would exec the sleep and lose the name
+        screen = subprocess.Popen(["bash", "-c", 'exec -a "claude --session-id %s" bash -c "sleep 30; :"' % sid])
         try:
             time.sleep(0.3)
             self.assertTrue(self.chats.state("W1")["elsewhere"])
