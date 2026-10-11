@@ -25,8 +25,8 @@ session budget, stop it, choose where it goes next, interrupt a chain.
 otherwise. `--host 0.0.0.0` (or DFS_WEB_HOST) opens it to the network, and then anyone on
 that network can read the roadmap, answer, correct and accept, and, unless `--no-walk`,
 START AGENTS (the walk, the chat), which run with their permission prompts off: that is
-remote code execution on this machine, for whoever can reach the port. Do it on a network you
-trust. Bound to loopback, a request whose `Host` is not a loopback name is refused (a
+remote code execution on this machine, for whoever can reach the port. Do it on a network
+you trust. Bound to loopback, a request whose `Host` is not a loopback name is refused (a
 page on another site can point its own name at 127.0.0.1: DNS rebinding), a write from
 another website is refused (it must be JSON, which a page elsewhere cannot send without a
 preflight this server never grants, and its `Origin` must be this server's own address).
