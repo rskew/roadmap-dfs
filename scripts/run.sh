@@ -47,8 +47,9 @@
 #                                           accept a finished tree
 #         <scripts>/run.sh --open [task]     write a new task file
 #         <scripts>/run.sh [--codex|--kiro|--opencode] --chat [task|project]
-#         <scripts>/run.sh --chat-turn <task|project>   one turn of a chat for the web page (Edit and Write refused,
-#                          Bash not: a command can change files): the author's message on stdin, CHAT_SID to resume, JSON out
+#         <scripts>/run.sh --chat-turn <task|project>   one turn of a chat for the web page
+#                          (Edit and Write refused, Bash not: a command can change files):
+#                          the author's message on stdin, CHAT_SID to resume, JSON out
 #         <scripts>/run.sh --bump-agent     pin the agents to nixpkgs now
 #                                           (tui.py does it in the background)
 # Env:    CLAUDE_CMD       how claude is launched here — a nix run, not a binary on PATH
