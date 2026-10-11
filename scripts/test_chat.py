@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""chat.py and `run.sh --chat-turn`: a basic chat about a task or the project, with full permissions.
-The agent is a stub that records how it was called and answers in claude's JSON.
+"""chat.py and `run.sh --chat-turn`: a basic chat about a task or the project, with full
+permissions. The agent is a stub that records how it was called and answers in claude's JSON.
 
 Run:  python3 roadmap-dfs/scripts/test_chat.py
 """

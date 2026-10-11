@@ -1111,7 +1111,8 @@ def main(argv=None):
     if handle.public:
         print("  no login: anyone on this network can answer, correct and accept"
               + (", and start agents (the walk, the chat), which run with their permission "
-                 "prompts off. --no-walk removes that; --host 127.0.0.1 keeps it to this machine."
+                 "prompts off. --no-walk removes that; --host 127.0.0.1 keeps it to "
+                 "this machine."
                  if WALK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
     try:
         while handle.thread.is_alive():
