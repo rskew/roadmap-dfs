@@ -117,6 +117,7 @@ a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; 
 .item.reorder { cursor: default; }
 .item.reorder:active { background: none; }
 .item.reorder.moved { background: var(--sel); }
+.item.reorder.pending { outline: var(--rule) dashed var(--muted); outline-offset: -2px; }   /* drawn where it was dropped, not yet written */
 .item.reorder { grid-template-columns: 3.2rem minmax(0, 1fr) var(--hit); }
 .moves { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 .moves .btn { min-width: var(--hit); padding: 0 var(--s3); }
@@ -357,7 +358,7 @@ body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, flagged: false, node: null, sig: "", dirty: false };
+const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Set(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
 /* Loading: a request still outstanding after 250 ms shows "loading" and the stripe under the header
@@ -499,6 +500,7 @@ async function renderDraw(force) {
     } else {
       const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk")]);
       if (mine !== RENDERS) return;
+      if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
       S.state = state; S.needs = state.needs_you; S.walk = walk; syncColour(state);
       S.node = null; drawTasks();
     }
@@ -725,7 +727,8 @@ function drawTasks() {
     if (S.reorder) {
       const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
-      html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
+      const wait = S.pending.has(it.id) ? `<span class="tag pending-tag" role="status">saving\u2026</span>` : "";
+      html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner.replace("</span></span>\n", wait + "</span></span>\n")}
         <span class="moves">${mv("out", "\u2190", "Move out of its parent:")}${mv("in", "\u2192", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}</span>${grip}</div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
   }
@@ -735,10 +738,41 @@ function drawTasks() {
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
 }
-// One tap, one move: the server writes order.md and answers with the new list, which is drawn at once.
+// One tap, one move: the server writes order.md and answers with the new list. A move among the siblings is drawn
+// where it lands at once, marked as saving, so the row does not jump back until the reply; a refused one is undone.
+function guessMove(id, move, more) {
+  const its = S.state.items, sibs = siblingsOf(id);
+  let target, after;
+  if (move === "place") { target = more.target; after = more.where === "after"; }
+  else if (move === "up" || move === "down") {
+    const i = sibs.indexOf(id), t = sibs[i + (move === "up" ? -1 : 1)];
+    if (!t) return null;
+    target = t; after = move === "down";
+  } else return null;
+  if (!sibs.includes(target) || target === id) return null;
+  const span = spanOf(id), rest = its.filter(x => !span.includes(x.id));
+  const tail = spanOf(target).filter(x => !span.includes(x));
+  const at = rest.findIndex(x => x.id === (after ? tail[tail.length - 1] : target)) + (after ? 1 : 0);
+  const moved = rest.slice(0, at).concat(its.filter(x => span.includes(x.id)), rest.slice(at));
+  // the breaks keep their places in the list, so the segments are dealt out by position again
+  const seg = its.map(x => x.segment);
+  return { ...S.state, items: moved.map((x, k) => ({ ...x, segment: seg[k] })) };
+}
 async function moveTask(id, move, more) {
-  try { S.state = await api("/api/order", { item: id, move, ...more }); S.moved = id; drawTasks(); }
+  const guess = guessMove(id, move, more);
+  if (guess) S.state = guess;
+  // each redraw replaces the rows, so a grip that had focus (the arrow keys) is given it back
+  const redraw = () => { const g = document.activeElement && document.activeElement.dataset.grip; drawTasks(); const again = g && $(`[data-grip="${CSS.escape(g)}"]`); if (again) again.focus(); };
+  S.pending.add(id); S.inflight++; S.moved = id; redraw();
+  let state = null;
+  try { state = await api("/api/order", { item: id, move, ...more }); }
   catch (e) { toast(e.message, true); }
+  S.pending.delete(id);
+  if (--S.inflight === 0) {
+    try { S.state = state || await api("/api/state"); } catch (e) { /* the list as drawn stands */ }
+    if (S.stale) { S.stale = false; render(false); }
+  }
+  if (route().view === "tasks") redraw();
 }
 // Dragging a row by its grip. The row (and its subtree) follows the pointer, a line shows the gap it will drop
 // into, and letting go posts a place. It stays among its siblings, as Up and Down did; the arrows change the parent.

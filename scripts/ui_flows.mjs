@@ -938,6 +938,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
     await page.mouse.up();
     await page.waitForFunction(first => document.querySelector(".item .iid").textContent.trim() !== first, before[0], { timeout: 8000 });
+    await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
     assert(fs.existsSync(path.join(DIR, ".dfs", "order.md")), "the drag is written to order.md");
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "the dragged task now follows the one it was dropped past");
     assert(!(await page.$(".item.dragging, .item.drop-after, .item.drop-before")), "the drag leaves no marks");
@@ -957,6 +958,49 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.click("[data-act=reorder]");
     assert(await page.$("button.item") && !(await page.$(".moves")), "switching Reorder off restores the rows");
     same(errors.filter(e => !/status of 409/.test(e)), [], "no page errors but the refused move's 409");
+  },
+
+  // A drop is drawn where it landed, marked as saving, while the server is still writing; a refused one is put back.
+  async reorderpending(b) {
+    const { page, errors } = await open(b, PHONE);
+    const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
+    const before = await ids();
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".moves");
+    const drag = async () => {
+      const grip = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
+      const second = await (await page.$(`[data-row=${before[1]}]`)).boundingBox();
+      await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(grip.x + grip.width / 2, second.y + second.height * 0.9, { steps: 6 });
+      await page.mouse.up();
+    };
+    // the reply is held back: the new order and the mark are already on the page
+    let release; const held = new Promise(r => { release = r; });
+    await page.route("**/api/order", async r => { await held; await r.continue(); });
+    await drag();
+    await page.waitForSelector(".item.pending");
+    same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "the dropped row is drawn in its new place before the server answers");
+    same(await page.$eval(".item.pending .iid", e => e.textContent.trim()), before[0], "the dropped row is the one marked");
+    assert((await page.textContent(".item.pending")).includes("saving"), "the mark says it is saving");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    assert(!(await page.$(".item.dragging")), "the drop leaves no drag marks");
+    release();
+    await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "the written order is the one that was drawn");
+    await page.unroute("**/api/order");
+    // refused: the order comes back and the reason is told
+    await page.route("**/api/order", r => r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) }));
+    const g = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
+    const first = await (await page.$(`[data-row=${before[1]}]`)).boundingBox();
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(g.x + g.width / 2, first.y + first.height * 0.2, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForSelector("#toast.err");
+    await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a refused move puts the order back");
+    same(errors.filter(e => !/status of 409/.test(e)), [], "no page errors but the 409");
   },
 
   // Switching Reorder on or off keeps the list where the reader was: the rows grow a strip of moves, and the row

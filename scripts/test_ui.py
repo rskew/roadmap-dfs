@@ -256,6 +256,9 @@ class Flows(unittest.TestCase):
     def test_reordering_the_task_list_writes_order_md(self):
         self.flow("reorder")
 
+    def test_a_dropped_row_is_drawn_in_place_while_it_saves(self):
+        self.flow("reorderpending")
+
     def test_reorder_keeps_the_list_where_it_was_scrolled(self):
         self.flow("reorderkeepsscroll")
 
