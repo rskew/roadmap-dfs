@@ -686,6 +686,53 @@ class Check(InARepo):
         with self.assertRaises(ValueError):
             dfs_tree.delete_task("W1")
 
+    def test_a_task_is_archived_only_when_done_reviewed_and_pushed_and_its_number_stays_taken(self):
+        sh = lambda c, cwd=self.root: subprocess.run(c, shell=True, cwd=cwd, check=True, capture_output=True)
+        work = ("- 2026-09-25T09:00:00Z · session · work\n- 2026-09-25T09:10:00Z · end · work · ok\n")
+        self.write(task(node(1, "confirmed", extra="Determination: yes\n"), log=work))
+        (self.root / ".dfs" / "order.md").write_text("Prose.\n\n- W1\n- W2\n")
+        self.commit()
+        dfs_tree._unpushed_seen.clear(); dfs_tree._uncommitted_seen.clear()
+        self.assertEqual(dfs_tree.archive_blocker("W1"), "it is not done")
+        self.write(task(node(1, "confirmed", extra="Determination: yes\n"), log=work + "- 2026-09-25T09:20:00Z · review · ok\n"))
+        self.commit()
+        dfs_tree._unpushed_seen.clear(); dfs_tree._uncommitted_seen.clear()
+        self.assertIn("no origin branch", dfs_tree.archive_blocker("W1"))
+        remote = Path(tempfile.mkdtemp())
+        try:
+            sh("git init -q --bare -b master", remote)
+            sh("git remote add origin %s && git fetch -q origin" % remote)
+            dfs_tree._unpushed_seen.clear()
+            self.assertIn("no origin branch", dfs_tree.archive_blocker("W1"))   # origin has no master yet
+            sh("git push -q origin master")
+            dfs_tree._unpushed_seen.clear()
+            self.assertEqual(dfs_tree.archive_blocker("W1"), "")
+            # A later commit of the task that origin lacks holds it back.
+            self.write(task(node(1, "confirmed", extra="Determination: yes!\n"), log=work + "- 2026-09-25T09:20:00Z · review · ok\n"))
+            sh("git add -A && git -c user.name=t -c user.email=t@t commit -qm 'W1.1: more'")
+            dfs_tree._unpushed_seen.clear(); dfs_tree._uncommitted_seen.clear()
+            self.assertIn("1 of its commits are not on origin/master", dfs_tree.archive_blocker("W1"))
+            sh("git push -q origin master")
+            self.write(task(node(1, "confirmed", extra="Determination: yes!!\n"), log=work + "- 2026-09-25T09:20:00Z · review · ok\n"))
+            dfs_tree._unpushed_seen.clear(); dfs_tree._uncommitted_seen.clear()
+            self.assertIn("uncommitted", dfs_tree.archive_blocker("W1"))
+            sh("git checkout -q -- .dfs")
+            dfs_tree._unpushed_seen.clear(); dfs_tree._uncommitted_seen.clear()
+            with self.assertRaises(ValueError):
+                dfs_tree.archive_task("W9")
+            moved = dfs_tree.archive_task("W1")
+        finally:
+            shutil.rmtree(remote, ignore_errors=True)
+        self.assertEqual(moved, ["items/W1.md"])
+        self.assertTrue((self.root / ".dfs" / "archive" / "archived" / "items" / "W1.md").is_file())
+        self.assertFalse((self.root / ".dfs" / "archive" / "deleted").exists())
+        self.assertFalse(dfs_tree.exists("W1"))
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "Prose.\n\n- W2\n")
+        self.assertEqual(dfs_tree.retired_ids(), {"W1"})
+        self.assertEqual(dfs_tree.next_task_id(), "W2")
+        with self.assertRaises(ValueError):
+            dfs_tree.create_task("again", task="W1")
+
     def test_a_deleted_node_takes_its_subtree_and_leaves_a_delete_entry_the_guard_accepts(self):
         log = ("- 2026-09-25T09:00:00Z · session · work\n"
                "- 2026-09-25T09:01:00Z · correct · W1.2 · refuted\n  wrong\n")

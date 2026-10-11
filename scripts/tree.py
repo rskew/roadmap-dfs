@@ -679,39 +679,44 @@ def deleted_dir():
     return dfs_paths.state() / "archive" / "deleted"
 
 
+def archived_dir():
+    """Where an archived task's files are kept, laid out as `deleted_dir()` is."""
+    return dfs_paths.state() / "archive" / "archived"
+
+
 def retired_ids():
-    """The tasks `delete_task` has retired. Their numbers are not handed out again."""
-    base = deleted_dir() / "items"
+    """The tasks `delete_task` or `archive_task` has retired. Their numbers are not handed
+    out again."""
     out = set()
-    for p in base.glob("*") if base.is_dir() else ():
-        got = part_of(p.name) if p.is_file() else (p.name,) if re.fullmatch(TASK_RE, p.name) else None
-        if got:
-            out.add(got[0])
+    for base in (deleted_dir() / "items", archived_dir() / "items"):
+        for p in base.glob("*") if base.is_dir() else ():
+            got = part_of(p.name) if p.is_file() else (p.name,) if re.fullmatch(TASK_RE, p.name) else None
+            if got:
+                out.add(got[0])
     return out
 
 
-def delete_task(task):
-    """Delete a task: move every part of it, and of its archive, under `deleted_dir()`
-    (the same relative paths) and drop it from `order.md`, its children there taking its
-    place. Nothing is erased, so putting the files back restores it, and the move is a
-    rename, which is what `check.py` lets through where it refuses a deleted task file.
-    Refused: an unknown task, one a live chain is working, and one already retired under
-    that id. Returns the moved paths, relative to `.dfs`; ValueError says what is wrong."""
+def _retire(task, dest, verb):
+    """Move every part of `task`, and of its archive, under `dest` (the same relative
+    paths) and drop it from `order.md`, its children there taking its place. A rename,
+    which is what `check.py` lets through where it refuses a deleted task file. Refused
+    (ValueError): an unknown task, one a live chain is working, one already retired.
+    Returns the moved paths, relative to `.dfs`."""
     if not exists(task):
         raise ValueError("no task %s" % task)
     import runs as dfs_runs
     if any(r["item"] == task for r in dfs_runs.live_runs()):
         raise ValueError("%s is being worked on by a running session; stop it first" % task)
     if task in retired_ids():
-        raise ValueError("%s was deleted before, and its files are still under %s"
-                         % (task, dfs_paths.rel(deleted_dir())))
+        raise ValueError("%s was %s before, and its files are still under %s"
+                         % (task, verb, dfs_paths.rel(dfs_paths.state() / "archive")))
     state = dfs_paths.state()
     moves = []
     for sub in ("items", "archive/items"):
         base = state / sub
         for src in [base / ("%s.md" % task), base / task]:
             if src.exists():
-                moves.append((src, deleted_dir() / ("items" if sub == "items" else "archive")
+                moves.append((src, dest / ("items" if sub == "items" else "archive")
                               / src.relative_to(base)))
     for src, dst in moves:
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -721,6 +726,42 @@ def delete_task(task):
     if left is not None:
         dfs_order.write_order(left)
     return [str(src.relative_to(state)) for src, _ in moves]
+
+
+def delete_task(task):
+    """Delete a task: `_retire` it under `deleted_dir()`. Nothing is erased, so putting the
+    files back restores it. ValueError says what is wrong."""
+    return _retire(task, deleted_dir(), "deleted")
+
+
+def archive_blocker(task):
+    """Why `task` cannot be archived yet, in words, or "" when it can: it is a finished tree
+    (done) and its implementation was reviewed or accepted by the author, no commit of it is ahead of the default branch on origin
+    (which must be there to compare with) and none of its files has uncommitted edits."""
+    if not exists(task):
+        return "no task %s" % task
+    t = load(task)
+    if status_of(t)[0] != "done":
+        return "it is not done"
+    if not any(e["kind"] in ("review", "accept") for e in t["log"]):
+        return "its implementation has not been reviewed"
+    got = unpushed()
+    if got is None:
+        return "there is no origin branch to say it was pushed"
+    if got[1].get(task):
+        return "%d of its commits are not on %s" % (got[1][task], default_ref())
+    if uncommitted().get(task):
+        return "its files have uncommitted changes"
+    return ""
+
+
+def archive_task(task):
+    """Archive a task that `archive_blocker` passes: `_retire` it under `archived_dir()`.
+    Moving the files back restores it. ValueError says what is wrong."""
+    why = archive_blocker(task)
+    if why:
+        raise ValueError("%s cannot be archived: %s" % (task, why))
+    return _retire(task, archived_dir(), "archived")
 
 
 def delete_node(task, nid):
