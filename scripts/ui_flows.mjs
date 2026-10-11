@@ -11,6 +11,8 @@ const [flow, URL_, DIR] = process.argv.slice(2);
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function same(a, b, msg) { assert(JSON.stringify(a) === JSON.stringify(b), `${msg}: ${JSON.stringify(a)} != ${JSON.stringify(b)}`); }
+// a list render replaces the rows, and a row measured in that instant has no box: ask again
+async function boxOf(page, sel) { for (let i = 0; i < 40; i++) { const e = await page.$(sel); const r = e && await e.boundingBox(); if (r) return r; await page.waitForTimeout(50); } throw new Error("no box for " + sel); }
 
 function chromiumPath() {
   if (process.env.DFS_UI_CHROMIUM) return process.env.DFS_UI_CHROMIUM;
@@ -916,6 +918,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
+    const box = sel => boxOf(page, sel);
     const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
     const before = await ids();
     assert(before.length >= 3 && !(await page.$(".moves")), "the list has no moves until Reorder is on");
@@ -929,8 +932,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     const edge = await page.$eval(`[data-grip=${before[0]}]`, g => { const r = g.getBoundingClientRect(), row = g.closest("[data-row]").getBoundingClientRect(); return row.right - r.right; });
     assert(edge >= 0 && edge < 20, "the grip is at the row's right edge, " + edge + "px in");
     // drag the first row down past the middle of the second: it lands after it
-    const grip = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
-    const second = await (await page.$(`[data-row=${before[1]}]`)).boundingBox();
+    const grip = await box(`[data-grip=${before[0]}]`);
+    const second = await box(`[data-row=${before[1]}]`);
     await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
     await page.mouse.down();
     await page.mouse.move(grip.x + grip.width / 2, second.y + second.height * 0.9, { steps: 6 });
@@ -943,7 +946,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "the dragged task now follows the one it was dropped past");
     assert(!(await page.$(".item.dragging, .item.drop-after, .item.drop-before")), "the drag leaves no marks");
     // dropped where it started, nothing moves
-    const g2 = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
+    const g2 = await box(`[data-grip=${before[0]}]`);
     await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
     await page.mouse.down(); await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2 + 4, { steps: 2 }); await page.mouse.up();
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a drag that ends where it began changes nothing");
@@ -967,9 +970,10 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     const before = await ids();
     await page.click("[data-act=reorder]");
     await page.waitForSelector(".moves");
+    const box = sel => boxOf(page, sel);
     const drag = async () => {
-      const grip = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
-      const second = await (await page.$(`[data-row=${before[1]}]`)).boundingBox();
+      const grip = await box(`[data-grip=${before[0]}]`);
+      const second = await box(`[data-row=${before[1]}]`);
       await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
       await page.mouse.down();
       await page.mouse.move(grip.x + grip.width / 2, second.y + second.height * 0.9, { steps: 6 });
@@ -1022,8 +1026,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(first => document.querySelector(".item .iid").textContent.trim() === first && !document.querySelector(".item.pending"), before[1], { timeout: 8000 });
     // refused: the order comes back and the reason is told
     await page.route("**/api/order", r => r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) }));
-    const g = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
-    const first = await (await page.$(`[data-row=${before[1]}]`)).boundingBox();
+    const g = await box(`[data-grip=${before[0]}]`);
+    const first = await box(`[data-row=${before[1]}]`);
     await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
     await page.mouse.down();
     await page.mouse.move(g.x + g.width / 2, first.y + first.height * 0.2, { steps: 6 });
@@ -1048,13 +1052,34 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowUp");
     await page.waitForFunction(() => S.inflight === 2, null, { timeout: 8000 });
+    // moves made back to back can reach the server in either order, so the second is not sent until the first is answered
+    await page.waitForTimeout(300);
+    same(calls, 1, "the second move is not sent while the first is unanswered");
     open1();
     await page.waitForFunction(() => S.inflight === 1, null, { timeout: 8000 });
     assert(await page.$(".item.pending"), "the row is still marked saving while its second move is unwritten");
+    for (let i = 0; i < 80 && calls < 2; i++) await page.waitForTimeout(50);
+    same(calls, 2, "the second move is sent once the first is answered");
     open2();
     await page.waitForFunction(() => !document.querySelector(".item.pending") && !S.inflight, null, { timeout: 8000 });
     await page.unroute("**/api/order");
-    same(errors.filter(e => !/status of 409|Failed to load resource/.test(e)), [], "no page errors but the 409 and the aborted read");
+    // a move still being written when the reader goes to Chats does not put the task list's state over the chats view's
+    const cur = await ids();
+    let open3; const gate3 = new Promise(r => { open3 = r; });
+    await page.route("**/api/order", async r => { await gate3; await r.continue(); });
+    await page.focus(`[data-grip=${cur[0]}]`);
+    await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(() => S.inflight === 1, null, { timeout: 8000 });
+    await page.evaluate(() => { location.hash = "#/chats"; });
+    await page.waitForFunction(first => route().view === "chats" && S.chats && S.state.items[0].id === first, cur[0], { timeout: 8000 });
+    await page.route("**/api/state", r => r.abort());   // the chats view's own poll cannot replace the state being judged
+    await page.evaluate(() => { S.state = { ...S.state, loadedByChats: true }; });
+    open3();
+    await page.waitForFunction(() => !S.inflight, null, { timeout: 8000 });
+    assert(await page.evaluate(() => S.state.loadedByChats), "a late reply does not overwrite the chats view's state");
+    await page.unroute("**/api/state");
+    await page.unroute("**/api/order");
+    same(errors.filter(e => !/status of 409|Failed to load resource/.test(e)), [], "no page errors but the 409 and the aborted reads");
   },
 
   // A root-level nudge onto or across a break is drawn where the server puts it: a break is a sibling at the root.
