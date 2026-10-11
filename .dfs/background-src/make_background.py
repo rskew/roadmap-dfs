@@ -3,37 +3,38 @@
 
 The icon (scripts/web/icon.svg) is a stepped path from a square, through an amber node,
 to a red stopped branch and a blue end. Here that grows into a single tree across the
-whole picture: a square root, orthogonal stepped runs, amber nodes where a run forks,
-and every branch ending stopped (red bar) or arrived (blue disc). The page draws the
-picture once ("cover", no repeat), so nothing tiles and the tree is continuous.
+whole picture: a square root at the centre, orthogonal stepped runs, amber nodes where a
+run forks, and every branch ending stopped (red bar) or arrived (blue disc). The picture
+is square and the page draws it once ("cover", no repeat), so nothing tiles, the tree is
+continuous, and a portrait phone, which shows only the middle of it, still sees the root.
 
-Run:  python3 make_background.py <out-dir> [seed]   (seed default: SEED) writes background-light.svg and -dark.svg
-Render to png with headless chromium (see render.mjs) and save as
-.dfs/background-image-light and .dfs/background-image-dark.
+Run, from this directory (writes background-light.svg and -dark.svg; seed default SEED):
+  python3 make_background.py /tmp/bg [seed]
+  for m in light dark; do bash render.sh /tmp/bg/background-$m.svg ../background-image-$m; done
 """
 import random
 import sys
 from collections import deque
 from pathlib import Path
 
-W, H = 1920, 1200
+W, H = 1680, 1680
 STEP = 120                      # one grid step, in pixels of the picture
 COLS, ROWS = W // STEP, H // STEP
 PALETTE = {
     "light": dict(ground="#efede7", ink="#16191c", amber="#c99f30", red="#b94c40", blue="#3f6aa1"),
     "dark": dict(ground="#171a1d", ink="#bfc2c6", amber="#d9b04a", red="#d0675b", blue="#6f95c9"),
 }
-SEED = 2362                  # a seed whose tree reaches every edge of the page, with among the most branches
+SEED = 2460                  # a seed whose tree reaches every edge of the square, with many branches in the middle columns a phone shows
 DIRS = [(1, 0), (0, 1), (-1, 0), (0, -1)]
 
 
 def grow(seed: int):
     """Grow the tree on the grid; returns its edges, each a pair of neighbouring cells, and the root."""
     rnd = random.Random(seed)
-    root = (0, ROWS // 2)
+    root = (COLS // 2, ROWS // 2)
     used = {root}               # every cell a path passes through
     edges = []
-    queue = deque([(root, (1, 0))])
+    queue = deque((root, d) for d in DIRS)
 
     def enter(c, origin):       # a cell the path may enter: on the page, free, and touching no other path
         return (0 <= c[0] < COLS and 0 <= c[1] < ROWS and c not in used and
@@ -52,13 +53,10 @@ def grow(seed: int):
             cur = nxt
         if cur == pos:
             continue
-        # turns lean to the right so the tree crosses the page; straight on is the other way a node can go
-        if d[0]:
-            turns = [(0, 1), (0, -1)]
-            rnd.shuffle(turns)
-            kids = turns[:2] + ([d] if rnd.random() < 0.5 else [])
-        else:
-            kids = [rnd.choice([(1, 0)] * 4 + [(-1, 0)]), d]
+        # a node turns either way, and may also go straight on
+        turns = [(d[1], d[0]), (-d[1], -d[0])]
+        rnd.shuffle(turns)
+        kids = turns + ([d] if rnd.random() < 0.5 else [])
         r = rnd.random()
         if r < 0.45:
             queue.extend((cur, t) for t in kids)
@@ -85,7 +83,7 @@ def picture(mode: str, seed: int) -> str:
     out.append('<rect x="%g" y="%g" width="44" height="44" fill="%s"/>' % (rx - 22, ry - 22, c["ink"]))
     for cell, ns in nbr.items():
         x, y = px(cell)
-        if len(ns) >= 3:        # a fork: an amber node
+        if len(ns) >= 3 and cell != root:        # a fork: an amber node
             out.append('<circle cx="%g" cy="%g" r="30" fill="%s"/>' % (x, y, c["amber"]))
         elif len(ns) == 1 and cell != root:     # a branch's last cell: stopped (a red bar) or arrived (a blue disc)
             if rnd.random() < 0.5:
