@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""chat.py and `run.sh --chat-turn`: a basic chat about a task or the project, read-only.
+"""chat.py and `run.sh --chat-turn`: a basic chat about a task or the project, with the shell but no edit tools.
 The agent is a stub that records how it was called and answers in claude's JSON.
 
 Run:  python3 roadmap-dfs/scripts/test_chat.py
@@ -161,12 +161,12 @@ class Chat(unittest.TestCase):
         self.assertTrue(self.chats.path("W1").exists(), "the session id is kept under the run root, not in the roadmap")
         self.assertEqual(list(self.chats.path("W1").parts[-3:-1]), ["runs", "chat"])
 
-    def test_it_is_read_only_and_not_a_permission_skipper(self):
+    def test_it_has_the_shell_but_no_edit_tools_and_is_not_a_permission_skipper(self):
         self.chats.send("W1", "hello")
         self.settle("W1")
         first = self.calls()[0]
-        self.assertIn("--allowedTools Read Grep Glob", first)
-        self.assertIn("--disallowedTools Bash Edit Write NotebookEdit", first)
+        self.assertIn("--allowedTools Read Grep Glob Bash", first)
+        self.assertIn("--disallowedTools Edit Write NotebookEdit", first)
         self.assertNotIn("dangerously", first)
         self.assertIn("--output-format json", first)
         self.assertIn("task W1", first)                       # the framing, on the first turn

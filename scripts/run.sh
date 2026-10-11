@@ -47,7 +47,7 @@
 #                                           accept a finished tree
 #         <scripts>/run.sh --open [task]     write a new task file
 #         <scripts>/run.sh [--codex|--kiro|--opencode] --chat [task|project]
-#         <scripts>/run.sh --chat-turn <task|project>   one turn of a READ-ONLY chat, for the web
+#         <scripts>/run.sh --chat-turn <task|project>   one turn of a chat that cannot edit, for the web
 #                          page: the author's message on stdin, CHAT_SID to resume, JSON out
 #         <scripts>/run.sh --bump-agent     pin the agents to nixpkgs now
 #                                           (tui.py does it in the background)
@@ -290,11 +290,11 @@ if [ "$MODE" = chat ]; then
 fi
 
 # One turn of a chat, for the web page: the author's message on stdin, the agent's reply as
-# the JSON claude prints on stdout. ⚠️ READ-ONLY, and that is the whole difference from the
+# the JSON claude prints on stdout. ⚠️ NO EDIT TOOLS, and that is the whole difference from the
 # interactive chat above: the page may be open to a network, the person typing may be on a
-# phone, and a chat is for talking, so the tools are the three that look (Read, Grep, Glob)
-# and the permission-skipping flags every other mode passes are NOT passed. Anything else
-# the agent reaches for is refused, headless, rather than asked about. The first turn gets
+# phone, so the tools are the ones that look (Read, Grep, Glob) and the shell (Bash), and the
+# permission-skipping flags every other mode passes are NOT passed. Anything else the agent
+# reaches for (Edit, Write) is refused, headless, rather than asked about. The first turn gets
 # the framing; a resumed one is just the message, the session already has it.
 if [ "$MODE" = chatturn ]; then
   [ "$AGENT" = claude ] || { echo "dfs_run: a chat from the web page runs under claude; \`c\` on the screen opens the others" >&2; exit 2; }
@@ -311,7 +311,7 @@ if [ "$MODE" = chatturn ]; then
     else
       about="task $ITEM: read $DFS_ROADMAP_REL, then $DFS_ITEMS_REL/$ITEM.md and every file in $DFS_ITEMS_REL/$ITEM/, whichever exist"
     fi
-    framing="You are talking with the author about $about. They are on a phone: answer briefly and plainly, in short paragraphs, and say which node or file you mean. You may only read. Do not edit files, run commands or add to any task's log; if the author wants something changed, tell them what to do and where in their page (answer a raise, refute or confirm a node, add a node)."
+    framing="You are talking with the author about $about. They are on a phone: answer briefly and plainly, in short paragraphs, and say which node or file you mean. You may read and run commands to look. Do not edit files or add to any task's log; if the author wants something changed, tell them what to do and where in their page (answer a raise, refute or confirm a node, add a node)."
     if [ -n "${CHAT_OPENING:-}" ] && [ -z "$message" ]; then
       if [ "$ITEM" = project ]; then
         prompt="$framing Start by summarising the roadmap in a few short lines and asking what the author wants to talk about."
@@ -324,7 +324,7 @@ if [ "$MODE" = chatturn ]; then
     session_flag=(--session-id "${CHAT_SID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}")
   fi
   exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json "${session_flag[@]}" \
-    --allowedTools Read Grep Glob --disallowedTools Bash Edit Write NotebookEdit < /dev/null
+    --allowedTools Read Grep Glob Bash --disallowedTools Edit Write NotebookEdit < /dev/null
 fi
 
 # The caller may name the directory. tui.py does, because it starts a chain in the
