@@ -105,7 +105,13 @@ const FLOWS = {
       same(await row.$eval(".goal", g => getComputedStyle(g).whiteSpace), "nowrap", "a done task's goal is one line");
       assert(!(await row.$(".why")), "a done task has no why line");
     }
-    // Tags crowding a done row (unpushed commits, uncommitted edits) go on a second line; the goal keeps its line.
+    // A done row's goal always has a whole line to itself; the status and tags (unpushed commits, uncommitted
+    // edits) sit on the line under it, however few they are.
+    const bare = await page.$eval(".item.done", row => {
+      const g = row.querySelector(".goal").getBoundingClientRect(), m = row.querySelector(".meta").getBoundingClientRect(), r = row.querySelector(".body").getBoundingClientRect();
+      return { goalW: g.width, rowW: r.width, below: m.top >= g.bottom - 1 };
+    });
+    assert(bare.goalW >= bare.rowW - 1 && bare.below, "a done row's goal takes the body's whole width and the status sits under it: " + JSON.stringify(bare));
     const crowded = await page.$eval(".item.done", row => {
       const meta = row.querySelector(".meta"), goal = row.querySelector(".goal");
       // fixed widths stand in for the text: this browser may draw none, and the tags must be wide
