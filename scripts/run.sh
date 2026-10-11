@@ -48,8 +48,8 @@
 #         <scripts>/run.sh --open [task]     write a new task file
 #         <scripts>/run.sh [--codex|--kiro|--opencode] --chat [task|project]
 #         <scripts>/run.sh --chat-turn <task|project>   one turn of a chat for the web page
-#                          (Edit and Write refused, Bash not: a command can change files):
-#                          the author's message on stdin, CHAT_SID to resume, JSON out
+#                          (full permissions, as --chat has): the author's message on
+#                          stdin, CHAT_SID to resume, JSON out
 #         <scripts>/run.sh --bump-agent     pin the agents to nixpkgs now
 #                                           (tui.py does it in the background)
 # Env:    CLAUDE_CMD       how claude is launched here — a nix run, not a binary on PATH
@@ -291,14 +291,12 @@ if [ "$MODE" = chat ]; then
 fi
 
 # One turn of a chat, for the web page: the author's message on stdin, the agent's reply as
-# the JSON claude prints on stdout. ⚠️ Edit and Write are refused, and that is the whole
-# difference from the interactive chat above: the page may be open to a network, the person
-# typing may be on a phone, so the tools are the ones that look (Read, Grep, Glob) and the
-# shell (Bash), and the permission-skipping flags every other mode passes are NOT passed.
-# Bash is unrestricted, so a command can still change files; only the framing asks the agent
-# not to. Anything else the agent reaches for (Edit, Write) is refused, headless, rather than
-# asked about. The first turn gets the framing; a resumed one is just the message, the
-# session already has it.
+# the JSON claude prints on stdout. ⚠️ FULL PERMISSIONS, the same flags as the interactive chat
+# above: Edit, Write and Bash all work and nothing is refused or asked about. That is the
+# exposure the port already has (the walk it starts runs with permission prompts off), and
+# `--no-walk` turns the chat off with it. The turn is headless and one-shot so that a resumed
+# turn reads the cached prefix. The first turn gets the framing; a resumed one is just the
+# message, the session already has it.
 if [ "$MODE" = chatturn ]; then
   [ "$AGENT" = claude ] || { echo "dfs_run: a chat from the web page runs under claude; \`c\` on the screen opens the others" >&2; exit 2; }
   message="$(cat)"
@@ -314,7 +312,7 @@ if [ "$MODE" = chatturn ]; then
     else
       about="task $ITEM: read $DFS_ROADMAP_REL, then $DFS_ITEMS_REL/$ITEM.md and every file in $DFS_ITEMS_REL/$ITEM/, whichever exist"
     fi
-    framing="You are talking with the author about $about. They are on a phone: answer briefly and plainly, in short paragraphs, and say which node or file you mean. You may read and run commands to look. Do not edit files or add to any task's log; if the author wants something changed, tell them what to do and where in their page (answer a raise, refute or confirm a node, add a node)."
+    framing="You are talking with the author about $about. They are on a phone: answer briefly and plainly, in short paragraphs, and say which node or file you mean."
     if [ -n "${CHAT_OPENING:-}" ] && [ -z "$message" ]; then
       if [ "$ITEM" = project ]; then
         prompt="$framing Start by summarising the roadmap in a few short lines and asking what the author wants to talk about."
@@ -327,7 +325,7 @@ if [ "$MODE" = chatturn ]; then
     session_flag=(--session-id "${CHAT_SID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}")
   fi
   exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json "${session_flag[@]}" \
-    --allowedTools Read Grep Glob Bash --disallowedTools Edit Write NotebookEdit < /dev/null
+    "${PERMISSION_ARGV[@]}" < /dev/null
 fi
 
 # The caller may name the directory. tui.py does, because it starts a chain in the
