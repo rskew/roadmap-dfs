@@ -786,11 +786,10 @@ async function moveTask(id, move, more) {
     const left = S.pending.get(id) - 1;   // the row stays marked until the last move of it is answered
     if (left) S.pending.set(id, left); else S.pending.delete(id);
   }
-  if (S.inflight === 1) {
-    // the last move still counts as in flight while a refused one is read back, so a move made meanwhile starts from the drawn list
-    // and the late read-back does not draw over it; the last move sent has the last word, whichever reply landed last
-    const here = () => route().view === "tasks";   // a chats view that has loaded its own state is not overwritten
-    const current = () => S.inflight === 1 && here();
+  if (mine === SENT) {
+    // only the last move sent decides the list. It stays counted in flight until its refused move is read back, so a move made
+    // meanwhile starts from the drawn list, and a read that began before that move does not draw over it (it is not "mine" any more)
+    const current = () => mine === SENT && route().view === "tasks";   // a chats view that has loaded its own state is not overwritten
     try { const read = LATEST || await api("/api/state"); if (current()) S.state = read; }
     catch (e) { if (current()) S.state = BEFORE; toast("The list could not be read back and may be out of date: reload to see the order.", true); }
   }

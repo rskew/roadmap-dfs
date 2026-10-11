@@ -10,6 +10,8 @@ const { chromium, devices } = require("playwright");
 const [flow, URL_, DIR] = process.argv.slice(2);
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
+// a gate that never opens fails the flow in seconds, saying which, rather than hanging it
+const within = (p, what, ms = 8000) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`${what}: never happened in ${ms} ms`)), ms))]);
 function same(a, b, msg) { assert(JSON.stringify(a) === JSON.stringify(b), `${msg}: ${JSON.stringify(a)} != ${JSON.stringify(b)}`); }
 // a list render replaces the rows, and a row measured in that instant has no box: ask again
 async function boxOf(page, sel) { for (let i = 0; i < 40; i++) { const e = await page.$(sel); const r = e && await e.boundingBox(); if (r) return r; await page.waitForTimeout(50); } throw new Error("no box for " + sel); }
@@ -1038,8 +1040,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     // refused and the list cannot be read back: the list from before the move is drawn, and the toast says it may be stale
     await page.route("**/api/state", r => r.abort());
     await page.evaluate(() => { document.querySelector("#toast").className = ""; });
-    await page.focus(`[data-grip=${before[0]}]`);
-    await page.keyboard.press("ArrowUp");
+    await page.evaluate(id => { moveTask(id, "up"); }, before[0]);
     await page.waitForFunction(() => /out of date/.test(document.querySelector("#toast").textContent), null, { timeout: 8000 });
     await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a refused move whose list cannot be read back still draws the old order");
@@ -1061,12 +1062,10 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       if (writes++ === 0) { refused = true; return r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) }); }
       await lastGate; await r.continue();
     });
-    await page.focus(`[data-grip=${before[0]}]`);
-    await page.keyboard.press("ArrowUp");
-    await readHeld;
+    await page.evaluate(id => { moveTask(id, "up"); }, before[0]);   // called, not pressed: a list render between a focus and a key would drop the key
+    await within(readHeld, "the refused move's list was not read back");
     same(await page.evaluate(() => S.inflight), 1, "the refused move's list is being read back");
-    await page.focus(`[data-grip=${before[2]}]`);
-    await page.keyboard.press("ArrowUp");
+    await page.evaluate(id => { moveTask(id, "up"); }, before[2]);
     const drawnNow = (await ids()).slice(0, 3).join();
     same(drawnNow, [before[0], before[2], before[1]].join(), "the move made during the read-back is drawn at once");
     readBack();
@@ -1076,6 +1075,37 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert(await page.$(`.item.pending [data-grip=${before[2]}], .item.pending .iid`), "and the row is still marked saving");
     sendLast();
     await page.waitForFunction(() => !document.querySelector(".item.pending") && !S.inflight, null, { timeout: 8000 });
+    await page.unroute("**/api/state");
+    await page.unroute("**/api/order");
+    // a move made during a read-back and answered before the read lands is not drawn over by it either: its reply is the list
+    await page.waitForFunction(() => !S.inflight && !S.stale && !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    await page.waitForTimeout(400);
+    let firstRead, laterReads, readSeen2;
+    let refused2 = false, held2 = false, writes2 = 0;
+    const gateA = new Promise(r => { firstRead = r; }), gateB = new Promise(r => { laterReads = r; });
+    const seen2 = new Promise(r => { readSeen2 = r; });
+    await page.route("**/api/state", async r => {
+      if (!refused2) return r.continue();
+      if (!held2) { held2 = true; readSeen2(); await gateA; return r.continue(); }
+      await gateB; await r.continue();   // the push for the second move's write makes a read of its own, held so the page's own choice shows
+    });
+    await page.route("**/api/order", async r => {
+      if (writes2++ === 0) { refused2 = true; return r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) }); }
+      await r.continue();
+    });
+    const cur2 = await ids();
+    await page.evaluate(id => { moveTask(id, "up"); }, cur2[1]);
+    await within(seen2, "the refused move's list was not read back (second time)");
+    await page.evaluate(id => { moveTask(id, "up"); }, cur2[2]);
+    await page.waitForFunction(() => S.inflight === 1 && !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    const truth = (await (await page.request.get(URL_ + "/api/state")).json()).items.map(x => x.id).slice(0, 3).join();
+    same((await ids()).slice(0, 3).join(), truth, "the reply to a move made during a read-back is drawn once it lands");
+    firstRead();
+    await page.waitForFunction(() => !S.inflight, null, { timeout: 8000 });
+    same((await ids()).slice(0, 3).join(), truth, "the read that began before that move does not draw over its reply");
+    laterReads();
+    await page.waitForFunction(() => !S.stale, null, { timeout: 8000 });
+    same((await ids()).slice(0, 3).join(), truth, "and the list stands once the later reads land");
     await page.unroute("**/api/state");
     await page.unroute("**/api/order");
     // two moves of one row in flight: the mark stays until the second is written, not just the first
