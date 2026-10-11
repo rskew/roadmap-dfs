@@ -1,0 +1,176 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W65 · This instance's background, drawn from the app icon</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 14px; min-height: 3em; }
+  #rulebox, #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p, #answerbox p { margin: 0 0 8px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; min-height: 44px; box-sizing: border-box; }
+  label { display: block; margin: 8px 0 2px; }
+  .stage { border: 1.5px solid #333; border-radius: 6px; overflow: hidden; height: 220px; margin: 0 0 8px; }
+  .stage svg { display: block; width: 100%; height: 100%; }
+  .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 0 0 10px; }
+  input[type=range] { flex: 1; min-width: 160px; min-height: 44px; }
+</style>
+
+<h1>W65 · This instance's background, drawn from the app icon</h1>
+<p class="lede">The app icon (a stepped path, a node, a stopped branch, an end) is the project's
+  look. This reading makes the background the same drawing, repeated: a picture for light mode and
+  one for dark mode, laid in this repo's <code>.dfs/</code>. No code changes.</p>
+
+<h2>Which reading of the Goal</h2>
+<div class="choices" role="group" aria-label="Which reading">
+  <button type="button" data-case="pictures" aria-pressed="true">Pictures from the icon</button>
+  <button type="button" data-case="colours" aria-pressed="false">Icon colours, flat</button>
+  <button type="button" data-case="icons" aria-pressed="false">Icons follow the project</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+
+<h2>The picture</h2>
+<div class="choices" role="group" aria-label="Mode">
+  <button type="button" data-mode="light" aria-pressed="true">Light</button>
+  <button type="button" data-mode="dark" aria-pressed="false">Dark</button>
+  <button type="button" data-veil="on" aria-pressed="true">As the page shows it (90% veil)</button>
+</div>
+<div class="row"><label for="size" style="margin:0">Motif size</label>
+  <input type="range" id="size" min="120" max="360" step="20" value="240"><output id="sizeout">240</output></div>
+<div class="stage" id="stage" data-node="preview" aria-label="Preview of the background"></div>
+<p id="note" style="margin:0;color:#444"></p>
+
+<div id="rulebox" hidden>
+  <p>Rule on this node: the reading chosen above.</p>
+  <label id="parkbox" hidden><input type="checkbox" id="park"> Confirming prunes <span id="parks"></span>, which hold work: park them</label>
+  <label for="why">Your note, sent with it (optional)</label>
+  <textarea id="why" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
+<div id="answerbox" hidden>
+  <p>This page is also the answer to a raise. Choose above, then send it.</p>
+  <button type="button" id="answer">Send as my answer</button>
+  <p id="answer-status" aria-live="polite"></p>
+</div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The author meant something else by "extension of icon theme": the app icons themselves
+  following the project's colour, or only a flat background colour, not a picture.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>The icon is one drawing in five colours (<code>scripts/web/icon.svg</code>). Pictures, per-mode
+    backgrounds and the top colour already exist (<code>.dfs/background-image-light</code> and
+    <code>-dark</code>, <code>.dfs/background</code>, <code>.dfs/theme</code>), so the reading needs no code.
+    The icons are four fixed PNGs and the manifest names a fixed <code>background_color</code>.</p>
+</details>
+
+<script>
+  var cases = {
+    pictures: 'Reading chosen: draw the background as the app icon repeated, a picture each for light and dark mode, kept in .dfs/background-image-light and -dark. The top colour and the code stay as they are.',
+    colours: 'Reading chosen: no picture; set flat page backgrounds from the icon\'s paper and ink colours in .dfs/background, light and dark. Smaller, but the icon\'s drawing is not in it.',
+    icons: 'Reading chosen: the app icons (192, 512, maskable, touch icon) and manifest take the project\'s colour instead of fixed art, so the instance is recognisable on a phone. A code change; the background stays as it is.'
+  };
+  var notes = {
+    pictures: 'Shown: the picture that would be installed.',
+    colours: 'Shown: only the ground colour of the icon; no drawing.',
+    icons: 'Shown: the background is unchanged; the change would be to the icon files, not to this preview.'
+  };
+  var PAL = {
+    light: { ground: '#efede7', ink: '#16191c', amber: '#c99f30', red: '#b94c40', blue: '#3f6aa1', paper: '#f5f4ef' },
+    dark: { ground: '#171a1d', ink: '#bfc2c6', amber: '#d9b04a', red: '#d0675b', blue: '#6f95c9', paper: '#171a1d' }
+  };
+  var chosen = 'pictures', mode = 'light', veil = true, cell = 240, touched = false;
+  function motif(c) {
+    return '<path d="M150 140H256V236H362V336M256 236V318" fill="none" stroke="' + c.ink + '" stroke-width="26"/>' +
+      '<rect x="128" y="118" width="44" height="44" fill="' + c.ink + '"/>' +
+      '<circle cx="256" cy="236" r="30" fill="' + c.amber + '"/>' +
+      '<rect x="208" y="318" width="96" height="30" fill="' + c.red + '"/>' +
+      '<circle cx="362" cy="352" r="40" fill="' + c.blue + '"/>';
+  }
+  function draw() {
+    var c = PAL[mode], W = 1920, H = 1200, k = cell / 512, flips = [[1, 1], [-1, 1], [-1, -1], [1, -1]], g = '';
+    if (chosen === 'pictures') {
+      for (var r = 0; r < H / cell + 2; r++) for (var q = 0; q < W / cell + 2; q++) {
+        var f = flips[(q + 2 * r) % 4], x = q * cell - (r % 2 ? cell / 2 : 0) + cell / 2, y = r * cell + cell / 2;
+        g += '<g transform="translate(' + x + ' ' + y + ') scale(' + f[0] * k + ' ' + f[1] * k + ') translate(-256 -256)">' + motif(c) + '</g>';
+      }
+    }
+    var cover = veil ? '<rect width="' + W + '" height="' + H + '" fill="' + c.paper + '" fill-opacity=".9"/>' : '';
+    document.getElementById('stage').innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid slice">' +
+      '<rect width="' + W + '" height="' + H + '" fill="' + c.ground + '"/>' + g + cover + '</svg>';
+  }
+  function show() {
+    document.getElementById('result').textContent = cases[chosen];
+    document.getElementById('note').textContent = notes[chosen];
+    document.querySelectorAll('[data-case]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.case === chosen)); });
+    document.querySelectorAll('[data-mode]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.mode === mode)); });
+    document.querySelector('[data-veil]').setAttribute('aria-pressed', String(veil));
+    document.getElementById('sizeout').textContent = cell;
+    draw();
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
+  });
+  document.querySelectorAll('[data-mode]').forEach(function (b) {
+    b.addEventListener('click', function () { mode = b.dataset.mode; show(); });
+  });
+  document.querySelector('[data-veil]').addEventListener('click', function () { veil = !veil; show(); });
+  document.getElementById('size').addEventListener('input', function (e) { cell = +e.target.value; show(); });
+
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen }; }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
+  function rule(verdict) {
+    var out = document.getElementById('rule-status'), why = document.getElementById('why').value.trim();
+    var text = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: mine(), verdict: verdict, answer: text, park: document.getElementById('park').checked }).then(function () {
+      out.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      out.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
+  var send = document.getElementById('answer');
+  send.addEventListener('click', function () {
+    var out = document.getElementById('answer-status');
+    send.disabled = true;
+    call('POST', { state: mine(), answer: document.getElementById('result').textContent }).then(function () {
+      out.textContent = 'Recorded as your answer.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) { send.disabled = false; out.textContent = 'Not recorded: ' + e.message; });
+  });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
+    var parks = (j.node && j.node.parks) || [];
+    document.getElementById('parks').textContent = parks.join(', ');
+    document.getElementById('parkbox').hidden = !parks.length;
+    document.getElementById('answerbox').hidden = !j.raise;
+  }).catch(function () {});
+</script>
