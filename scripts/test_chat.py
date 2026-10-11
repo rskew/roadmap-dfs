@@ -170,6 +170,9 @@ class Chat(unittest.TestCase):
         self.assertNotIn("dangerously", first)
         self.assertIn("--output-format json", first)
         self.assertIn("task W1", first)                       # the framing, on the first turn
+        self.assertNotIn("You may only read", first)
+        self.assertIn("run commands", first)
+        self.assertIn("Do not edit files or add to any task's log", first)
         self.assertIn("hello", first)
 
     def test_the_second_turn_resumes_the_session_and_is_just_the_message(self):

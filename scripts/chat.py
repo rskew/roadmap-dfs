@@ -3,8 +3,9 @@
 
 One conversation per scope (a task, or `project`): a claude session whose id is kept in a
 small file under the run root. The terminal's `c` (and `C`) starts or RESUMES that session
-interactively; the web page resumes the same one a turn at a time, headless and
-without edit tools (`run.sh --chat-turn`: Read, Grep, Glob and Bash; Edit and Write are refused). What the page shows
+interactively; the web page resumes the same one a turn at a time, headless, with Read, Grep,
+Glob and Bash (`run.sh --chat-turn`; Edit and Write are refused, but Bash is not restricted, so a
+command can change files and only the turn's framing asks the agent not to). What the page shows
 is read from the session's own transcript, so a message typed at the screen shows on the page
 and one typed on the page shows when `c` is next opened. It is the same conversation, not a copy.
 

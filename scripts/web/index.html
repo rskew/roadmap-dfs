@@ -1088,7 +1088,7 @@ function correctForm(id) {
     async fd => wrote(await api("/api/correct", { task: S.task.id, node: id, verdict: fd.get("verdict"), body: fd.get("body"), park: fd.get("park") === "on" }), (fd.get("verdict") === "refuted" ? "Refuted" : "Confirmed") + "; the task reopens."));
   verdictHelp();
 }
-/* ── chat: basic, read-only, one agent turn at a time ──────────────────────────────── */
+/* ── chat: basic, one agent turn at a time ──────────────────────────────── */
 const chatOn = () => !!(S.walk && S.walk.enabled);
 const CHAT = { scope: null, busyT: null, last: "", fresh: false, follow: false };
 const chatKey = () => "chat:" + CHAT.scope;

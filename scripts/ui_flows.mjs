@@ -658,7 +658,7 @@ const FLOWS = {
     await ctx.close();
   },
 
-  // Chat: a basic, read-only conversation about a task, then about the project.
+  // Chat: a basic conversation about a task, then about the project.
   async chat(b) {
     const { page, errors } = await open(b, PHONE);
     await task(page, "W9");
