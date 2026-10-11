@@ -51,9 +51,8 @@ TLS proxy such as `tailscale serve` (bind 127.0.0.1 and name the proxy's hostnam
 `--allow-host`, or the Host check refuses it). The worker it installs caches nothing.
 CHAT (`chat.py`, a button on a task and on the list) talks about a task or the project with claude,
 with Read, Grep, Glob and Bash (Edit and Write refused; a command can still change files) when the page
-runs the turn; when a screen serves the page the chats are
-agents that screen keeps running in the background. The Chats tab lists them all. It starts agents, so
-`--no-walk` turns it off.
+runs the turn; when a screen serves the page the chats are agents that screen keeps running in the
+background. The Chats tab lists them all. It starts agents, so `--no-walk` turns it off.
 ARTEFACTS (`.dfs/artefacts`) are served sandboxed at `/artefacts/<name>` and linked from the
 text that names them.
 """
