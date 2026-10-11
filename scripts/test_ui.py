@@ -259,6 +259,9 @@ class Flows(unittest.TestCase):
     def test_a_dropped_row_is_drawn_in_place_while_it_saves(self):
         self.flow("reorderpending")
 
+    def test_a_nudge_across_a_break_is_drawn_where_the_server_puts_it(self):
+        self.flow("reorderbreak")
+
     def test_reorder_keeps_the_list_where_it_was_scrolled(self):
         self.flow("reorderkeepsscroll")
 

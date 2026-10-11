@@ -741,22 +741,30 @@ function drawTasks() {
 // One tap, one move: the server writes order.md and answers with the new list. A move among the siblings is drawn
 // where it lands at once, marked as saving, so the row does not jump back until the reply; a refused one is undone.
 function guessMove(id, move, more) {
-  const its = S.state.items, sibs = siblingsOf(id);
-  let target, after;
-  if (move === "place") { target = more.target; after = more.where === "after"; }
-  else if (move === "up" || move === "down") {
-    const i = sibs.indexOf(id), t = sibs[i + (move === "up" ? -1 : 1)];
-    if (!t) return null;
-    target = t; after = move === "down";
-  } else return null;
-  if (!sibs.includes(target) || target === id) return null;
-  const span = spanOf(id), rest = its.filter(x => !span.includes(x.id));
-  const tail = spanOf(target).filter(x => !span.includes(x));
-  const at = rest.findIndex(x => x.id === (after ? tail[tail.length - 1] : target)) + (after ? 1 : 0);
-  const moved = rest.slice(0, at).concat(its.filter(x => span.includes(x.id)), rest.slice(at));
-  // the breaks keep their places in the list, so the segments are dealt out by position again
-  const seg = its.map(x => x.segment);
-  return { ...S.state, items: moved.map((x, k) => ({ ...x, segment: seg[k] })) };
+  if (move !== "place" && move !== "up" && move !== "down") return null;
+  // order.py's shape: the items with a fence (id null) in front of each segment, since a fence is a sibling at the root
+  const nodes = []; let seg = 0;
+  for (const x of S.state.items) { while (seg < x.segment) { nodes.push({ id: null, depth: 0 }); seg++; } nodes.push({ id: x.id, depth: x.depth, it: x }); }
+  const end = i => { let j = i + 1; while (j < nodes.length && nodes[j].depth > nodes[i].depth) j++; return j; };
+  const i = nodes.findIndex(n => n.id === id);
+  let par = i - 1; while (par >= 0 && nodes[par].depth >= nodes[i].depth) par--;
+  const lo = par < 0 ? 0 : par + 1, hi = par < 0 ? nodes.length : end(par);
+  const sibs = []; for (let j = lo; j < hi; j++) if (nodes[j].depth === nodes[i].depth) sibs.push(j);
+  let t, after;
+  if (move === "place") { t = nodes.findIndex(n => n.id === more.target); after = more.where === "after"; }
+  else { t = sibs[sibs.indexOf(i) + (move === "up" ? -1 : 1)]; after = move === "down"; }
+  if (t === undefined || t < 0 || t === i || !sibs.includes(t)) return null;
+  const at = after ? end(t) : t, cut = nodes.slice(i, end(i)), rest = nodes.slice(0, i).concat(nodes.slice(end(i)));
+  const dest = at <= i ? at : at - cut.length, out = rest.slice(0, dest).concat(cut, rest.slice(dest));
+  // the server reads the file back: a fence before the first task, or twice running, is no fence, so segments are counted by what survives
+  let n = 0, seen = false, fenced = false;
+  const items = [];
+  for (const x of out) {
+    if (x.id === null) { fenced = seen; continue; }
+    if (fenced) { n++; fenced = false; }
+    seen = true; items.push({ ...x.it, segment: n });
+  }
+  return { ...S.state, items };
 }
 async function moveTask(id, move, more) {
   const guess = guessMove(id, move, more);

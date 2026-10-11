@@ -1003,6 +1003,46 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors.filter(e => !/status of 409/.test(e)), [], "no page errors but the 409");
   },
 
+  // A root-level nudge onto or across a break is drawn where the server puts it: a break is a sibling at the root.
+  async reorderbreak(b) {
+    const { page, errors } = await open(b, PHONE);
+    const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
+    const all = await ids();
+    const [a, c, ...tail] = all;
+    fs.writeFileSync(path.join(DIR, ".dfs", "order.md"), `- ${a}\n\n---\n\n- ${c}\n${tail.map(t => `- ${t}\n`).join("")}`);
+    await page.reload();
+    await page.waitForSelector(".item");
+    // the list as drawn: each task id, and "|" where a break is
+    const shape = () => page.$$eval("#view .item, #view .break", es => es.map(e => e.classList.contains("break") ? "|" : e.querySelector(".iid").textContent.trim()).join(" "));
+    same((await shape()).split(" ").slice(0, 3).join(" "), `${a} | ${c}`, "the break is drawn between the first two tasks");
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".moves");
+    let release; const held = new Promise(r => { release = r; });
+    await page.route("**/api/order", async r => { await held; await r.continue(); });
+    // up: the task under the break steps across it, to the end of the segment above
+    await page.focus(`[data-grip=${c}]`);
+    await page.keyboard.press("ArrowUp");
+    await page.waitForSelector(".item.pending");
+    const drawn = await shape();
+    same(drawn.split(" ").slice(0, 3).join(" "), `${a} ${c} |`, "up across the break is drawn with the task above the break");
+    release();
+    await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    same(await shape(), drawn, "the written order is the one that was drawn");
+    await page.unroute("**/api/order");
+    // down: back onto the break's far side, and the same again
+    let release2; const held2 = new Promise(r => { release2 = r; });
+    await page.route("**/api/order", async r => { await held2; await r.continue(); });
+    await page.focus(`[data-grip=${c}]`);
+    await page.keyboard.press("ArrowDown");
+    await page.waitForSelector(".item.pending");
+    const back = await shape();
+    same(back.split(" ").slice(0, 3).join(" "), `${a} | ${c}`, "down across the break is drawn with the task below the break");
+    release2();
+    await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    same(await shape(), back, "the written order is the one that was drawn, going down");
+    same(errors, [], "no page errors");
+  },
+
   // Switching Reorder on or off keeps the list where the reader was: the rows grow a strip of moves, and the row
   // at the top of the screen stays at the top of the screen instead of the page keeping its offset into new content.
   async reorderkeepsscroll(b) {
