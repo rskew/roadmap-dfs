@@ -1101,7 +1101,7 @@ function chatDraw(st) {
   CHAT.last = sig;
   log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">Running in the terminal's process: type here, or press <code>c</code> there to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
-    + (st.messages.length ? "" : `<p class="muted">Ask about ${CHAT.scope === "project" ? "the project" : "this task"}: where the work is, what was refuted and why, what to do next. It can read the roadmap and the task; it changes nothing.</p>`)
+    + (st.messages.length ? "" : `<p class="muted">Ask about ${CHAT.scope === "project" ? "the project" : "this task"}: where the work is, what was refuted and why, what to do next. It has full permissions, as the screen&rsquo;s chat does: it can read and change files and run commands.</p>`)
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "");
   $("#chat-stop").hidden = !st.busy;

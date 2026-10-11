@@ -689,6 +689,20 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // An empty chat says what the agent may do: it has full permissions, so it must not claim to change nothing.
+  async chatempty(b) {
+    const { page, errors } = await open(b, PHONE);
+    const state = { scope: "W9", messages: [], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => /Ask about/.test(document.querySelector("#chat-log").textContent));
+    const text = await page.textContent("#chat-log");
+    assert(!/changes nothing/.test(text), "the empty chat does not claim the agent changes nothing");
+    assert(/full permissions/.test(text), "the empty chat says the agent has full permissions");
+    same(errors, [], "no page errors");
+  },
+
   // Stop: shown only while the agent is answering, and pressing it asks the server to stop that chat.
   async chatstop(b) {
     const { page, errors } = await open(b, PHONE);
