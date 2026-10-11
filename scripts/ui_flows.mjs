@@ -1045,24 +1045,33 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a refused move whose list cannot be read back still draws the old order");
     await page.unroute("**/api/state");
     // a move made while a refused one is being read back is not drawn over by the read-back
-    let readBack, readDone = false, reads = 0, writes = 0, sendLast;
+    // let the page settle first: the server's push for the earlier writes makes list reads of its own, and only the read-back that follows the refusal is held
+    await page.waitForFunction(() => !S.inflight && !S.stale && !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    await page.waitForTimeout(400);
+    let readBack, readSeen, sendLast;
+    let refused = false, held1 = false, writes = 0;
     const readGate = new Promise(r => { readBack = r; }), lastGate = new Promise(r => { sendLast = r; });
-    await page.route("**/api/state", async r => { reads++; await readGate; await r.continue(); readDone = true; });
+    const readHeld = new Promise(r => { readSeen = r; });
+    await page.route("**/api/state", async r => {
+      if (!refused || held1) return r.continue();
+      held1 = true; readSeen();
+      await readGate; await r.continue();
+    });
     await page.route("**/api/order", async r => {
-      if (writes++ === 0) return r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) });
+      if (writes++ === 0) { refused = true; return r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) }); }
       await lastGate; await r.continue();
     });
     await page.focus(`[data-grip=${before[0]}]`);
     await page.keyboard.press("ArrowUp");
-    for (let i = 0; i < 80 && !reads; i++) await page.waitForTimeout(50);
-    same(reads, 1, "the refused move's list is being read back");
+    await readHeld;
+    same(await page.evaluate(() => S.inflight), 1, "the refused move's list is being read back");
     await page.focus(`[data-grip=${before[2]}]`);
     await page.keyboard.press("ArrowUp");
     const drawnNow = (await ids()).slice(0, 3).join();
     same(drawnNow, [before[0], before[2], before[1]].join(), "the move made during the read-back is drawn at once");
     readBack();
-    for (let i = 0; i < 80 && !readDone; i++) await page.waitForTimeout(50);
-    await page.waitForTimeout(200);
+    // the read-back is done when only the second move is left in flight
+    await page.waitForFunction(() => S.inflight === 1, null, { timeout: 8000 });
     same((await ids()).slice(0, 3).join(), drawnNow, "the late read-back does not draw the old place over it");
     assert(await page.$(`.item.pending [data-grip=${before[2]}], .item.pending .iid`), "and the row is still marked saving");
     sendLast();
