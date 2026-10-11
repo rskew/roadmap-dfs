@@ -290,12 +290,14 @@ if [ "$MODE" = chat ]; then
 fi
 
 # One turn of a chat, for the web page: the author's message on stdin, the agent's reply as
-# the JSON claude prints on stdout. ⚠️ NO EDIT TOOLS, and that is the whole difference from the
-# interactive chat above: the page may be open to a network, the person typing may be on a
-# phone, so the tools are the ones that look (Read, Grep, Glob) and the shell (Bash), and the
-# permission-skipping flags every other mode passes are NOT passed. Anything else the agent
-# reaches for (Edit, Write) is refused, headless, rather than asked about. The first turn gets
-# the framing; a resumed one is just the message, the session already has it.
+# the JSON claude prints on stdout. ⚠️ Edit and Write are refused, and that is the whole
+# difference from the interactive chat above: the page may be open to a network, the person
+# typing may be on a phone, so the tools are the ones that look (Read, Grep, Glob) and the
+# shell (Bash), and the permission-skipping flags every other mode passes are NOT passed.
+# Bash is unrestricted, so a command can still change files; only the framing asks the agent
+# not to. Anything else the agent reaches for (Edit, Write) is refused, headless, rather than
+# asked about. The first turn gets the framing; a resumed one is just the message, the
+# session already has it.
 if [ "$MODE" = chatturn ]; then
   [ "$AGENT" = claude ] || { echo "dfs_run: a chat from the web page runs under claude; \`c\` on the screen opens the others" >&2; exit 2; }
   message="$(cat)"
