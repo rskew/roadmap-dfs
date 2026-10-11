@@ -61,6 +61,12 @@
 #                          from its own config (~/.config/opencode/opencode.json, or the
 #                          project's opencode.json, or $OPENCODE_CONFIG). Set
 #                          OPENCODE_CMD="opencode -m provider/model" to override for one run.
+#         PLAN_MODEL       the model a claude session that PLANS runs on (default: opus): the
+#                          first work session, while the task has no nodes, and every critic
+#                          and implementation review
+#         IMPLEMENT_MODEL  the model every other claude work session runs on (default: sonnet)
+#                          Either set empty passes no --model, so claude's own default
+#                          applies. codex, kiro and opencode are not told a model.
 #         NIX_AGENT_FLAGS  extra flags for the nix command in those defaults
 #                          (default: none)
 #         AGENT_NIXPKGS_REV the nixpkgs revision the defaults launch from
@@ -627,7 +633,7 @@ run_session() {
     # session goes, and we CHOSE the id, so the live turns are readable from the
     # first one — by tui.py, which is the only reader.
     meta_set sid="$SID"
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" "${PERMISSION_ARGV[@]}" > "$log"
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
     session_rc=$?
   fi
   return "$session_rc"
@@ -863,7 +869,7 @@ elif [ "$AGENT" = opencode ]; then
 elif [ "$AGENT" = kiro ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
 else
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json ${PERMISSION_ARGV[*]}"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --model <opus to plan, sonnet to implement> ${PERMISSION_ARGV[*]}"
 fi
 total_turns=0
 total_cost=0
@@ -914,6 +920,16 @@ for i in $(seq 1 "$CAP"); do
   fi
   tree_log session "$kind" "$(basename "$RUNDIR")/run-$i"
   if [ "$kind" = work ]; then fp_before="$(python3 "$HERE/state.py" --fingerprint)"; else fp_tree_before="$(python3 "$HERE/state.py" --fingerprint)"; fi
+  # ⚠️ OPUS PLANS, SONNET IMPLEMENTS, and which a session does is a fact of the task, not
+  # a judgement: the work session that opens a task with no nodes lays the tree out, and
+  # the critic and the review judge it; every other work session builds a node. Only
+  # claude is told a model (the others read theirs from their own config).
+  MODEL_ARGV=()
+  if [ "$AGENT" = claude ]; then
+    if [ "$kind" != work ] || [ "${plan:-0}" = 1 ]; then model="${PLAN_MODEL-opus}"; else model="${IMPLEMENT_MODEL-sonnet}"; fi
+    [ -z "$model" ] || MODEL_ARGV=(--model "$model")
+    echo "   model ${model:-claude default}"
+  fi
   IN_SESSION="$kind"
   set +e
   run_session "$prompt" "$log"

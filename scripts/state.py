@@ -137,6 +137,8 @@ def state_for(task: str):
         review_rounds=dfs_tree.review_rounds_unsettled(t),
         review_limit=int(dfs_tree.review_rounds_unsettled(t) >= dfs_tree.REVIEW_ROUNDS),
         limit=int(since_author >= dfs_tree.SESSION_LIMIT),
+        # No node yet: the work session's job is to lay the tree out, not to build.
+        plan=int(not t["nodes"]),
         open_raises=[r["ts"] for r in raises],
         corrections=[c["node"] for c in corr],
         frontier=[nd["id"] for nd in fr],
@@ -867,7 +869,7 @@ def main() -> int:
             return 2
         st = state_for(args[1])
         for k in ("status", "why", "sessions", "since_critic", "critic_due", "review_due",
-                  "review_rounds", "review_limit", "limit", "progress"):
+                  "review_rounds", "review_limit", "limit", "plan", "progress"):
             print("%s=%s" % (k, shlex.quote(str(st[k]))))
         return 0
     if args and args[0] == "--critic-problem":

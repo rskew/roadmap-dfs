@@ -68,6 +68,7 @@ n=$(( $(cat "$COUNT_FILE") + 1 )); echo "$n" > "$COUNT_FILE"
 prompt="${2:-}"
 kind=work; case "$prompt" in *"You are the critic"*) kind=critic ;; *"You are the implementation reviewer"*) kind=review ;; esac
 echo "$kind" >> "$KINDS_FILE"
+echo "$kind $(printf '%s\n' "$@" | grep -A1 -x -e '--model' | tail -1)" >> "$KINDS_FILE.models"
 echo "${RUNDIR:-<unset>}" > "$KINDS_FILE.rundir"
 recipe="$(python3 -c 'import os,sys; r=os.environ["RECIPE"].split(","); i=int(sys.argv[1])-1; print(r[i] if i < len(r) else "nothing")' "$n")"
 T="python3 $TREE_PY"
@@ -164,6 +165,28 @@ class Chain(unittest.TestCase):
         subj = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=self.root,
                               capture_output=True, text=True).stdout.strip()
         self.assertEqual(subj, "W1.1: the step is done")
+
+    def models_run(self):
+        f = Path(str(self.kinds) + ".models")
+        return [l.strip() for l in f.read_text().splitlines()]
+
+    def test_opus_plans_and_sonnet_implements(self):
+        # W1 has a node, so its work sessions implement; the critic judges the tree.
+        self.run_chain("work,work,work,work,work,ok,work", cap=7)
+        self.assertEqual(self.models_run(),
+                         ["work sonnet"] * 5 + ["critic opus", "work sonnet"])
+
+    def test_the_work_session_that_opens_an_empty_tree_plans_on_opus(self):
+        item = self.root / ".dfs" / "items" / "W1.md"
+        item.write_text(TASK.split("### W1.1")[0] + "## Log\n")
+        subprocess.run("git add -A && git -c user.name=t -c user.email=t@t commit -qm empty",
+                       shell=True, cwd=self.root, check=True)
+        self.run_chain("nothing", cap=1)
+        self.assertEqual(self.models_run(), ["work opus"])
+
+    def test_the_review_plans_on_opus_and_the_models_can_be_set_or_dropped(self):
+        self.run_chain("work,confirm,rok", PLAN_MODEL="fable", IMPLEMENT_MODEL="")
+        self.assertEqual(self.models_run(), ["work", "work", "review fable"])
 
     def test_a_session_that_moved_nothing_stops_the_chain(self):
         rc, meta, out = self.run_chain("work,nothing,work")
