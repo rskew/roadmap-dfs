@@ -989,6 +989,37 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "the written order is the one that was drawn");
     await page.unroute("**/api/order");
+    // a list render that lands while a move is being written does not draw over it, and the reply still wins
+    let release3; const held3 = new Promise(r => { release3 = r; });
+    await page.route("**/api/order", async r => { await held3; await r.continue(); });
+    await page.focus(`[data-grip=${before[0]}]`);
+    await page.keyboard.press("ArrowUp");
+    await page.waitForSelector(".item.pending");
+    same((await ids()).slice(0, 2).join(), [before[0], before[1]].join(), "the nudge is drawn before the server answers");
+    await page.evaluate(() => render(false));
+    await page.waitForFunction(() => S.stale, null, { timeout: 8000 });
+    same((await ids()).slice(0, 2).join(), [before[0], before[1]].join(), "a list read that lands mid-write leaves the drawn order alone");
+    assert(await page.$(".item.pending"), "and the saving mark stays");
+    release3();
+    await page.waitForFunction(() => !document.querySelector(".item.pending") && !S.stale, null, { timeout: 8000 });
+    same((await ids()).slice(0, 2).join(), [before[0], before[1]].join(), "the written order stands once the write is done");
+    await page.unroute("**/api/order");
+    // out, in and break have no preview, but the row says it is saving all the same
+    for (const act of ["break", "break", "in", "out"]) {
+      let rel; const hold = new Promise(r => { rel = r; });
+      await page.route("**/api/order", async r => { await hold; await r.continue(); });
+      await page.click(`[data-row=${before[1]}] [data-move=${act}]`);
+      await page.waitForSelector(".item.pending");
+      same(await page.$eval(".item.pending .iid", e => e.textContent.trim()), before[1], act + " marks the row it moves");
+      assert((await page.textContent(".item.pending")).includes("saving"), act + " says it is saving");
+      rel();
+      await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
+      await page.unroute("**/api/order");
+    }
+    // and back to the order the refused drag below starts from
+    await page.focus(`[data-grip=${before[0]}]`);
+    await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(first => document.querySelector(".item .iid").textContent.trim() === first && !document.querySelector(".item.pending"), before[1], { timeout: 8000 });
     // refused: the order comes back and the reason is told
     await page.route("**/api/order", r => r.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "it cannot go there" }) }));
     const g = await (await page.$(`[data-grip=${before[0]}]`)).boundingBox();
@@ -1000,7 +1031,16 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForSelector("#toast.err");
     await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
     same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a refused move puts the order back");
-    same(errors.filter(e => !/status of 409/.test(e)), [], "no page errors but the 409");
+    // refused and the list cannot be read back: the list from before the move is drawn, and the toast says it may be stale
+    await page.route("**/api/state", r => r.abort());
+    await page.evaluate(() => { document.querySelector("#toast").className = ""; });
+    await page.focus(`[data-grip=${before[0]}]`);
+    await page.keyboard.press("ArrowUp");
+    await page.waitForFunction(() => /out of date/.test(document.querySelector("#toast").textContent), null, { timeout: 8000 });
+    await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    same((await ids()).slice(0, 2).join(), [before[1], before[0]].join(), "a refused move whose list cannot be read back still draws the old order");
+    await page.unroute("**/api/state");
+    same(errors.filter(e => !/status of 409|Failed to load resource/.test(e)), [], "no page errors but the 409 and the aborted read");
   },
 
   // A root-level nudge onto or across a break is drawn where the server puts it: a break is a sibling at the root.

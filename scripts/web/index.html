@@ -713,6 +713,7 @@ function drawTasks() {
     if (S.only && !it.needs_you) continue;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}`;
+    const wait = S.reorder && S.pending.has(it.id) ? `<span class="tag pending-tag" role="status">saving\u2026</span>` : "";
     const inner = `<span class="iid">${esc(it.id)}</span>
       <span class="body"><span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
@@ -721,14 +722,13 @@ function drawTasks() {
           ${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}
           ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}
           ${it.waiting_on ? `<span class="tag">waiting on ${esc(it.waiting_on)}</span>` : ""}
-          ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}</span></span>
+          ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}${wait}</span></span>
       ${it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}`;
     const style = `--ind:${Math.min(it.depth, 3) * 14}px`;
     if (S.reorder) {
       const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
-      const wait = S.pending.has(it.id) ? `<span class="tag pending-tag" role="status">saving\u2026</span>` : "";
-      html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner.replace("</span></span>\n", wait + "</span></span>\n")}
+      html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
         <span class="moves">${mv("out", "\u2190", "Move out of its parent:")}${mv("in", "\u2192", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}</span>${grip}</div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
   }
@@ -766,18 +766,24 @@ function guessMove(id, move, more) {
   }
   return { ...S.state, items };
 }
+let SENT = 0, LATEST = null, BEFORE = null;   // the moves sent, the reply to the last of them, the list before the first guess
 async function moveTask(id, move, more) {
+  if (!S.inflight) BEFORE = S.state;
   const guess = guessMove(id, move, more);
   if (guess) S.state = guess;
   // each redraw replaces the rows, so a grip that had focus (the arrow keys) is given it back
   const redraw = () => { const g = document.activeElement && document.activeElement.dataset.grip; drawTasks(); const again = g && $(`[data-grip="${CSS.escape(g)}"]`); if (again) again.focus(); };
+  const mine = ++SENT; LATEST = null;
   S.pending.add(id); S.inflight++; S.moved = id; redraw();
   let state = null;
   try { state = await api("/api/order", { item: id, move, ...more }); }
   catch (e) { toast(e.message, true); }
+  if (mine === SENT) LATEST = state;
   S.pending.delete(id);
   if (--S.inflight === 0) {
-    try { S.state = state || await api("/api/state"); } catch (e) { /* the list as drawn stands */ }
+    // the last move sent has the last word, whichever reply landed last; a refused one is read back from the server
+    try { S.state = LATEST || await api("/api/state"); }
+    catch (e) { S.state = BEFORE; toast("The list could not be read back and may be out of date: reload to see the order.", true); }
     if (S.stale) { S.stale = false; render(false); }
   }
   if (route().view === "tasks") redraw();
