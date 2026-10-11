@@ -106,9 +106,8 @@ a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; 
 /* a finished task recedes whole, so the open ones are what the eye lands on */
 .item.done .iid, .item.done .goal { color: var(--muted); font-weight: 400; }
 .item .st.done::before { content: "\2713\00a0"; }
-/* and takes one line, not three: the goal is cut to a single line with the status after it, no why under it.
-   The goal keeps at least that line: when the status and tags (not on main, uncommitted) leave it under 10rem
-   they wrap to a second line under it, and the goal takes the first whole */
+/* and takes two lines at most, not three, no why under it: the goal always has the first line whole, cut with an
+   ellipsis at the edge, and the status and tags (not on main, uncommitted) always sit on the line under it */
 .item.done { padding-top: var(--s2); padding-bottom: var(--s2); }
 .item.done .body { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); min-width: 0; }
 .item.done .goal { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
