@@ -225,6 +225,21 @@ class Flows(unittest.TestCase):
         self.assertFalse(dfs_tree.exists("W3"))
         self.assertTrue((self.root / ".dfs" / "archive" / "deleted" / "items" / "W3.md").is_file())
 
+    def test_archiving_a_finished_task_that_is_on_origin(self):
+        sh = lambda c, cwd=self.root: subprocess.run(c, shell=True, cwd=cwd, check=True, capture_output=True)
+        dfs_tree.append_log("W4", "accept")
+        sh("git add -A && git -c user.name=t -c user.email=t@t commit -qm 'W4: accepted'")
+        remote = Path(tempfile.mkdtemp())
+        try:
+            sh("git init -q --bare -b main", remote)
+            sh("git remote add origin %s && git push -q -u origin main" % remote)
+            dfs_tree._unpushed_seen.clear()
+            self.flow("archive")
+        finally:
+            shutil.rmtree(remote, ignore_errors=True)
+        self.assertFalse(dfs_tree.exists("W4"))
+        self.assertTrue((self.root / ".dfs" / "archive" / "archived" / "items" / "W4.md").is_file())
+
     def test_accepting_a_finished_tree(self):
         self.flow("accept")
         self.assertTrue(dfs_tree.accepted(dfs_tree.load("W4")))

@@ -97,6 +97,12 @@ a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; 
 .item.assumes { background: var(--assumption-wash); }
 .item.blocks { background: var(--attention-wash); }          /* a blocker is the more urgent: it wins */
 .item:active { background: var(--sel); }
+/* a task that can be archived gets a small button on the left of its row, under its id; it cannot sit inside the
+   row's own button, so the row's wrapper holds it over the empty space the id column leaves */
+.arow { position: relative; }
+.archive { position: absolute; left: var(--ind, 0px); bottom: var(--s3); width: 3.2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: flex-start; color: var(--muted); }
+.archive svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.archive:active { background: var(--sel); color: var(--ink); }
 .item .iid { font-weight: 600; letter-spacing: .03em; }
 .item .goal { font-weight: 500; overflow-wrap: anywhere; }
 .item .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin-top: 6px; font-size: var(--fs-control); }
@@ -730,6 +736,9 @@ function drawTasks() {
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
         <span class="moves">${mv("out", "\u2190", "Move out of its parent:")}${mv("in", "\u2192", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}</span>${grip}</div>`;
+    } else if (it.archivable) {
+      const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
+      html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
   }
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
@@ -1301,6 +1310,15 @@ function deleteTaskForm() {
       const res = await api("/api/delete_task", { task: t.id });
       toast("Deleted " + res.deleted + "."); S.task = null; S.sig = ""; go(""); await render(true); });
 }
+function archiveTaskForm(id) {
+  const it = S.state.items.find(i => i.id === id); if (!it) return;
+  form(`<h3>Archive ${esc(id)}?</h3>
+    <p class="muted" style="margin:0">${inline(it.goal)}</p>
+    <p class="muted" style="margin:0">It is done, reviewed and on ${esc(it.base)}. It leaves the list and the order. Its files are kept under <code>.dfs/archive/archived/</code>, so moving them back restores it; its number is not used again.</p>${buttons("Archive")}`,
+    async () => {
+      const res = await api("/api/archive_task", { task: id });
+      toast("Archived " + res.archived + "."); S.sig = ""; await render(true); });
+}
 function deleteNodeForm(id) {
   const rows = S.task.rows.filter(x => x.kind === "node"), under = [];
   for (const x of rows) { let p = x.parent; while (p) { if (p === id) { under.push(x.id); break; } const up = rows.find(y => y.id === p); p = up ? up.parent : ""; } }
@@ -1349,7 +1367,7 @@ document.addEventListener("click", e => {
     fold: () => { const s = S.folded[S.task.id] ||= new Set(); s.has(d.id) ? s.delete(d.id) : s.add(d.id); S.sig = ""; render(true); },
     close: () => leave(`t/${S.task.id}`), up,
     prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
-    answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, deletetask: deleteTaskForm, deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
+    answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chattop: chatTop, chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
     chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,

@@ -570,6 +570,26 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Archive a finished task from the list: only a done, reviewed and pushed task has the button, on the left of its row.
+  async archive(b) {
+    const { page, errors } = await open(b, PHONE);
+    await page.waitForSelector(".item[data-id=W4]");
+    same(await page.$$eval("[data-act=archive]", els => els.map(e => e.dataset.id)), ["W2", "W4"], "only the finished, reviewed, pushed tasks offer it");
+    const at = await page.$eval("[data-act=archive][data-id=W4]", e => [e.getBoundingClientRect().right, e.nextElementSibling.querySelector(".goal").getBoundingClientRect().left]);
+    assert(at[0] <= at[1] + 1, "the button sits in the left column of its row");
+    if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "archive.png") });
+    await page.click("[data-act=archive][data-id=W4]"); await dialog(page);
+    assert(/Archive W4\?/.test(await page.textContent("dialog")), "the dialog names the task");
+    await page.click("dialog button[value=cancel]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    assert(await page.$(".item[data-id=W4]"), "cancelling keeps the task");
+    await page.click("[data-act=archive][data-id=W4]"); await dialog(page);
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector(".item[data-id=W4]"));
+    same(await page.$$eval("[data-act=archive]", els => els.map(e => e.dataset.id)), ["W2"], "the other finished task keeps its button");
+    same(errors, [], "no page errors");
+  },
+
   // Add a node under another.
   async add(b) {
     const { page, errors } = await open(b, PHONE);

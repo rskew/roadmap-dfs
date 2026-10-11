@@ -143,6 +143,8 @@ def state_for(task: str):
         corrections=[c["node"] for c in corr],
         frontier=[nd["id"] for nd in fr],
         accepted=dfs_tree.accepted(t),
+        # Done, reviewed and on origin: the list offers to archive it.
+        archivable=int(not dfs_tree.archive_blocker(task)),
         progress=progress(t),
         # The screen's `next`: what is workable now, in order.
         next=["%s · %s" % (nd["id"], nd["title"]) for nd in fr],

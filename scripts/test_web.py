@@ -1072,6 +1072,16 @@ class Web(unittest.TestCase):
         self.assertTrue((self.root / ".dfs" / "archive" / "deleted" / "items" / "W1.md").is_file())
         self.assertEqual(self.call("POST", "/api/delete_task", dict(task="W1"))[0], 404)
 
+    def test_a_task_not_done_reviewed_and_pushed_is_not_archived_and_its_row_says_so(self):
+        status, data, _ = self.call("POST", "/api/archive_task", dict(task="W1"))
+        self.assertEqual(status, 409)
+        self.assertIn("cannot be archived", data["error"])
+        self.assertTrue(dfs_tree.exists("W1"))
+        self.assertFalse((self.root / ".dfs" / "archive" / "archived").exists())
+        self.assertEqual(self.call("POST", "/api/archive_task", dict(task="W9"))[0], 404)
+        row = [i for i in self.call("GET", "/api/state")[1]["items"] if i["id"] == "W1"][0]
+        self.assertIs(row["archivable"], False)
+
     def test_a_new_task_is_written_as_run_open_writes_it(self):
         status, data, _ = self.call("POST", "/api/new", dict(name="Cache the lookups", goal="Hits above 90%.", todos="profile it\nadd the cache\n"))
         self.assertEqual(status, 200)

@@ -147,7 +147,7 @@ def state_json():
             corrections=list(it.get("corrections") or ()),
             waiting_on=it.get("waiting_on") or "", blocked_by=it.get("blocked_by") or "",
             segment=it.get("segment", 0), ahead=it.get("ahead", 0), base=it.get("base") or "origin/main",
-            uncommitted=it.get("uncommitted") or "",
+            uncommitted=it.get("uncommitted") or "", archivable=bool(it.get("archivable")),
             running=running.get(it["id"], ""), next=it["id"] == nxt))
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
@@ -657,6 +657,13 @@ def act(name, body):
                 raise Refused(str(e), 409)
             HUB.notify()
             return dict(deleted=task)
+        elif name == "archive_task":
+            try:
+                dfs_tree.archive_task(task)
+            except (ValueError, dfs_paths.NoBranch) as e:
+                raise Refused(str(e), 409)
+            HUB.notify()
+            return dict(archived=task)
         elif name == "delete_node":
             nid = need(body, "node", "the node")
             if nid not in nodes:
