@@ -766,7 +766,7 @@ function guessMove(id, move, more) {
   }
   return { ...S.state, items };
 }
-let SENT = 0, LATEST = null, BEFORE = null;   // the moves sent, the reply to the last of them, the list before the first guess
+let SENT = 0, LATEST = null, BEFORE = null, SENDING = Promise.resolve();   // the moves sent, the reply to the last of them, the list before the first guess, the move being written
 async function moveTask(id, move, more) {
   if (!S.inflight) BEFORE = S.state;
   const guess = guessMove(id, move, more);
@@ -776,7 +776,10 @@ async function moveTask(id, move, more) {
   const mine = ++SENT; LATEST = null;
   S.pending.set(id, (S.pending.get(id) || 0) + 1); S.inflight++; S.moved = id;
   let state = null;
-  try { redraw(); state = await api("/api/order", { item: id, move, ...more }); }
+  // one request at a time, so the server applies the moves in the order they were made
+  const written = SENDING.then(() => api("/api/order", { item: id, move, ...more }));
+  SENDING = written.catch(() => {});
+  try { redraw(); state = await written; }
   catch (e) { toast(e.message, true); }
   finally {   // redraw is inside the try so a throw in it still reaches the count below, not leaving every list render dropped as stale
     if (mine === SENT) LATEST = state;
@@ -785,8 +788,9 @@ async function moveTask(id, move, more) {
   }
   if (--S.inflight === 0) {
     // the last move sent has the last word, whichever reply landed last; a refused one is read back from the server
-    try { S.state = LATEST || await api("/api/state"); }
-    catch (e) { S.state = BEFORE; toast("The list could not be read back and may be out of date: reload to see the order.", true); }
+    const here = () => route().view === "tasks";   // a chats view that has loaded its own state is not overwritten
+    try { const read = LATEST || await api("/api/state"); if (here()) S.state = read; }
+    catch (e) { if (here()) S.state = BEFORE; toast("The list could not be read back and may be out of date: reload to see the order.", true); }
     if (S.stale) { S.stale = false; render(false); }
   }
   if (route().view === "tasks") redraw();
