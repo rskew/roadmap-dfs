@@ -1,0 +1,43 @@
+W70.1 record: the screen's chat (`c`) against claude run directly, claude-code 2.1.295, tmux 3.7c.
+
+Setup: a copy of this repo in /tmp/w70/repo; `python3 scripts/tui.py` (this checkout's) run in it
+inside a tmux pane, with CLAUDE_CMD pointing at a wrapper that starts the pinned claude with no
+prompt (so no turn is spent), or with `--resume` of a synthetic session holding two long author
+messages, two long replies and a Bash call. Long input typed with `tmux send-keys -l`, screens read
+with `tmux capture-pane -p`.
+
+Cases, each with a long input line typed at the end (all wrapped at the pane's width, inside the
+input box, the same as claude run directly in the same pane):
+ 1. claude directly, 80x24, empty and resumed conversation                         -> correct (baseline)
+ 2. tui `c`, 80x24, empty conversation                                             -> correct
+ 3. tui `c`, resize while attached 80 -> 60 -> 100                                  -> correct at each width
+ 4. tui `c`, ctrl-], resize 100 -> 70 while detached, `c` again                     -> correct
+ 5. tui `c`, resumed conversation, 80x30                                            -> transcript and input correct
+ 6. as 5, ctrl-], resize to 60, `c`                                                 -> correct at 60
+ 7. as 6, ctrl-] and `c` at the same size (attach's cols-1 then cols redraw)        -> correct
+ 8. as 5 with TERM=xterm-256color for the tui and the chat                          -> correct
+ 9. claude with --settings '{"tui":"fullscreen"}', directly and through tui `c`,
+    then ctrl-], resize to 64, `c`                                                  -> correct
+10. chat started in the background by POST /api/chat/send {"scope":"W1","message":"/context"}
+    (the page's path: Relay.send pastes and presses enter), output while detached, then `c`  -> correct
+
+Raw bytes across a ctrl-] / `c` cycle (tmux pipe-pane, 9033 bytes): the only autowrap sequence is
+ESC[?7h (on), the only scroll region ESC[1;30r (the whole 30-row screen); no ESC[?7l.
+
+Case 7, after `c` at 60 columns, input typed:
+  ❯ A second message from the author, again longer than one
+    row of the terminal so that the way it wraps can be seen
+    plainly.
+
+  ● Third reply: short.
+
+  ────────────────────────────────────────────────────────────
+  ❯ Now a long input line typed after coming back to the
+    chat, which has to wrap onto a second row at sixty
+    columns.
+  ────────────────────────────────────────────────────────────
+    ⚠ Transcript saving is off — inherited CLAUDE_CODE_CHIL…
+    Sonnet 5.5 | Context: 0% used
+
+Seen in passing, not wrapping: after case 10's `c`, the pane's scrollback held only the last
+screen (31 rows), none of the conversation above it.
