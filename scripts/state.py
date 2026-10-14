@@ -137,6 +137,8 @@ def state_for(task: str):
         review_rounds=dfs_tree.review_rounds_unsettled(t),
         review_limit=int(dfs_tree.review_rounds_unsettled(t) >= dfs_tree.REVIEW_ROUNDS),
         limit=int(since_author >= dfs_tree.SESSION_LIMIT),
+        # Marked a draft: the walk never picks it, but a pin or a run by hand works it.
+        draft=int(dfs_tree.is_draft(t)),
         # No node yet: the work session's job is to lay the tree out, not to build.
         plan=int(not t["nodes"]),
         open_raises=[r["ts"] for r in raises],
@@ -181,7 +183,11 @@ def walk(items):
     into one spine to fake it would make every RAISE stall the whole tree, which is
     the exact stall the depth-first move exists to avoid.
 
-    `reachable` is the AND of all three, and stays the only thing `next_item` reads.
+    `reachable` is the AND of all three, and stays the only position fact `next_item` reads.
+
+    ⚠️ **A DRAFT holds no fence.** It is a task the author has not released to the
+    walk, so a fence that waited on it would hold everything after it for work nobody
+    has asked for yet. It does not hold its subtree either: only a raise does that.
 
     ⚠️ All three are facts about the POSITION, not about how the item is getting on:
     a `done` item behind a fence still carries the fence's `waiting_on`, because the
@@ -209,7 +215,7 @@ def walk(items):
         it["reachable"] = not stack and gate is None
         if it["status"] == "blocked":
             stack.append((it["depth"], it["id"]))
-        if it["status"] != "done" and pending is None:
+        if it["status"] != "done" and not it.get("draft") and pending is None:
             pending = it["id"]
     return items
 
@@ -217,12 +223,13 @@ def walk(items):
 def next_item(items):
     """What the ORDER says to work: the first item in preorder that is open and whose
     branch nothing is holding. None means every branch is blocked or finished — which
-    is a fact worth having, not an error.
+    is a fact worth having, not an error. A draft is never the order's answer: the
+    author takes it with the walk's pin (`n`) or runs it by hand.
 
     It is the order's answer alone, which is not quite the walk's: a walk continues
     the item its last run was on before it reads the order at all (`continue_last`)."""
     return next((it["id"] for it in items
-                 if it["reachable"] and it["status"] == "open"), None)
+                 if it["reachable"] and it["status"] == "open" and not it.get("draft")), None)
 
 
 def metrics(trees):
@@ -306,13 +313,15 @@ def continue_last(walked):
     name an item.
 
     When the last run's item CANNOT be worked — finished, blocked by its own raise,
-    or held by the tree (an ancestor's raise, a fence) — the order's answer stands.
+    or held by the tree (an ancestor's raise, a fence) — or is a DRAFT, the order's
+    answer stands: a draft the author pinned had its one chain, and the walk does not
+    take it up again on its own.
     On a dirty tree the item the order names then starts by committing or stashing
     that half-done work (`foreign_dirt`), so the walk goes on rather than waiting.
     """
     owner, _ = latest_session()
     row = next((i for i in walked if i["id"] == owner), None)
-    if row and row["status"] == "open" and row["reachable"]:
+    if row and row["status"] == "open" and row["reachable"] and not row.get("draft"):
         return owner
     return next_item(walked)
 

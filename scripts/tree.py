@@ -101,7 +101,7 @@ DETERMINED = ("confirmed", "refuted")
 # Who writes each kind is a convention the checker enforces only by shape; the
 # runner, the agent, the critic and the author's passes each append their own.
 KINDS = ("session", "end", "raise", "answer", "critic", "review", "correct", "backtrack",
-         "accept", "delete")
+         "accept", "delete", "draft", "ready")
 FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determination",
           "Ask", "Corrects")
 # Old names still read, as the field they became: determined nodes are history, so
@@ -1092,6 +1092,14 @@ def unacted_answers(t):
 def answer_for(t, ts):
     return next((e for e in t["log"] if e["kind"] == "answer" and e["args"]
                  and e["args"][0] == ts), None)
+
+
+def is_draft(t):
+    """Whether the author has marked the task a draft: its later `draft` or `ready` entry
+    says, and neither means it is not one. A draft is still an open task; only the walk's
+    own choice passes it over (`dfs_state.next_item`, `continue_last`)."""
+    marks = [e for e in t["log"] if e["kind"] in ("draft", "ready")]
+    return bool(marks) and marks[-1]["kind"] == "draft"
 
 
 def author_marks(t):

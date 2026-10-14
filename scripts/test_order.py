@@ -368,6 +368,24 @@ class Walking(unittest.TestCase):
         t = self.fenced(("A", 0, "open", 0), ("B", 0, "done", 1), ("C", 0, "open", 2))
         self.assertEqual({i["id"]: i for i in t}["C"]["waiting_on"], "A")
 
+    def test_a_draft_is_passed_over_and_its_subtree_is_not(self):
+        t = dfs_state.walk([dict(id="A", depth=0, status="open", draft=1),
+                            dict(id="B", depth=1, status="open"),
+                            dict(id="C", depth=0, status="open")])
+        self.assertTrue(all(i["reachable"] for i in t))
+        self.assertEqual(dfs_state.next_item(t), "B")
+
+    def test_a_draft_holds_no_fence(self):
+        t = dfs_state.walk([dict(id="A", depth=0, status="done", segment=0),
+                            dict(id="B", depth=0, status="open", segment=0, draft=1),
+                            dict(id="C", depth=0, status="open", segment=1)])
+        self.assertIsNone({i["id"]: i for i in t}["C"]["waiting_on"])
+        self.assertEqual(dfs_state.next_item(t), "C")
+
+    def test_only_drafts_left_is_nothing_to_walk(self):
+        t = dfs_state.walk([dict(id="A", depth=0, status="open", draft=1)])
+        self.assertIsNone(dfs_state.next_item(t))
+
     def test_an_item_does_not_gate_its_own_segment(self):
         t = self.fenced(("A", 0, "done", 0), ("B", 0, "open", 1), ("C", 0, "open", 1))
         self.assertTrue(all(i["reachable"] for i in t))
@@ -515,6 +533,20 @@ class ContinuingTheLastRun(InAWorkRoot):
         # reason to sit on it.
         self.task(2, log="- 2026-09-25T10:00:00Z · session · work · dfs_run_x/run-1\n"
                          "- 2026-09-25T10:30:00Z · raise · W2.1\n  which way?\n")
+        self.assertEqual(self.nxt(), ("W1", "W1"))
+
+    def test_a_draft_is_a_mark_in_its_log_and_ready_takes_it_off(self):
+        self.task(1, log="- 2026-09-25T09:00:00Z · draft\n")
+        rows = {i["id"]: i for i in dfs_state.full()["items"]}
+        self.assertEqual((rows["W1"]["status"], rows["W1"]["draft"]), ("open", 1))
+        self.assertEqual(self.nxt(), ("W2", "W2"))
+        self.task(1, log="- 2026-09-25T09:00:00Z · draft\n- 2026-09-25T09:10:00Z · ready\n")
+        self.assertEqual(self.nxt(), ("W1", "W1"))
+
+    def test_a_draft_the_last_run_was_on_hands_the_walk_back_to_the_order(self):
+        # A pinned draft had its chain; the walk does not take it up again by itself.
+        self.task(2, log="- 2026-09-25T09:00:00Z · draft\n"
+                         "- 2026-09-25T10:00:00Z · session · work · dfs_run_x/run-1\n")
         self.assertEqual(self.nxt(), ("W1", "W1"))
 
     def test_a_finished_item_does_not_hold_the_walk(self):
