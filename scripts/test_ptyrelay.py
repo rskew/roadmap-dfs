@@ -7,6 +7,7 @@ Run:  python3 roadmap-dfs/scripts/test_ptyrelay.py
 import os
 import select
 import shutil
+import struct
 import sys
 import tempfile
 import threading
@@ -193,6 +194,30 @@ class Looking(unittest.TestCase):
         os.write(self.keys_w, b"\x1d")
         self.t.join(5)
         self.assertTrue(self.seen(b"\x1b[?1049l\x1b[?2004l"))
+
+    def test_a_terminal_resized_as_it_attaches_leaves_the_agent_the_new_size(self):
+        """herdr narrows its pane by a column as the screen leaves curses, just as `attach` reads the
+        size: the SIGWINCH handler sets the new one while the redraw step sleeps, and the stale one
+        read before it must not be written over it."""
+        real, out = ptyrelay._winsize, sys.stdout.fileno()
+        sizes = {"now": struct.pack("HHHH", 33, 74, 0, 0)}
+
+        def winsize(fd):
+            return sizes["now"] if fd == out else real(fd)
+        ptyrelay._winsize = winsize
+        self.addCleanup(setattr, ptyrelay, "_winsize", real)
+        real_sleep = time.sleep
+
+        def sleep(s):                           # the terminal resizes during the redraw step's sleep
+            sizes["now"] = struct.pack("HHHH", 33, 73, 0, 0)
+            real_sleep(s)
+        ptyrelay.time = types.SimpleNamespace(sleep=sleep, time=time.time)
+        self.addCleanup(setattr, ptyrelay, "time", time)
+        self.relay.resize((33, 74))
+        self.t.start()
+        self.assertTrue(self.seen(b"ready"))
+        time.sleep(0.5)                         # past the redraw step, which passes through 73 on its way
+        self.assertEqual(struct.unpack("HHHH", real(self.relay.fd))[:2], (33, 73))
 
     def test_attaching_to_a_chat_that_has_already_ended_returns_false(self):
         gone = ptyrelay.Relay().start(["bash", "-c", "exit 127"])

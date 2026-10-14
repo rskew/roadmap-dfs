@@ -286,7 +286,14 @@ class Relay:
             if redraw and cols > 1 and struct.unpack("HHHH", _winsize(fd))[:2] == (rows, cols):
                 _try(fcntl.ioctl, fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols - 1, x, y))
                 time.sleep(0.05)
-            _try(fcntl.ioctl, fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, x, y))
+            # the terminal may have been resized meanwhile (herdr narrows its pane by the scrollbar as the
+            # screen leaves curses), and the SIGWINCH handler's fit ran inside the sleep: set what the
+            # terminal is now, until it stays, so that a stale size read before does not overwrite it
+            while True:
+                want = _winsize(stdout)
+                _try(fcntl.ioctl, fd, termios.TIOCSWINSZ, want)
+                if _winsize(stdout) == want:
+                    break
             _try(os.kill, self.pid, signal.SIGWINCH)
 
         try:

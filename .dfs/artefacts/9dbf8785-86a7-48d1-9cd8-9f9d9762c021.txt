@@ -1,0 +1,30 @@
+W70.2 record: the screen's chat (`c`) inside herdr 0.8.2 (in tmux 3.7c, TERM=xterm-256color), claude-code 2.1.295.
+
+Herdr's pane is 74 columns wide. In a shell it reports a window of 73 (a scrollbar takes the last column);
+while the screen is in curses (alternate screen, mouse on) it reports 74, and about half a second after
+curses.endwin() it is 73 again. `Relay.attach` reads the terminal's size right after endwin, so it read 74.
+
+Before (the same long input line typed after `c`; the rules are 74 wide in a 73-column pane):
+  ────────────────────────────────────────────────────────────────────────── (73)
+  ─                                                                          (the 74th, wrapped)
+  ──A─long─input─line─typed─into─the─chat,─which─has─to─wrap─onto─a─second─
+    row and even a third row at this pane width, to show it.
+  ────────────────────────────────────────────────────────────────────────── (73)
+  ─ ⏵⏵ auto mode on (shift+tab to cycle)
+The pty's size in the chat, logged every second by a stand-in agent: `stty size` = 33 74 for as long as it ran.
+
+Cause (probe: curses with mouse, endwin, Relay.attach, the stand-in agent trapping WINCH): `fit(redraw=True)`
+sets cols-1 and sleeps 0.05s; herdr's resize to 73 arrives in that sleep and the SIGWINCH handler's fit sets
+33x73; the outer fit then resumes and writes the 33x74 it read before the sleep over it. The agent printed
+"winch 33 74" and kept 74.
+A bare Relay.attach with no curses before it, and claude run directly in the pane, were both right (73).
+
+After (fit sets the terminal's size as it is now, until it stays): the same steps in herdr
+  ─────────────────────────────────────────────────────────────────────────  (one row, 73)
+  ❯ A long input line typed into the chat, which has to wrap onto a
+    second row and even a third row at this pane width, to show it.
+  ─────────────────────────────────────────────────────────────────────────
+    Sonnet 5.5
+    ⏵⏵ auto mode on (shift+tab to cycle)
+The test test_a_terminal_resized_as_it_attaches_leaves_the_agent_the_new_size fails on the old fit
+((33, 74) != (33, 73)) and passes on the new; test_ptyrelay passes whole (32 tests).
