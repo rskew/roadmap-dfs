@@ -104,6 +104,8 @@ a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; 
 .archive svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 .archive:active { background: var(--sel); color: var(--ink); }
 .item .iid { font-weight: 600; letter-spacing: .03em; }
+.itag { display: block; font-size: var(--fs-label); letter-spacing: .03em; color: var(--muted); overflow-wrap: anywhere; }   /* a branch's tag, beside its number */
+.item.done .itag { flex: 1 0 100%; }
 .item .goal { font-weight: 500; overflow-wrap: anywhere; }
 .item .meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); margin-top: 6px; font-size: var(--fs-control); }
 .item .meta .tag { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }   /* a long tag wraps inside its row: nowrap made it wider than the phone, and the page with it */
@@ -293,6 +295,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 #rail { display: none; }
 .railitem { display: grid; grid-template-columns: 2.6em minmax(0, 1fr); gap: 0 var(--s2); width: 100%; padding: var(--s2) var(--s2) var(--s2) var(--s3); border-left: var(--rule-status) solid var(--st, transparent); border-bottom: var(--rule) solid var(--faint); font-size: var(--fs-small); }
 .railitem .iid { font-weight: 600; }
+.railitem .itag, .railitem .goal { grid-column: 2; }
 .railitem .goal { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .railitem.done { color: var(--muted); }
 .railitem.assumes { background: var(--assumption-wash); --st: var(--assumption-fill); }
@@ -363,6 +366,11 @@ body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
 "use strict";
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+/* A task's id in a row of tasks: a branch's tag (`W1@serve-real-records`) is drawn apart from its number, as a small line
+   at the top of the goal's column, right of the number, so the numbers line up and a long tag has the row's width. */
+const tagAt = id => String(id).indexOf("@");
+const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
+const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
 const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false };
 const wide = () => matchMedia("(min-width: 900px)").matches;
@@ -532,7 +540,7 @@ function drawRail() {
   if (r.view !== "task" || !S.state) return;
   const html = S.state.items.map(it => {
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
-    return `<button class="railitem${blocks ? " blocks" : assumes ? " assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" aria-current="${it.id === r.task}" title="${esc(it.goal)}"><span class="iid">${esc(it.id)}</span><span class="goal">${esc(it.goal)}</span></button>`;
+    return `<button class="railitem${blocks ? " blocks" : assumes ? " assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" aria-current="${it.id === r.task}" title="${esc(it.goal)}"><span class="iid">${iidHtml(it.id)}</span>${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span></button>`;
   }).join("");
   if (rail.dataset.sig !== html) {
     const was = rail.scrollTop; rail.innerHTML = html; rail.dataset.sig = html; rail.scrollTop = was;
@@ -696,8 +704,8 @@ function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
   const who = { you: "You", agent: "Agent", error: "Not answered", note: "Note" };
   const rows = S.chats.map(c => `<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
-      <span class="iid">${esc(c.scope === "project" ? "All" : c.scope)}</span>
-      <span><span class="goal">${esc(goal(c.scope))}</span>
+      <span class="iid">${c.scope === "project" ? "All" : iidHtml(c.scope)}</span>
+      <span>${tagHtml(c.scope)}<span class="goal">${esc(goal(c.scope))}</span>
         <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}<span class="muted">${esc(ago(c.updated))}</span></span>
         ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button>`).join("");
   $("#view").className = "col";
@@ -720,8 +728,8 @@ function drawTasks() {
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}`;
     const wait = S.reorder && S.pending.has(it.id) ? `<span class="tag pending-tag" role="status">saving\u2026</span>` : "";
-    const inner = `<span class="iid">${esc(it.id)}</span>
-      <span class="body"><span class="goal">${esc(it.goal)}</span>
+    const inner = `<span class="iid">${iidHtml(it.id)}</span>
+      <span class="body">${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
           ${walkTags(it)}
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}

@@ -1549,6 +1549,37 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await ctx.close();
   },
 
+  // A branch-tagged task (`W1@serve-real-records`, beside the main branch's W1): at a phone's width and a laptop's its number
+  // keeps its column and its tag the goal's, in the list and the rail, never past the row's edge or the screen's.
+  async tagged(b) {
+    const id = "W1@serve-real-records";
+    const fits = (page, sel) => page.evaluate(([sel, id]) => {
+      const row = document.querySelector(`${sel}[data-id="${id}"]`);
+      if (!row) return "no row";
+      const iid = row.querySelector(".iid"), tag = row.querySelector(".itag"), goal = row.querySelector(".goal");
+      if (!tag || iid.textContent.trim() + tag.textContent !== id) return "the row shows " + row.textContent.trim().slice(0, 40);
+      const box = el => { const r = document.createRange(); r.selectNodeContents(el); const t = [...r.getClientRects()]; return { left: Math.min(...t.map(x => x.left)), right: Math.max(...t.map(x => x.right)) }; };
+      const n = box(iid), t = box(tag), g = goal.getBoundingClientRect(), edge = row.getBoundingClientRect().right;
+      if (n.right > g.left + 1) return `the number runs to ${n.right}px, under the goal at ${g.left}px`;
+      if (t.left < g.left - 1 || t.right > edge + 1) return `the tag runs ${t.left}-${t.right}px, out of the goal's column ${g.left}-${edge}px`;
+      if (document.documentElement.scrollWidth > innerWidth) return "the page is wider than the screen";
+      return "";
+    }, [sel, id]);
+    for (const [name, opts] of [["320", NARROW], ["phone", PHONE], ["1280", DESKTOP], ["1920", FHD]]) {
+      const { ctx, page, errors } = await open(b, opts);
+      same(await fits(page, ".item"), "", `${name}: the list row`);
+      await page.$eval(`.item[data-id="${id}"]`, e => e.scrollIntoView({ block: "center" }));
+      if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, `tagged-${name}.png`) });
+      if (name === "1920") {
+        await task(page, "W9"); await page.waitForSelector("#rail .railitem");
+        same(await fits(page, "#rail .railitem"), "", `${name}: the rail row`);
+        if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, `tagged-${name}-rail.png`) });
+      }
+      same(errors, [], `${name}: no page errors`);
+      await ctx.close();
+    }
+  },
+
   // A game controller: nothing of it shows until a pad connects; then the d-pad moves focus, A presses, B backs out,
   // the bumpers step nodes, Y shows the flagged ones, X adds, Start lists the buttons. The pad is faked on `navigator`.
   async pad(b) {

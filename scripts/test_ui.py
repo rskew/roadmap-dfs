@@ -368,6 +368,19 @@ class Flows(unittest.TestCase):
     def test_a_game_controller_moves_focus_presses_backs_out_and_shows_hints_only_while_connected(self):
         self.flow("pad")
 
+    def tag_a_task(self):
+        """A task begun on a branch, `W1@serve-real-records`, beside the main branch's W1."""
+        items = self.root / ".dfs" / "items"
+        (items / "W1@serve-real-records.md").write_text(
+            "# W1@serve-real-records · Serve the real records\n\n## Goal\n\nServe the records from the store, not the fixture.\n\n"
+            "## Tree\n\n### W1@serve-real-records.1 · Read from the store\nStatus: open\n"
+            "Approach: Point the handler at the store.\n\n## Log\n")
+        dfs_paths._TAG_CACHE.clear()
+
+    def test_a_branch_tagged_id_fits_its_row_at_every_width(self):
+        self.tag_a_task()
+        self.flow("tagged")
+
     def test_every_screen_in_both_themes_and_five_widths_is_readable_and_reachable(self):
         self.flow("layout")
 
