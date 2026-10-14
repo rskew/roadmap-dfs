@@ -75,7 +75,7 @@ def run_turn(argv, message, cwd, env, on_start=None):
     return subprocess.CompletedProcess(argv, p.returncode, out, err)
 
 
-SCOPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+SCOPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]*$")
 MAX_MESSAGE = 4000
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on

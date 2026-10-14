@@ -1098,6 +1098,26 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/accept", dict(task="W99"))[0], 404)
         self.assertEqual(self.call("POST", "/api/nonsense", dict(task="W1"))[0], 404)
 
+    def test_a_branch_tagged_task_opens_by_its_percent_encoded_id(self):
+        """The page asks for `/api/task/` + encodeURIComponent(id), which writes `@` as `%40`:
+        the server decodes the one segment, so `W1@serve-real-records` opens as itself."""
+        (self.root / ".dfs" / "items" / "W1@serve-real-records.md").write_text(
+            TASK.replace("# W1 ·", "# W1@serve-real-records ·").replace("### W1.", "### W1@serve-real-records."))
+        dfs_paths._TAG_CACHE.clear()
+        status, t, _ = self.call("GET", "/api/task/W1%40serve-real-records")
+        self.assertEqual((status, t["id"]), (200, "W1@serve-real-records"))
+        self.assertEqual(self.call("GET", "/api/task/W1@serve-real-records")[1]["id"], "W1@serve-real-records")
+        for bad in ("/api/task/W1%2Fx", "/api/task/%2e%2e%2fW1", "/api/task/W1%40", "/api/task/W1%zz",
+                    "/api/task/", "/api/task/W1/W1.1"):
+            self.assertEqual(self.call("GET", bad)[0], 404, bad)
+        dfs_web.CHAT["chats"] = None
+        status, st, _ = self.call("GET", "/api/chat/W1%40serve-real-records")
+        self.assertEqual((status, st["messages"]), (200, []))
+        self.put_artefact()
+        self.assertEqual(self.call("GET", "/artefacts/0a1b2c%2Ehtml")[0], 200)
+        self.assertEqual(self.call("GET", "/artefact-state/0a1b2c%2Ehtml")[0], 200)
+        self.assertEqual(self.call("GET", "/artefact-state/%2e%2e%2fsecret.html")[0], 404)
+
     # ── the walk ────────────────────────────────────────────────────────────────
     def test_the_walk_starts_with_a_budget_and_says_where_it_stands(self):
         status, snap, _ = self.call("GET", "/api/walk")

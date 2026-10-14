@@ -70,7 +70,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -219,9 +219,26 @@ def skim_for(t, nd):
 
 
 ART_NAME = r"[0-9A-Za-z][0-9A-Za-z._-]*"
+RUN_NAME = r"[0-9A-Za-z][0-9A-Za-z._@-]*"
 ART_TYPES = {".html": "text/html", ".png": "image/png", ".svg": "image/svg+xml",
              ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
              ".webp": "image/webp"}
+
+
+def segment(path, prefix, pattern, what):
+    """The one URL segment after `prefix`, percent-decoded: the page writes each id with
+    encodeURIComponent, so `W1@fx` arrives as `W1%40fx`. Decoded after the split, so an
+    encoded `/` stays inside its segment, and refused unless it is all `pattern`."""
+    raw = path[len(prefix):]
+    try:
+        name = unquote(raw, errors="strict")
+    except UnicodeDecodeError:
+        name = ""
+    if "/" in raw or not re.fullmatch(pattern, name):
+        raise Refused("no such %s" % what, 404)
+    return name
+
+
 # An artefact is a page an AGENT wrote, opened from the same address as the controls that
 # start agents. So it is served sandboxed: an opaque origin, no network, no way to reach
 # `/api` as this page (and a cross-origin write is refused, `same_origin`). The checker
@@ -872,7 +889,7 @@ class Handler(BaseHTTPRequestHandler):
     def json(self, status, obj, extra=()):
         self.send(status, json.dumps(obj, default=str), extra=extra)
 
-    def artefact_api(self, method, page):
+    def artefact_api(self, method, path):
         """`/artefact-state/<page>`: the one thing a sandboxed page may reach. It answers anyone who
         asks (`Access-Control-Allow-Origin: *`, since the page's origin is opaque) and reads a plain
         text body, which needs no preflight; a write from another website is still refused."""
@@ -894,7 +911,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise Refused("that is not JSON")
                 if not isinstance(body, dict):
                     raise Refused("that is not JSON")
-            return self.json(200, artefact_state(page, body), cors)
+            return self.json(200, artefact_state(segment(path, "/artefact-state/", ART_NAME, "page"), body), cors)
         except (ValueError, dfs_paths.NoBranch) as e:
             return self.json(409, dict(error=str(e)), cors)
         except Refused as e:
@@ -962,7 +979,7 @@ class Handler(BaseHTTPRequestHandler):
             if not self.host_ok():
                 raise Refused("this server answers to its own address only", 421)
             if url.path.startswith("/artefact-state/"):
-                return self.artefact_api(method, url.path[len("/artefact-state/"):])
+                return self.artefact_api(method, url.path)
             if method == "GET":
                 return self.get(url.path)
             if not self.same_origin():
@@ -1011,16 +1028,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/chats":
             return self.json(200, chat_act("chats"))
         if path.startswith("/api/chat/"):
-            return self.json(200, chat_act("chat", scope=path[len("/api/chat/"):]))
+            return self.json(200, chat_act("chat", scope=segment(path, "/api/chat/", dfs_chat.SCOPE.pattern, "chat")))
         if path == "/api/state":
             return self.json(200, state_json())
         if path == "/api/assumptions":
             return self.json(200, assumptions_json())
         if path.startswith("/api/task/"):
-            return self.json(200, task_json(path[len("/api/task/"):]))
+            return self.json(200, task_json(segment(path, "/api/task/", dfs_tree.TASK_RE, "task")))
         if path.startswith("/api/run/"):
             from_ = parse_qs(urlparse(self.path).query).get("from", [""])[0]
-            return self.json(200, run_log(path[len("/api/run/"):], int(from_) if from_.isdigit() else None))
+            return self.json(200, run_log(segment(path, "/api/run/", RUN_NAME, "run"), int(from_) if from_.isdigit() else None))
         if path == "/background-image":
             mode = parse_qs(urlparse(self.path).query).get("mode", [""])[0]
             image = dfs_paths.read_background_image(mode if mode in dfs_paths.MODES else "")
@@ -1028,7 +1045,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise Refused("no background image", 404)
             return self.send(200, image[0], image[1], extra=[("Cache-Control", "no-cache")])
         if path.startswith("/artefacts/"):
-            return self.artefact(path[len("/artefacts/"):])
+            return self.artefact(segment(path, "/artefacts/", ART_NAME, "artefact"))
         if path in STATIC:
             return self.send(200, (HERE / "web" / (path[1:] + (".html" if path == "/design" else ""))).read_bytes(), STATIC[path])
         if path == "/manifest.json":
