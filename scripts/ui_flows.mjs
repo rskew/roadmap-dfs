@@ -1578,6 +1578,22 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       same(errors, [], `${name}: no page errors`);
       await ctx.close();
     }
+    // It opens by its id, and so does its node: from the list, after a reload, by an encoded address, and Back.
+    const { ctx, page, errors } = await open(b, PHONE);
+    const node = id + ".1", at = () => page.evaluate(() => decodeURIComponent(location.hash));
+    await page.click(`.item[data-id="${id}"]`); await page.waitForSelector(".row");
+    same(await at(), "#/t/" + id, "the task's address");
+    assert((await page.textContent("#view")).includes("Serve the records from the store"), "the tagged task, not W1, is open");
+    await page.click(".row .main"); await page.waitForSelector("#sheet.open");
+    same(await at(), `#/t/${id}/${node}`, "the node's address");
+    await page.reload(); await page.waitForSelector("#sheet.open");
+    assert((await page.textContent("#sheet")).includes("Read from the store"), "a reload opens the node again");
+    await page.goBack(); await page.waitForFunction(() => !document.querySelector("#sheet.open"));
+    same(await at(), "#/t/" + id, "Back closes the node and stays in the task");
+    await page.goto(`${URL_}/#/t/${encodeURIComponent(id)}/${encodeURIComponent(node)}`); await page.waitForSelector("#sheet.open");
+    assert((await page.textContent("#sheet")).includes("Read from the store"), "an encoded address opens the node");
+    same(errors, [], "opening a tagged task: no page errors");
+    await ctx.close();
   },
 
   // A game controller: nothing of it shows until a pad connects; then the d-pad moves focus, A presses, B backs out,
