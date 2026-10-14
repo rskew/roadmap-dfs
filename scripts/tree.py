@@ -111,7 +111,7 @@ RENAMED = {"Plan": "Approach"}
 # five sessions to see the critic once is most of the cost of trying it.
 SESSION_LIMIT = int(os.environ.get("DFS_SESSION_LIMIT", 10))  # work sessions before a raise for review
 CRITIC_EVERY = int(os.environ.get("DFS_CRITIC_EVERY", 5))     # work sessions between critic reviews
-REVIEW_ROUNDS = int(os.environ.get("DFS_REVIEW_ROUNDS", 2))   # unsettled reviews before a raise
+REVIEW_ROUNDS = int(os.environ.get("DFS_REVIEW_ROUNDS", 4))   # unsettled reviews before a raise
 
 TS_RE = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
 LOG_HEAD = re.compile(r"^- (%s) · (\w+)((?: · [^\n]*)?)$" % TS_RE)

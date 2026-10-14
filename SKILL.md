@@ -146,7 +146,7 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 - The tree is **complete** when no live node is open. Make sure the last node says the
   Goal is met, and how you know. A reviewer then judges the implementation; each
   finding that shows the Goal is not met arrives as a new open node (lesser ones
-  batched into one), and the next session fixes it. After two reviews that did not
+  batched into one), and the next session fixes it. After four reviews that did not
   settle, the runner raises to the author rather than reviewing again.
 - **The session that completes the tree writes the `## Summary`**, in the same commit
   as the last node: a section ABOVE `## Goal` (add it, or rewrite it if a review
