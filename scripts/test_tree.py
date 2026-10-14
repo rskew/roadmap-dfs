@@ -315,6 +315,13 @@ class NewTask(InARepo):
         self.assertIn("Just a name", (self.root / ".dfs" / "items" / (got + ".md")).read_text())
         self.assertEqual(dfs_tree.by_id(dfs_tree.load(got)), {})
 
+    def test_a_task_made_as_a_draft_is_logged_one(self):
+        got = dfs_tree.create_task("Later, maybe", draft=True)
+        t = dfs_tree.load(got)
+        self.assertEqual([e["kind"] for e in t["log"]], ["draft"])
+        self.assertTrue(dfs_tree.is_draft(t))
+        self.assertFalse(dfs_tree.is_draft(dfs_tree.load(dfs_tree.create_task("Now"))))
+
     def test_what_is_not_a_task_is_refused(self):
         self.write(task())
         for bad in (dict(name=""), dict(name="x", task="W1"), dict(name="x", task="nope")):

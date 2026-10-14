@@ -817,11 +817,12 @@ while True:
     ln = tty_in.readline()
     if ln == "" or ln.rstrip("\n") == ".": break
     if ln.strip(): todos.append(ln.strip().lstrip("-[ ]x").strip())
+draft = ask("  Draft, so the walk passes it over until it is marked ready? [y/N]: ").lower().startswith("y")
 try:
-    task = dfs_tree.create_task(name, goal, todos, task=task)
+    task = dfs_tree.create_task(name, goal, todos, task=task, draft=draft)
 except ValueError as e:
     say("dfs_run: %s." % e); raise SystemExit(2)
-say("\ndfs_run: wrote %s — %d node%s." % (dfs_tree.part_path(task, dfs_paths.branch_tag()), len(todos), "" if len(todos) == 1 else "s"))
+say("\ndfs_run: wrote %s — %d node%s%s." % (dfs_tree.part_path(task, dfs_paths.branch_tag()), len(todos), "" if len(todos) == 1 else "s", ", a draft" if draft else ""))
 PY
   python3 "$HERE/check.py" --warn || true
 }

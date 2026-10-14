@@ -1093,6 +1093,14 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/new", dict(name="x", id="W1"))[0], 409)     # taken
         self.assertEqual(self.call("POST", "/api/new", dict(name="x", todos=[1]))[0], 400)
 
+    def test_a_new_task_can_be_a_draft_the_walk_passes_over(self):
+        new = self.call("POST", "/api/new", dict(name="Later, maybe", draft=True))[1]["added"]
+        plain = self.call("POST", "/api/new", dict(name="Now"))[1]["added"]
+        rows = {i["id"]: i for i in self.call("GET", "/api/state")[1]["items"]}
+        self.assertEqual((rows[new]["draft"], rows[new]["status"]), (True, "open"))
+        self.assertIs(rows[plain]["draft"], False)
+        self.assertNotEqual(self.call("GET", "/api/state")[1]["next_item"], new)
+
     def test_an_unknown_task_or_action_is_not_found(self):
         self.assertEqual(self.call("GET", "/api/task/W99")[0], 404)
         self.assertEqual(self.call("POST", "/api/accept", dict(task="W99"))[0], 404)

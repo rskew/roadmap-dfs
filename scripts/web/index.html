@@ -1291,8 +1291,9 @@ function newTaskForm() {
   form(`<h3>Add a task</h3>
     <div><label for="nn">Name</label>${line("nn", "name", "", ' placeholder="A few words"')}</div>
     <div><label for="ng">Goal, in your own words: what done looks like, and why</label><textarea id="ng" name="goal"></textarea></div>
-    <div><label for="nt">First steps, one per line, optional</label><textarea id="nt" name="todos" placeholder="Each line becomes a node, in order"></textarea></div>${buttons("Add task")}`,
-    async fd => { const res = await api("/api/new", { name: fd.get("name"), goal: fd.get("goal"), todos: fd.get("todos") }); toast("Added " + res.added + "."); S.sig = ""; await render(true); });
+    <div><label for="nt">First steps, one per line, optional</label><textarea id="nt" name="todos" placeholder="Each line becomes a node, in order"></textarea></div>
+    <div><label><input type="checkbox" id="ndr" name="draft"> Draft: the walk passes it over until you mark it ready; pin it or run it to work it now</label></div>${buttons("Add task")}`,
+    async fd => { const res = await api("/api/new", { name: fd.get("name"), goal: fd.get("goal"), todos: fd.get("todos"), draft: fd.get("draft") === "on" }); toast("Added " + res.added + "."); S.sig = ""; await render(true); });
 }
 function editTaskForm() {
   const t = S.task;

@@ -148,6 +148,7 @@ def state_json():
             waiting_on=it.get("waiting_on") or "", blocked_by=it.get("blocked_by") or "",
             segment=it.get("segment", 0), ahead=it.get("ahead", 0), base=it.get("base") or "origin/main",
             uncommitted=it.get("uncommitted") or "", archivable=bool(it.get("archivable")),
+            draft=bool(it.get("draft")),
             running=running.get(it["id"], ""), next=it["id"] == nxt))
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
@@ -478,7 +479,8 @@ def set_theme(body):
 
 def new_task(body):
     """A new task, as `run --open` writes one: a name, the goal in the author's words, and
-    todo lines that become a linear chain of open nodes."""
+    todo lines that become a linear chain of open nodes; `draft` makes it one the walk passes
+    over."""
     name = need(body, "name", "a name")
     todos = body.get("todos") or []
     if isinstance(todos, str):
@@ -490,7 +492,8 @@ def new_task(body):
         raise Refused("the goal is text")
     with LOCK:
         try:
-            task = dfs_tree.create_task(name, goal, todos, task=body.get("id") or None)
+            task = dfs_tree.create_task(name, goal, todos, task=body.get("id") or None,
+                                        draft=body.get("draft") is True)
         except (ValueError, dfs_paths.NoBranch) as e:
             raise Refused(str(e), 409)
     HUB.notify()

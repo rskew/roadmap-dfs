@@ -614,11 +614,12 @@ def next_task_id():
     return "W%d%s" % (max(nums, default=0) + 1, "@" + tag if tag else "")
 
 
-def create_task(name, goal="", todos=(), task=None):
+def create_task(name, goal="", todos=(), task=None, draft=False):
     """Write a new task file: the author's words unchanged, the todo lines a LINEAR chain of
     open nodes (each the child of the one before, the shape a task starts in; the sessions
     add nodes, branch and back up from there). `task` is an id the author chose (letters then
-    a number, tagged here), else the next one. Returns the id; ValueError says what is wrong."""
+    a number, tagged here), else the next one. `draft` logs it a draft, which the walk passes
+    over until a `ready` entry (`is_draft`). Returns the id; ValueError says what is wrong."""
     tag = dfs_paths.branch_tag()
     suffix = "@" + tag if tag else ""
     name = " ".join((name or "").split())
@@ -643,6 +644,8 @@ def create_task(name, goal="", todos=(), task=None):
     body += ["## Log", ""]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(body).rstrip() + "\n")
+    if draft:
+        append_log(task, "draft")
     return task
 
 
