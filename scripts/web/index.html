@@ -962,7 +962,7 @@ function rich(text) {
     if (a.kind === "file") return fileLink(a, alt);
     if (a.kind === "image")
       return `<a class="shot" href="${href}"><img src="artefacts/${name}" alt="${alt || esc(a.title)}" loading="lazy"></a>`;
-    return `<a class="art" href="${href}">${esc(a.title)}</a>`;
+    return `<a class="art" href="${href}">${alt || esc(a.title)}</a>`;
   });
 }
 /* Prose is markdown as the task files and chat replies write it: fenced blocks, `code`, **bold**,

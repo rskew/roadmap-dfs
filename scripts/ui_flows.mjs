@@ -478,9 +478,25 @@ const FLOWS = {
     await page.setInputFiles("dialog .attach input[type=file]", { name: "the bar.png", mimeType: "image/png", buffer: png });
     await page.waitForFunction(() => /!\[the bar\.png\]\(\.dfs\/artefacts\/[0-9a-f-]+\.png\)$/.test(document.querySelector("dialog textarea").value));
     assert((await page.inputValue("dialog textarea")).startsWith("Look at this: ![the bar.png]("), "the reference follows the text, a space between");
+    // a picture pasted, and one dropped, into the box are attached the same way
+    for (const kind of ["paste", "drop"]) {
+      const before = (await page.inputValue("dialog textarea")).match(/\]\(\.dfs\/artefacts\//g).length;
+      await page.evaluate(([kind, b64]) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], "image.png", { type: "image/png" }));
+        const init = { bubbles: true, cancelable: true };
+        const box = document.querySelector("dialog textarea");
+        box.dispatchEvent(kind === "paste" ? new ClipboardEvent("paste", { ...init, clipboardData: dt }) : new DragEvent("drop", { ...init, dataTransfer: dt }));
+      }, [kind, png.toString("base64")]);
+      await page.waitForFunction(n => document.querySelector("dialog textarea").value.match(/\]\(\.dfs\/artefacts\//g).length > n, before);
+    }
+    assert(/!\[pasted-[\d-]+\.png\]\(\.dfs\/artefacts\/[0-9a-f-]+\.png\)/.test(await page.inputValue("dialog textarea")), "a pasted picture is named for when it was pasted");
+    // a plain link to a page the task has keeps the author's words
+    await page.fill("dialog textarea", (await page.inputValue("dialog textarea")) + " And [my notes](.dfs/artefacts/7f3a9c1e-fsync.html).");
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => /overruled by you/.test(document.body.textContent));
+    assert(await page.locator("a.art", { hasText: /^my notes$/ }).count() > 0, "a link to a page is drawn with the author's words");
     await page.waitForFunction(() => [...document.querySelectorAll("img[src^='artefacts/']")].some(i => i.complete && i.naturalWidth > 0));
     if (process.env.DFS_SHOT) {
       await page.evaluate(() => { document.querySelector("#sheet [data-act=close]")?.click(); document.querySelector("img[src^='artefacts/']").scrollIntoView({ block: "center" }); });

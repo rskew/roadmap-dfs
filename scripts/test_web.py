@@ -363,6 +363,9 @@ class Web(unittest.TestCase):
         self.assertEqual((status, body["ref"]), (200, "[notes.PDF](.dfs/artefacts/%s)" % doc))
         self.assertEqual(send("photo.jpeg", b"\xff\xd8\xff...")[1]["file"][-4:], ".jpg")
         self.assertEqual(send("log.txt", b"line")[0], 200)
+        text = "see [the notes](.dfs/artefacts/%s) and ![the bad bar.png](.dfs/artefacts/%s)" % (doc, shot)
+        self.assertEqual({a["file"]: a["title"] for a in dfs_web.artefacts_for(text)},
+                         {doc: "the notes", shot: shot}, "a document's tile is named for what the author called it")
         status, raw, r = self.call("GET", "/artefacts/" + doc)
         self.assertEqual((status, raw, r.getheader("Content-Type"), r.getheader("X-Content-Type-Options")),
                          (200, b"%PDF-1.4 ...", "application/pdf", "nosniff"))

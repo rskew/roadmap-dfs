@@ -188,9 +188,12 @@ class Flows(unittest.TestCase):
         self.flow("attach")
         corr = [e for e in self.log("W9") if e["kind"] == "correct"]
         self.assertEqual(len(corr), 1)
-        m = re.fullmatch(r"Look at this: !\[the bar\.png\]\(\.dfs/artefacts/([0-9a-f-]+\.png)\)", corr[0]["body"].strip())
-        self.assertTrue(m, corr[0]["body"])
-        self.assertTrue((self.root / ".dfs" / "artefacts" / m.group(1)).read_bytes().startswith(b"\x89PNG"))
+        ref = r"!\[%s\]\(\.dfs/artefacts/([0-9a-f-]+\.png)\)"
+        m = re.fullmatch(r"Look at this: " + ref % r"the bar\.png" + " " + ref % r"pasted-[\d-]+\.png" + " " + ref % r"pasted-[\d-]+\.png"
+                         + r" And \[my notes\]\(\.dfs/artefacts/7f3a9c1e-fsync\.html\)\.", corr[0]["body"].strip())
+        self.assertTrue(m, corr[0]["body"])   # the file input, a paste and a drop each put a reference in
+        for name in m.groups():
+            self.assertTrue((self.root / ".dfs" / "artefacts" / name).read_bytes().startswith(b"\x89PNG"))
 
     def test_confirming_over_a_sibling_that_holds_work_asks_to_park_it(self):
         dfs_tree.start_node("W9", "W9.10")

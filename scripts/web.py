@@ -300,10 +300,14 @@ def artefacts_for(text):
         if name in on_disk and name not in named:
             named.append(name)
 
+    def label(n):   # what the author called an attachment: the text of `[label](.dfs/artefacts/<n>)`
+        m = re.search(r"\[([^\]\n]+)\]\((?:\.dfs/)?artefacts/%s\)" % re.escape(n), text)
+        return m.group(1).strip() if m else ""
+
     def entry(n):
         suffix = on_disk[n].suffix.lower()
         page = suffix == ".html"
-        return dict(file=n, title=(artefact_title(on_disk[n]) if page else "") or n,
+        return dict(file=n, title=(artefact_title(on_disk[n]) if page else label(n) if suffix in FILE_TYPES else "") or n,
                     kind="page" if page else "file" if suffix in FILE_TYPES else "image")
     return [entry(n) for n in named]
 
