@@ -235,8 +235,9 @@ def _unmerged(task, wt, name, r):
     _raise_blocked(task, (
         "%s is finished and reviewed, but git would not merge %s into %s: %s\n"
         "Your uncommitted edits in %s overlap the merge: %s.\n"
-        "Options: commit or stash those edits and run the chain again (it merges first), or tell me "
-        "to leave the branch unmerged. I would commit them.") % (
+        "Options: commit or stash those edits and answer this, after which the chain works the item "
+        "again and merges it when the next review passes, or tell me to leave the branch unmerged. "
+        "I would commit them.") % (
             task, name, default, " ".join(out.split())[:200], dfs_paths.work_root(),
             ", ".join(paths) or "see the message above"))
     return "refused"

@@ -2670,10 +2670,10 @@ class UI(WalkMixin):
         """
         it = self.current()
         named = artefacts_named_by(self.data["entries"], it["id"]) if it else []
-        on_disk = sorted(p.name for p in ART_DIR.glob("*.html")
-                         if not p.name.startswith("_"))
+        on_disk = sorted({p.name for d in [ART_DIR] + [w / "artefacts" for w in dfs_paths.worktree_states()]
+                          for p in d.glob("*.html") if not p.name.startswith("_")})
         taken = {n for n, _ in named}
-        out = [dict(name=n, entry=eid, exists=(ART_DIR / n).exists(), mine=True)
+        out = [dict(name=n, entry=eid, exists=dfs_paths.artefact_file(n).exists(), mine=True)
                for n, eid in named]
         out += [dict(name=n, entry=None, exists=True, mine=False)
                 for n in on_disk if n not in taken]
@@ -2698,7 +2698,7 @@ class UI(WalkMixin):
                 self.web.url.rsplit(":", 1)[1].strip("/"), art["name"])
         else:
             url = ("http://localhost:%d/%s" % (ART_PORT, art["name"]) if art_server_up()
-                   else (ART_DIR / art["name"]).as_uri())
+                   else dfs_paths.artefact_file(art["name"]).as_uri())
         browser = os.environ.get("BROWSER")
         argv = ([browser, url] if browser else
                 next(([b, url] for b in ("xdg-open", "firefox", "chromium")
@@ -2785,7 +2785,7 @@ class UI(WalkMixin):
                 group = head
                 out.append(("", 0))
                 out.append(("  " + head, look("chrome")))
-            title = art_title(ART_DIR / a["name"]) if a["exists"] else "missing"
+            title = art_title(dfs_paths.artefact_file(a["name"])) if a["exists"] else "missing"
             # A uuid plus `.html` is 41, and a name cut mid-extension reads as a
             # different file: it is the one column here that must not be truncated.
             label = "%s %-41s %s" % (">" if i == self.art_sel else " ",

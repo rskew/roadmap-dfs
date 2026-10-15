@@ -177,7 +177,9 @@ branch and merges it in with `--no-ff`, locally and without a push, and removes 
 branch. A rebase that conflicts is not done: the runner aborts it and adds an open node asking
 for `dfs/<task>` to be rebased onto the default branch and the conflicts resolved, so the next
 session takes it up like any open node. Edits of the author's on the default branch
-that overlap the merge are a raise, which the runner logs.
+that overlap the merge are a raise, which the runner logs. The rebase rewrites the
+branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
+by a hash that would dangle once the branch is merged and deleted.
 
 ## When `.dfs/` is gitignored
 
