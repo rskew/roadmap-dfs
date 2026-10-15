@@ -192,6 +192,14 @@ def task_ids():
             out.add(part_of(rel)[0])
         elif p.is_dir() and re.fullmatch(TASK_RE, p.name) and part_tags(p.name):
             out.add(p.name)
+    # A task never committed on the default branch is carried into its worktree and
+    # leaves this checkout, so the worktrees are listed too (by their own task only:
+    # the rest of a worktree's items are stale copies).
+    try:
+        wts = [d.name for d in dfs_paths.worktrees().iterdir()]
+    except OSError:
+        wts = []
+    out.update(t for t in wts if re.fullmatch(TASK_RE, t) and dfs_paths.worktree(t) and part_tags(t))
     return sorted(out)
 
 

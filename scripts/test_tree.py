@@ -1252,6 +1252,15 @@ class Branches(InARepo):
         self.assertEqual(r.returncode, 0, r.stderr)
         return wt
 
+    def test_a_task_never_committed_stays_listed_once_its_branch_is_worked(self):
+        (self.root / ".dfs/items/W2.md").write_text(task(node(1), "").replace("W1", "W2"))
+        self.assertEqual(dfs_tree.task_ids(), ["W1", "W2"])
+        wt = self.worktree("W2")
+        (wt / ".dfs/items").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs/items/W2.md").rename(wt / ".dfs/items/W2.md")
+        self.assertEqual(dfs_tree.task_ids(), ["W1", "W2"])
+        self.assertTrue(dfs_tree.exists("W2"))
+
     def test_an_item_branch_writes_plain_ids_into_the_top_level_file(self):
         self.switch("checkout -qb dfs/W1")
         self.assertEqual(dfs_paths.branch_tag(), "")
