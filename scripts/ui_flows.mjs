@@ -728,6 +728,30 @@ const FLOWS = {
     const up = await page.evaluate(() => scrollY);
     await page.mouse.move(drag.x, drag.y, { steps: 4 }); await page.mouse.up();
     assert(up < drag.at - 50, `${name}: held just under the Walk box, a dragged row scrolls the list up (${drag.at} to ${up})`);
+    // Still in reorder mode: a grip and a Move-out button lying just under the box come into view below it, focused as the pad
+    // does (focus, then scrollIntoView) and as Shift+Tab does (the browser's own scroll to the control it lands on). Each is read
+    // at once, before a poll can redraw the list.
+    const found = () => { const e = document.activeElement, q = e.getBoundingClientRect();
+      return { top: q.top, box: document.querySelector("#walkbox").getBoundingClientRect().bottom, what: e.getAttribute("aria-label") || e.tagName }; };
+    // scroll so control `i` of `sel` sits `dy` under the box's bottom edge (negative: partly under it), and focus it without scrolling
+    const place = (sel, i, dy, andThen) => page.evaluate(([sel, i, dy, andThen]) => {
+      const box = document.querySelector("#walkbox").getBoundingClientRect().bottom, els = [...document.querySelectorAll(sel)].filter(e => e.getBoundingClientRect().height > 0);
+      const el = els[Math.min(i, els.length - 1)]; scrollTo(0, scrollY + el.getBoundingClientRect().top - box - dy); el.focus({ preventScroll: true });
+      if (andThen) { el.scrollIntoView({ block: "nearest", inline: "nearest" }); const q = el.getBoundingClientRect(); return { top: q.top, box, what: el.getAttribute("aria-label") }; }
+    }, [sel, i, dy, andThen]);
+    for (const sel of ["[data-grip]", "[data-move]"]) {
+      await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(100);
+      const r = await place(sel, 2, -20, true);
+      assert(r.top >= r.box - 0.5, `${name}: ${sel} focused by the pad (${r.what}) comes into view at ${r.top}, below the box ending at ${r.box}`);
+    }
+    // Shift+Tab up the reorder list from its last grip: every control it lands on is below the box, not under it.
+    await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(100);
+    await page.evaluate(() => [...document.querySelectorAll("[data-grip]")].pop().focus());
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press("Shift+Tab");
+      const r = await page.evaluate(found);
+      if (r.top < r.box - 0.5) assert(false, `${name}: Shift+Tab ${i + 1} up the reorder list lands on ${r.what} at ${r.top}, under the box ending at ${r.box}`);
+    }
     same(errors, [], "no page errors");
     await ctx.close();
     }

@@ -152,7 +152,8 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 /* The walk's controls stay in reach on a long list: the box sticks under the bar (its measured height, `--bar-h`, as a long
    title can make it taller), opaque, above the rows, and out to the view's edges so a tinted row (which bleeds 10px past the
    column) does not show either side of it. Open, it scrolls in itself under its own summary rather than cover the list, and
-   a row focus brings into view clears it too (each row's `scroll-margin-top` is `--pin-h`, its measured height; the page's own
+   a focus the list brings into view clears it too, a row or a control in one (its grip, move and archive buttons): each has a
+   `scroll-margin-top` of `--pin-h`, the box's measured height; the page's own
    scroll padding stops at the bar's own edge, so the box, stuck just below it, lies inside the snapport and focusing it does not
    scroll the list; the pixel is for the box's fractional top). */
 .walk { margin: 6px calc(-1 * var(--s4)) 10px; padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); position: sticky; z-index: 4; background: var(--paper);
@@ -160,7 +161,7 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 .walk[open] { max-height: 55dvh; overflow-y: auto; overscroll-behavior: contain; }
 .walk[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--paper); }
 :root:has(#walkbox) { scroll-padding-top: calc(var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule))) - 1px); }
-:root:has(#walkbox) .item { scroll-margin-top: calc(var(--pin-h, 0px) + var(--s3) + 1px); }
+:root:has(#walkbox) :is(.item, .item :is(button, a, select), .arow > button) { scroll-margin-top: calc(var(--pin-h, 0px) + var(--s3) + 1px); }
 .walk > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
 .walk > summary::-webkit-details-marker { display: none; }
 .walk > summary .state { font-size: var(--fs-body); font-weight: 500; }
@@ -1525,7 +1526,7 @@ function padTargets() {
     return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
   });
 }
-/* Every control in scope is a candidate, on screen or not: the page scrolls to the one chosen, clear of the fixed bars (`scroll-padding`).
+/* Every control in scope is a candidate, on screen or not: the page scrolls to the one chosen, clear of the bar (`scroll-padding`) and, on the list, the pinned Walk box (`scroll-margin`).
    Of the controls lying wholly past the focused one in `dir`, the nearest, counting a step off the line twice over; a
    control that overlaps it (a wide row, its indented child) is not "to the right" of it, so none past it falls back to the centres. */
 function padMove(dir) {
