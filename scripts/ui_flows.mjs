@@ -674,7 +674,8 @@ const FLOWS = {
   // The walk's controls stay in reach on a list taller than the screen: the box sticks under the bar, the rows pass under it,
   // open it scrolls in itself, and a row focus brings back into view is not left under it.
   async walkpin(b) {
-    const ctx = await b.newContext({ viewport: { width: 390, height: 600 }, hasTouch: true, isMobile: true });
+    for (const [name, opts] of [["phone", { viewport: { width: 390, height: 600 }, hasTouch: true, isMobile: true }], ["desktop", { viewport: { width: 1280, height: 500 } }]]) {
+    const ctx = await b.newContext(opts);
     const page = await ctx.newPage(); PAGES.push(page);
     const errors = []; page.on("pageerror", e => errors.push(String(e)));
     await page.goto(URL_); await page.waitForSelector("#walkbox");
@@ -690,10 +691,22 @@ const FLOWS = {
     let p = await at();
     assert(Math.abs(p.top - p.bar) <= 2, `scrolled to the end, the Walk box sits under the bar (box at ${p.top}, bar ends at ${p.bar})`);
     assert(p.under && p.mine, "rows pass under the box, which is drawn over them");
-    await page.click("#walkbox summary"); await page.waitForSelector("#nextsel");
+    // Reaching the pinned box from the keyboard leaves the list where it is: focus the summary, open it, Tab through its controls.
+    const y0 = await page.evaluate(() => scrollY);
+    await page.focus("#walkbox > summary"); await page.waitForTimeout(100);
+    assert(await page.evaluate(() => scrollY) === y0, `${name}: focusing the Walk summary does not scroll the list`);
+    await page.keyboard.press("Enter"); await page.waitForSelector("#nextsel"); await page.waitForTimeout(100);
+    const y1 = await page.evaluate(() => scrollY);   // opening makes the page taller, and the end of it moves
+    const stops = await page.evaluate(() => document.querySelectorAll("#walkbox select, #walkbox button").length);
+    assert(stops >= 3, `${name}: the open box has controls to Tab through (${stops})`);
+    for (let i = 0; i < stops; i++) {
+      await page.keyboard.press("Tab"); await page.waitForTimeout(100);
+      const f = await page.evaluate(() => ({ y: scrollY, in: !!document.activeElement.closest("#walkbox") }));
+      assert(f.in && f.y === y1, `${name}: Tab ${i + 1} stays in the box without scrolling the list (scrollY ${f.y}, was ${y1})`);
+    }
     p = await at();
     assert(Math.abs(p.top - p.bar) <= 2 && p.bottom - p.top <= 0.6 * p.h, `open, it stays put and takes at most 60% of the screen (${p.bottom - p.top} of ${p.h})`);
-    await page.selectOption("#nextsel", "W2");
+    if (await page.$eval("#nextsel", e => e.value) !== "W2") await page.selectOption("#nextsel", "W2");   // picking the pinned one again takes the pin away, and the other width left W2 pinned
     await page.waitForFunction(() => /W2/.test(document.querySelector("#walkbox .brief")?.textContent || ""));
     await page.click("#walkbox summary");
     await page.waitForFunction(() => !document.querySelector("#walkbox[open]"));
@@ -705,6 +718,7 @@ const FLOWS = {
     assert(clear.row >= clear.box - 0.5, `the first row comes into view at ${clear.row}, below the box ending at ${clear.box}`);
     same(errors, [], "no page errors");
     await ctx.close();
+    }
   },
 
   // The thumbs: what you press to move is in the bottom of the screen, Back always at the right, under the right thumb, what moves you on the left.

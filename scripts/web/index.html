@@ -152,12 +152,15 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 /* The walk's controls stay in reach on a long list: the box sticks under the bar (its measured height, `--bar-h`, as a long
    title can make it taller), opaque, above the rows, and out to the view's edges so a tinted row (which bleeds 10px past the
    column) does not show either side of it. Open, it scrolls in itself under its own summary rather than cover the list, and
-   a row focus brings into view clears it too (`--pin-h`, its measured height). */
+   a row focus brings into view clears it too (each row's `scroll-margin-top` is `--pin-h`, its measured height; the page's own
+   scroll padding stops at the bar's own edge, so the box, stuck just below it, lies inside the snapport and focusing it does not
+   scroll the list; the pixel is for the box's fractional top). */
 .walk { margin: 6px calc(-1 * var(--s4)) 10px; padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); position: sticky; z-index: 4; background: var(--paper);
   top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule)))); }
 .walk[open] { max-height: 55dvh; overflow-y: auto; overscroll-behavior: contain; }
 .walk[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--paper); }
-:root:has(#walkbox) { scroll-padding-top: calc(var(--bar-h, var(--bar)) + var(--pin-h, 0px) + var(--s3)); }
+:root:has(#walkbox) { scroll-padding-top: calc(var(--bar-h, var(--bar)) - 1px); }
+:root:has(#walkbox) .item { scroll-margin-top: calc(var(--pin-h, 0px) + var(--s3) + 1px); }
 .walk > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
 .walk > summary::-webkit-details-marker { display: none; }
 .walk > summary .state { font-size: var(--fs-body); font-weight: 500; }
