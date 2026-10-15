@@ -972,6 +972,13 @@ class Check(InARepo):
         self.assertIn("tree.py start W1 <node>", brief)
         self.assertIn("commits nothing", brief)
 
+    def test_the_work_briefing_carries_the_picture_the_author_attached_to_a_correction(self):
+        self.write(task(node(1, "confirmed", extra="Approach: done.\nDetermination: Confirmed: ok.\n"), self.LOG))
+        self.commit()
+        ref = "![the bar.png](.dfs/artefacts/0f1e2d3c-4b5a-4968-8776-655443322110.png)"
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"], "The bar is cut off:\n" + ref)
+        self.assertIn("  " + ref, dfs_state.brief("W1"))
+
     def test_the_work_briefing_shows_what_the_author_deleted(self):
         self.write(task(node(1, "confirmed", extra="Approach: done.\nDetermination: Confirmed: ok.\n")
                         + node(2, parent=1, extra="Approach: a doomed idea.\n"), self.LOG))

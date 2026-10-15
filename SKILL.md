@@ -20,7 +20,8 @@ session carries it out.
    present, `## Tree`, `## Log`.
 3. **The author first, then the critic.** An answer to a raise, a correction at a
    node, or a critic's backtrack is the first work; the briefing lists each with what
-   it prunes. After a correction, resume with a node carrying
+   it prunes. A picture or file the author attached is named in their words as
+   `.dfs/artefacts/<name>`: open it (Read shows a picture) before acting on them. After a correction, resume with a node carrying
    `Corrects: <the correction's ts>`: under the corrected node if the author said
    confirmed, or at a sibling if refuted (unpark one, or add a new alternative). A
    backtrack withdraws the node itself as well: redo its step beside it, under its
