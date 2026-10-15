@@ -46,6 +46,10 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a task file or an archive HEAD holds, deleted (the limit case of the two
       rules above; a staged rename is followed, not refused). A task retired on
       purpose is the author's rewrite of history, committed with --no-verify
+    - a task file (or archive) naming a file in `.dfs/artefacts` that is on disk but not
+      in the index: the author's attached picture or document is uploaded by the web
+      server, which commits nothing, so the commit carrying the text must carry the
+      file or a push, a clone or `git clean` loses it (`check_attachments`)
     - a task file over the size budget that this commit grew
   warned:
     - a coordinate (`file.js:123`) in a task file: it rots with no sign
@@ -476,6 +480,14 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
     return bad
 
 
+def check_attachments(text):
+    """One refusal per file in `.dfs/artefacts` that `text` names and that git's index
+    does not hold. Nothing else stages the author's upload; see `dfs_tree.untracked_artefacts`."""
+    return ["names .dfs/artefacts/%s, which is on disk but not staged. Stage it with this "
+            "file (`git add .dfs/artefacts/%s`): the author attached it, and nothing else "
+            "will commit it" % (n, n) for n in dfs_tree.untracked_artefacts(text)]
+
+
 def check_no_new_ask(task, text, head):
     """No node may gain or change an `Ask:`. A choice the author may want the other way
     is a Hypothesis, which says what would show it wrong and carries evidence and an
@@ -574,6 +586,7 @@ def main() -> int:
             path = items_dir / tasks[task][tag]
             rel = dfs_paths.rel(path)
             fatal += ["%s: %s" % (rel, b) for b in check_shape(task, text, arc, tag, whole)]
+            fatal += ["%s %s" % (rel, b) for b in check_attachments(text + "\n" + arc)]
             head = at_head(path)
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]

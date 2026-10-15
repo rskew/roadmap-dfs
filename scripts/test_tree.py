@@ -592,6 +592,53 @@ class Check(InARepo):
         git("commit -qm 'W1.2: back' -m 'This reverts commit %s.'" % sha)
         self.assertEqual(dfs_tree.unreverted_pruned(t), [])
 
+    def attached_picture(self):
+        """A task naming a picture the author attached, which is on disk and nowhere else."""
+        name = "0f1e2d3c-4b5a-4968-8776-655443322110.png"
+        self.write(task(node(1), self.LOG))
+        self.commit()
+        (self.root / ".dfs" / "artefacts").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs" / "artefacts" / name).write_bytes(b"\x89PNG\r\n\x1a\n")
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"],
+                            "The bar is cut off: ![bar](.dfs/artefacts/%s)" % name)
+        return name
+
+    def test_the_guard_refuses_a_task_naming_an_attachment_that_is_not_staged(self):
+        name = self.attached_picture()
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn(".dfs/artefacts/%s, which is on disk but not staged" % name, out)
+        self.assertEqual(dfs_tree.untracked_artefacts(
+            (self.root / ".dfs/items/W1.md").read_text()), [name])
+
+    def test_the_guard_passes_once_the_attachment_is_staged_with_the_task_file(self):
+        name = self.attached_picture()
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/artefacts/" + name],
+                       cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(dfs_tree.untracked_artefacts(
+            (self.root / ".dfs/items/W1.md").read_text()), [])
+
+    def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
+        name = self.attached_picture()
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/artefacts/" + name],
+                       cwd=self.root, check=True)
+        (self.root / ".dfs/artefacts/aaaaaaaa-4b5a-4968-8776-655443322110.png").write_bytes(b"x")
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"],
+                            "gone: ![x](.dfs/artefacts/bbbbbbbb-4b5a-4968-8776-655443322110.png)")
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+
+    def test_the_work_briefing_lists_the_attachments_to_commit(self):
+        name = self.attached_picture()
+        self.assertIn("### Attachments to commit", dfs_state.brief("W1"))
+        self.assertIn("    .dfs/artefacts/" + name, dfs_state.brief("W1"))
+        subprocess.run(["git", "add", ".dfs/artefacts/" + name], cwd=self.root, check=True)
+        self.assertNotIn("Attachments to commit", dfs_state.brief("W1"))
+
     def test_git_revert_of_a_node_commit_is_what_the_guard_refuses(self):
         # the control: the instruction the briefing gave before, same commit
         sha, git = self.refuted_node_commit()

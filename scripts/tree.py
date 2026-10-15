@@ -1251,6 +1251,30 @@ def accepted(t):
 ARTEFACT_REF = re.compile(r"\.dfs/artefacts/([\w.-]+\.html)(?![\w-]|\.\w)")
 
 
+# Any file in `.dfs/artefacts` a text names by path: the author's attached picture or
+# document (`web.py` `/api/attach`) as much as a page or screenshot a session made.
+ATTACHED_REF = re.compile(r"\.dfs/artefacts/([\w-]+\.[A-Za-z0-9]+)(?![\w-])")
+
+
+def untracked_artefacts(text):
+    """The files in `.dfs/artefacts` that `text` names and that are on disk but not in
+    git's index, in the order named. Nothing commits the author's upload (the web
+    server never does), so the commit that carries the text naming it must carry it
+    too, or a push, a clone or `git clean` loses it. Empty when `.dfs/` is gitignored."""
+    if dfs_paths.ignored():
+        return []
+    root = dfs_paths.artefacts()
+    names = [n for n in dict.fromkeys(ATTACHED_REF.findall(text)) if (root / n).is_file()]
+    if not names:
+        return []
+    r = subprocess.run(["git", "--literal-pathspecs", "ls-files", "--", *names],
+                       capture_output=True, text=True, cwd=root)
+    if r.returncode != 0:   # no git here
+        return []
+    kept = set(r.stdout.split())
+    return [n for n in names if n not in kept]
+
+
 def deciding_node(page, tasks=None):
     """The (task, node id) whose Hypothesis names `page` and that is still waiting on the author:
     live, not parked, not yet ruled on (`assumed`). None when no node is."""

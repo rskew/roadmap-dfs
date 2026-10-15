@@ -21,8 +21,8 @@ session carries it out.
 3. **The author first, then the critic.** An answer to a raise, a correction at a
    node, or a critic's backtrack is the first work; the briefing lists each with what
    it prunes. A picture or file the author attached is named in their words as
-   `.dfs/artefacts/<name>`: open it (Read shows a picture) before acting on them. After a correction, resume with a node carrying
-   `Corrects: <the correction's ts>`: under the corrected node if the author said
+   `.dfs/artefacts/<name>`: open it (Read shows a picture) before acting on them.
+   After a correction, resume with a node carrying `Corrects: <the correction's ts>`: under the corrected node if the author said
    confirmed, or at a sibling if refuted (unpark one, or add a new alternative). A
    backtrack withdraws the node itself as well: redo its step beside it, under its
    parent, with `Corrects: <the backtrack's ts>`.
@@ -142,7 +142,9 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   guard refuses. The briefing lists refuted or pruned commits still in the code, each
   with the command that reverts its code alone; commit that under your node with
   `This reverts commit <sha>.` in the body, so the briefing stops listing it.
-- Stage the node's paths by name, never `git add -A`, and read the diff first. The
+- Stage the node's paths by name, never `git add -A`, and read the diff first. A file
+  the briefing lists under "Attachments to commit" goes in the next node's commit with
+  the task file that names it (`check.py` refuses the commit otherwise). The
   task file goes in the same commit, unless `.dfs/` is gitignored (below).
 - The tree is **complete** when no live node is open. Make sure the last node says the
   Goal is met, and how you know. A reviewer then judges the implementation; each

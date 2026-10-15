@@ -597,6 +597,14 @@ def brief(task: str) -> str:
                     "in the Evidence of the node you are on, so the author can find it, and "
                     "go on with the session as usual."]
         out += [""]
+    loose = dfs_tree.untracked_artefacts("\n".join(p.read_text() for p in dfs_tree.part_files(task)))
+    if loose:
+        out += ["### Attachments to commit", "",
+                "The task's text names these files in `.dfs/artefacts`, which git does not "
+                "hold: the author attached them from the web page, which commits nothing. "
+                "Stage them by name in your next node's commit, with the task file; "
+                "`check.py` refuses a commit that names one and leaves it out.", ""]
+        out += ["    .dfs/artefacts/" + n for n in loose] + [""]
     stale = dfs_tree.unreverted_pruned(t)
     if stale:
         out += ["### Refuted or pruned nodes whose commits are still in the code", "",
