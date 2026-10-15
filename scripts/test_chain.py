@@ -166,6 +166,16 @@ class Chain(unittest.TestCase):
                               capture_output=True, text=True).stdout.strip()
         self.assertEqual(subj, "W1.1: the step is done")
 
+    def test_a_draft_run_by_hand_is_worked_to_done_like_any_open_task(self):
+        # `run.sh W1` is the author taking the draft: the runner has no draft stop.
+        subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "draft"],
+                       cwd=self.root, check=True, capture_output=True)
+        self.assertTrue(dfs_tree.is_draft(self.tree()))
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.kinds_run(), ["work", "work", "review"])
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "done")
+
     def models_run(self):
         f = Path(str(self.kinds) + ".models")
         return [l.strip() for l in f.read_text().splitlines()]

@@ -30,6 +30,15 @@ docker logs <repo>-dev                                    # its output (podman l
 nix run github:rskew/roadmap-dfs#sandbox stop
 ```
 
+## Drafts
+
+A task can be a **draft**: still open, but the walk never picks it as its next item, never carries on into it
+and does not wait on it at a fence. Create one with the Draft box on the web page's new-task form (or `draft: true`
+to `/api/new`, or `y` at `run.sh --open`'s draft prompt), and mark an existing task a draft, or ready again, with `s`
+on the tui's item list or the Draft button on a task's page. Each is a `draft` or `ready` entry in the task's log,
+the later one winning. A draft is worked by hand: `n` pins it as the walk's next chain, and `run.sh <task>` runs its
+sessions as any open task's. When that chain ends the walk passes it over again, until it is marked ready.
+
 ## Deleting
 
 An item or a node can be deleted from the tui (`D` on the item list, or on a node in the tree) and from the web
