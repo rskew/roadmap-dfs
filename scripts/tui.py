@@ -688,6 +688,7 @@ KEYS = [
     ("items", "tab", 9, "tree", "into the item's tree, and back out"),
     ("items", "w", ord("w"), "walk", "walk the roadmap depth-first, or stop the walk"),
     ("items", "n", ord("n"), "pin", "pin this item as where the walk goes next (again: unpin)"),
+    ("items", "s", ord("s"), "draft", "mark it a draft, which the walk passes over (again: ready); n still pins it"),
     ("items", "K", ord("K"), "stop", "stop this item's running chain (asks first)"),
     ("items", "D", ord("D"), "delete", "delete this item; its files are kept under .dfs/archive/deleted (asks first)"),
     ("items", "r", ord("r"), "review", "review: open the tree to answer and correct"),
@@ -1535,6 +1536,9 @@ def row_state(it):
     true, and a fence would otherwise have said it about whole segments at a time.
     """
     held = it.get("blocked_by") or it.get("waiting_on")
+    if it["status"] == "open" and not held and it.get("draft"):
+        # The author's own mark, that the walk passes it over: said where `open` was.
+        return "draft"
     if it["status"] != "open" or not held:
         return it["status"]
     return ("↳" if it.get("blocked_by") else "»") + held
@@ -4428,6 +4432,21 @@ class UI(WalkMixin):
         self.reload()
         self.msg = self.event("review", "added %s under %s" % (nid, parent or item))
 
+    def toggle_draft(self, item):
+        """`s`: mark the item a draft, which the walk never picks (`n` and a run by hand
+        still work it), or ready again. A log entry, so the task file says when."""
+        if item is None:
+            return
+        try:
+            on = not dfs_tree.is_draft(dfs_tree.load(item))
+            dfs_tree.append_log(item, "draft" if on else "ready")
+        except (ValueError, OSError, dfs_paths.NoBranch) as e:
+            self.msg = "not changed: %s" % e
+            return
+        self.reload()
+        self.msg = self.event("review", "%s is a draft: the walk passes it over, n pins it" % item
+                              if on else "%s is ready: the walk takes it in its turn" % item)
+
     def delete_item(self, item):
         """Retire `item` to `.dfs/archive/deleted` after a yes, then land the cursor on
         the item that took its row (`reload` falls back to the row once it is gone)."""
@@ -4852,6 +4871,8 @@ class UI(WalkMixin):
                 self.tree_delete(item)
             else:
                 self.delete_item(item)
+        elif ch == ord("s") and not self.tree_focused():
+            self.toggle_draft(item)
         elif ch == ord("K"):
             # Capital, and it asks: a chain is an hour of somebody's subscription and
             # there is no undo for stopping one halfway.

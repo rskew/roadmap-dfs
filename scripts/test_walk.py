@@ -496,6 +496,14 @@ class Ticking(unittest.TestCase):
         self.assertEqual(ui.started, [("W9", "20")])
         self.assertIsNone(ui.walk_next, "a pin is for one chain; the order has the rest")
 
+    def test_a_pinned_draft_is_where_the_next_chain_starts(self):
+        # A draft is never the order's answer, and the pin is how the author takes one.
+        ui = self.ui(walk_next="W9")
+        ui.data["items"] = [dict(id="W7", status="open"), dict(id="W9", status="open", draft=1)]
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [("W9", "20")])
+
     def test_a_pin_overrides_what_the_ended_chain_would_have_led_to(self):
         ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"}, walk_next="W9")
         self.items(ui, W7="open", W9="open")

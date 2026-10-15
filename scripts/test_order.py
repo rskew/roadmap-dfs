@@ -23,6 +23,7 @@ sys.path.insert(0, str(HERE))
 import order as dfs_order            # noqa: E402
 import paths as dfs_paths            # noqa: E402
 import state as dfs_state            # noqa: E402
+import tree as dfs_tree             # noqa: E402
 
 class InAWorkRoot(unittest.TestCase):
     """A throwaway work root, which is the whole of "which project is this".
@@ -543,6 +544,17 @@ class ContinuingTheLastRun(InAWorkRoot):
         self.task(1, log="- 2026-09-25T09:00:00Z · draft\n- 2026-09-25T09:10:00Z · ready\n")
         self.assertEqual(self.nxt(), ("W1", "W1"))
 
+    def test_s_on_the_screen_marks_a_draft_and_again_ready(self):
+        ui = object.__new__(TUI.UI)
+        ui.msg, ui.reload, ui.event = "", lambda note="": None, lambda kind, text: text
+        ui.toggle_draft("W1")
+        self.assertIn("W1 is a draft", ui.msg)
+        self.assertEqual(self.nxt(), ("W2", "W2"))
+        ui.toggle_draft("W1")
+        self.assertIn("W1 is ready", ui.msg)
+        self.assertEqual([e["kind"] for e in dfs_tree.load("W1")["log"]], ["draft", "ready"])
+        self.assertEqual(self.nxt(), ("W1", "W1"))
+
     def test_a_draft_the_last_run_was_on_hands_the_walk_back_to_the_order(self):
         # A pinned draft had its chain; the walk does not take it up again by itself.
         self.task(2, log="- 2026-09-25T09:00:00Z · draft\n"
@@ -617,6 +629,10 @@ class BreaksOnTheScreen(InAWorkRoot):
                          "↳W7", "the answerable one first")
         self.assertEqual(say(dict(status="done", waiting_on="W2")), "done")
         self.assertEqual(say(dict(status="blocked", waiting_on="W2")), "blocked")
+        self.assertEqual(say(dict(status="open", draft=1)), "draft")
+        self.assertEqual(say(dict(status="open", draft=1, waiting_on="W2")), "»W2",
+                         "a held draft says what holds it")
+        self.assertEqual(say(dict(status="done", draft=1)), "done")
 
     def test_b_again_takes_it_away(self):
         self.ui.sel = 1
