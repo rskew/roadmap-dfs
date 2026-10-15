@@ -1115,6 +1115,15 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/draft", dict(task=task))[0], 400)
         self.assertEqual(self.call("POST", "/api/draft", dict(task="W99", draft=True))[0], 404)
 
+    def test_marking_a_draft_tells_the_walk_only_when_it_becomes_one(self):
+        told = []
+        dfs_web.WALK["walker"] = type("W", (), {"draft_marked": lambda self, t: told.append(t)})()
+        self.addCleanup(dfs_web.WALK.update, walker=None)
+        task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
+        self.call("POST", "/api/draft", dict(task=task, draft=True))
+        self.call("POST", "/api/draft", dict(task=task, draft=False))
+        self.assertEqual(told, [task])
+
     def test_an_unknown_task_or_action_is_not_found(self):
         self.assertEqual(self.call("GET", "/api/task/W99")[0], 404)
         self.assertEqual(self.call("POST", "/api/accept", dict(task="W99"))[0], 404)

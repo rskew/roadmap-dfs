@@ -436,6 +436,22 @@ class WalkMixin:
         self.msg = self.event("walk", "walk: pinned %s — %s's chain ends after run %d" % (
             it["id"], run["item"], n))
 
+    def walk_draft_marked(self, item):
+        """`item` was just marked a draft: end the walk's own chain on it after the run in
+        flight, as `walk_pin` does for a chain on another item. The chain carries the
+        walk's whole budget and `run.sh` has no draft stop, so it would otherwise work
+        the draft to the end. A chain the author pinned stays: pinning was asking for it."""
+        run = self.walk_on and self.walk_run()
+        if not (run and run["live"]) or run["item"] != item or self.walk_chain_pin == item:
+            return
+        n = int(run["run"] or 0)
+        try:
+            self.lower_cap(run["dir"], n)
+        except OSError as e:
+            self.msg = "walk: %s is a draft, but its chain could not be told to end (%s)" % (item, e)
+            return
+        self.msg = self.event("walk", "walk: %s is a draft — its chain ends after run %d" % (item, n))
+
     def walk_raise(self, item, why):
         """Put a suspect item to the author and re-read the trees; True to carry on.
 
@@ -700,6 +716,11 @@ class HeadlessWalk(WalkMixin):
             self.refresh_chains()
             self.reload()
             self.walk_pin_id(item)
+
+    def draft_marked(self, item):
+        with self.lock:
+            self.refresh_chains()
+            self.walk_draft_marked(item)
 
     def stop_chain(self, item):
         with self.lock:

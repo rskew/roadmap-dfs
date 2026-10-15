@@ -559,6 +559,27 @@ class Ticking(unittest.TestCase):
         self.assertTrue(ui.walk_on, "a switch is not a stop")
         self.assertIn("→ W9", ui.walk_badge())
 
+    def test_marking_the_item_the_walk_s_chain_is_on_a_draft_ends_that_chain_after_its_run(self):
+        lowered = self.lowering()
+        ui = self.ui(walk_dir="/runs/mine")
+        ui.event = lambda kind, text: text
+        self.live(ui, [self.chain(live=True, run="3")])
+        ui.walk_draft_marked("W7")
+        self.assertEqual(lowered, [("/runs/mine", 3)])
+        self.assertTrue(ui.walk_on, "ending a chain is not a stop")
+
+    def test_marking_a_draft_leaves_a_pinned_chain_and_other_items_alone(self):
+        lowered = self.lowering()
+        ui = self.ui(walk_dir="/runs/mine")
+        ui.event = lambda kind, text: text
+        self.live(ui, [self.chain(live=True, run="3")])
+        ui.walk_draft_marked("W9")                  # a chain on another item
+        ui.walk_chain_pin = "W7"
+        ui.walk_draft_marked("W7")                  # the author asked for this chain
+        ui.walk_chain_pin, ui.walk_on = None, False
+        ui.walk_draft_marked("W7")                  # no walk
+        self.assertEqual(lowered, [])
+
     def test_pinning_the_item_the_chain_is_on_leaves_it_running(self):
         lowered = self.lowering()
         ui = self.ui(walk_dir="/runs/mine")

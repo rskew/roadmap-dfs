@@ -680,6 +680,9 @@ def act(name, body):
                     dfs_tree.append_log(task, "draft" if want else "ready")
                 except (ValueError, dfs_paths.NoBranch) as e:
                     raise Refused(str(e), 409)
+                # a walk chain already on it would work it to the end
+                if want and WALK["walker"] is not None:
+                    WALK["walker"].draft_marked(task)
         elif name == "delete_task":
             try:
                 dfs_tree.delete_task(task)

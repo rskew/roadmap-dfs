@@ -547,6 +547,7 @@ class ContinuingTheLastRun(InAWorkRoot):
     def test_s_on_the_screen_marks_a_draft_and_again_ready(self):
         ui = object.__new__(TUI.UI)
         ui.msg, ui.reload, ui.event = "", lambda note="": None, lambda kind, text: text
+        ui.walk_on = False
         ui.toggle_draft("W1")
         self.assertIn("W1 is a draft", ui.msg)
         self.assertEqual(self.nxt(), ("W2", "W2"))

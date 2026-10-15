@@ -4446,6 +4446,8 @@ class UI(WalkMixin):
         self.reload()
         self.msg = self.event("review", "%s is a draft: the walk passes it over, n pins it" % item
                               if on else "%s is ready: the walk takes it in its turn" % item)
+        if on:
+            self.walk_draft_marked(item)
 
     def delete_item(self, item):
         """Retire `item` to `.dfs/archive/deleted` after a yes, then land the cursor on
@@ -4961,6 +4963,9 @@ class UiWalker:
 
     def pin(self, item):
         self.ui.call_soon(lambda: self.ui.walk_pin_id(item))
+
+    def draft_marked(self, item):
+        self.ui.call_soon(lambda: self.ui.walk_draft_marked(item))
 
     def stop_chain(self, item):
         self.ui.call_soon(lambda: self.ui.interrupt_chain(item))
