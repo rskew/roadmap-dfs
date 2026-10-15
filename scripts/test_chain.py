@@ -70,6 +70,7 @@ kind=work; case "$prompt" in *"You are the critic"*) kind=critic ;; *"You are th
 echo "$kind" >> "$KINDS_FILE"
 echo "$kind $(printf '%s\n' "$@" | grep -A1 -x -e '--model' | tail -1)" >> "$KINDS_FILE.models"
 echo "${RUNDIR:-<unset>}" > "$KINDS_FILE.rundir"
+pwd -P > "$KINDS_FILE.cwd"
 recipe="$(python3 -c 'import os,sys; r=os.environ["RECIPE"].split(","); i=int(sys.argv[1])-1; print(r[i] if i < len(r) else "nothing")' "$n")"
 T="python3 $TREE_PY"
 case "$recipe" in
@@ -142,6 +143,20 @@ class Chain(unittest.TestCase):
         meta = json.loads(metas[-1].read_text()) if metas else {}
         return p.returncode, meta, p.stdout + p.stderr
 
+    @property
+    def wt(self):
+        """The worktree the chain works W1 in, on the branch `dfs/W1`."""
+        return self.root / ".dfs" / "worktrees" / "W1"
+
+    def enter(self):
+        """Cut W1's worktree as a chain's first run does."""
+        return subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W1"],
+                              cwd=self.root, capture_output=True, text=True, check=True)
+
+    def git(self, *args, cwd=None):
+        return subprocess.run(["git", *args], cwd=cwd or self.root, capture_output=True,
+                              text=True, check=True).stdout.strip()
+
     def tree(self):
         old = dfs_tree.dfs_paths.work_root
         dfs_tree.dfs_paths.work_root = lambda: self.root
@@ -162,9 +177,76 @@ class Chain(unittest.TestCase):
         self.assertEqual([e["args"][:2] for e in self.log("end")],
                          [["work", "ok"], ["work", "ok"], ["review", "ok"]], out)
         self.assertEqual(self.kinds_run(), ["work", "work", "review"])
-        subj = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=self.root,
-                              capture_output=True, text=True).stdout.strip()
-        self.assertEqual(subj, "W1.1: the step is done")
+        self.assertEqual(self.git("log", "-1", "--format=%s", "dfs/W1"), "W1.1: the step is done")
+
+    def test_a_chain_works_the_item_on_its_own_branch_and_main_does_not_move(self):
+        main = self.git("rev-parse", "HEAD")
+        branch = self.git("symbolic-ref", "--short", "HEAD")
+        (self.root / "app.txt").write_text("the author's edit\n")
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertIn("W1 is worked on branch dfs/W1", out)
+        self.assertEqual(self.git("rev-parse", "HEAD"), main)
+        self.assertEqual(self.git("symbolic-ref", "--short", "HEAD"), branch)
+        self.assertEqual(self.git("symbolic-ref", "--short", "HEAD", cwd=self.wt), "dfs/W1")
+        self.assertEqual(self.git("log", "--format=%s", "%s..dfs/W1" % main), "W1.1: the step is done")
+        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
+        # the chain's own directory stays where the screen reads it
+        self.assertTrue(list((self.root / ".dfs" / "runs").glob("*/meta.json")))
+        self.assertFalse((self.wt / ".dfs" / "runs").exists())
+
+    def test_the_sessions_are_told_their_paths_from_the_worktree(self):
+        self.run_chain("work", cap=1)
+        self.assertEqual(Path((self.aside / "kinds.cwd").read_text().strip()), self.wt.resolve())
+
+    def test_a_second_chain_reuses_the_branch_and_its_worktree(self):
+        self.run_chain("work", cap=1)
+        sha = self.git("rev-parse", "dfs/W1")
+        rc, meta, out = self.run_chain("code,confirm,rok", cap=3)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertNotIn("existed", out)
+        self.assertEqual(self.git("merge-base", sha, "dfs/W1"), sha)
+        self.assertEqual(self.git("worktree", "list").count("\n"), 1)
+
+    def test_the_task_s_uncommitted_edits_move_to_the_branch_and_main_gets_them_back(self):
+        item = self.root / ".dfs" / "items" / "W1.md"
+        item.write_text(TASK + "- 2026-01-01T00:00:00Z · note\n")
+        (self.root / ".dfs" / "items" / "W1").mkdir()
+        (self.root / ".dfs" / "items" / "W1" / "fix.md").write_text("a part\n")
+        r = self.enter()
+        self.assertEqual(Path(r.stdout.strip()).resolve(), self.wt.resolve())
+        self.assertIn("2 uncommitted path(s) of W1 moved", r.stderr)
+        self.assertEqual(item.read_text(), TASK)
+        self.assertFalse((self.root / ".dfs" / "items" / "W1" / "fix.md").exists())
+        self.assertIn("2026-01-01T00:00:00Z · note", (self.wt / ".dfs" / "items" / "W1.md").read_text())
+        self.assertEqual((self.wt / ".dfs" / "items" / "W1" / "fix.md").read_text(), "a part\n")
+        self.assertEqual(self.git("status", "--porcelain", "--", ".dfs/items"), "")
+
+    def test_a_branch_the_chain_did_not_cut_is_reused_and_main_s_edits_left_alone(self):
+        self.git("branch", "dfs/W1")
+        item = self.root / ".dfs" / "items" / "W1.md"
+        item.write_text(TASK + "- 2026-01-01T00:00:00Z · note\n")
+        r = self.enter()
+        self.assertIn("existed", r.stderr)
+        self.assertIn("· note", item.read_text())
+
+    def test_an_older_roadmap_that_does_not_ignore_worktrees_does_not_show_them_as_new(self):
+        self.assertEqual(self.git("status", "--porcelain"), "")
+        self.enter()
+        self.assertEqual(self.git("status", "--porcelain"), "")
+
+    def test_a_chain_on_a_gitignored_roadmap_stays_where_it_is(self):
+        # no task file is committed there, so a branch would carry nothing
+        (self.root / ".gitignore").write_text(".dfs/items/\n.dfs/runs/\n")
+        r = self.enter()
+        self.assertEqual((r.stdout.strip(), self.wt.exists()), ("", False))
+
+    def test_a_chain_on_another_branch_stays_where_it_is(self):
+        self.git("switch", "-q", "-c", "alt")
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertNotIn("is worked on branch", out)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("look 1", (self.root / ".dfs" / "items" / "W1.md").read_text())
 
     def test_a_draft_run_by_hand_is_worked_to_done_like_any_open_task(self):
         # `run.sh W1` is the author taking the draft: the runner has no draft stop.
@@ -213,7 +295,8 @@ class Chain(unittest.TestCase):
 
     def test_a_dirty_tree_that_is_not_this_tasks_is_the_first_sessions_to_clear(self):
         # It used to refuse to start, which stopped the walk until the author came.
-        (self.root / "app.txt").write_text("the author's edit\n")
+        self.enter()
+        (self.wt / "app.txt").write_text("the author's edit\n")
         rc, meta, out = self.run_chain("stash,confirm,rok")
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         stashes = subprocess.run(["git", "stash", "list"], cwd=self.root,
@@ -226,9 +309,9 @@ class Chain(unittest.TestCase):
         self.assertEqual(meta.get("stop"), "cap", out)
         # The last session anywhere was another task's, so the edit is not W1's. Its
         # ts is written out: W1's are bumped past the clock to stay unique.
-        (self.root / ".dfs" / "items" / "W2.md").write_text(
+        (self.wt / ".dfs" / "items" / "W2.md").write_text(
             TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
-        (self.root / "app.txt").write_text("W2's half-done edit\n")
+        (self.wt / "app.txt").write_text("W2's half-done edit\n")
         rc, meta, out = self.run_chain("work,work,work,work,work,stash,ok", cap=2)
         self.assertEqual(self.kinds_run(), ["work"] * 6 + ["critic"], out)
 
@@ -330,7 +413,7 @@ class Chain(unittest.TestCase):
         rc, meta, out = self.run_chain("confirm,rmeddle", cap=3)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         self.assertIn("changed outside .dfs/", out)
-        self.assertIn("left for the next session to commit", (self.root / ".dfs" / "items" / "W1.md").read_text())
+        self.assertIn("left for the next session to commit", (self.wt / ".dfs" / "items" / "W1.md").read_text())
 
     def test_a_review_that_changes_code_and_gives_no_verdict_still_fails_the_chain(self):
         rc, meta, out = self.run_chain("confirm,code", cap=3)

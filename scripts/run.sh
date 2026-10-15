@@ -851,6 +851,22 @@ if not dfs_tree.exists(sys.argv[1]):
           file=sys.stderr); raise SystemExit(2)
 PY
 
+# ⚠️ AN ITEM IS WORKED ON ITS OWN BRANCH, IN ITS OWN WORKTREE. From the default branch,
+# the first run cuts `dfs/<task>` into `.dfs/worktrees/<task>` (branch.py), and every
+# session of the chain, work, critic and review, runs there: the author's checkout stays
+# on the default branch, and the screen reads the task through the worktree (paths.py).
+# The chain's own files stay in the main checkout, where the screen looks: RUNDIR is made
+# absolute before the move, and the paths the sessions are handed are derived again from
+# the worktree, since they are spelled from the session's CWD. Everything above read
+# the main checkout and is done with it.
+RUNDIR="$(cd "$RUNDIR" && pwd)"
+ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM")" || exit 2
+if [ -n "$ITEM_TREE" ]; then
+  cd "$ITEM_TREE"
+  eval "$(python3 "$HERE/paths.py" --sh)"
+  echo "dfs_run: $ITEM is worked on branch $(git symbolic-ref --short HEAD), in $ITEM_TREE"
+fi
+
 meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
          started="$(date -Is)" pid="$$"
 trap on_exit EXIT
