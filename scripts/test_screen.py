@@ -486,6 +486,19 @@ class ThePlan(unittest.TestCase):
         self.assertIn("a raise above it, on W1", text)
         self.assertIn("waiting on your answer: W4", text)
 
+    def test_a_pinned_draft_is_the_first_and_another_draft_says_it_is_one(self):
+        items = [item("W7"), dict(item("W9"), draft=1), dict(item("W8"), draft=1)]
+        ui = a_screen(items, walk_next="W9")
+        ui.data["next_item"] = "W7"
+        text = "\n".join(t for t, _ in ui.lines_plan(100))
+        self.assertLess(text.index("W9"), text.index("W7"))
+        self.assertIn("pinned", text.split("held back")[0])
+        held = text.split("held back")[1]
+        self.assertIn("W8", held)
+        self.assertIn("a draft: the walk passes it over", held)
+        self.assertNotIn("fence", text)
+        self.assertNotIn("W9", held)
+
     def test_one_answer_to_which_task_the_walk_takes_next(self):
         # The header's `next`, the plan's first line and the chain the walk starts all
         # read `walk_target`: the pin while it is open, else the order's answer.

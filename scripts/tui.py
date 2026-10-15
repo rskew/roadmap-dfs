@@ -3613,7 +3613,8 @@ class UI(WalkMixin):
                 done += 1
             elif it["status"] == "blocked":
                 blocked.append(it)
-            elif state != "open":
+            elif state != "open" and it["id"] != first:
+                # the pin is taken whatever holds it: pinning overrides the order
                 held.append((it, state))
             else:
                 take.append(it)
@@ -3633,7 +3634,8 @@ class UI(WalkMixin):
             out.append(("", 0))
             out.append(("held back", grey))
             for it, state in held:
-                why = ("a raise above it, on %s" % state[1:] if state.startswith("↳")
+                why = ("a draft: the walk passes it over, n pins it" if state == "draft"
+                       else "a raise above it, on %s" % state[1:] if state.startswith("↳")
                        else "a fence, until %s is done" % state[1:])
                 out.append(("      %-6s %s — %s" % (it["id"], it["goal"], why), grey))
         if blocked:
