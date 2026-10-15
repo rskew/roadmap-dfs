@@ -678,7 +678,7 @@ const FLOWS = {
     const ctx = await b.newContext(opts);
     const page = await ctx.newPage(); PAGES.push(page);
     const errors = []; page.on("pageerror", e => errors.push(String(e)));
-    await page.goto(URL_); await page.waitForSelector("#walkbox");
+    await page.goto(URL_); await page.waitForSelector("#walkbox"); await page.waitForTimeout(600);   // the page draws again when its first polls land; let them
     assert(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 200), "the task list is taller than the screen");
     const at = () => page.evaluate(() => {
       const bar = document.querySelector("#bar").getBoundingClientRect(), box = document.querySelector("#walkbox").getBoundingClientRect();
@@ -716,6 +716,18 @@ const FLOWS = {
       return { row: r.getBoundingClientRect().top, box: document.querySelector("#walkbox").getBoundingClientRect().bottom };
     });
     assert(clear.row >= clear.box - 0.5, `the first row comes into view at ${clear.row}, below the box ending at ${clear.box}`);
+    // Dragging a row to reorder scrolls the list up when the pointer is held just under the box, not only above it.
+    await page.click("[data-act=reorder]"); await page.waitForSelector(".moves");
+    await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(150);
+    const drag = await page.evaluate(() => {
+      const g = [...document.querySelectorAll("[data-grip]")].map(e => e.getBoundingClientRect()).filter(r => r.top > 250 && r.bottom < innerHeight - 130).pop();
+      return { x: g.left + g.width / 2, y: g.top + g.height / 2, under: document.querySelector("#walkbox").getBoundingClientRect().bottom + 8, at: scrollY };
+    });
+    await page.mouse.move(drag.x, drag.y); await page.mouse.down(); await page.mouse.move(drag.x, drag.under, { steps: 4 });
+    await page.waitForTimeout(400);
+    const up = await page.evaluate(() => scrollY);
+    await page.mouse.move(drag.x, drag.y, { steps: 4 }); await page.mouse.up();
+    assert(up < drag.at - 50, `${name}: held just under the Walk box, a dragged row scrolls the list up (${drag.at} to ${up})`);
     same(errors, [], "no page errors");
     await ctx.close();
     }

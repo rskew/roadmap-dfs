@@ -159,7 +159,7 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
   top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule)))); }
 .walk[open] { max-height: 55dvh; overflow-y: auto; overscroll-behavior: contain; }
 .walk[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--paper); }
-:root:has(#walkbox) { scroll-padding-top: calc(var(--bar-h, var(--bar)) - 1px); }
+:root:has(#walkbox) { scroll-padding-top: calc(var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule))) - 1px); }
 :root:has(#walkbox) .item { scroll-margin-top: calc(var(--pin-h, 0px) + var(--s3) + 1px); }
 .walk > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
 .walk > summary::-webkit-details-marker { display: none; }
@@ -879,7 +879,7 @@ document.addEventListener("pointerdown", e => {
   for (const x of DRAG.span) rowOf(x).classList.add("dragging");
   // near the top or bottom edge the page scrolls under the pointer, so a long list can be crossed in one drag
   DRAG.timer = setInterval(() => {
-    const room = 90, bottom = innerHeight - 130;
+    const room = Math.max(90, ($("#walkbox")?.getBoundingClientRect().bottom ?? 0) + 30), bottom = innerHeight - 130;   // the pinned Walk box lies over the top of the list
     const by = DRAG.y < room ? -12 : DRAG.y > bottom ? 12 : 0;
     if (by) { scrollBy(0, by); dragUpdate(); }
   }, 16);
