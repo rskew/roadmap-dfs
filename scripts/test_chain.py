@@ -61,6 +61,8 @@ Evidence:
 #   noverdict  a critic that raises on W1.1 but gives no verdict
 #   limit      die on a 429
 #   lower      `work`, then lower the chain's cap to this run, as the TUI's `w` does
+#   resolvemain confirm the open node, committing it, after merging main into the branch
+#              the way the node asks (keeping the branch's side of a conflict)
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
 STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -90,6 +92,9 @@ case "$recipe" in
            echo "a finding" | $T log W1 review issues > /dev/null ;;
   fixn)    id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: fixed.")+t[m.end():]); print(m.group(1))')"
            echo "fixed $id" >> app.txt; git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: fixed" ;;
+  resolvemain) id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: merged.")+t[m.end():]); print(m.group(1))')"
+           git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: the item is up to date"
+           git -c user.name=t -c user.email=t@t merge -q -X ours "$MAIN_BRANCH" -m "merge main" > /dev/null ;;
   rminor)  echo "a comment reads oddly" | $T log W1 review ok > /dev/null ;;
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
            echo "one issue" | $T log W1 critic issues > /dev/null ;;
@@ -210,11 +215,42 @@ class Chain(unittest.TestCase):
         self.assertEqual([e["args"][:2] for e in self.log("end")][-1], ["review", "ok"])
         self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
 
+    def test_a_merge_that_conflicts_reopens_the_item_and_the_fix_is_reviewed_and_merged(self):
+        main = self.git("symbolic-ref", "--short", "HEAD")
+        rc, meta, out = self.run_chain("code,confirm", cap=2)
+        (self.root / "app.txt").write_text("app\nmain's line\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "main moves")
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("rok,resolvemain,rok", cap=3, MAIN_BRANCH=main)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertIn("conflicts with %s" % main, out)
+        self.assertEqual(self.kinds_run()[-3:], ["review", "work", "review"], out)
+        self.assertIn("Merge %s into dfs/W1 and resolve the conflicts" % main,
+                      (self.root / ".dfs" / "items" / "W1.md").read_text())
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("log", "--merges", "--format=%s", main).splitlines(),
+                         ["W1: merge the item's branch dfs/W1", "merge main"])
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s", main))
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_a_merge_over_the_authors_uncommitted_edits_is_a_raise_and_leaves_main_alone(self):
+        (self.root / "app.txt").write_text("the author's edit\n")
+        head = self.git("rev-parse", "HEAD")
+        rc, meta, out = self.run_chain("code,confirm,rok")
+        self.assertEqual(meta.get("stop"), "blocked", out)
+        raised = self.log("raise")
+        self.assertEqual(len(raised), 1, out)
+        self.assertIn("app.txt", raised[0]["body"])
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
+        self.assertTrue(self.wt.exists())
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
     def test_the_authors_accept_merges_the_branch_too(self):
         rc, meta, out = self.run_chain("work,confirm", cap=2)
         self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))
         subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
-                       cwd=self.root, check=True, capture_output=True)
+                       cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
         self.assertFalse(self.wt.exists())
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
         self.assertTrue(self.log("accept"))
@@ -275,7 +311,7 @@ class Chain(unittest.TestCase):
     def test_a_draft_run_by_hand_is_worked_to_done_like_any_open_task(self):
         # `run.sh W1` is the author taking the draft: the runner has no draft stop.
         subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "draft"],
-                       cwd=self.root, check=True, capture_output=True)
+                       cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
         self.assertTrue(dfs_tree.is_draft(self.tree()))
         rc, meta, out = self.run_chain("work,confirm,rok")
         self.assertEqual(rc, 0, out)

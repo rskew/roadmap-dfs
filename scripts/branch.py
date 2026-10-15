@@ -32,6 +32,11 @@ class BranchError(Exception):
     pass
 
 
+# `branch.py merge`'s exit status: 0 the item is settled (merged, or nothing to merge), 1 it
+# could not be merged and nothing changed, 3 the tree has an open node again, 4 it is blocked.
+MERGE_EXIT = {"merged": 0, "none": 0, "dirty": 1, "conflict": 3, "refused": 4}
+
+
 def _git(*args, cwd=None):
     return subprocess.run(["git", *args], cwd=cwd or dfs_paths.work_root(),
                           capture_output=True, text=True)
@@ -141,14 +146,55 @@ def _identity():
     return ["-c", "user.name=roadmap-dfs", "-c", "user.email=roadmap-dfs@localhost"]
 
 
+def _commit_task_files(task, wt, what):
+    """Commit the task's own files left uncommitted in its worktree onto its branch."""
+    _git("add", "--", *[p for p in task_paths(task) if (wt / p).exists()], cwd=wt)
+    if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
+        r = _git(*_identity(), "commit", "-q", "-m", "%s: %s" % (task, what), cwd=wt)
+        if r.returncode != 0:
+            raise BranchError("cannot commit %s's files on %s: %s" %
+                              (task, dfs_paths.item_branch(task), (r.stderr or r.stdout).strip()))
+
+
+def _unmerged(task, wt, name, r):
+    """A merge git did not complete leaves the default branch as it was, and the item
+    open. A conflict is work: the merge is aborted and an open node asks for the default
+    branch to be merged into the item's branch and resolved there, which earns another
+    review. A merge git refused before starting, because the author's uncommitted edits
+    here overlap it, is theirs to settle: a raise naming the paths."""
+    import tree as dfs_tree
+    default = dfs_paths.branch()
+    if _git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0:
+        files = _git("diff", "--name-only", "--diff-filter=U").stdout.split()
+        _git("merge", "--abort")
+        dfs_tree.add_node(task, "Merge %s into %s and resolve the conflicts" % (default, name),
+                          approach="%s could not merge into %s: %s conflict. In this worktree run `git merge %s`, "
+                                   "resolve the conflicts, keep both sides' intent, run the tests, and commit."
+                                   % (name, default, ", ".join(files) or "files", default))
+        _commit_task_files(task, wt, "the merge into %s conflicted" % default)
+        return "conflict"
+    out = r.stderr + r.stdout
+    paths = [l.strip() for l in out.splitlines() if l.startswith("\t")]
+    dfs_tree.append_log(task, "raise", [], (
+        "%s is finished and reviewed, but git would not merge %s into %s: %s\n"
+        "Your uncommitted edits in %s overlap the merge: %s.\n"
+        "Options: commit or stash those edits and run the chain again (it merges first), or tell me "
+        "to leave the branch unmerged. I would commit them.") % (
+            task, name, default, " ".join(out.split())[:200], dfs_paths.work_root(),
+            ", ".join(paths) or "see the message above"))
+    return "refused"
+
+
 def merge(task):
     """Merge `dfs/<task>` into the default branch, from the main checkout, and remove the
     worktree and the branch. Local only: nothing is pushed.
 
     First the task's own files left uncommitted in the worktree (the runner's log entries,
     an accept) are committed onto the branch, since the merge carries only commits. Returns
-    "none" when the task has no worktree, "merged", or "dirty" when the worktree holds
-    uncommitted work that is not the task's (left in place, nothing merged).
+    "none" when the task has no worktree, "merged", "dirty" when the worktree holds
+    uncommitted work that is not the task's (left in place, nothing merged), "conflict"
+    when the default branch moved under it (an open node is added) or "refused" when the
+    author's edits overlap (a raise is logged); see `_unmerged`.
     """
     wt = dfs_paths.worktree(task)
     if wt is None:
@@ -157,17 +203,12 @@ def merge(task):
     if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
         raise BranchError("%s is merged from the default branch; this checkout is on %s" %
                           (name, dfs_paths.branch()))
-    ident = _identity()
-    _git("add", "--", *[p for p in task_paths(task) if (wt / p).exists()], cwd=wt)
-    if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
-        r = _git(*ident, "commit", "-q", "-m", "%s: the log and edits left uncommitted" % task, cwd=wt)
-        if r.returncode != 0:
-            raise BranchError("cannot commit %s's files on %s: %s" % (task, name, (r.stderr or r.stdout).strip()))
+    _commit_task_files(task, wt, "the log and edits left uncommitted")
     if _git("status", "--porcelain", cwd=wt).stdout.strip():
         return "dirty"
-    r = _git(*ident, "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
+    r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
     if r.returncode != 0:
-        raise BranchError("merging %s: %s" % (name, (r.stderr or r.stdout).strip()))
+        return _unmerged(task, wt, name, r)
     _git("worktree", "remove", "--force", str(wt))
     _git("branch", "-d", name)
     return "merged"
@@ -180,10 +221,14 @@ def main(argv):
         except BranchError as e:
             print("dfs_branch: %s" % e, file=sys.stderr)
             return 1
-        print("dfs_branch: %s: %s" % (argv[2], {"merged": "dfs/%s merged into %s, its worktree removed" % (
-            argv[2], dfs_paths.branch()), "dirty": "not merged: its worktree holds uncommitted work that "
-            "is not the task's", "none": "no worktree, nothing to merge"}[result]), file=sys.stderr)
-        return 0 if result != "dirty" else 1
+        print("dfs_branch: %s: %s" % (argv[2], {
+            "merged": "dfs/%s merged into %s, its worktree removed" % (argv[2], dfs_paths.branch()),
+            "dirty": "not merged: its worktree holds uncommitted work that is not the task's",
+            "conflict": "not merged: it conflicts with %s, so a node asks for that merge on the branch" %
+                        dfs_paths.branch(),
+            "refused": "not merged: git would overwrite uncommitted edits here, raised for the author",
+            "none": "no worktree, nothing to merge"}[result]), file=sys.stderr)
+        return MERGE_EXIT[result]
     if len(argv) == 3 and argv[1] == "enter":
         try:
             wt = enter(argv[2])

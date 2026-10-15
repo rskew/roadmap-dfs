@@ -872,10 +872,19 @@ fi
 # branch is checked out. The runner stops `done` only after a review `ok` (or the author's
 # accept), so this is the "passing review merges the branch". The worktree is removed
 # with it, so the chain steps back into the main checkout first.
+# A merge that cannot go through (branch.py, `_unmerged`) is not a done item: a conflict
+# puts an open node back in the tree (exit 3) and the chain goes on and works it, and
+# edits of the author's that overlap the merge raise (exit 4). Both return non-zero here
+# and the chain steps back into the worktree.
 merge_item() {
   [ -n "$ITEM_TREE" ] || return 0
+  local rc=0
   cd "$ITEM_MAIN"
-  python3 "$HERE/branch.py" merge "$ITEM" || true
+  python3 "$HERE/branch.py" merge "$ITEM" || rc=$?
+  case "$rc" in
+    3|4) cd "$ITEM_TREE"; return "$rc" ;;
+  esac
+  return 0
 }
 
 meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
@@ -909,7 +918,10 @@ for i in $(seq 1 "$CAP"); do
   eval "$(dfs_state)"
   case "$status" in
     blocked) stop_is blocked; echo "dfs_run: BLOCKED before run $i — $why. Answer it with --review $ITEM, then run again."; exit 0 ;;
-    done)    stop_is done; echo "dfs_run: DONE before run $i — $why."; merge_item; exit 0 ;;
+    done)    mrc=0; merge_item || mrc=$?
+             if [ "$mrc" = 0 ]; then stop_is done; echo "dfs_run: DONE before run $i — $why."; exit 0; fi
+             eval "$(dfs_state)"
+             if [ "$mrc" = 4 ]; then stop_is blocked; echo "dfs_run: BLOCKED before run $i — $why. Answer it with --review $ITEM, then run again."; exit 0; fi ;;
   esac
   kind=work
   if [ "$critic_due" = 1 ]; then
@@ -1095,7 +1107,11 @@ for i in $(seq 1 "$CAP"); do
   eval "$(dfs_state)"
   case "$status" in
     blocked) stop_is blocked; echo; echo "dfs_run: BLOCKED after run $i — $why."; break ;;
-    done)    stop_is done;    echo; echo "dfs_run: DONE after run $i — $why."; merge_item; break ;;
+    done)    mrc=0; merge_item || mrc=$?
+             if [ "$mrc" = 0 ]; then stop_is done; echo; echo "dfs_run: DONE after run $i — $why."; break; fi
+             eval "$(dfs_state)"
+             if [ "$mrc" = 4 ]; then stop_is blocked; echo; echo "dfs_run: BLOCKED after run $i — $why."; break; fi
+             echo "dfs_run: the merge did not go through; the item is open again — $why." ;;
   esac
   lowered_cap
   if [ "$i" -ge "$CAP" ]; then stop_is cap; break; fi
