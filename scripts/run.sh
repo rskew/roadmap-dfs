@@ -29,9 +29,9 @@
 #
 # ⚠️ AN ITEM IS WORKED ON ITS OWN BRANCH, IN ITS OWN WORKTREE (branch.py). The first run
 # from the default branch cuts `dfs/<task>` into `.dfs/worktrees/<task>` and every
-# session runs there; a passing review (or the author's accept) merges it back with
-# `--no-ff` and removes the worktree and the branch. See the two blocks below the
-# argument parsing.
+# session runs there; a passing review (or the author's accept) rebases it onto the
+# default branch, merges it back with `--no-ff`, and removes the worktree and the branch.
+# See the two blocks below the argument parsing.
 #
 # ⚠️ A SESSION MAY END MID-NODE, and the next one picks the work up. A node ends with
 # a commit, not a session: a usage limit or the context checkpoint leaves the node's

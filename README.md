@@ -20,7 +20,7 @@ Each item is worked on its own branch, `dfs/<task>`, in its own git worktree und
 and the web page read the task through its worktree). The first run cuts the branch from
 `main` (or `master`). When the review passes, or you accept the tree, the branch is
 merged into the default branch with `--no-ff` (local, never pushed) and the worktree and
-branch are removed. A merge that conflicts reopens the item with a node to resolve it;
+branch are removed. A rebase that conflicts reopens the item with a node to resolve it;
 uncommitted edits of yours that the merge would overwrite raise instead.
 
 ## Running the sandbox as a daemon

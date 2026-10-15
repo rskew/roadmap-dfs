@@ -172,10 +172,10 @@ default branch (`main` or `master`). Your CWD is that worktree: edit and commit 
 and the author's checkout stays on the default branch. The branch writes plain ids
 (`W13.4`, no `@<tag>`), so its nodes merge into the default branch's task file as
 written. You never merge, switch branch or remove the worktree yourself: when the
-review passes (or the author accepts), the runner merges `dfs/<task>` into the default
-branch with `--no-ff`, locally and without a push, and removes the worktree and the
-branch. A merge that conflicts is not done: the runner adds an open node asking for the
-default branch to be merged into `dfs/<task>` and the conflicts resolved, so the next
+review passes (or the author accepts), the runner rebases `dfs/<task>` onto the default
+branch and merges it in with `--no-ff`, locally and without a push, and removes the worktree and the
+branch. A rebase that conflicts is not done: the runner aborts it and adds an open node asking
+for `dfs/<task>` to be rebased onto the default branch and the conflicts resolved, so the next
 session takes it up like any open node. Edits of the author's on the default branch
 that overlap the merge are a raise, which the runner logs.
 

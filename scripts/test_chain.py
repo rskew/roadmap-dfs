@@ -61,7 +61,7 @@ Evidence:
 #   noverdict  a critic that raises on W1.1 but gives no verdict
 #   limit      die on a 429
 #   lower      `work`, then lower the chain's cap to this run, as the TUI's `w` does
-#   resolvemain confirm the open node, committing it, after merging main into the branch
+#   resolvemain confirm the open node, committing it, after rebasing the branch onto main
 #              the way the node asks (keeping the branch's side of a conflict)
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
 STUB = r"""#!/usr/bin/env bash
@@ -92,9 +92,9 @@ case "$recipe" in
            echo "a finding" | $T log W1 review issues > /dev/null ;;
   fixn)    id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: fixed.")+t[m.end():]); print(m.group(1))')"
            echo "fixed $id" >> app.txt; git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: fixed" ;;
-  resolvemain) id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: merged.")+t[m.end():]); print(m.group(1))')"
-           git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: the item is up to date"
-           git -c user.name=t -c user.email=t@t merge -q -X ours "$MAIN_BRANCH" -m "merge main" > /dev/null ;;
+  resolvemain) git -c user.name=t -c user.email=t@t rebase -q --autostash -X theirs "$MAIN_BRANCH" > /dev/null 2>&1 || exit 3
+           id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: rebased.")+t[m.end():]); print(m.group(1))')"
+           git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: the item is up to date" ;;
   rminor)  echo "a comment reads oddly" | $T log W1 review ok > /dev/null ;;
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
            echo "one issue" | $T log W1 critic issues > /dev/null ;;
@@ -225,13 +225,30 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         self.assertIn("conflicts with %s" % main, out)
         self.assertEqual(self.kinds_run()[-3:], ["review", "work", "review"], out)
-        self.assertIn("Merge %s into dfs/W1 and resolve the conflicts" % main,
+        self.assertIn("Rebase dfs/W1 onto %s and resolve the conflicts" % main,
                       (self.root / ".dfs" / "items" / "W1.md").read_text())
         self.assertFalse(self.wt.exists())
         self.assertEqual(self.git("log", "--merges", "--format=%s", main).splitlines(),
-                         ["W1: merge the item's branch dfs/W1", "merge main"])
+                         ["W1: merge the item's branch dfs/W1"])
+        self.assertFalse((self.root / ".git" / "rebase-merge").exists())
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s", main))
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_a_branch_is_rebased_onto_a_default_branch_that_moved_before_it_merges(self):
+        main = self.git("symbolic-ref", "--short", "HEAD")
+        self.run_chain("work,confirm", cap=2)
+        (self.root / "other.txt").write_text("main's own file\n")
+        self.git("add", "other.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moves")
+        moved = self.git("rev-parse", main)
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("rok", cap=1, MAIN_BRANCH=main)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        # the node commit now sits on the commit main moved to, and the merge joins them
+        merge = self.git("rev-list", "--merges", "-n1", main)
+        self.assertEqual(self.git("rev-parse", merge + "^1"), moved)
+        subprocess.run(["git", "merge-base", "--is-ancestor", moved, merge + "^2"], cwd=self.root, check=True)
+        self.assertFalse(self.wt.exists())
 
     def test_a_merge_over_the_authors_uncommitted_edits_is_a_raise_and_leaves_main_alone(self):
         (self.root / "app.txt").write_text("the author's edit\n")
