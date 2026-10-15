@@ -353,14 +353,22 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.kinds_run(), ["work", "review"], out)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
 
-    def test_four_review_rounds_that_did_not_settle_raise_instead_of_a_fifth(self):
-        # The fifth work session makes the critic due, and it runs before the raise.
+    def test_review_rounds_that_did_not_settle_never_raise_by_their_count(self):
+        # Four rounds in a row found issues; a fifth review runs all the same (the fifth work
+        # session makes the critic due, and it runs first), and its ok finishes the task.
         rc, meta, out = self.run_chain("confirm" + ",rnode,fixn" * 4 + ",ok,rok", cap=12)
-        self.assertEqual(self.kinds_run(), ["work"] + ["review", "work"] * 4 + ["critic"], out)
-        self.assertEqual((rc, meta.get("stop")), (0, "blocked"), out)
+        self.assertEqual(self.kinds_run(),
+                         ["work"] + ["review", "work"] * 4 + ["critic", "review"], out)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(dfs_tree.open_raises(self.tree()), [], out)
+
+    def test_a_review_loop_is_stopped_by_the_session_limit(self):
+        rc, meta, out = self.run_chain("confirm" + ",rnode,fixn" * 5, cap=12,
+                                       DFS_SESSION_LIMIT="3", DFS_CRITIC_EVERY="50")
         raises = dfs_tree.open_raises(self.tree())
+        self.assertEqual((rc, meta.get("stop")), (0, "blocked"), out)
         self.assertEqual(len(raises), 1, out)
-        self.assertIn("4 implementation reviews", raises[0]["body"])
+        self.assertIn("work sessions", raises[0]["body"])
 
     def test_a_second_review_that_comes_back_ok_finishes_the_task(self):
         rc, meta, out = self.run_chain("confirm,rnode,fixn,rminor", cap=8)
@@ -368,14 +376,14 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         self.assertEqual(self.log("review")[-1]["args"], ["ok"])
 
-    def test_the_authors_answer_starts_the_review_rounds_over(self):
+    def test_the_authors_word_starts_the_review_rounds_over(self):
         self.run_chain("confirm" + ",rnode,fixn" * 4, cap=12)
         t = self.tree()
         self.assertEqual(dfs_tree.review_rounds_unsettled(t), 4)
         old = dfs_tree.dfs_paths.work_root
         dfs_tree.dfs_paths.work_root = lambda: self.root
         try:
-            dfs_tree.append_log("W1", "answer", [dfs_tree.open_raises(t)[0]["ts"]], "go on")
+            dfs_tree.append_log("W1", "accept")
             self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 0)
         finally:
             dfs_tree.dfs_paths.work_root = old
@@ -396,14 +404,14 @@ class Chain(unittest.TestCase):
         self.assertIn("only if it shows the Goal is not met", b)
         self.assertIn("never a node of its own", b)
         self.assertIn("This is review round 2", b)
-        self.assertNotIn("raised to the author instead", b)
-        # Only the last round before the raise warns that a finding ends the reviews.
+        self.assertNotIn("raised to the author", b)
+        # Later rounds are named too, and none warns of a raise.
         self.count.write_text("0")
         self.kinds.write_text("")
         self.run_chain("rnode,fixn,rnode,fixn", cap=4)
         b = brief()
         self.assertIn("This is review round 4", b)
-        self.assertIn("raised to the author instead", b)
+        self.assertNotIn("raised to the author", b)
 
     def test_a_usage_limit_is_recorded_and_stops(self):
         rc, meta, out = self.run_chain("work,limit")

@@ -135,7 +135,6 @@ def state_for(task: str):
         review_due=int(dfs_tree.review_due(t) and status == "open"
                        and not dfs_tree.open_raises(t)),
         review_rounds=dfs_tree.review_rounds_unsettled(t),
-        review_limit=int(dfs_tree.review_rounds_unsettled(t) >= dfs_tree.REVIEW_ROUNDS),
         limit=int(since_author >= dfs_tree.SESSION_LIMIT),
         # Marked a draft: the walk never picks it, but a pin or a run by hand works it.
         draft=int(dfs_tree.is_draft(t)),
@@ -780,10 +779,8 @@ def _round_note(t):
         return []
     last = max(e["ts"] for e in t["log"] if e["kind"] == "review")
     return ["This is review round %d: %d review%s since the author last spoke found "
-            "issues, and the fixes are in. Start from the commits made since %s. %s" % (
-                n + 1, n, "" if n == 1 else "s", last,
-                "If this round adds a node, the task is raised to the author instead of "
-                "being reviewed again." if n + 1 >= dfs_tree.REVIEW_ROUNDS else ""), ""]
+            "issues, and the fixes are in. Start from the commits made since %s." % (
+                n + 1, n, "" if n == 1 else "s", last), ""]
 
 
 def review_brief(task: str) -> str:
@@ -880,7 +877,7 @@ def main() -> int:
             return 2
         st = state_for(args[1])
         for k in ("status", "why", "sessions", "since_critic", "critic_due", "review_due",
-                  "review_rounds", "review_limit", "limit", "plan", "progress"):
+                  "review_rounds", "limit", "plan", "progress"):
             print("%s=%s" % (k, shlex.quote(str(st[k]))))
         return 0
     if args and args[0] == "--critic-problem":

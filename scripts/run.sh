@@ -20,9 +20,9 @@
 # finds is work, put in the tree: the reviewer adds open nodes, the critic adds them
 # or backtracks to where the reasoning stopped holding. Only a decision that needs
 # the author is a raise. And after SESSION_LIMIT work sessions since the author last
-# spoke on the task, the runner raises for their review, and so it does when
-# REVIEW_ROUNDS implementation reviews in a row found issues without the author
-# having spoken, rather than reviewing the fixes to the fixes. An answer reopens the task
+# spoke on the task, the runner raises for their review. That limit is also the
+# backstop for a review loop: rounds of implementation review have none of their
+# own, since some tasks need extensive review. An answer reopens the task
 # until a work session has acted on it. All of it is counted from the
 # task's own Log, where the runner records every session it starts and how it ended;
 # none of it is left to a session's judgement.
@@ -887,12 +887,6 @@ for i in $(seq 1 "$CAP"); do
   kind=work
   if [ "$critic_due" = 1 ]; then
     kind=critic
-  elif [ "$review_due" = 1 ] && [ "$review_limit" = 1 ]; then
-    printf '%s\n' "$review_rounds implementation reviews of $ITEM since you last spoke on it found issues, and the fixes for them are in. Rather than a round $(( review_rounds + 1 )), review the tree ($DFS_SCRIPTS_REL/run.sh --review $ITEM): accept the code as it stands, or answer this to let one more review run." \
-      | python3 "$TREE_PY" log "$ITEM" raise > /dev/null
-    stop_is blocked
-    echo "dfs_run: BLOCKED before run $i — $review_rounds review rounds found issues without settling; raised for review."
-    exit 0
   elif [ "$review_due" = 1 ]; then
     kind=review
   elif [ "$limit" = 1 ]; then

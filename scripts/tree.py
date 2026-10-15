@@ -108,10 +108,11 @@ FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determinati
 # trees written before a rename keep them.
 RENAMED = {"Plan": "Approach"}
 # The two cadences. The environment overrides exist for trial runs, where waiting
-# five sessions to see the critic once is most of the cost of trying it.
+# five sessions to see the critic once is most of the cost of trying it. Review rounds
+# have no limit of their own: some tasks need extensive review, and SESSION_LIMIT, which
+# every fix to a review's findings counts toward, is the backstop for a review loop.
 SESSION_LIMIT = int(os.environ.get("DFS_SESSION_LIMIT", 10))  # work sessions before a raise for review
 CRITIC_EVERY = int(os.environ.get("DFS_CRITIC_EVERY", 5))     # work sessions between critic reviews
-REVIEW_ROUNDS = int(os.environ.get("DFS_REVIEW_ROUNDS", 4))   # unsettled reviews before a raise
 
 TS_RE = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
 LOG_HEAD = re.compile(r"^- (%s) · (\w+)((?: · [^\n]*)?)$" % TS_RE)
@@ -1225,11 +1226,10 @@ def review_rounds_unsettled(t):
     """Implementation reviews that found issues since the author last spoke and since
     a review last came back ok: the rounds a fix has not settled.
 
-    ⚠️ The count is what stops the review loop. A review's issues become nodes, the
-    nodes' fixes complete the tree, and a complete tree is due another review, which
-    always finds something smaller: W20 ran five rounds in one evening, down to the
-    wording of a refusal message. At REVIEW_ROUNDS the runner raises instead of
-    reviewing again, and the author's answer or accept starts the count over."""
+    The count only names the round in the review's brief. It limits nothing: a review's
+    issues become nodes, the nodes' fixes complete the tree, and a complete tree is due
+    another review, so a loop that never settles is stopped by SESSION_LIMIT counting
+    the fixes, not by a number of rounds."""
     last = max([e["ts"] for e in author_marks(t)] +
                [e["ts"] for e in t["log"] if e["kind"] == "review"
                 and e["args"][:1] == ["ok"]], default="")

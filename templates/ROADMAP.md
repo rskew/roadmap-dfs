@@ -32,9 +32,9 @@ node for each finding that shows the Goal is not met, and the critic adds one or
 backtracks to the first node whose evidence does not carry its determination, which
 withdraws that node and everything below it. A lesser finding (a wording, a stale
 sentence, a missing test for a guard) is never a node of its own: it rides in one
-node beside a real finding, or in the review's `ok` for the author to read. When four
-reviews since the author last spoke have found issues, the next is a raise, not a
-fifth review.
+node beside a real finding, or in the review's `ok` for the author to read. Reviews
+have no round limit: some tasks need extensive review, and the session limit below is
+the backstop for a review loop.
 
 Raise only for what needs the author, the system's designer and user: a fact only
 they have, a preference between outcomes, access the session lacks, or a task that
