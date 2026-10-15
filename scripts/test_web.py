@@ -348,6 +348,38 @@ class Web(unittest.TestCase):
         self.assertEqual(dfs_tree.answer_page("Answer with: gone.html"), "gone.html")
         self.assertIsNone(dfs_tree.answer_page("Look at .dfs/artefacts/x.html. Answer with words."))
 
+    def test_an_attachment_is_kept_as_an_artefact_and_its_reference_names_it_in_the_text(self):
+        import base64
+        png = b"\x89PNG\r\n\x1a\n" + b"pixels"
+        send = lambda name, raw: self.call("POST", "/api/attach", dict(name=name, data=base64.b64encode(raw).decode()))
+        status, body, _ = send("the [bad] bar.png", png)
+        self.assertEqual(status, 200, body)
+        shot = body["file"]
+        self.assertRegex(shot, r"^[0-9a-f-]{36}\.png$")
+        self.assertEqual(body["ref"], "![the bad bar.png](.dfs/artefacts/%s)" % shot)
+        self.assertEqual((self.root / ".dfs" / "artefacts" / shot).read_bytes(), png)
+        status, body, _ = send("notes.PDF", b"%PDF-1.4 ...")
+        doc = body["file"]
+        self.assertEqual((status, body["ref"]), (200, "[notes.PDF](.dfs/artefacts/%s)" % doc))
+        self.assertEqual(send("photo.jpeg", b"\xff\xd8\xff...")[1]["file"][-4:], ".jpg")
+        self.assertEqual(send("log.txt", b"line")[0], 200)
+        status, raw, r = self.call("GET", "/artefacts/" + doc)
+        self.assertEqual((status, raw, r.getheader("Content-Type"), r.getheader("X-Content-Type-Options")),
+                         (200, b"%PDF-1.4 ...", "application/pdf", "nosniff"))
+        self.assertIn("sandbox", r.getheader("Content-Security-Policy"))
+        dfs_tree.append_log("W1", "answer", (), "Like this: ![bar](.dfs/artefacts/%s), and [notes](.dfs/artefacts/%s)." % (shot, doc))
+        arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
+        self.assertEqual([(a["file"], a["kind"]) for a in arts], [(shot, "image"), (doc, "file")])
+        for bad, code in ((dict(name="x.png"), 400), (dict(data="eA=="), 400), (dict(name="x.png", data="not base64!"), 400),
+                          (dict(name="x.png", data=""), 400), (dict(name="x.exe", data="eA=="), 415),
+                          (dict(name="x.html", data="eA=="), 415), (dict(name="x.png", data=base64.b64encode(b"GIF89a").decode()), 415),
+                          (dict(name="x.png", data=base64.b64encode(png + b"\0" * dfs_paths.IMAGE_MAX).decode()), 413)):
+            self.assertEqual(self.call("POST", "/api/attach", bad)[0], code, str(bad)[:40])
+        big = png + b"\0" * (2 * dfs_web.MAX_BODY)        # a picture past the usual body limit
+        self.assertEqual(send("big.png", big)[0], 200)
+        self.assertEqual(self.call("POST", "/api/attach", dict(name="x.png", data=""), headers={"Origin": "https://evil.example"})[0], 403)
+        self.assertEqual(len(list((self.root / ".dfs" / "artefacts").iterdir())), 5)
+
     def test_a_task_lists_only_the_artefacts_it_names(self):
         self.put_artefact()
         self.put_artefact("standing-map.html", "The standing map")

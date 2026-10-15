@@ -54,7 +54,10 @@ with full permissions (the screen's flags: Edit, Write and Bash all work) when t
 when a screen serves the page the chats are agents that screen keeps running in the background. The
 Chats tab lists them all. It starts agents, so `--no-walk` turns it off.
 ARTEFACTS (`.dfs/artefacts`) are served sandboxed at `/artefacts/<name>` and linked from the
-text that names them.
+text that names them. ATTACHMENTS are artefacts the author adds: POST /api/attach (base64 in JSON,
+8 MB at most, like the background picture) keeps a picture or a pdf, txt, md, csv, json or log file
+as `.dfs/artefacts/<uuid>.<ext>` and returns the markdown reference the page puts in the text being
+written, an answer, a correction or a node's approach, which is how it reaches the agent.
 """
 import argparse
 import base64
@@ -224,6 +227,12 @@ RUN_NAME = r"[0-9A-Za-z][0-9A-Za-z._@-]*"
 ART_TYPES = {".html": "text/html", ".png": "image/png", ".svg": "image/svg+xml",
              ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
              ".webp": "image/webp"}
+# What the author attaches beside a picture: plain documents, served as what they are and never
+# sniffed into a page (`send` says `nosniff`), under the same sandbox as everything in `.dfs/artefacts`.
+FILE_TYPES = {".pdf": "application/pdf", ".txt": "text/plain",
+              ".md": "text/plain", ".csv": "text/plain",
+              ".json": "text/plain", ".log": "text/plain"}
+PICTURES = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
 
 def segment(path, prefix, pattern, what):
@@ -281,20 +290,21 @@ def artefacts_for(text):
     on_disk = {}
     try:
         for p in sorted(root.iterdir()):
-            if (p.suffix.lower() in ART_TYPES and not p.name.startswith(("_", "."))
+            if ((p.suffix.lower() in ART_TYPES or p.suffix.lower() in FILE_TYPES) and not p.name.startswith(("_", "."))
                     and p.is_file()):
                 on_disk[p.name] = p
     except OSError:
         pass
     named = []
-    for name in re.findall(r"(%s\.(?:html|png|jpe?g|gif|webp|svg))" % ART_NAME, text, re.I):
+    for name in re.findall(r"(%s\.(?:html|png|jpe?g|gif|webp|svg|pdf|txt|md|csv|json|log))\b" % ART_NAME, text, re.I):
         if name in on_disk and name not in named:
             named.append(name)
 
     def entry(n):
-        page = on_disk[n].suffix.lower() == ".html"
+        suffix = on_disk[n].suffix.lower()
+        page = suffix == ".html"
         return dict(file=n, title=(artefact_title(on_disk[n]) if page else "") or n,
-                    kind="page" if page else "image")
+                    kind="page" if page else "file" if suffix in FILE_TYPES else "image")
     return [entry(n) for n in named]
 
 
@@ -439,6 +449,40 @@ def set_background(body):
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_file()), e), 500)
     HUB.notify()
     return dict(background=have, palettes=dfs_paths.background_palettes())
+
+
+def attach(body):
+    """Keep a picture or file the author attaches to what they write (`name`, and `data` in
+    base64) as `.dfs/artefacts/<uuid>.<ext>`, and give back the reference to put in the text:
+    `![name](.dfs/artefacts/<uuid>.png)` for a picture, which the page draws in place, and
+    `[name](.dfs/artefacts/<uuid>.pdf)` for a file. The text carries it, to the page and to the
+    agent that reads the answer or correction, so nothing else records it. A picture is held to
+    its bytes (a png named .png), a document to its extension; 8 MB at most."""
+    import uuid
+    name = need(body, "name", "the file's name")
+    ext = os.path.splitext(name)[1].lower()
+    if ext not in PICTURES and ext not in FILE_TYPES:
+        raise Refused("attach a picture (png, jpeg, gif, webp) or a pdf, txt, md, csv, json or log file", 415)
+    try:
+        data = base64.b64decode(need(body, "data", "the file"), validate=True)
+    except (ValueError, TypeError):
+        raise Refused("that is not base64")
+    if not data:
+        raise Refused("that file is empty")
+    if len(data) > dfs_paths.IMAGE_MAX:
+        raise Refused("an attachment is 8 MB or smaller", 413)
+    if ext in PICTURES and dfs_paths.image_type(data) != ART_TYPES[ext]:
+        raise Refused("that is not a %s picture" % ext[1:], 415)
+    if ext == ".jpeg":
+        ext = ".jpg"
+    file = "%s%s" % (uuid.uuid4(), ext)
+    try:
+        dfs_paths._write_atomically(dfs_paths.artefacts() / file, data)
+    except OSError as e:
+        raise Refused("could not write %s: %s" % (file, e), 500)
+    label = " ".join(re.sub(r"[\[\]]", " ", os.path.basename(name)).split()) or file
+    ref = "%s[%s](.dfs/artefacts/%s)" % ("!" if ext in PICTURES else "", label, file)
+    return dict(file=file, ref=ref)
 
 
 def set_background_image(body):
@@ -939,7 +983,7 @@ class Handler(BaseHTTPRequestHandler):
     def artefact(self, name):
         """One file of `.dfs/artefacts`, by bare name: no path, no dotfile, a known type."""
         p = dfs_paths.artefacts() / name
-        ctype = ART_TYPES.get(p.suffix.lower())
+        ctype = ART_TYPES.get(p.suffix.lower()) or FILE_TYPES.get(p.suffix.lower())
         if not re.fullmatch(ART_NAME, name) or ctype is None or not p.is_file():
             raise Refused("no such artefact", 404)
         return self.send(200, p.read_bytes(), ctype,
@@ -1006,7 +1050,7 @@ class Handler(BaseHTTPRequestHandler):
             if "application/json" not in self.headers.get("Content-Type", ""):
                 raise Refused("JSON only", 415)
             n = int(self.headers.get("Content-Length") or 0)
-            if n > (IMAGE_BODY if url.path == "/api/background-image" else MAX_BODY):
+            if n > (IMAGE_BODY if url.path in ("/api/background-image", "/api/attach") else MAX_BODY):
                 raise Refused("too large", 413)
             try:
                 body = json.loads(self.rfile.read(n) or b"{}")
@@ -1023,6 +1067,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, set_background(body))
             if name == "background-image":
                 return self.json(200, set_background_image(body))
+            if name == "attach":
+                return self.json(200, attach(body))
             if name == "new":
                 return self.json(200, new_task(body))
             if name == "order":
