@@ -21,6 +21,10 @@ self=$(readlink -f "$0" 2>/dev/null || echo "$0")
 HERE=$(cd "$(dirname "$self")" && pwd)
 mode="${1:-$(basename "$0")}"
 cd "$(git rev-parse --show-toplevel)" || exit 0
+# ⚠️ Git hands a worktree's hooks GIT_DIR, and with GIT_DIR and no GIT_WORK_TREE a git
+# call takes its cwd for the top of the tree: check.py's, from `.dfs/`, then saw no
+# task file and the guard passed anything. Name the top so every call finds it.
+[ -z "${GIT_DIR:-}" ] || export GIT_WORK_TREE="$PWD"
 case "$mode" in
   pre-commit)       base="";     extra="" ;;
   pre-merge-commit) base="HEAD"; extra="--merge" ;;

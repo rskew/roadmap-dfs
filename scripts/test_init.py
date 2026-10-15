@@ -132,6 +132,39 @@ class Init(unittest.TestCase):
         self.assertEqual((self.root / "nix-args").read_text(),
                          "run %s#hook -- pre-commit\n" % dfs_paths.FLAKE)
 
+    def test_the_guard_judges_a_commit_made_in_a_worktree(self):
+        """Git hands a worktree's hooks GIT_DIR, and a git call from `.dfs/` then takes
+        `.dfs/` for the top of the tree: the guard saw no task file and let a broken one
+        through. The repo sits beside this file, since the temp directory is regularly
+        noexec and git will not run a hook there."""
+        root = Path(tempfile.mkdtemp(prefix=".test-wt-", dir=HERE))
+        self.addCleanup(shutil.rmtree, root, True)
+        repo, wt = root / "repo", root / "wt"
+        git = lambda *a, cwd=repo: subprocess.run(["git", *a], cwd=cwd, env=env,
+                                                  capture_output=True, text=True)
+        env = dict(os.environ, DFS_TOOL=str(HERE.parent), GIT_AUTHOR_NAME="t",
+                   GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        repo.mkdir()
+        git("init", "-q", "-b", "main")
+        dfs_paths.work_root = lambda: repo
+        self.assertEqual(self.run_init()[0], 0)
+        (repo / ".dfs" / "items" / "W1.md").write_text("# W1 · one\n\n## Goal\n\ng\n\n## Tree\n\n## Log\n")
+        git("add", "-A")
+        self.assertEqual(git("commit", "-qm", "init").returncode, 0)
+        self.assertEqual(git("worktree", "add", "-q", str(wt), "-b", "dfs/W1").returncode, 0)
+        task = wt / ".dfs" / "items" / "W1.md"
+        good = task.read_text()
+        task.write_text(good.replace("# W1 ·", "# W9 ·"))
+        git("add", ".dfs/items/W1.md", cwd=wt)
+        bad = git("commit", "-qm", "W1: wrong heading", cwd=wt)
+        self.assertNotEqual(bad.returncode, 0, bad.stdout + bad.stderr)
+        self.assertIn("does not name W1", bad.stderr)
+        task.write_text(good.replace("\ng\n", "\nthe goal, reworded\n"))
+        git("add", ".dfs/items/W1.md", cwd=wt)
+        ok = git("commit", "-qm", "W1: the goal reworded", cwd=wt)
+        self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+        self.assertIn("1 task file", ok.stderr + ok.stdout)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
