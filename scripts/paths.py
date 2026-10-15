@@ -81,6 +81,69 @@ def order() -> Path:
     return state() / "order.md"
 
 
+# ── an item's branch and its worktree ────────────────────────────────────────
+#
+# An item is worked on the branch `dfs/<task>`, checked out in its own git worktree
+# at `.dfs/worktrees/<task>` (gitignored), so the author's checkout stays on the
+# default branch. The branch writes plain ids into the task's top-level file, as the
+# default branch does, and merges back as written; `branch_tag()` is "" on it. The
+# main checkout reads and writes that task's files inside the worktree meanwhile.
+
+ITEM_BRANCH_PREFIX = "dfs/"
+
+
+def worktrees() -> Path:
+    return state() / "worktrees"
+
+
+def item_branch(task: str) -> str:
+    return ITEM_BRANCH_PREFIX + task
+
+
+def is_item_branch(name) -> bool:
+    return bool(name) and re.fullmatch(re.escape(ITEM_BRANCH_PREFIX) + r"[A-Za-z]+\d+", name) is not None
+
+
+def worktree(task: str):
+    """The checkout of `task`'s item branch under this work root's `.dfs/worktrees`,
+    None when there is none. A worktree's own `.dfs` has no `worktrees/` (it is
+    ignored, so never checked out), so inside one this is always None."""
+    d = worktrees() / task
+    return d if (d / ".git").exists() else None
+
+
+def task_state(task: str) -> Path:
+    """The `.dfs` that holds `task`'s files: its worktree's when it has one, else this
+    checkout's."""
+    wt = worktree(task)
+    return wt / STATE_DIR_NAME if wt else state()
+
+
+def task_items(task: str) -> Path:
+    return task_state(task) / "items"
+
+
+def worktree_states():
+    """The `.dfs` of every item worktree under this work root."""
+    try:
+        return sorted(d / STATE_DIR_NAME for d in worktrees().iterdir() if (d / ".git").exists())
+    except OSError:
+        return []
+
+
+def artefact_file(name: str) -> Path:
+    """An artefact by bare name: this checkout's, else the first item worktree's that
+    has it (a page a session made on an item branch is not in the main checkout until
+    the merge). This checkout's path when neither has it."""
+    here = artefacts() / name
+    if here.is_file():
+        return here
+    for s in worktree_states():
+        if (s / "artefacts" / name).is_file():
+            return s / "artefacts" / name
+    return here
+
+
 def runs() -> Path:
     return state() / "runs"
 
@@ -441,7 +504,8 @@ _TAG_CACHE = {}
 
 
 def branch_tag() -> str:
-    """The tag this checkout writes under: "" on main or master (and outside git).
+    """The tag this checkout writes under: "" on main or master, on an item branch
+    `dfs/<task>` (which merges back as written), and outside git.
 
     Raises NoBranch on a detached HEAD, which has no name to tag with, and when another
     local branch sanitises to the same tag, which would let two branches write one part.
@@ -469,7 +533,7 @@ def _branch_tag() -> str:
     if name is None:
         raise NoBranch("HEAD is detached, so there is no branch to tag this write with. "
                        "Check out a branch (git switch -c <name>) and run it again.")
-    if name in ("",) + DEFAULT_BRANCHES:
+    if name in ("",) + DEFAULT_BRANCHES or is_item_branch(name):
         return ""
     tag = sanitise(name)
     heads = _git("for-each-ref", "--format=%(refname:short)", "refs/heads").stdout.split()

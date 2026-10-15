@@ -232,6 +232,24 @@ class Web(unittest.TestCase):
                     "/artefacts/.hidden.html", "/artefacts/0a1b2c.py", "/artefacts/sub/x.html", "/artefacts/"):
             self.assertEqual(self.call("GET", bad)[0], 404, bad)
 
+    def test_a_worked_task_and_its_pages_are_served_from_its_item_worktree(self):
+        """The branch's copy is what the page shows while the item is worked: its tree,
+        and a page a session made there that the main checkout does not have."""
+        wt = self.root / ".dfs" / "worktrees" / "W1"
+        r = subprocess.run("git -c user.name=t -c user.email=t@t worktree add -q %s -b dfs/W1" % wt,
+                           shell=True, cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        (wt / ".dfs" / "artefacts").mkdir()
+        (wt / ".dfs" / "artefacts" / "9f9f9f.html").write_text("<title>made on the branch</title>")
+        self.assertEqual(self.call("GET", "/artefacts/9f9f9f.html")[0], 200)
+        self.assertEqual(self.call("GET", "/artefacts/8e8e8e.html")[0], 404)
+        mine = (wt / ".dfs" / "items" / "W1.md")
+        mine.write_text(mine.read_text().replace("## Tree\n", "## Tree\n\n### W1.7 · only on the branch\nStatus: open\n", 1))
+        status, data, _ = self.call("GET", "/api/task/W1")
+        self.assertEqual(status, 200)
+        self.assertIn("W1.7", json.dumps(data))
+        self.assertIn(str(mine), [p for p, _ in dfs_web.roadmap_signature() if p == str(mine)])
+
     def page_call(self, method, page, body=None, origin="null"):
         """What a sandboxed page sends: a plain-text body (no preflight) and the origin `null`."""
         headers = {"Origin": origin} if origin else {}

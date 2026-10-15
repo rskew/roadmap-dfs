@@ -285,16 +285,16 @@ def artefact_title(path):
 def artefacts_for(text):
     """The artefacts a task's prose names (as the screen's `v` pane finds them: by scanning
     for `<name>.html`, and for a screenshot `<name>.png` and the other picture types) that
-    exist in `.dfs/artefacts`. Each: file, title and kind ("page" or "image")."""
-    root = dfs_paths.artefacts()
+    exist in `.dfs/artefacts` or an item worktree's. Each: file, title and kind ("page" or "image")."""
     on_disk = {}
-    try:
-        for p in sorted(root.iterdir()):
-            if ((p.suffix.lower() in ART_TYPES or p.suffix.lower() in FILE_TYPES) and not p.name.startswith(("_", "."))
-                    and p.is_file()):
-                on_disk[p.name] = p
-    except OSError:
-        pass
+    for root in [dfs_paths.artefacts()] + [s / "artefacts" for s in dfs_paths.worktree_states()]:
+        try:
+            for p in sorted(root.iterdir()):
+                if ((p.suffix.lower() in ART_TYPES or p.suffix.lower() in FILE_TYPES)
+                        and not p.name.startswith(("_", ".")) and p.is_file()):
+                    on_disk.setdefault(p.name, p)
+        except OSError:
+            pass
     named = []
     for name in re.findall(r"(%s\.(?:html|png|jpe?g|gif|webp|svg|pdf|txt|md|csv|json|log))\b" % ART_NAME, text, re.I):
         if name in on_disk and name not in named:
@@ -639,8 +639,8 @@ def artefact_state(page, body=None):
     Hypothesis names it while that waits on the author (`node`). A body `{state, answer}` keeps the
     state, and records `answer` as the author's answer to the raise the page is named for; with
     `verdict` ("confirmed" or "refuted") the answer is instead the author's ruling on that node."""
-    root = dfs_paths.artefacts()
-    if not re.fullmatch(ART_NAME, page) or not page.lower().endswith(".html") or not (root / page).is_file():
+    if not re.fullmatch(ART_NAME, page) or not page.lower().endswith(".html") \
+            or not dfs_paths.artefact_file(page).is_file():
         raise Refused("no such page", 404)
     f = dfs_paths.artefact_state() / (page + ".json")
     answered = None
@@ -890,6 +890,8 @@ def roadmap_signature():
     their archives and the order file. Stat only; nothing is read or parsed."""
     sig = []
     roots = [dfs_paths.items(), dfs_paths.state() / "archive" / "items"]
+    for s in dfs_paths.worktree_states():
+        roots += [s / "items", s / "archive" / "items"]
     for root in roots:
         for dirpath, _dirs, files in os.walk(root):
             for f in files:
@@ -986,7 +988,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def artefact(self, name):
         """One file of `.dfs/artefacts`, by bare name: no path, no dotfile, a known type."""
-        p = dfs_paths.artefacts() / name
+        p = dfs_paths.artefact_file(name) if re.fullmatch(ART_NAME, name) else dfs_paths.artefacts() / name
         ctype = ART_TYPES.get(p.suffix.lower()) or FILE_TYPES.get(p.suffix.lower())
         if not re.fullmatch(ART_NAME, name) or ctype is None or not p.is_file():
             raise Refused("no such artefact", 404)

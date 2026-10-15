@@ -425,11 +425,10 @@ def foreign_dirt(task):
 
 # ── what a session is handed ────────────────────────────────────────────────────
 
-def _size_note(path) -> str:
+def _size_note(task, path) -> str:
     if not path.exists():
         return "not written yet"
     n = len(path.read_text()) // 4
-    task = dfs_tree.part_of(path.relative_to(dfs_paths.items()))[0]
     over = (" — ⚠️ over the %s-token budget; prune Background, and move settled "
             "history to the archive (`tree.py shelve %s`)"
             % (f"{HANDOFF_BUDGET:,}", task)) if n > HANDOFF_BUDGET else ""
@@ -493,7 +492,7 @@ def brief(task: str) -> str:
            "## Your briefing — %s" % task, "",
            "- **Status**: %s — %s" % (st["status"], st["why"]),
            "- **Your task file is `%s`** (%s). Read it next: its Tree is the state of the "
-           "work, its Log what everyone has said about it." % (rel, _size_note(path)),
+           "work, its Log what everyone has said about it." % (rel, _size_note(task, path)),
            ] + _parts_note(task, path) + [
            "- **The tool's scripts are in `%s`**: `<scripts>` in the skill means that "
            "directory." % dfs_paths.rel(dfs_paths.SCRIPTS),

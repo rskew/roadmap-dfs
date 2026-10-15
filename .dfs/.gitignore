@@ -2,3 +2,5 @@
 runs/
 # what a reader left on an artefact page: local, not the roadmap
 artefact-state/
+# where each item's branch is checked out
+worktrees/

@@ -1246,6 +1246,53 @@ class Branches(InARepo):
         rc, out = self.check()
         self.assertEqual(rc, 0, out)
 
+    def worktree(self, task="W1"):
+        wt = self.root / ".dfs" / "worktrees" / task
+        r = self.git("worktree add -q %s -b dfs/%s" % (wt, task))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return wt
+
+    def test_an_item_branch_writes_plain_ids_into_the_top_level_file(self):
+        self.switch("checkout -qb dfs/W1")
+        self.assertEqual(dfs_paths.branch_tag(), "")
+        self.assertEqual(dfs_tree.path_for("W1"), self.root / ".dfs/items/W1.md")
+        self.assertEqual(dfs_tree.next_node_id(dfs_tree.load("W1")), "W1.3")
+        self.git("branch dfs/W1-b")
+        self.assertEqual(dfs_paths.branch_tag(), "")
+        self.switch("checkout -q master")
+        self.switch("checkout -qb dfs/not-a-task")
+        self.assertEqual(dfs_paths.branch_tag(), "dfs-not-a-task")
+
+    def test_the_main_checkout_reads_and_writes_a_worked_task_in_its_worktree(self):
+        wt = self.worktree()
+        self.assertEqual(dfs_paths.worktree("W1"), wt)
+        self.assertEqual(dfs_tree.path_for("W1"), wt / ".dfs/items/W1.md")
+        self.assertEqual(dfs_tree.archive_path("W1"), wt / ".dfs/archive/items/W1.md")
+        (wt / ".dfs/items/W1.md").write_text(task(node(1, "confirmed") + node(2, parent=1)
+                                                  + node(3, parent=2), ""))
+        self.assertEqual([n["id"] for n in dfs_tree.load("W1")["nodes"]], ["W1.1", "W1.2", "W1.3"])
+        before = (self.root / ".dfs/items/W1.md").read_text()
+        dfs_tree.append_log("W1", "session", ["work"])
+        self.assertEqual((wt / ".dfs/items/W1.md").read_text().count("· session · work"), 1)
+        self.assertEqual((self.root / ".dfs/items/W1.md").read_text(), before)
+        self.assertEqual(dfs_tree.node_commits("W1"), {})
+
+    def test_inside_the_worktree_the_task_is_its_own_checkouts(self):
+        wt = self.worktree()
+        self._wr_inner, dfs_paths.work_root = dfs_paths.work_root, lambda: wt
+        self.addCleanup(setattr, dfs_paths, "work_root", self._wr_inner)
+        dfs_paths._TAG_CACHE.clear()
+        self.assertIsNone(dfs_paths.worktree("W1"))
+        self.assertEqual(dfs_paths.branch_tag(), "")
+        self.assertEqual(dfs_tree.path_for("W1"), wt / ".dfs/items/W1.md")
+
+    def test_a_page_made_in_the_worktree_is_found_from_the_main_checkout(self):
+        wt = self.worktree()
+        (wt / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
+        (wt / ".dfs/artefacts/a.html").write_text("<p>x</p>")
+        self.assertEqual(dfs_paths.artefact_file("a.html"), wt / ".dfs/artefacts/a.html")
+        self.assertEqual(dfs_paths.artefact_file("b.html"), self.root / ".dfs/artefacts/b.html")
+
     def test_a_branch_may_not_add_to_another_part(self):
         self.switch("checkout -qb fx")
         self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=1),

@@ -428,7 +428,8 @@ def watch_signature():
     app's own live path is written against.
     """
     paths = [dfs_paths.roadmap(), dfs_paths.order()]
-    paths += sorted(dfs_paths.items().glob("*.md")) + sorted(dfs_paths.items().glob("*/*.md"))
+    for items in [dfs_paths.items()] + [s / "items" for s in dfs_paths.worktree_states()]:
+        paths += sorted(items.glob("*.md")) + sorted(items.glob("*/*.md"))
     sig = []
     for p in paths:
         try:

@@ -149,12 +149,13 @@ def order_key(nd):
 # ── parts ────────────────────────────────────────────────────────────────────
 
 def part_path(task, tag=""):
-    """The file a branch with `tag` writes for `task`."""
-    return dfs_paths.items() / (("%s.md" % task) if not tag else "%s/%s.md" % (task, tag))
+    """The file a branch with `tag` writes for `task`, in the task's item worktree when
+    it has one."""
+    return dfs_paths.task_items(task) / (("%s.md" % task) if not tag else "%s/%s.md" % (task, tag))
 
 
 def archive_part(task, tag=""):
-    base = dfs_paths.state() / "archive" / "items"
+    base = dfs_paths.task_state(task) / "archive" / "items"
     return base / (("%s.md" % task) if not tag else "%s/%s.md" % (task, tag))
 
 
@@ -173,7 +174,7 @@ def part_of(rel):
 
 def part_tags(task, base=None):
     """The tags `task` has a part for under `base` (default `items/`), default first."""
-    base = base or dfs_paths.items()
+    base = base or dfs_paths.task_items(task)
     tags = [""] if (base / ("%s.md" % task)).exists() else []
     d = base / task
     if d.is_dir():
@@ -586,10 +587,10 @@ def append_log(task, kind, args=(), body=""):
     if kind not in KINDS:
         raise ValueError("unknown log kind %r (one of %s)" % (kind, ", ".join(KINDS)))
     page = answer_page(body) if kind == "raise" else None
-    if page and not (dfs_paths.artefacts() / page).is_file():
+    if page and not dfs_paths.artefact_file(page).is_file():
         raise ValueError("the raise says to answer with %s, which is not in %s"
                          % (page, dfs_paths.rel(dfs_paths.artefacts())))
-    if page and not can_answer((dfs_paths.artefacts() / page).read_text(errors="replace")):
+    if page and not can_answer(dfs_paths.artefact_file(page).read_text(errors="replace")):
         raise ValueError("the raise says to answer with %s, which cannot answer: the page must POST "
                          "{answer: <text>} to /artefact-state/<its file name> "
                          "(templates/_TEMPLATE_ASSUMPTION.html does)" % page)
@@ -1352,12 +1353,14 @@ def notes(t):
 
 def node_commits(task, cwd=None):
     """{node id: [(sha, subject, committed-at ts)]}, newest first, from subjects
-    `<task>.<n>[@<tag>]: <subject>`, on every branch HEAD can reach."""
+    `<task>.<n>[@<tag>]: <subject>`, on every branch HEAD can reach (the task's item
+    worktree's HEAD when it has one, which also reaches the default branch)."""
     try:
         out = subprocess.run(
             ["git", "log", "--format=%H%x09%ct%x09%s", "--extended-regexp",
              "--grep=^%s\\.[0-9]+(@[a-z0-9-]+)?:" % re.escape(task)],
-            capture_output=True, text=True, cwd=cwd or dfs_paths.work_root()).stdout
+            capture_output=True, text=True,
+            cwd=cwd or dfs_paths.worktree(task) or dfs_paths.work_root()).stdout
     except OSError:
         return {}
     found = {}
