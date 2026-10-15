@@ -158,6 +158,7 @@ class Ticking(unittest.TestCase):
         ui.walk_content = set()
         ui.walk_note = ""
         ui.walk_next = None
+        ui.walk_chain_pin = None
         ui.walk_pending = False
         ui.chains = []
         # The seam the tick re-asks through. Stubbed to a no-op so a test says which
@@ -503,6 +504,33 @@ class Ticking(unittest.TestCase):
         self.live(ui, [])
         ui.walk_tick()
         self.assertEqual(ui.started, [("W9", "20")])
+
+    def test_a_pinned_draft_whose_chain_hits_a_limit_is_resumed_after_the_hold(self):
+        # The pin is spent when the chain starts, and `next_item` never offers a draft.
+        ui = self.ui(walk_next="W9")
+        ui.data["items"] = [dict(id="W7", status="open"), dict(id="W9", status="open", draft=1)]
+        ui.event = lambda kind, text: text
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [("W9", "20")])
+        self.assertIsNone(ui.walk_next)
+        self.live(ui, [self.chain(dir="/runs/new", item="W9", stop="limit", run="2")])
+        ui.walk_tick()                      # the limit: hold
+        self.assertEqual(len(ui.started), 1)
+        ui.walk_until = 0.0                 # the hold is over
+        self.live(ui, [])
+        ui.walk_dir = None
+        ui.walk_tick()
+        self.assertEqual(ui.started[-1][0], "W9", "resumed the draft, not next_item")
+
+    def test_a_limit_hold_does_not_override_a_newer_pin(self):
+        ui = self.ui(walk_next="W9", walk_chain_pin="W9", walk_dir="/runs/mine")
+        ui.walk_next = "W8"
+        self.items(ui, W7="open", W8="open", W9="open")
+        ui.event = lambda kind, text: text
+        self.live(ui, [self.chain(item="W9", stop="limit")])
+        ui.walk_tick()
+        self.assertEqual(ui.walk_next, "W8")
 
     def test_a_pin_overrides_what_the_ended_chain_would_have_led_to(self):
         ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"}, walk_next="W9")

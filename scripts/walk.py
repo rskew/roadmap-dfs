@@ -195,6 +195,7 @@ class WalkMixin:
         self.walk_content = set()   # what the trees said when that chain started
         self.walk_note = ""         # why the last walk stopped, until the next one
         self.walk_next = None       # an item the author pinned for the next chain — walk_pin
+        self.walk_chain_pin = None  # the item the chain in flight was pinned to, kept through a hold
         self.walk_pending = False   # on, but nothing is workable: waiting for a task to appear
 
     def walk_begin(self, budget):
@@ -323,6 +324,13 @@ class WalkMixin:
                 tail = (" (%s)" % run["resets"]) if run["resets"] else ""
                 self.msg = self.event("hold", "walk: %s hit %s — holding %s%s" % (
                     run["item"], why, walk_held_for(self.walk_until - now), tail))
+                # ⚠️ A limit means "try the same thing again", and for a chain the
+                # author PINNED that is the pinned item: the pin was spent when the
+                # chain started, and without it `next_item` leaves a draft (which
+                # `continue_last` refuses) half-done. A newer pin is the author's
+                # later word and stays.
+                if self.walk_chain_pin == run["item"] and self.walk_next is None:
+                    self.walk_next = run["item"]
                 return
             if action == "stop":
                 self.walk_off("%s: %s" % (run["item"], why))
@@ -351,6 +359,7 @@ class WalkMixin:
         if self.walk_pending:
             self.walk_pending = False
             self.event("walk", "walk: %s is workable — resuming" % item)
+        self.walk_chain_pin = item if self.walk_next == item else None
         self.walk_next = None
         self.walk_content = set(self.data.get("content", ()))
         self.walk_started = time.time()
