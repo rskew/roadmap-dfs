@@ -36,7 +36,7 @@ A task can be a **draft**: still open, but the walk never picks it as its next i
 and does not wait on it at a fence. Create one with the Draft box on the web page's new-task form (or `draft: true`
 to `/api/new`, or `y` at `run.sh --open`'s draft prompt), and mark an existing task a draft, or ready again, with `s`
 on the tui's item list or the Draft button on a task's page. Each is a `draft` or `ready` entry in the task's log,
-the later one winning. A draft is worked by hand: `n` pins it as the walk's next chain, and `run.sh <task>` runs its
+the later one winning. A draft is worked by hand: `n` on the tui, or the pin on the web page, makes it the walk's next chain, and `run.sh <task>` runs its
 sessions as any open task's. When that chain ends the walk passes it over again, until it is marked ready; a usage-limit hold does not end it, and
 the walk resumes the pinned draft when the hold is over.
 

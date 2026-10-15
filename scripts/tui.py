@@ -4446,7 +4446,7 @@ class UI(WalkMixin):
             self.msg = "not changed: %s" % e
             return
         self.reload()
-        self.msg = self.event("review", "%s is a draft: the walk passes it over, n pins it" % item
+        self.msg = self.event("order", "%s is a draft: the walk passes it over, n pins it" % item
                               if on else "%s is ready: the walk takes it in its turn" % item)
         if on:
             self.walk_draft_marked(item)

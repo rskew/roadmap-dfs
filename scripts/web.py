@@ -490,10 +490,13 @@ def new_task(body):
     goal = body.get("goal") or ""
     if not isinstance(goal, str) or len(goal) > 20000:
         raise Refused("the goal is text")
+    draft = body.get("draft", False)
+    if not isinstance(draft, bool):
+        raise Refused("draft is true or false")
     with LOCK:
         try:
             task = dfs_tree.create_task(name, goal, todos, task=body.get("id") or None,
-                                        draft=body.get("draft") is True)
+                                        draft=draft)
         except (ValueError, dfs_paths.NoBranch) as e:
             raise Refused(str(e), 409)
     HUB.notify()

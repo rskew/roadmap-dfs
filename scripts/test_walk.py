@@ -499,6 +499,8 @@ class Ticking(unittest.TestCase):
 
     def test_a_pinned_draft_is_where_the_next_chain_starts(self):
         # A draft is never the order's answer, and the pin is how the author takes one.
+        # `walk_pinned` and `walk_target` never read `draft`, so this only guards against
+        # a future check there; the order's side is `test_order.py`.
         ui = self.ui(walk_next="W9")
         ui.data["items"] = [dict(id="W7", status="open"), dict(id="W9", status="open", draft=1)]
         self.live(ui, [])

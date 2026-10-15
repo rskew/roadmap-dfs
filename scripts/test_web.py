@@ -1101,6 +1101,9 @@ class Web(unittest.TestCase):
         self.assertIs(rows[plain]["draft"], False)
         self.assertNotEqual(self.call("GET", "/api/state")[1]["next_item"], new)
 
+    def test_a_new_task_refuses_a_draft_that_is_not_true_or_false(self):
+        self.assertEqual(self.call("POST", "/api/new", dict(name="Later", draft="yes"))[0], 400)
+
     def test_a_task_is_marked_a_draft_and_ready_again(self):
         task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
         self.assertIs(self.call("GET", "/api/task/" + task)[1]["draft"], False)
