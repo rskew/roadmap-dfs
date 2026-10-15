@@ -177,14 +177,15 @@ class Chain(unittest.TestCase):
         self.assertEqual([e["args"][:2] for e in self.log("end")],
                          [["work", "ok"], ["work", "ok"], ["review", "ok"]], out)
         self.assertEqual(self.kinds_run(), ["work", "work", "review"])
-        self.assertEqual(self.git("log", "-1", "--format=%s", "dfs/W1"), "W1.1: the step is done")
+        # the review `ok` merged the branch: the node's commit is in main's history
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
 
     def test_a_chain_works_the_item_on_its_own_branch_and_main_does_not_move(self):
         main = self.git("rev-parse", "HEAD")
         branch = self.git("symbolic-ref", "--short", "HEAD")
         (self.root / "app.txt").write_text("the author's edit\n")
-        rc, meta, out = self.run_chain("work,confirm,rok")
-        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        rc, meta, out = self.run_chain("work,confirm", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
         self.assertIn("W1 is worked on branch dfs/W1", out)
         self.assertEqual(self.git("rev-parse", "HEAD"), main)
         self.assertEqual(self.git("symbolic-ref", "--short", "HEAD"), branch)
@@ -195,6 +196,29 @@ class Chain(unittest.TestCase):
         self.assertTrue(list((self.root / ".dfs" / "runs").glob("*/meta.json")))
         self.assertFalse((self.wt / ".dfs" / "runs").exists())
 
+    def test_a_passing_review_merges_the_branch_and_drops_the_worktree(self):
+        (self.root / "app.txt").write_text("the author's edit\n")
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertIn("dfs/W1 merged into", out)
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("branch", "--list", "dfs/*"), "")
+        self.assertEqual(self.git("worktree", "list").count("\n"), 0)
+        # the log the runner wrote after the last commit came across with it
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "done")
+        self.assertEqual([e["args"][:2] for e in self.log("end")][-1], ["review", "ok"])
+        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
+
+    def test_the_authors_accept_merges_the_branch_too(self):
+        rc, meta, out = self.run_chain("work,confirm", cap=2)
+        self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))
+        subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                       cwd=self.root, check=True, capture_output=True)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
+        self.assertTrue(self.log("accept"))
+
     def test_the_sessions_are_told_their_paths_from_the_worktree(self):
         self.run_chain("work", cap=1)
         self.assertEqual(Path((self.aside / "kinds.cwd").read_text().strip()), self.wt.resolve())
@@ -202,8 +226,8 @@ class Chain(unittest.TestCase):
     def test_a_second_chain_reuses_the_branch_and_its_worktree(self):
         self.run_chain("work", cap=1)
         sha = self.git("rev-parse", "dfs/W1")
-        rc, meta, out = self.run_chain("code,confirm,rok", cap=3)
-        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        rc, meta, out = self.run_chain("code,confirm", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
         self.assertNotIn("existed", out)
         self.assertEqual(self.git("merge-base", sha, "dfs/W1"), sha)
         self.assertEqual(self.git("worktree", "list").count("\n"), 1)

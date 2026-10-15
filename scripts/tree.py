@@ -604,6 +604,15 @@ def append_log(task, kind, args=(), body=""):
         ts = _ts_after(latest)
     t["log"].append(make_entry(ts, kind, args, body))
     p.write_text(render(t))
+    if kind == "accept":
+        # The author taking the finished tree is as good as a passing review: the item's
+        # branch, if it has one, goes into the default branch. A merge that cannot go
+        # through leaves the accept written and the branch where it is.
+        import branch as dfs_branch
+        try:
+            dfs_branch.merge(task)
+        except dfs_branch.BranchError as e:
+            print("dfs_tree: %s was accepted but not merged: %s" % (task, e), file=sys.stderr)
     return ts
 
 

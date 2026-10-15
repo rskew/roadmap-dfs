@@ -9,6 +9,8 @@ worktree").
 
     python3 <scripts>/branch.py enter <task>   # print the worktree to work in, "" to
                                                # stay where we are
+    python3 <scripts>/branch.py merge <task>   # from the main checkout, when the item
+                                               # is done: merge, drop the worktree
 
 `enter` cuts the branch and the worktree on the task's first run and reuses them
 after. It leaves the chain where it is, printing nothing, when the roadmap is
@@ -132,7 +134,56 @@ def enter(task):
     return wt
 
 
+def _identity():
+    """`-c` flags for a commit made where git has no identity configured."""
+    if _git("config", "user.email").stdout.strip():
+        return []
+    return ["-c", "user.name=roadmap-dfs", "-c", "user.email=roadmap-dfs@localhost"]
+
+
+def merge(task):
+    """Merge `dfs/<task>` into the default branch, from the main checkout, and remove the
+    worktree and the branch. Local only: nothing is pushed.
+
+    First the task's own files left uncommitted in the worktree (the runner's log entries,
+    an accept) are committed onto the branch, since the merge carries only commits. Returns
+    "none" when the task has no worktree, "merged", or "dirty" when the worktree holds
+    uncommitted work that is not the task's (left in place, nothing merged).
+    """
+    wt = dfs_paths.worktree(task)
+    if wt is None:
+        return "none"
+    name = dfs_paths.item_branch(task)
+    if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
+        raise BranchError("%s is merged from the default branch; this checkout is on %s" %
+                          (name, dfs_paths.branch()))
+    ident = _identity()
+    _git("add", "--", *[p for p in task_paths(task) if (wt / p).exists()], cwd=wt)
+    if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
+        r = _git(*ident, "commit", "-q", "-m", "%s: the log and edits left uncommitted" % task, cwd=wt)
+        if r.returncode != 0:
+            raise BranchError("cannot commit %s's files on %s: %s" % (task, name, (r.stderr or r.stdout).strip()))
+    if _git("status", "--porcelain", cwd=wt).stdout.strip():
+        return "dirty"
+    r = _git(*ident, "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
+    if r.returncode != 0:
+        raise BranchError("merging %s: %s" % (name, (r.stderr or r.stdout).strip()))
+    _git("worktree", "remove", "--force", str(wt))
+    _git("branch", "-d", name)
+    return "merged"
+
+
 def main(argv):
+    if len(argv) == 3 and argv[1] == "merge":
+        try:
+            result = merge(argv[2])
+        except BranchError as e:
+            print("dfs_branch: %s" % e, file=sys.stderr)
+            return 1
+        print("dfs_branch: %s: %s" % (argv[2], {"merged": "dfs/%s merged into %s, its worktree removed" % (
+            argv[2], dfs_paths.branch()), "dirty": "not merged: its worktree holds uncommitted work that "
+            "is not the task's", "none": "no worktree, nothing to merge"}[result]), file=sys.stderr)
+        return 0 if result != "dirty" else 1
     if len(argv) == 3 and argv[1] == "enter":
         try:
             wt = enter(argv[2])

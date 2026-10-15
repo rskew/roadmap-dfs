@@ -860,12 +860,23 @@ PY
 # the worktree, since they are spelled from the session's CWD. Everything above read
 # the main checkout and is done with it.
 RUNDIR="$(cd "$RUNDIR" && pwd)"
+ITEM_MAIN="$(pwd)"
 ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM")" || exit 2
 if [ -n "$ITEM_TREE" ]; then
   cd "$ITEM_TREE"
   eval "$(python3 "$HERE/paths.py" --sh)"
   echo "dfs_run: $ITEM is worked on branch $(git symbolic-ref --short HEAD), in $ITEM_TREE"
 fi
+
+# ⚠️ A DONE ITEM IS MERGED, and from the main checkout, which is where the default
+# branch is checked out. The runner stops `done` only after a review `ok` (or the author's
+# accept), so this is the "passing review merges the branch". The worktree is removed
+# with it, so the chain steps back into the main checkout first.
+merge_item() {
+  [ -n "$ITEM_TREE" ] || return 0
+  cd "$ITEM_MAIN"
+  python3 "$HERE/branch.py" merge "$ITEM" || true
+}
 
 meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
          started="$(date -Is)" pid="$$"
@@ -898,7 +909,7 @@ for i in $(seq 1 "$CAP"); do
   eval "$(dfs_state)"
   case "$status" in
     blocked) stop_is blocked; echo "dfs_run: BLOCKED before run $i — $why. Answer it with --review $ITEM, then run again."; exit 0 ;;
-    done)    stop_is done; echo "dfs_run: DONE before run $i — $why."; exit 0 ;;
+    done)    stop_is done; echo "dfs_run: DONE before run $i — $why."; merge_item; exit 0 ;;
   esac
   kind=work
   if [ "$critic_due" = 1 ]; then
@@ -1084,7 +1095,7 @@ for i in $(seq 1 "$CAP"); do
   eval "$(dfs_state)"
   case "$status" in
     blocked) stop_is blocked; echo; echo "dfs_run: BLOCKED after run $i — $why."; break ;;
-    done)    stop_is done;    echo; echo "dfs_run: DONE after run $i — $why."; break ;;
+    done)    stop_is done;    echo; echo "dfs_run: DONE after run $i — $why."; merge_item; break ;;
   esac
   lowered_cap
   if [ "$i" -ge "$CAP" ]; then stop_is cap; break; fi
