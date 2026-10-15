@@ -90,6 +90,7 @@ case "$recipe" in
            echo fixed >> app.txt; git add -A && git -c user.name=t -c user.email=t@t commit -qm "W1.2: fix the bug" ;;
   rnode)   python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); n=len(re.findall(r"^### W1\.",t,re.M))+1; open(p,"w").write(t.replace("## Log","### W1.%d · review finding %d\nStatus: open\nApproach: fix it.\n\n## Log" % (n,n),1))'
            echo "a finding" | $T log W1 review issues > /dev/null ;;
+  unblock) rm -f "$BLOCK_FILE" ;&
   fixn)    id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: fixed.")+t[m.end():]); print(m.group(1))')"
            echo "fixed $id" >> app.txt; git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: fixed" ;;
   resolvemain) git -c user.name=t -c user.email=t@t rebase -q --autostash -X theirs "$MAIN_BRANCH" > /dev/null 2>&1 || exit 3
@@ -262,6 +263,48 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
         self.assertTrue(self.wt.exists())
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_a_review_ok_over_a_dirty_worktree_reopens_the_item_and_is_never_done_unmerged(self):
+        rc, meta, out = self.run_chain("work,confirm,rmeddle", cap=3)
+        self.assertNotEqual(meta.get("stop"), "done", out)
+        self.assertIn("Commit or drop the uncommitted changes", (self.wt / ".dfs/items/W1.md").read_text())
+        self.assertIn("app.txt", (self.wt / ".dfs/items/W1.md").read_text())
+        self.assertTrue(self.wt.exists())
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("fixn,rok", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertIn("reviewer was here", (self.root / "app.txt").read_text())
+
+    def test_a_merge_a_hook_refuses_reopens_the_item_with_the_hooks_message(self):
+        block = self.aside / "block"
+        block.write_text("")
+        hook = self.root / ".git" / "hooks" / "pre-merge-commit"
+        hook.write_text('#!/bin/sh\n[ -e "%s" ] && { echo "guard says: fix the heading" >&2; exit 1; }\nexit 0\n' % block)
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        rc, meta, out = self.run_chain("work,confirm,rok", cap=3, BLOCK_FILE=str(block))
+        self.assertNotEqual(meta.get("stop"), "done", out)
+        text = (self.wt / ".dfs/items/W1.md").read_text()
+        self.assertIn("Fix what refused the merge of dfs/W1", text)
+        self.assertIn("guard says: fix the heading", text)
+        self.assertNotIn("resolve the conflicts", text)
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("unblock,rok", cap=2, BLOCK_FILE=str(block))
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertFalse(self.wt.exists())
+
+    def test_a_merge_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
+        self.run_chain("work,confirm", cap=2)
+        self.git("checkout", "-q", "-b", "elsewhere")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertEqual(len(self.log("raise")), 1)
+        self.assertTrue(self.wt.exists())
 
     def test_the_authors_accept_merges_the_branch_too(self):
         rc, meta, out = self.run_chain("work,confirm", cap=2)
@@ -487,10 +530,14 @@ class Chain(unittest.TestCase):
 
     def test_a_review_that_changes_code_is_noted_and_its_verdict_stands(self):
         # As for the critic: the change may be the author's, so it is noted, not a stop.
-        rc, meta, out = self.run_chain("confirm,rmeddle", cap=3)
+        # The verdict stands, but a branch with the review's change uncommitted does not
+        # merge: the item reopens with a node, and the next session commits it.
+        rc, meta, out = self.run_chain("confirm,rmeddle,fixn,rok", cap=4)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         self.assertIn("changed outside .dfs/", out)
-        self.assertIn("left for the next session to commit", (self.wt / ".dfs" / "items" / "W1.md").read_text())
+        self.assertIn("left for the next session to commit", (self.root / ".dfs" / "items" / "W1.md").read_text())
+        self.assertIn("reviewer was here", (self.root / "app.txt").read_text())
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
 
     def test_a_review_that_changes_code_and_gives_no_verdict_still_fails_the_chain(self):
         rc, meta, out = self.run_chain("confirm,code", cap=3)

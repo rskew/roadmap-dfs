@@ -887,10 +887,12 @@ merge_item() {
   local rc=0
   cd "$ITEM_MAIN"
   python3 "$HERE/branch.py" merge "$ITEM" || rc=$?
-  case "$rc" in
-    3|4) cd "$ITEM_TREE"; return "$rc" ;;
-  esac
-  return 0
+  # Anything but a merge (or nothing to merge) is not done: an exit this does not know
+  # (a crash) blocks the chain rather than ending it `done` with the branch unmerged.
+  [ "$rc" = 0 ] && return 0
+  cd "$ITEM_TREE"
+  case "$rc" in 3|4) ;; *) rc=4; echo "dfs_run: the merge of $ITEM failed unexpectedly; see above." ;; esac
+  return "$rc"
 }
 
 meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \

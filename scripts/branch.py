@@ -33,9 +33,10 @@ class BranchError(Exception):
     pass
 
 
-# `branch.py merge`'s exit status: 0 the item is settled (merged, or nothing to merge), 1 it
-# could not be merged and nothing changed, 3 the tree has an open node again, 4 it is blocked.
-MERGE_EXIT = {"merged": 0, "none": 0, "dirty": 1, "conflict": 3, "refused": 4}
+# `branch.py merge`'s exit status: 0 the item is settled (merged, or nothing to merge), 3 it
+# was not merged and the tree has an open node again, 4 it is blocked on a raise.
+# Every result that is not a merge is 3 or 4, so a chain never takes an unmerged item for done.
+MERGE_EXIT = {"merged": 0, "none": 0, "dirty": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
 
 
 def _git(*args, cwd=None):
@@ -157,18 +158,34 @@ def _commit_task_files(task, wt, what):
                               (task, dfs_paths.item_branch(task), (r.stderr or r.stdout).strip()))
 
 
+def _reopen_with(task, wt, title, approach, what):
+    """Put the item back in work with an open node, which earns another review. The node
+    is committed onto the branch unless the commit itself is what is refused."""
+    import tree as dfs_tree
+    dfs_tree.add_node(task, title, approach=approach)
+    try:
+        _commit_task_files(task, wt, what)
+    except BranchError:
+        pass
+
+
 def _reopen(task, wt, name, files):
     """Put the item back in work: an open node asks for the branch to be rebased onto the
-    default branch and the conflicts resolved there, which earns another review."""
-    import tree as dfs_tree
+    default branch and the conflicts resolved there."""
     default = dfs_paths.branch()
-    dfs_tree.add_node(task, "Rebase %s onto %s and resolve the conflicts" % (name, default),
-                      approach="%s could not be rebased onto %s: %s conflict. In this worktree run "
-                               "`git rebase --autostash %s` (the autostash keeps the task's uncommitted log "
-                               "entries), resolve the conflicts commit by commit, keep both sides' intent, "
-                               "run the tests, and `git rebase --continue`."
-                               % (name, default, ", ".join(files) or "files", default))
-    _commit_task_files(task, wt, "the rebase onto %s conflicted" % default)
+    _reopen_with(task, wt, "Rebase %s onto %s and resolve the conflicts" % (name, default),
+                 "%s could not be rebased onto %s: %s conflict. In this worktree run "
+                 "`git rebase --autostash %s` (the autostash keeps the task's uncommitted log "
+                 "entries), resolve the conflicts commit by commit, keep both sides' intent, "
+                 "run the tests, and `git rebase --continue`."
+                 % (name, default, ", ".join(files) or "files", default),
+                 "the rebase onto %s conflicted" % default)
+
+
+def _raise_blocked(task, text):
+    """A merge only the author can settle: a raise, and the chain stops blocked."""
+    import tree as dfs_tree
+    dfs_tree.append_log(task, "raise", [], text)
 
 
 def _rebase(task, wt, name):
@@ -188,6 +205,10 @@ def _rebase(task, wt, name):
     return False
 
 
+def out_of(r):
+    return r.stderr + r.stdout
+
+
 def _unmerged(task, wt, name, r):
     """A merge git did not complete leaves the default branch as it was, and the item
     open. A conflict is work (the default branch moved after the rebase): the merge is
@@ -199,11 +220,19 @@ def _unmerged(task, wt, name, r):
     if _git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0:
         files = _git("diff", "--name-only", "--diff-filter=U").stdout.split()
         _git("merge", "--abort")
-        _reopen(task, wt, name, files)
-        return "conflict"
+        if files:
+            _reopen(task, wt, name, files)
+            return "conflict"
+        # Nothing conflicts: a hook (the roadmap's guard) refused to commit the merge.
+        _reopen_with(task, wt, "Fix what refused the merge of %s into %s" % (name, default),
+                     "git merged %s into %s without a conflict, but refused to commit the merge: %s "
+                     "Change the branch so the merge is accepted (the guard's message says what "
+                     "to fix), and commit it." % (name, default, " ".join(out_of(r).split())[:400]),
+                     "a hook refused the merge into %s" % default)
+        return "guard"
     out = r.stderr + r.stdout
     paths = [l.strip() for l in out.splitlines() if l.startswith("\t")]
-    dfs_tree.append_log(task, "raise", [], (
+    _raise_blocked(task, (
         "%s is finished and reviewed, but git would not merge %s into %s: %s\n"
         "Your uncommitted edits in %s overlap the merge: %s.\n"
         "Options: commit or stash those edits and run the chain again (it merges first), or tell me "
@@ -221,10 +250,11 @@ def merge(task):
     an accept) are committed onto the branch, since the merge carries only commits; then the
     branch is rebased onto the default branch (`_rebase`). Returns
     "none" when the task has no worktree, "merged", "dirty" when the worktree holds
-    uncommitted work that is not the task's (left in place, nothing merged), "conflict"
-    when the branch cannot be rebased onto the default branch, which has moved (an open
-    node is added) or "refused" when the
-    author's edits overlap (a raise is logged); see `_unmerged`.
+    uncommitted work that is not the task's (left in place, nothing merged; an open node
+    asks for it to be committed or dropped), "conflict" when the branch cannot be rebased
+    onto the default branch, which has moved (an open node is added), "guard" when a hook
+    refused a clean merge or the task's files (an open node names its message) or "refused"
+    when the author's edits overlap (a raise is logged); see `_unmerged`.
     """
     wt = dfs_paths.worktree(task)
     if wt is None:
@@ -233,8 +263,20 @@ def merge(task):
     if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
         raise BranchError("%s is merged from the default branch; this checkout is on %s" %
                           (name, dfs_paths.branch()))
-    _commit_task_files(task, wt, "the log and edits left uncommitted")
-    if _git("status", "--porcelain", cwd=wt).stdout.strip():
+    try:
+        _commit_task_files(task, wt, "the log and edits left uncommitted")
+    except BranchError as e:
+        _reopen_with(task, wt, "Fix what refuses the commit of %s's files on %s" % (task, name),
+                     "The runner could not commit the task's own files on %s: %s" % (name, e), "")
+        return "guard"
+    stray = [l[3:] for l in _git("status", "--porcelain", cwd=wt).stdout.splitlines()]
+    if stray:
+        _reopen_with(task, wt, "Commit or drop the uncommitted changes in the %s worktree" % name,
+                     "%s is finished and reviewed, but its worktree %s holds uncommitted changes that are "
+                     "not the task's: %s. Commit the ones that belong to the work (with a node's id in the "
+                     "subject) and restore or delete the rest, so the branch can be merged."
+                     % (name, dfs_paths.rel(wt), ", ".join(stray[:12])),
+                     "uncommitted changes stopped the merge")
         return "dirty"
     if not _rebase(task, wt, name):
         return "conflict"
@@ -251,11 +293,16 @@ def main(argv):
         try:
             result = merge(argv[2])
         except BranchError as e:
+            # Only the author can settle it (the checkout is on another branch): a raise.
             print("dfs_branch: %s" % e, file=sys.stderr)
-            return 1
+            _raise_blocked(argv[2], "%s is finished and reviewed, but it was not merged: %s. Put the "
+                                    "checkout right and run the chain again, or tell me to leave the "
+                                    "branch unmerged." % (argv[2], e))
+            return MERGE_EXIT["blocked"]
         print("dfs_branch: %s: %s" % (argv[2], {
             "merged": "dfs/%s merged into %s, its worktree removed" % (argv[2], dfs_paths.branch()),
-            "dirty": "not merged: its worktree holds uncommitted work that is not the task's",
+            "dirty": "not merged: its worktree holds uncommitted work that is not the task's, so a node asks for it to be committed or dropped",
+            "guard": "not merged: a hook refused the commit, so a node asks for what it names to be fixed",
             "conflict": "not merged: it conflicts with %s, so a node asks for the branch to be rebased onto it" %
                         dfs_paths.branch(),
             "refused": "not merged: git would overwrite uncommitted edits here, raised for the author",
