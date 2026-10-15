@@ -1101,6 +1101,20 @@ class Web(unittest.TestCase):
         self.assertIs(rows[plain]["draft"], False)
         self.assertNotEqual(self.call("GET", "/api/state")[1]["next_item"], new)
 
+    def test_a_task_is_marked_a_draft_and_ready_again(self):
+        task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
+        self.assertIs(self.call("GET", "/api/task/" + task)[1]["draft"], False)
+        status, data, _ = self.call("POST", "/api/draft", dict(task=task, draft=True))
+        self.assertEqual((status, data["task"]["draft"]), (200, True))
+        rows = {i["id"]: i for i in self.call("GET", "/api/state")[1]["items"]}
+        self.assertEqual((rows[task]["draft"], rows[task]["status"]), (True, "open"))
+        self.assertNotEqual(self.call("GET", "/api/state")[1]["next_item"], task)
+        self.call("POST", "/api/draft", dict(task=task, draft=True))     # already one: nothing more is written
+        self.assertEqual([e["kind"] for e in dfs_tree.load(task)["log"] if e["kind"] in ("draft", "ready")], ["draft"])
+        self.assertIs(self.call("POST", "/api/draft", dict(task=task, draft=False))[1]["task"]["draft"], False)
+        self.assertEqual(self.call("POST", "/api/draft", dict(task=task))[0], 400)
+        self.assertEqual(self.call("POST", "/api/draft", dict(task="W99", draft=True))[0], 404)
+
     def test_an_unknown_task_or_action_is_not_found(self):
         self.assertEqual(self.call("GET", "/api/task/W99")[0], 404)
         self.assertEqual(self.call("POST", "/api/accept", dict(task="W99"))[0], 404)

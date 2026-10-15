@@ -731,7 +731,7 @@ function drawTasks() {
     const inner = `<span class="iid">${iidHtml(it.id)}</span>
       <span class="body">${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
-          ${walkTags(it)}
+          ${walkTags(it)}${it.draft ? `<span class="tag">draft</span>` : ""}
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}
           ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}
@@ -904,6 +904,7 @@ function drawTask() {
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>
       <button class="btn" data-act="edittask">Edit task</button>
+      ${t.status !== "done" ? `<button class="btn" data-act="draft" data-draft="${t.draft ? "0" : "1"}" aria-pressed="${t.draft}" title="${t.draft ? "The walk passes it over; Ready puts it back in its turn" : "Mark it a draft: the walk passes it over until it is ready"}">${t.draft ? "Draft: mark ready" : "Mark as draft"}</button>` : ""}
       <button class="btn" data-act="deletetask">Delete task</button>
       <button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button>
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
@@ -1382,6 +1383,7 @@ document.addEventListener("click", e => {
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStartForm, walkstop: async () => { try { S.walk = await api("/api/walk/stop", {}); toast("Walk stopped; its chain ends after this run."); drawTasks(); } catch (e) { toast(e.message, true); } },
     chainstop: () => chainStopForm(d.item),
+    draft: async () => { try { const on = d.draft === "1"; wrote(await api("/api/draft", { task: S.task.id, draft: on }), on ? S.task.id + " is a draft: the walk passes it over." : S.task.id + " is ready: the walk takes it in its turn."); } catch (e) { toast(e.message, true); } },
     walkhere: async () => { try { S.walk = await api("/api/walk/pin", { item: d.item }); toast(S.walk.pinned ? "The walk goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
   }[d.act] || (() => {}))();
 });

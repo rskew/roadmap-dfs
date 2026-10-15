@@ -264,6 +264,9 @@ class Flows(unittest.TestCase):
     def test_a_new_task_from_the_bottom_of_the_list_and_the_title_is_the_rename(self):
         self.flow("newtask")
 
+    def test_a_task_is_made_a_draft_in_the_form_and_toggled_on_its_screen(self):
+        self.flow("draft")
+
     def test_a_long_name_wraps_in_its_field_and_enter_saves_it_on_one_line(self):
         self.flow("namefield")
         self.assertEqual(open(self.root / ".dfs" / "items" / "W3.md").readline().strip(), "# W3 · Stop cache stampedes")

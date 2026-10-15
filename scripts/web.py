@@ -346,7 +346,7 @@ def task_json(task):
                 status=status, why=humanize(why), accepted=accepted,
                 acceptable=status == "done" and not accepted, rows=rows, assumed=assumed,
                 notes=[dict(kind=k, verdict=v, body=b) for k, _ts, v, b in dfs_tree.notes(t)],
-                sessions=dfs_tree.sessions_since_author(t))
+                sessions=dfs_tree.sessions_since_author(t), draft=dfs_tree.is_draft(t))
 
 
 RUN_LISTED = 12             # the newest chains a task page lists
@@ -670,6 +670,16 @@ def act(name, body):
                 dfs_tree.edit_node(task, nid, need(body, "title", "a title"), body.get("approach") or "")
             except (ValueError, dfs_paths.NoBranch) as e:
                 raise Refused(str(e), 409)
+        elif name == "draft":
+            # as the terminal's `s`: a log entry the walk's choice reads; asking for the state it is in writes nothing
+            want = body.get("draft")
+            if not isinstance(want, bool):
+                raise Refused("draft is true or false")
+            if want != dfs_tree.is_draft(t):
+                try:
+                    dfs_tree.append_log(task, "draft" if want else "ready")
+                except (ValueError, dfs_paths.NoBranch) as e:
+                    raise Refused(str(e), 409)
         elif name == "delete_task":
             try:
                 dfs_tree.delete_task(task)

@@ -1326,6 +1326,35 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // A task is made a draft from the new-task form's box, and marked a draft and ready again from its own screen.
+  async draft(b) {
+    const { page, errors } = await open(b, PHONE);
+    const tag = id => page.$eval(`.item[data-id=${id}] .meta`, e => /\bdraft\b/.test(e.textContent)).catch(() => null);
+    assert((await tag("W3")) === false, "a plain task's row does not say draft");
+    await page.click("[data-act=newtask]"); await dialog(page);
+    await page.fill("#nn", "Maybe later");
+    await page.check("#ndr");
+    if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "draft-form.png") });
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => [...document.querySelectorAll(".item")].some(e => /Maybe later/.test(e.textContent) && /\bdraft\b/.test(e.querySelector(".meta").textContent)), null, { timeout: 8000 });
+    await task(page, "W3");
+    same((await page.textContent("[data-act=draft]")).trim(), "Mark as draft", "an ordinary task offers to be a draft");
+    await page.click("[data-act=draft]");
+    await page.waitForFunction(() => /ready/.test(document.querySelector("[data-act=draft]")?.textContent || ""), null, { timeout: 8000 });
+    if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "draft-task.png") });
+    await toList(page);
+    await page.waitForSelector(".item[data-id=W3]");
+    assert((await tag("W3")) === true, "the list row says draft once marked");
+    if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "draft-list.png") });
+    await task(page, "W3");
+    await page.click("[data-act=draft]");
+    await page.waitForFunction(() => document.querySelector("[data-act=draft]")?.textContent.trim() === "Mark as draft", null, { timeout: 8000 });
+    await toList(page);
+    await page.waitForSelector(".item[data-id=W3]");
+    assert((await tag("W3")) === false, "marked ready, the row no longer says draft");
+    same(errors, [], "no page errors");
+  },
+
   // An artefact named in a raise is linked and served sandboxed: its script cannot reach the API.
   async artefacts(b, ctx0) {
     const { ctx, page, errors } = await open(b, PHONE);
