@@ -184,6 +184,14 @@ class Flows(unittest.TestCase):
         self.assertEqual([(e["args"], e["body"].strip()) for e in corr],
                          [(["W9.2", "refuted"], "WAL is wrong on this disk.")])
 
+    def test_a_picture_attached_to_a_correction_is_kept_and_drawn(self):
+        self.flow("attach")
+        corr = [e for e in self.log("W9") if e["kind"] == "correct"]
+        self.assertEqual(len(corr), 1)
+        m = re.fullmatch(r"Look at this: !\[the bar\.png\]\(\.dfs/artefacts/([0-9a-f-]+\.png)\)", corr[0]["body"].strip())
+        self.assertTrue(m, corr[0]["body"])
+        self.assertTrue((self.root / ".dfs" / "artefacts" / m.group(1)).read_bytes().startswith(b"\x89PNG"))
+
     def test_confirming_over_a_sibling_that_holds_work_asks_to_park_it(self):
         dfs_tree.start_node("W9", "W9.10")
         self.flow("park")

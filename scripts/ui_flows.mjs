@@ -463,6 +463,33 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A picture attached to a correction: the Attach button uploads it, its reference goes in the text, and the
+  // correction draws it under the node once written.
+  async attach(b) {
+    const { page, errors } = await open(b, PHONE);
+    const png = await page.screenshot({ clip: { x: 0, y: 0, width: 120, height: 80 } });
+    await task(page, "W9");
+    await page.click("[data-id='W9.2'].main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=correct]"); await dialog(page);
+    await page.click("dialog label:has(input[value=refuted])");
+    await page.fill("dialog textarea", "Look at this:");
+    assert(await page.isVisible("dialog .attach button"), "the box has an Attach button");
+    await page.setInputFiles("dialog .attach input[type=file]", { name: "the bar.png", mimeType: "image/png", buffer: png });
+    await page.waitForFunction(() => /!\[the bar\.png\]\(\.dfs\/artefacts\/[0-9a-f-]+\.png\)$/.test(document.querySelector("dialog textarea").value));
+    assert((await page.inputValue("dialog textarea")).startsWith("Look at this: ![the bar.png]("), "the reference follows the text, a space between");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => /overruled by you/.test(document.body.textContent));
+    await page.waitForFunction(() => [...document.querySelectorAll("img[src^='artefacts/']")].some(i => i.complete && i.naturalWidth > 0));
+    if (process.env.DFS_SHOT) {
+      await page.evaluate(() => { document.querySelector("#sheet [data-act=close]")?.click(); document.querySelector("img[src^='artefacts/']").scrollIntoView({ block: "center" }); });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: process.env.DFS_SHOT.replace(/\.png$/, "-drawn.png") });
+    }
+    same(errors, [], "no page errors");
+  },
+
   // Confirming over a later sibling that holds work asks first: the box shows only for Confirm and Confirm needs it ticked.
   async park(b) {
     const { page, errors } = await open(b, PHONE);

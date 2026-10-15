@@ -366,6 +366,7 @@ class Web(unittest.TestCase):
         status, raw, r = self.call("GET", "/artefacts/" + doc)
         self.assertEqual((status, raw, r.getheader("Content-Type"), r.getheader("X-Content-Type-Options")),
                          (200, b"%PDF-1.4 ...", "application/pdf", "nosniff"))
+        self.assertEqual(r.getheader("Content-Disposition"), 'attachment; filename="%s"' % doc)
         self.assertIn("sandbox", r.getheader("Content-Security-Policy"))
         dfs_tree.append_log("W1", "answer", (), "Like this: ![bar](.dfs/artefacts/%s), and [notes](.dfs/artefacts/%s)." % (shot, doc))
         arts = self.call("GET", "/api/task/W1")[1]["artefacts"]

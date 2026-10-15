@@ -986,8 +986,10 @@ class Handler(BaseHTTPRequestHandler):
         ctype = ART_TYPES.get(p.suffix.lower()) or FILE_TYPES.get(p.suffix.lower())
         if not re.fullmatch(ART_NAME, name) or ctype is None or not p.is_file():
             raise Refused("no such artefact", 404)
+        # a browser will not draw a pdf in a sandbox, so a pdf is handed over to open in the phone's own viewer
+        down = [("Content-Disposition", 'attachment; filename="%s"' % name)] if p.suffix.lower() == ".pdf" else []
         return self.send(200, p.read_bytes(), ctype,
-                         extra=[("Content-Security-Policy", ART_CSP)])
+                         extra=[("Content-Security-Policy", ART_CSP)] + down)
 
     def same_origin(self):
         """A write names where it came from: refused when that is another site."""

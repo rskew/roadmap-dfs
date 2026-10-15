@@ -180,6 +180,9 @@ details.sec.arts .body, details.sec.runs .body { white-space: normal; }
 a.tile { display: block; color: inherit; text-decoration: none; }
 a.tile .thumb { display: block; position: relative; aspect-ratio: 3 / 2; overflow: hidden; border: var(--rule) solid var(--line); background: var(--faint); }
 a.tile .thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+a.tile .thumb.file { display: flex; align-items: center; justify-content: center; font-weight: 600; color: var(--muted); }
+#form .attach { display: flex; align-items: center; gap: var(--s2); margin-top: var(--s2); }
+#form .attach .hint { color: var(--muted); }
 a.tile .thumb iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; pointer-events: none; background: #fff; }
 a.tile .name { display: block; margin-top: var(--s1); font-size: var(--fs-small); overflow-wrap: anywhere; }
 a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max-width: 100%; height: auto; border: var(--rule) solid var(--line); }
@@ -947,13 +950,16 @@ const artHref = name => `#/a/${encodeURIComponent(S.task.id)}/${encodeURICompone
    older raises carry) becomes an <a> to that viewer; it links only when the task has the file. A screenshot
    (`<name>.png`, or `![alt](.dfs/artefacts/<name>.png)`) is drawn in place, tap for full size. Text is
    escaped first. */
-const ART_RE = /(?<![0-9A-Za-z._\/-])(!\[([^\]\n]*)\]\()?(?:https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/|(?:\.dfs\/)?artefacts\/)?([0-9A-Za-z][0-9A-Za-z._-]*\.(?:html|png|jpe?g|gif|webp|svg))(\))?/gi;
+const ART_RE = /(?<![0-9A-Za-z._\/-])(!?\[([^\]\n]*)\]\()?(?:https?:\/\/(?:localhost|127\.0\.0\.1):\d+\/|(?:\.dfs\/)?artefacts\/)?([0-9A-Za-z][0-9A-Za-z._-]*\.(?:html|png|jpe?g|gif|webp|svg|pdf|txt|md|csv|json|log))(\))?/gi;
+/* A file the author attached (`[notes.pdf](.dfs/artefacts/<uuid>.pdf)`) opens as itself, in a tab of its own. */
+const fileLink = (a, label) => `<a class="art" href="artefacts/${esc(a.file)}" target="_blank" rel="noopener">${label || esc(a.title)}</a>`;
 function rich(text) {
   const have = new Map(((S.task && S.task.artefacts) || []).map(a => [a.file, a]));
   return esc(text).replace(ART_RE, (m, md, alt, name, close) => {
     const a = have.get(name);
     if (!a || (md && !close)) return m;
     const href = artHref(name);
+    if (a.kind === "file") return fileLink(a, alt);
     if (a.kind === "image")
       return `<a class="shot" href="${href}"><img src="artefacts/${name}" alt="${alt || esc(a.title)}" loading="lazy"></a>`;
     return `<a class="art" href="${href}">${esc(a.title)}</a>`;
@@ -1003,7 +1009,9 @@ function artefactsHtml(t) {
   const arts = t.artefacts || [];
   if (!arts.length) return "";
   const href = a => `artefacts/${esc(a.file)}`;
-  const card = a => `<a class="tile" href="${artHref(a.file)}"><span class="thumb">${a.kind === "image"
+  const card = a => a.kind === "file"
+    ? `<a class="tile" href="${href(a)}" target="_blank" rel="noopener"><span class="thumb file">${esc(a.file.split(".").pop().toUpperCase())}</span><span class="name">${esc(a.title)}</span></a>`
+    : `<a class="tile" href="${artHref(a.file)}"><span class="thumb">${a.kind === "image"
     ? `<img src="${href(a)}" alt="" loading="lazy">`
     : `<iframe src="${href(a)}" title="${esc(a.title)}" tabindex="-1" loading="lazy" scrolling="no" width="${THUMB_W}" height="${THUMB_W * 2 / 3}"></iframe>`}</span><span class="name">${esc(a.title)}</span></a>`;
   return `<details class="sec arts" open><summary class="cap">Artefacts ${arts.length}</summary><div class="body">
@@ -1079,6 +1087,7 @@ function form(html, onsubmit) {
     el.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); f.requestSubmit($("button[value=ok]", f)); } });
     grow();
   }
+  for (const el of f.querySelectorAll("textarea:not(.line):not([name=todos])")) attachTo(el);
   f.addEventListener("submit", async ev => {
     ev.preventDefault();
     if (ev.submitter && ev.submitter.value === "cancel") { d.close(); return; }
@@ -1088,6 +1097,42 @@ function form(html, onsubmit) {
     catch (e) { toast(e.message, true); if (btn) btn.disabled = false; }
   });
   d.addEventListener("close", () => { d.innerHTML = ""; if (S.dirty) { S.dirty = false; render(false); } }, { once: true });
+}
+/* Attaching to what the author writes: a box gets an Attach button (a phone offers its camera and photos), and a
+   picture pasted or dropped into it is attached too. Each file goes to /api/attach, which keeps it in
+   `.dfs/artefacts`, and the reference it returns is put in the text at the caret: that is how it reaches the
+   node, drawn in place here, and the agent, which reads the path. */
+const ATTACH_TYPES = ".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.md,.csv,.json,.log,image/*";
+const ATTACH_MAX = 8 * 1024 * 1024;
+function attachTo(box) {
+  const bar = document.createElement("div");
+  bar.className = "attach";
+  bar.innerHTML = `<button class="btn" type="button">Attach</button><span class="hint">a picture or file, or paste one</span><input type="file" multiple hidden accept="${ATTACH_TYPES}" aria-label="Attach a picture or file">`;
+  box.after(bar);
+  const pick = $("input", bar), hint = $(".hint", bar);
+  $("button", bar).addEventListener("click", () => pick.click());
+  const put = async files => {
+    for (const file of files) {
+      if (file.size > ATTACH_MAX) { toast(`${file.name} is over 8 MB`, true); continue; }
+      hint.textContent = `attaching ${file.name || "a picture"}…`;
+      try {
+        const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(r.error); r.readAsDataURL(file); });
+        const name = file.name && file.name !== "image.png" ? file.name : "pasted-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + "." + ((file.type.split("/")[1] || "png").replace("jpeg", "jpg"));
+        const { ref } = await api("/api/attach", { name, data });
+        const at = box.selectionStart ?? box.value.length, before = box.value.slice(0, at), after = box.value.slice(box.selectionEnd ?? at);
+        const text = (before && !/\s$/.test(before) ? " " : "") + ref + (after && !/^\s/.test(after) ? " " : "");
+        box.value = before + text + after;
+        box.selectionStart = box.selectionEnd = before.length + text.length;
+        box.dispatchEvent(new Event("input"));
+      } catch (e) { toast(e.message, true); }
+    }
+    hint.textContent = "a picture or file, or paste one";
+    pick.value = "";
+  };
+  pick.addEventListener("change", () => put([...pick.files]));
+  box.addEventListener("paste", ev => { const fs = [...(ev.clipboardData?.files || [])]; if (fs.length) { ev.preventDefault(); put(fs); } });
+  box.addEventListener("dragover", ev => { if ([...(ev.dataTransfer?.types || [])].includes("Files")) ev.preventDefault(); });
+  box.addEventListener("drop", ev => { const fs = [...(ev.dataTransfer?.files || [])]; if (fs.length) { ev.preventDefault(); put(fs); } });
 }
 (function () {                          // the visual viewport is what the keyboard leaves
   const vv = window.visualViewport; if (!vv) return;
