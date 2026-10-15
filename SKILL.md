@@ -164,6 +164,21 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   the Summary as `![what it shows](.dfs/artefacts/<uuid>.png)`; the item draws it in place.
   Nothing requires one.
 
+## Where an item is worked
+
+A chain runs every session of an item (work, critic and review) in a git worktree,
+`.dfs/worktrees/<task>`, on the branch `dfs/<task>`, which the first run cuts from the
+default branch (`main` or `master`). Your CWD is that worktree: edit and commit there,
+and the author's checkout stays on the default branch. The branch writes plain ids
+(`W13.4`, no `@<tag>`), so its nodes merge into the default branch's task file as
+written. You never merge, switch branch or remove the worktree yourself: when the
+review passes (or the author accepts), the runner merges `dfs/<task>` into the default
+branch with `--no-ff`, locally and without a push, and removes the worktree and the
+branch. A merge that conflicts is not done: the runner adds an open node asking for the
+default branch to be merged into `dfs/<task>` and the conflicts resolved, so the next
+session takes it up like any open node. Edits of the author's on the default branch
+that overlap the merge are a raise, which the runner logs.
+
 ## When `.dfs/` is gitignored
 
 Supported: `.dfs/` is planning, and git history shows the walk. Your briefing says

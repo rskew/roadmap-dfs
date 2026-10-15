@@ -13,6 +13,16 @@ nix run github:rskew/roadmap-dfs                         # the tui
 nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 ```
 
+## Where an item is worked
+
+Each item is worked on its own branch, `dfs/<task>`, in its own git worktree under
+`.dfs/worktrees/<task>`, so a walk never switches the checkout you have open (the screen
+and the web page read the task through its worktree). The first run cuts the branch from
+`main` (or `master`). When the review passes, or you accept the tree, the branch is
+merged into the default branch with `--no-ff` (local, never pushed) and the worktree and
+branch are removed. A merge that conflicts reopens the item with a node to resolve it;
+uncommitted edits of yours that the merge would overwrite raise instead.
+
 ## Running the sandbox as a daemon
 
 `sandbox daemon [command args]` runs the command (default: the repo's `CONTAINER_APP_CMD`, from `.container.env`)

@@ -27,6 +27,12 @@
 # task's own Log, where the runner records every session it starts and how it ended;
 # none of it is left to a session's judgement.
 #
+# ⚠️ AN ITEM IS WORKED ON ITS OWN BRANCH, IN ITS OWN WORKTREE (branch.py). The first run
+# from the default branch cuts `dfs/<task>` into `.dfs/worktrees/<task>` and every
+# session runs there; a passing review (or the author's accept) merges it back with
+# `--no-ff` and removes the worktree and the branch. See the two blocks below the
+# argument parsing.
+#
 # ⚠️ A SESSION MAY END MID-NODE, and the next one picks the work up. A node ends with
 # a commit, not a session: a usage limit or the context checkpoint leaves the node's
 # uncommitted work in the tree, and the briefing tells the next session it is its
