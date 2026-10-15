@@ -149,7 +149,15 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 .top-actions { margin: var(--s2) 0 0; }
 
 /* the walk */
-.walk { margin: 6px 0 10px; border-bottom: var(--rule) solid var(--line); }
+/* The walk's controls stay in reach on a long list: the box sticks under the bar (its measured height, `--bar-h`, as a long
+   title can make it taller), opaque, above the rows, and out to the view's edges so a tinted row (which bleeds 10px past the
+   column) does not show either side of it. Open, it scrolls in itself under its own summary rather than cover the list, and
+   a row focus brings into view clears it too (`--pin-h`, its measured height). */
+.walk { margin: 6px calc(-1 * var(--s4)) 10px; padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); position: sticky; z-index: 4; background: var(--paper);
+  top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule)))); }
+.walk[open] { max-height: 55dvh; overflow-y: auto; overscroll-behavior: contain; }
+.walk[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--paper); }
+:root:has(#walkbox) { scroll-padding-top: calc(var(--bar-h, var(--bar)) + var(--pin-h, 0px) + var(--s3)); }
 .walk > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
 .walk > summary::-webkit-details-marker { display: none; }
 .walk > summary .state { font-size: var(--fs-body); font-weight: 500; }
@@ -720,6 +728,11 @@ function drawChats() {
 const walkTags = it => (it.running ? `<span class="tag settled">running ${esc(it.running)}</span>` : "") + (it.next ? `<span class="tag settled">next</span>` : "");
 // The task screen has no list row, so it reads the same two facts from the walk it fetches beside the task.
 const walkOf = id => ({ running: ((S.walk && S.walk.live) || []).filter(c => c.item === id).map(c => c.progress)[0] || "", next: !!S.walk && S.walk.next === id });
+const pinSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+  const root = document.documentElement.style, box = $("#walkbox");
+  root.setProperty("--bar-h", $("#bar").getBoundingClientRect().height + "px");
+  if (box) root.setProperty("--pin-h", box.getBoundingClientRect().height + "px");
+}) : null;
 function drawTasks() {
   const items = S.state.items.filter(i => !S.only || i.needs_you);
   let seg = 0, html = walkHtml();
@@ -755,6 +768,7 @@ function drawTasks() {
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
   $("#view").className = "col"; $("#view").innerHTML = html;
+  if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
 }

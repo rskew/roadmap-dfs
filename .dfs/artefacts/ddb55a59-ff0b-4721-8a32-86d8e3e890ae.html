@@ -1,0 +1,176 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W74.1: the walk controls are the Walk box on the task list</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 640px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 18px; color: #444; }
+  .choices { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+  button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px;
+           background: #fff; cursor: pointer; }
+  button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .result { border: 1.5px solid #333; border-radius: 6px; background: #fff;
+            padding: 10px 14px; min-height: 3em; }
+  #rulebox, #answerbox { margin: 18px 0 0; padding: 10px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  #rulebox p, #answerbox p { margin: 0 0 8px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 8px 0; }
+  label { display: block; margin: 8px 0 2px; }
+  .phone { width: 100%; max-width: 300px; margin: 12px auto 0; border: 2px solid #333; border-radius: 14px; overflow: hidden; background: #f4f3ee; font-size: 14px; }
+  .phone .bar { padding: 10px 12px; background: #f4f3ee; border-bottom: 3px solid; border-image: linear-gradient(90deg, #b3261e 0 33%, #e0a400 0 66%, #2a5ca8 0) 1; font-weight: 600; }
+  .phone .pin { padding: 10px 12px; background: #fff; border-bottom: 1px solid #999; box-shadow: 0 3px 6px rgba(0,0,0,.12); }
+  .phone .pin small { color: #555; }
+  .phone .rows { height: 170px; overflow: hidden; position: relative; }
+  .phone .row { padding: 10px 12px; border-bottom: 1px solid #ddd; color: #444; }
+  .phone .gone { color: #999; text-decoration: line-through; }
+  .phone .tag { display: inline-block; border: 1px solid #2a5ca8; color: #2a5ca8; font-size: 12px; padding: 0 6px; border-radius: 3px; }
+  .phone .btnlike { display: inline-block; border: 1px solid #333; padding: 2px 8px; font-size: 13px; border-radius: 3px; margin: 4px 4px 0 0; }
+  .cap { text-align: center; color: #555; font-size: 14px; margin: 6px 0 0; }
+</style>
+
+<h1>"The walk controls" are the Walk box on the task list</h1>
+<p class="lede">The task says: pin walk controls to the top of the item view when scrolling. The work reads
+  "the item view" as the web page's list of tasks, and "the walk controls" as the Walk box at its head
+  (Next, Agent, Start or Stop walk, Stop chain), which a long list scrolls away. The task screen has only
+  walk tags and one "Walk here next" button among its actions.</p>
+
+<h2>Which did you mean? Switch to see each, scrolled half way down</h2>
+<div class="choices" role="group" aria-label="Which reading">
+  <button type="button" data-case="holds" aria-pressed="true">The task list's Walk box</button>
+  <button type="button" data-case="fails" aria-pressed="false">The task screen's walk button</button>
+</div>
+<div class="result" id="result" aria-live="polite"></div>
+<div class="phone" aria-hidden="true">
+  <div class="bar" id="ph-bar">roadmap-dfs</div>
+  <div class="pin" id="ph-pin"></div>
+  <div class="rows" id="ph-rows"></div>
+</div>
+<p class="cap" id="ph-cap"></p>
+
+<div id="rulebox" hidden>
+  <p>Rule on this node: what the work takes to be true is settled by the choice above.</p>
+  <label id="parkbox" hidden><input type="checkbox" id="park"> Confirming prunes <span id="parks"></span>, which hold work: park them</label>
+  <label for="note">Your note, sent with it (optional)</label>
+  <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
+  <div class="choices" style="margin-top:8px">
+    <button type="button" id="confirm">Confirm the node</button>
+    <button type="button" id="refute">Refute the node</button>
+  </div>
+  <p id="rule-status" aria-live="polite"></p>
+</div>
+<div id="answerbox" hidden>
+  <p>This page is also the answer to a raise. Choose above, then send it.</p>
+  <button type="button" id="answer">Send as my answer</button>
+  <p id="answer-status" aria-live="polite"></p>
+</div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">You meant the task screen (a task's tree, <code>#/t/W74</code>): its walk tags and its "Walk here next"
+  button should stay under the bar as the tree scrolls. Refute, and the next session pins those instead
+  (the parked alternative), keeping or undoing the list's pinned box as you say in your note.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>The Walk box (<code>walkHtml()</code>) is drawn only at the head of the task list; the server's
+    <code>--no-walk</code> help calls what it switches off "the walk controls". For the reading.</p>
+  <p>The TUI already keeps its walk badge in its fixed header line, so the page is the one place the
+    controls scroll away. For the reading being about the web page.</p>
+  <p>The task screen carries walk tags and a "Walk here next" button, which a reader could also call
+    walk controls. Against.</p>
+</details>
+
+<script>
+  // Replace these with what each case means for THIS assumption; the parts of the
+  // page above stay as they are. Add a slider only when the assumption turns on a
+  // quantity and the result below (or a drawing) changes as it moves: a control that
+  // moves nothing the reader can see is noise (docs/artefacts.md).
+  var cases = {
+    holds: 'The task list: the Walk box sticks under the bar while the list scrolls, rows pass under it, and opened it scrolls in itself (at most about half the screen). This is what is built.',
+    fails: 'The task screen: the walk tags and the "Walk here next" button stick under the bar while the tree scrolls. Not built; it is the parked alternative.'
+  };
+  var looks = {
+    holds: { pin: '<b>Walk</b> &nbsp;Walk is off <small>next W74 \u00b7 claude</small>',
+             rows: ['W54 &nbsp;Artefacts shouldn\u2019t have\u2026', 'W55 &nbsp;Codex limits reached\u2026', 'W56 &nbsp;Reorder mode controls', 'W57 &nbsp;Going back from an item\u2026'],
+             cap: 'The list, scrolled: the Walk box stays.' },
+    fails: { pin: '<span class="tag">running run 1/8</span> <span class="btnlike">Walk here next</span>',
+             rows: ['W74.1 &nbsp;Pin the Walk box\u2026', 'W74.2 &nbsp;Pin the task screen\u2019s\u2026', '\u2026 the rest of the tree'],
+             cap: 'A task\u2019s screen, scrolled: its walk tag and button stay.' }
+  };
+  function draw() {
+    var l = looks[chosen];
+    document.getElementById('ph-pin').innerHTML = l.pin;
+    document.getElementById('ph-rows').innerHTML = l.rows.map(function (r) { return '<div class="row">' + r + '</div>'; }).join('');
+    document.getElementById('ph-cap').textContent = l.cap;
+  }
+  var chosen = 'holds', touched = false;
+
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it, rules on the node whose Hypothesis names this page (verdict: confirmed or refuted), and
+  // records the answer when a raise names it ("Answer with: ..."). Opened
+  // from a file (the artefact check) there is no server, and none of this runs. Send text/plain
+  // (a JSON string, no header): that needs no preflight, which the server never grants.
+  var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+  function call(method, body) {
+    if (!API) return Promise.reject(new Error('no server'));
+    return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+    });
+  }
+  function mine() { return { chosen: chosen }; }
+  var saving;
+  function keep() { clearTimeout(saving); saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300); }
+  function show() {
+    document.getElementById('result').textContent = cases[chosen];
+    draw();
+    document.querySelectorAll('[data-case]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.case === chosen));
+    });
+  }
+  document.querySelectorAll('[data-case]').forEach(function (b) {
+    b.addEventListener('click', function () { touched = true; chosen = b.dataset.case; show(); keep(); });
+  });
+  // The node's Hypothesis names this page, so the buttons below rule on that node: the same
+  // refute/confirm the web page's form writes. Say the decision, then the author's note.
+  function rule(verdict) {
+    var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
+    if (verdict === 'confirmed' && !document.getElementById('parkbox').hidden && !document.getElementById('park').checked) {
+      note.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+      return;
+    }
+    var text = document.getElementById('result').textContent + (why ? '\n\n' + why : '');
+    document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
+    call('POST', { state: mine(), verdict: verdict, answer: text, park: document.getElementById('park').checked }).then(function () {
+      note.textContent = 'Recorded: ' + verdict + '.';
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }).catch(function (e) {
+      document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = false; });
+      note.textContent = 'Not recorded: ' + e.message;
+    });
+  }
+  document.getElementById('confirm').addEventListener('click', function () { rule('confirmed'); });
+  document.getElementById('refute').addEventListener('click', function () { rule('refuted'); });
+  // The answer is the text the author reads on the page: make it say the decision.
+  var send = document.getElementById('answer');
+  send.addEventListener('click', function () {
+    var note = document.getElementById('answer-status');
+    send.disabled = true;
+    call('POST', { state: mine(), answer: document.getElementById('result').textContent }).then(function () {
+      note.textContent = 'Recorded as your answer.';
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }).catch(function (e) { send.disabled = false; note.textContent = 'Not recorded: ' + e.message; });
+  });
+  show();
+  call('GET').then(function (j) {
+    if (!touched && j.state && cases[j.state.chosen]) { chosen = j.state.chosen; show(); }
+    document.getElementById('rulebox').hidden = !j.node;
+    // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+    var parks = (j.node && j.node.parks) || [];
+    document.getElementById('parks').textContent = parks.join(', ');
+    document.getElementById('parkbox').hidden = !parks.length;
+    document.getElementById('answerbox').hidden = !j.raise;
+  }).catch(function () {});
+</script>

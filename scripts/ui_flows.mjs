@@ -671,6 +671,42 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // The walk's controls stay in reach on a list taller than the screen: the box sticks under the bar, the rows pass under it,
+  // open it scrolls in itself, and a row focus brings back into view is not left under it.
+  async walkpin(b) {
+    const ctx = await b.newContext({ viewport: { width: 390, height: 600 }, hasTouch: true, isMobile: true });
+    const page = await ctx.newPage(); PAGES.push(page);
+    const errors = []; page.on("pageerror", e => errors.push(String(e)));
+    await page.goto(URL_); await page.waitForSelector("#walkbox");
+    assert(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 200), "the task list is taller than the screen");
+    const at = () => page.evaluate(() => {
+      const bar = document.querySelector("#bar").getBoundingClientRect(), box = document.querySelector("#walkbox").getBoundingClientRect();
+      const s = document.querySelector("#walkbox > summary").getBoundingClientRect(), x = s.left + s.width / 2, y = s.top + s.height / 2;
+      return { bar: bar.bottom, top: box.top, bottom: box.bottom, h: innerHeight, mine: !!document.elementFromPoint(x, y)?.closest("#walkbox"),
+        under: [...document.querySelectorAll(".item")].some(r => { const q = r.getBoundingClientRect(); return q.top < box.bottom && q.bottom > box.top; }) };
+    });
+    await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(150);
+    let p = await at();
+    assert(Math.abs(p.top - p.bar) <= 2, `scrolled to the end, the Walk box sits under the bar (box at ${p.top}, bar ends at ${p.bar})`);
+    assert(p.under && p.mine, "rows pass under the box, which is drawn over them");
+    await page.click("#walkbox summary"); await page.waitForSelector("#nextsel");
+    p = await at();
+    assert(Math.abs(p.top - p.bar) <= 2 && p.bottom - p.top <= 0.6 * p.h, `open, it stays put and takes at most 60% of the screen (${p.bottom - p.top} of ${p.h})`);
+    await page.selectOption("#nextsel", "W2");
+    await page.waitForFunction(() => /W2/.test(document.querySelector("#walkbox .brief")?.textContent || ""));
+    await page.click("#walkbox summary");
+    await page.waitForFunction(() => !document.querySelector("#walkbox[open]"));
+    // The first row, focused from the end of the list, comes into view below the box, not under it.
+    const clear = await page.evaluate(() => {
+      const r = document.querySelector(".item"); r.focus(); r.scrollIntoView({ block: "nearest" });
+      return { row: r.getBoundingClientRect().top, box: document.querySelector("#walkbox").getBoundingClientRect().bottom };
+    });
+    assert(clear.row >= clear.box - 0.5, `the first row comes into view at ${clear.row}, below the box ending at ${clear.box}`);
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // The thumbs: what you press to move is in the bottom of the screen, Back always at the right, under the right thumb, what moves you on the left.
   async thumbs(b) {
     for (const [name, opts] of [["phone", PHONE], ["narrow", NARROW]]) {

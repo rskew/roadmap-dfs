@@ -260,6 +260,9 @@ class Flows(unittest.TestCase):
         self.assertEqual(self.fake.started_chains[0][1], "7")
         self.assertEqual(self.fake.chosen, "codex")
 
+    def test_the_walk_controls_stay_under_the_bar_as_the_list_scrolls(self):
+        self.flow("walkpin")
+
     def test_navigation_is_under_the_thumbs(self):
         self.flow("thumbs")
 
