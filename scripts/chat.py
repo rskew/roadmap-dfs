@@ -222,8 +222,7 @@ def kiro_home():
 def kiro_messages(sid):
     """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions are
     `sess_<uuid>` directories (`session.json`, `messages.jsonl`) under `.kiro/sessions/`, in a
-    bucket per workspace; its sqlite database holds only auth and history. Taken from the names
-    in the binary, not from a captured session (W81.6's hypothesis)."""
+    bucket per workspace (as a real run writes them); its sqlite database holds only auth and history."""
     if not sid or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}", sid) or ".." in sid:
         return None
     root = os.path.join(kiro_home(), ".kiro", "sessions")
@@ -235,27 +234,25 @@ def kiro_messages(sid):
 
 
 def kiro_turns(rec):
-    """(role, text, message id) for one line of a kiro session's `messages.jsonl`: a message
-    with a user (or steering) or assistant role, its text in `content` (a string or blocks).
-    Tool calls and results are not words. The words are looked for in the record or in its
-    `payload`, as the binary shows both, and what kiro wraps around a typed message for the
-    model is cut away."""
-    body = rec.get("payload") if isinstance(rec.get("payload"), dict) else rec
-    role = {"user": "you", "steer": "you", "assistant": "agent"}.get(
-        body.get("role") or body.get("type") or rec.get("role") or rec.get("type"))
-    content = body.get("content", body.get("text"))
-    if not role or content is None:
+    """(role, text, message id) for one line of a kiro session's `messages.jsonl`, which a real
+    kiro writes as `{"id", "timestamp", "payload": {"type", ...}}`. The words are a `user`
+    payload's `content` and an `assistant` payload's `content` when it is something said
+    (`operationType` Say). Tool calls and results, reasoning, summaries, kiro's notes and turn
+    markers are not words, nor is a message kiro sent itself (a hook's, a notification, a
+    synthetic one)."""
+    body = rec.get("payload")
+    if not isinstance(body, dict) or not isinstance(body.get("content"), str):
         return []
-    if isinstance(content, str):
-        text = content
+    meta = (body.get("_meta") or {}).get("kiro") or {}
+    if body.get("type") == "user":
+        if body.get("source") == "hook" or meta.get("syntheticUserMessageReason") or meta.get("notification"):
+            return []
+        role = "you"
+    elif body.get("type") == "assistant" and body.get("operationType", "Say") == "Say":
+        role = "agent"
     else:
-        blocks = content if isinstance(content, list) else [content]
-        text = "\n".join(b if isinstance(b, str) else b.get("text", "") for b in blocks
-                         if isinstance(b, str) or (isinstance(b, dict) and b.get("type", "text") == "text"
-                                                   and isinstance(b.get("text"), str)))
-    if "--- USER MESSAGE BEGIN ---" in text:
-        text = text.split("--- USER MESSAGE BEGIN ---", 1)[1].split("--- USER MESSAGE END ---", 1)[0]
-    return [(role, text, rec.get("messageId") or rec.get("id") or body.get("id") or body.get("messageId"))]
+        return []
+    return [(role, body["content"], rec.get("id"))]
 
 
 READERS = dict(claude=claude_turns, codex=codex_turns, opencode=opencode_turns, kiro=kiro_turns)
@@ -355,29 +352,37 @@ def opencode_result(lines, sid=""):
     return dict(type="result", session_id=sid, is_error=failed, result=(error or text) if failed else text)
 
 
+KIRO_LOG = re.compile(r"^\[(INFO|DEBUG|WARN|ERROR)\]|^\(Use `node ")
+KIRO_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|[▰▱]{7} [^▰▱]*?\(\^\) \+ C to cancel")
+
+
 def kiro_result(lines, sid=""):
     """One turn of `kiro-cli chat --output-format stream-json` as the single JSON line a turn is
-    read from ({session_id, is_error, result}, as codex_result). The stream is ACP's events, one
-    JSON object a line, the session's id a `sessionId` anywhere in the first of them; the answer
-    is the run's `finalText`, else the `agent_message_chunk`s since its last tool call. Lines
-    that are not JSON are kiro's own words (a failed login, a limit: it says those on stderr,
-    which run.sh sends here too) and are the error when no answer came."""
+    read from ({session_id, is_error, result}, as codex_result). Each line is `{"type", "data"}`:
+    `runStarted`, `sessionUpdate`s (ACP's, the session's id in `data.sessionId`), then
+    `runFinished` (`data.finalText`, the turn's words) or `runError` (`data.message`). Without a
+    final text the answer is what was said since the last tool call. Lines that are not JSON are
+    kiro's own words (its log, a login it could not open) and the error when no answer came."""
     chunks, final, noise, error = [], None, [], ""
     for line in lines:
         try:
             rec = json.loads(line)
         except ValueError:
-            if line.strip():
-                noise.append(line.strip())
+            line = KIRO_ANSI.sub("", line).strip()
+            if line and not KIRO_LOG.match(line):
+                noise.append(line)
             continue
         if not isinstance(rec, dict):
             continue
+        data = rec.get("data") if isinstance(rec.get("data"), dict) else {}
         sid = sid or dfs_context.kiro_session_id([rec])
-        if rec.get("type") == "runFinished" and isinstance(rec.get("finalText"), str):
-            final = rec["finalText"]
-        elif rec.get("type") in ("error", "runFailed"):
-            err = rec.get("error") if isinstance(rec.get("error"), (dict, str)) else rec.get("message")
-            error = (err.get("message") if isinstance(err, dict) else err) or error or "the turn failed"
+        if rec.get("type") == "runFinished":
+            if isinstance(data.get("finalText"), str):
+                final = data["finalText"]
+            if data.get("status") not in (None, "success"):
+                error = "the turn ended: %s" % (data.get("stopReason") or data["status"])
+        elif rec.get("type") == "runError":
+            error = data.get("message") or "the turn failed"
         for u in dfs_context.acp_updates(rec):
             kind, content = u.get("sessionUpdate"), u.get("content")
             if kind == "tool_call":

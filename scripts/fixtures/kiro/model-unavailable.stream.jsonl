@@ -1,0 +1,2 @@
+{"type":"runStarted","data":{"payloadSchema":"acp","acpProtocolVersion":1,"engine":"v3"}}
+{"type":"runError","data":{"sessionId":"sess_67d6cb37-0b27-412c-b1b1-1b1b3ec751a9","stage":"prompt","message":"Kiro could not load the available models. Please try again. (code -32000): {\"errorType\":\"ModelRegistryUnavailableError\",\"retryErrorType\":\"SERVER_ERROR\"}"}}

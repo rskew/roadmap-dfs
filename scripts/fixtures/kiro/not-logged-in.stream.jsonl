@@ -1,0 +1,1 @@
+{"type":"runError","data":{"sessionId":null,"stage":"auth","message":"Not logged in. Set the KIRO_API_KEY environment variable or run `kiro-cli login` first."}}
