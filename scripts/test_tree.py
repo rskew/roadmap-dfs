@@ -1318,6 +1318,25 @@ class Branches(InARepo):
         text = "\n".join(p.read_text() for p in dfs_tree.part_files("W1"))
         self.assertEqual(dfs_tree.untracked_artefacts(text), [name])
 
+    def test_a_file_attached_to_a_goal_or_a_node_of_a_worked_task_goes_to_its_worktree_too(self):
+        wt = self.worktree()
+        (wt / ".dfs/items/W1.md").write_text(task(node(1, "confirmed") + node(2, parent=1), ""))
+        names = ["0a1b2c3d-0000-4000-8000-00000000001%d.png" % i for i in range(3)]
+        (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
+        for n in names:
+            (self.root / ".dfs/artefacts" / n).write_bytes(b"png")
+        ref = lambda n: "See ![x](.dfs/artefacts/%s)" % n
+        dfs_tree.add_node("W1", "look", "W1.1", ref(names[0]))
+        dfs_tree.edit_node("W1", "W1.2", "look again", ref(names[1]))
+        dfs_tree.edit_task("W1", "the task", ref(names[2]))
+        for n in names:
+            self.assertFalse((self.root / ".dfs/artefacts" / n).exists(), n)
+            self.assertEqual((wt / ".dfs/artefacts" / n).read_bytes(), b"png")
+        self._wr_inner, dfs_paths.work_root = dfs_paths.work_root, lambda: wt
+        self.addCleanup(setattr, dfs_paths, "work_root", self._wr_inner)
+        text = "\n".join(p.read_text() for p in dfs_tree.part_files("W1"))
+        self.assertEqual(sorted(dfs_tree.untracked_artefacts(text)), names)
+
     def test_a_file_attached_to_a_task_with_no_worktree_stays_where_it_is(self):
         name = "0a1b2c3d-0000-4000-8000-000000000003.png"
         (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)

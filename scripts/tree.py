@@ -698,6 +698,7 @@ def edit_task(task, name, goal):
     if "Goal" not in t["order"]:
         t["order"].insert(0, "Goal")
     t["sections"]["Goal"] = goal
+    carry_attachments(task, goal)
     p.write_text(render(t))
     return task
 
@@ -866,6 +867,7 @@ def edit_node(task, nid, title, approach=""):
                    if not re.match(r"(Parent|Status):", l)), len(kept))
     if approach:
         kept.insert(at, "Approach: %s" % approach)
+    carry_attachments(task, approach)
     nd["raw"] = ["### %s · %s" % (nid, title)] + kept
     nd["title"] = title
     p.write_text(render(t))
@@ -917,6 +919,7 @@ def add_node(task, title, parent=None, approach=""):
     approach = " ".join((approach or "").split())
     if approach:
         raw.append("Approach: %s" % approach)
+    carry_attachments(task, approach)
     t["nodes"].append(parse_nodes("\n".join(raw), task)[0])
     p.write_text(render(t))
     return nid
