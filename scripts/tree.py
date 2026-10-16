@@ -602,6 +602,7 @@ def append_log(task, kind, args=(), body=""):
         raise ValueError("the raise says to answer with %s, which cannot answer: the page must POST "
                          "{answer: <text>} to /artefact-state/<its file name> "
                          "(templates/_TEMPLATE_ASSUMPTION.html does)" % page)
+    carry_attachments(task, body)
     p = ensure_part(task)
     t = parse(p.read_text(), task)
     ts = now_ts()
@@ -1294,6 +1295,26 @@ def untracked_artefacts(text):
         return []
     kept = set(r.stdout.split())
     return [n for n in names if n not in kept]
+
+
+def carry_attachments(task, text):
+    """Move the files `text` names in this checkout's `.dfs/artefacts` into `task`'s worktree,
+    when it has one. The web server writes an author's attachment (`web.py` `attach`) here,
+    before it knows which task the words naming it go to; the words land in the worktree's
+    task file, so the file must too, or a session cannot open it, `untracked_artefacts` does
+    not list it to commit, and the guard on the default branch refuses the merge for a file
+    it never staged. Returns the names moved."""
+    wt = dfs_paths.worktree(task)
+    if not wt or not text:
+        return []
+    here, there = dfs_paths.artefacts(), wt / dfs_paths.STATE_DIR_NAME / "artefacts"
+    moved = []
+    for name in dict.fromkeys(ATTACHED_REF.findall(text)):
+        if (here / name).is_file() and not (there / name).exists():
+            there.mkdir(parents=True, exist_ok=True)
+            os.replace(here / name, there / name)
+            moved.append(name)
+    return moved
 
 
 def deciding_node(page, tasks=None):

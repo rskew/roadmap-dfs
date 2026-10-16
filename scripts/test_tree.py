@@ -1302,6 +1302,29 @@ class Branches(InARepo):
         self.assertEqual(dfs_paths.artefact_file("a.html"), wt / ".dfs/artefacts/a.html")
         self.assertEqual(dfs_paths.artefact_file("b.html"), self.root / ".dfs/artefacts/b.html")
 
+    def test_a_file_attached_to_a_worked_task_goes_to_its_worktree_with_the_words_naming_it(self):
+        wt = self.worktree()
+        name = "0a1b2c3d-0000-4000-8000-000000000001.png"
+        (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs/artefacts" / name).write_bytes(b"png")
+        other = "0a1b2c3d-0000-4000-8000-000000000002.png"
+        (self.root / ".dfs/artefacts" / other).write_bytes(b"png")
+        dfs_tree.append_log("W1", "correct", ["W1.1"], "Look at ![x](.dfs/artefacts/%s)" % name)
+        self.assertFalse((self.root / ".dfs/artefacts" / name).exists())
+        self.assertEqual((wt / ".dfs/artefacts" / name).read_bytes(), b"png")
+        self.assertTrue((self.root / ".dfs/artefacts" / other).exists())   # not named: stays
+        self._wr_inner, dfs_paths.work_root = dfs_paths.work_root, lambda: wt
+        self.addCleanup(setattr, dfs_paths, "work_root", self._wr_inner)
+        text = "\n".join(p.read_text() for p in dfs_tree.part_files("W1"))
+        self.assertEqual(dfs_tree.untracked_artefacts(text), [name])
+
+    def test_a_file_attached_to_a_task_with_no_worktree_stays_where_it_is(self):
+        name = "0a1b2c3d-0000-4000-8000-000000000003.png"
+        (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs/artefacts" / name).write_bytes(b"png")
+        dfs_tree.append_log("W1", "correct", ["W1.1"], "Look at ![x](.dfs/artefacts/%s)" % name)
+        self.assertTrue((self.root / ".dfs/artefacts" / name).exists())
+
     def test_a_branch_may_not_add_to_another_part(self):
         self.switch("checkout -qb fx")
         self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=1),
