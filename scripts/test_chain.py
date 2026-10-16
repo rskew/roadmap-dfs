@@ -387,6 +387,34 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.assertEqual(self.git("log", "--format=%s"), "W1.1: the step is done")
 
+    def test_a_branch_whose_worktree_was_removed_by_hand_is_checked_out_again_and_merged(self):
+        self.run_chain("work,confirm", cap=2)
+        shutil.rmtree(self.wt)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("worktree was missing", r.stderr)
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+        self.assertFalse(self.wt.exists())
+
+    def test_a_worktree_removed_by_hand_is_cut_again_by_enter(self):
+        self.run_chain("work,confirm", cap=2)
+        shutil.rmtree(self.wt)
+        self.enter()
+        self.assertTrue((self.wt / ".git").exists())
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s", cwd=self.wt))
+
+    def test_a_worktree_git_will_not_remove_is_said_so_not_claimed_removed(self):
+        self.run_chain("work,confirm", cap=2)
+        self.git("worktree", "lock", str(self.wt))
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("merged, but its worktree could not be removed", r.stderr)
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
+        self.assertTrue(self.wt.exists())
+
     def test_the_authors_accept_merges_the_branch_too(self):
         rc, meta, out = self.run_chain("work,confirm", cap=2)
         self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))

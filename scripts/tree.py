@@ -1278,7 +1278,10 @@ def review_rounds_unsettled(t):
 
 
 def accepted(t):
-    """Whether the author accepted the tree after its last change."""
+    """Whether the author accepted the tree after its last change. A node opened since (the
+    merge of an accepted item reopens it with one, which writes no log entry) is a change."""
+    if frontier(t):
+        return False
     last_acc = max((e["ts"] for e in t["log"] if e["kind"] == "accept"), default="")
     last_work = max((e["ts"] for e in t["log"] if e["kind"] in ("end", "correct", "backtrack")),
                     default="")

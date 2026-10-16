@@ -183,6 +183,13 @@ class Derivation(unittest.TestCase):
         accepted = issues + "- 2026-09-25T09:40:00Z · accept\n"
         self.assertEqual(dfs_tree.status_of(self.t(node(1, "confirmed"), log=accepted))[0], "done")
 
+    def test_an_accept_no_longer_holds_once_a_node_is_open_again(self):
+        # The merge of an accepted item reopens it with a node, which writes no log entry.
+        log = "- 2026-09-25T09:20:00Z · accept\n"
+        self.assertTrue(dfs_tree.accepted(self.t(node(1, "confirmed"), log=log)))
+        t = self.t(node(1, "confirmed"), node(2, parent=1), log=log)
+        self.assertFalse(dfs_tree.accepted(t))
+
     def test_an_accept_takes_a_complete_tree_without_its_review(self):
         # W13, 2026-09-28: the author accepted a complete tree whose review was due,
         # and the task still read review-due, so the runner would have reviewed the

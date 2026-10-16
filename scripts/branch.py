@@ -108,13 +108,6 @@ def carry_named_attachments(task, wt):
     return dfs_tree.carry_attachments(task, "\n".join(texts))
 
 
-def default_branch():
-    for name in dfs_paths.DEFAULT_BRANCHES:
-        if _has_branch(name):
-            return name
-    return None
-
-
 def keep_worktrees_untracked():
     """Make git ignore `.dfs/worktrees`, in `.git/info/exclude` when no ignore file does:
     a roadmap started before worktrees has no `worktrees/` line in `.dfs/.gitignore`, and
@@ -142,6 +135,7 @@ def enter(task):
     if dfs_paths.worktree(task):
         return wt
     fresh = not _has_branch(name)
+    _git("worktree", "prune")   # a worktree deleted by hand stays registered, and blocks the add
     keep_worktrees_untracked()
     wt.parent.mkdir(parents=True, exist_ok=True)
     args = ["worktree", "add", str(wt)] + (["-b", name, "HEAD"] if fresh else [name])
@@ -157,6 +151,23 @@ def enter(task):
         print("dfs_branch: %s existed; reused, and %s's uncommitted edits here are left as they are" %
               (name, task), file=sys.stderr)
     carry_named_attachments(task, wt)
+    return wt
+
+
+def _restore(task):
+    """The worktree of a branch whose directory was removed by hand: `git worktree prune`
+    drops the stale registration and the branch is checked out again, so the merge sees its
+    commits (what the directory held uncommitted is gone). None when there is no such branch."""
+    name = dfs_paths.item_branch(task)
+    if not _has_branch(name):
+        return None
+    wt = dfs_paths.worktrees() / task
+    _git("worktree", "prune")
+    r = _git("worktree", "add", str(wt), name)
+    if r.returncode != 0:
+        raise BranchError("%s exists but its worktree is gone and cannot be restored: %s" %
+                          (name, " ".join(out_of(r).split())))
+    print("dfs_branch: %s's worktree was missing; %s checked out again" % (task, name), file=sys.stderr)
     return wt
 
 
@@ -302,7 +313,8 @@ def merge(task):
     First the task's own files left uncommitted in the worktree (the runner's log entries,
     an accept) are committed onto the branch, since the merge carries only commits; then the
     branch is rebased onto the default branch (`_rebase`). Returns
-    "none" when the task has no worktree, "merged", "dirty" when the worktree holds
+    "none" when the task has no branch (one whose worktree was removed by hand is checked out
+    again, `_restore`), "merged", "dirty" when the worktree holds
     uncommitted work that is not the task's (left in place, nothing merged; an open node
     asks for it to be committed or dropped), "conflict" when the branch cannot be rebased
     onto the default branch, which has moved (an open node is added), "guard" when a hook
@@ -311,13 +323,14 @@ def merge(task):
     revert or rebase the author has left unfinished in the checkout is a `BranchError` before
     anything is touched: it is theirs, and `_unmerged` would abort it.
     """
-    wt = dfs_paths.worktree(task)
-    if wt is None:
-        return "none"
     name = dfs_paths.item_branch(task)
+    wt = dfs_paths.worktree(task)
+    if wt is None and (not _has_branch(name) or dfs_paths.branch() == name):
+        return "none"
     if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
         raise BranchError("%s is merged from the default branch; this checkout is on %s" %
                           (name, dfs_paths.branch()))
+    wt = wt or _restore(task)
     started = _in_progress()
     if started:
         raise BranchError("the checkout has its own %s unfinished, which a merge would take for "
@@ -413,7 +426,7 @@ def main(argv):
             "conflict": "not merged: it conflicts with %s, so a node asks for the branch to be rebased onto it" %
                         dfs_paths.branch(),
             "refused": "not merged: git would overwrite uncommitted edits here, raised for the author",
-            "none": "no worktree, nothing to merge"}[result]), file=sys.stderr)
+            "none": "no branch, nothing to merge"}[result]), file=sys.stderr)
         return MERGE_EXIT[result]
     if len(argv) == 3 and argv[1] == "enter":
         try:
