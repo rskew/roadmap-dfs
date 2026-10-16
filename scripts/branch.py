@@ -211,6 +211,21 @@ def raise_unmerged(task, error):
                          "branch unmerged." % (task, error))
 
 
+def _in_progress():
+    """The git operation the author has begun and not finished in the main checkout (a merge
+    that conflicted, a cherry-pick, a revert, a rebase), or "". `_unmerged` takes a MERGE_HEAD
+    for the merge it started, so none of these may be there when `merge` begins."""
+    for what, marker in (("merge", "MERGE_HEAD"), ("cherry-pick", "CHERRY_PICK_HEAD"),
+                         ("revert", "REVERT_HEAD"), ("rebase", "rebase-merge"),
+                         ("rebase", "rebase-apply")):
+        path = Path(_git("rev-parse", "--git-path", marker).stdout.strip())
+        if not path.is_absolute():
+            path = dfs_paths.work_root() / path
+        if path.exists():
+            return what
+    return ""
+
+
 def _rebase(task, wt, name):
     """Replay the branch's commits on the default branch, in the worktree, so the merge
     that follows is a plain `--no-ff` of a branch that starts at the default branch's tip.
@@ -288,7 +303,9 @@ def merge(task):
     asks for it to be committed or dropped), "conflict" when the branch cannot be rebased
     onto the default branch, which has moved (an open node is added), "guard" when a hook
     refused a clean merge or the task's files (an open node names its message) or "refused"
-    when the author's edits overlap (a raise is logged); see `_unmerged`.
+    when the author's edits overlap (a raise is logged); see `_unmerged`. A merge, cherry-pick,
+    revert or rebase the author has left unfinished in the checkout is a `BranchError` before
+    anything is touched: it is theirs, and `_unmerged` would abort it.
     """
     wt = dfs_paths.worktree(task)
     if wt is None:
@@ -297,6 +314,10 @@ def merge(task):
     if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
         raise BranchError("%s is merged from the default branch; this checkout is on %s" %
                           (name, dfs_paths.branch()))
+    started = _in_progress()
+    if started:
+        raise BranchError("the checkout has its own %s unfinished, which a merge would take for "
+                          "its own and abort" % started)
     try:
         _commit_task_files(task, wt, "the log and edits left uncommitted")
     except BranchError as e:

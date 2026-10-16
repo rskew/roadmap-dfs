@@ -338,6 +338,46 @@ class Chain(unittest.TestCase):
         self.assertEqual(len(self.log("raise")), 1)
         self.assertTrue(self.wt.exists())
 
+    def authors_merge_in_progress(self):
+        """The author's own `git merge side` on main, conflicted on mine.txt, which they have
+        resolved by hand and not yet added."""
+        main = self.git("symbolic-ref", "--short", "HEAD")
+        self.git("checkout", "-q", "-b", "side")
+        (self.root / "mine.txt").write_text("side\n")
+        self.git("add", "mine.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "side edits mine")
+        self.git("checkout", "-q", main)
+        (self.root / "mine.txt").write_text("main\n")
+        self.git("add", "mine.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main edits mine")
+        m = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "merge", "side"], cwd=self.root, capture_output=True, text=True)
+        self.assertTrue((self.root / ".git" / "MERGE_HEAD").exists(), m.stdout + m.stderr)
+        (self.root / "mine.txt").write_text("the author's resolution\n")
+
+    def assert_authors_merge_untouched(self):
+        self.assertTrue((self.root / ".git" / "MERGE_HEAD").exists())
+        self.assertEqual((self.root / "mine.txt").read_text(), "the author's resolution\n")
+        self.assertTrue(self.wt.exists())
+        self.assertNotIn("resolve the conflicts", (self.wt / ".dfs/items/W1.md").read_text())
+
+    def test_a_merge_while_the_author_is_mid_merge_is_a_raise_and_leaves_their_merge_alone(self):
+        self.run_chain("work,confirm", cap=2)
+        self.authors_merge_in_progress()
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertEqual(len(self.log("raise")), 1)
+        self.assertIn("its own merge unfinished", self.log("raise")[0]["body"])
+        self.assert_authors_merge_untouched()
+
+    def test_the_authors_accept_while_they_are_mid_merge_is_a_raise_and_leaves_their_merge_alone(self):
+        self.run_chain("work,confirm", cap=2)
+        self.authors_merge_in_progress()
+        subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                       cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(len(self.log("raise")), 1)
+        self.assert_authors_merge_untouched()
+
     def test_the_authors_accept_merges_the_branch_too(self):
         rc, meta, out = self.run_chain("work,confirm", cap=2)
         self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))
