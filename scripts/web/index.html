@@ -880,7 +880,10 @@ document.addEventListener("pointerdown", e => {
   for (const x of DRAG.span) rowOf(x).classList.add("dragging");
   // near the top or bottom edge the page scrolls under the pointer, so a long list can be crossed in one drag
   DRAG.timer = setInterval(() => {
-    const room = Math.max(90, ($("#walkbox")?.getBoundingClientRect().bottom ?? 0) + 30), bottom = innerHeight - 130;   // the pinned Walk box lies over the top of the list
+    // the pinned Walk box lies over the top of the list: the top edge starts under it, and both edges give way to the strip it
+    // leaves (open on a short screen that is under 200px), so some y inside the strip always holds the list still
+    const box = $("#walkbox")?.getBoundingClientRect().bottom ?? 0, strip = innerHeight - Math.max(90, box);
+    const room = Math.max(90, box + (box ? Math.min(30, strip / 3) : 0)), bottom = innerHeight - Math.min(130, strip / 3);
     const by = DRAG.y < room ? -12 : DRAG.y > bottom ? 12 : 0;
     if (by) { scrollBy(0, by); dragUpdate(); }
   }, 16);

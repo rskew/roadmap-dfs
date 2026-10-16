@@ -759,6 +759,32 @@ const FLOWS = {
     same(errors, [], "no page errors");
     await ctx.close();
     }
+    // With the box open on a short screen, the strip it leaves still has a y where a dragged row is held without scrolling the list.
+    for (const [name, opts] of [["landscape phone", { viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true }], ["short desktop", { viewport: { width: 1280, height: 500 } }]]) {
+      const ctx = await b.newContext(opts);
+      const page = await ctx.newPage(); PAGES.push(page);
+      await page.goto(URL_); await page.waitForSelector("#walkbox"); await page.waitForTimeout(600);
+      await page.click("#walkbox summary"); await page.waitForSelector("#nextsel");
+      await page.click("[data-act=reorder]"); await page.waitForSelector(".moves");
+      const g = await page.evaluate(() => {   // scroll so a grip lies just under the box, and take hold of it there
+        const box = document.querySelector("#walkbox").getBoundingClientRect().bottom, el = document.querySelectorAll("[data-grip]")[3];
+        scrollTo(0, scrollY + el.getBoundingClientRect().top - box - 6);
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, box, h: innerHeight };
+      });
+      await page.evaluate(() => document.addEventListener("pointerdown", e => { window.dragPointer = e.pointerId; }, { once: true, capture: true }));
+      await page.mouse.move(g.x, g.y); await page.mouse.down();
+      const still = [];
+      for (let y = Math.ceil(g.box) + 4; y < g.h - 2; y += 6) {
+        await page.mouse.move(g.x, y); const a = await page.evaluate(() => scrollY);
+        await page.waitForTimeout(120);
+        if (await page.evaluate(() => scrollY) === a) still.push(y);
+      }
+      await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: window.dragPointer, bubbles: true })));
+      await page.mouse.up();
+      assert(still.length > 0, `${name}: with the Walk box open (ending at ${Math.round(g.box)} of ${g.h}), some y under it holds a dragged row without scrolling the list`);
+      await ctx.close();
+    }
   },
 
   // The thumbs: what you press to move is in the bottom of the screen, Back always at the right, under the right thumb, what moves you on the left.
