@@ -117,6 +117,47 @@ PY
 """
 
 
+KIRO_STUB = r"""#!/usr/bin/env bash
+# a kiro-cli that records its arguments, keeps a session under ~/.kiro/sessions as the binary's names
+# say (a stand-in shape: no real session was captured) and prints `--output-format stream-json` events.
+# Without `--output-format` it is the interactive chat.
+echo "$@" >> "$CHAT_STUB_LOG"
+case "$*" in *--output-format*) ;; *) exit 0 ;; esac
+[ -n "${CHAT_STUB_FAIL:-}" ] && { echo "error: not logged in" >&2; exit 1; }
+sid=""; prompt=""; prev=""; rest=0
+for a in "$@"; do
+  if [ "$rest" = 1 ]; then prompt="$a"; continue; fi
+  [ "$a" = -- ] && { rest=1; continue; }
+  [ "$prev" = --resume-id ] && sid="$a"
+  prev="$a"
+done
+echo "prompt: $prompt" >> "$CHAT_STUB_LOG"
+[ -n "$sid" ] || sid="sess_$(python3 -c 'import uuid; print(uuid.uuid4())')"
+python3 - "$sid" "$prompt" "${CHAT_STUB_SAY:-Fine.}" <<'PY'
+import json, os, sys
+sid, prompt, say = sys.argv[1:4]
+d = os.path.join(os.environ["HOME"], ".kiro", "sessions", "bucket-1", sid); os.makedirs(d, exist_ok=True)
+with open(os.path.join(d, "session.json"), "w") as f:
+    f.write(json.dumps({"schemaVersion": "1.0.0", "sessionId": sid}))
+def msg(i, role, content):
+    return json.dumps({"messageId": "m%d-%s" % (len(open(os.path.join(d, "messages.jsonl")).readlines()) if os.path.exists(os.path.join(d, "messages.jsonl")) else 0, i),
+                       "payload": {"type": role, "content": content}})
+with open(os.path.join(d, "messages.jsonl"), "a") as f:
+    f.write(msg("u", "user", [{"type": "text", "text": prompt}]) + "\n")
+    f.write(msg("a", "assistant", [{"type": "text", "text": "I read it. " + say}]) + "\n")
+    f.write(msg("c", "tool_call", [{"type": "text", "text": "not words"}]) + "\n")
+def update(**u):
+    print(json.dumps({"type": "sessionUpdate", "payload": {"sessionId": sid, "update": u}}))
+print(json.dumps({"type": "runStarted", "sessionId": sid}))
+update(sessionUpdate="agent_message_chunk", content={"type": "text", "text": "Reading."})
+update(sessionUpdate="tool_call", toolCallId="t1", kind="read")
+update(sessionUpdate="agent_message_chunk", content={"type": "text", "text": "I read it. "})
+update(sessionUpdate="agent_message_chunk", content={"type": "text", "text": say})
+print(json.dumps({"type": "runFinished", "finalText": "I read it. " + say}))
+PY
+"""
+
+
 class Chat(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
@@ -129,7 +170,7 @@ class Chat(unittest.TestCase):
         self.stub.write_text(STUB)
         self.stub.chmod(self.stub.stat().st_mode | stat.S_IEXEC)
         self.log = self.root / "stub.log"
-        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CODEX_CMD", "OPENCODE_CMD", "XDG_DATA_HOME", "CHAT_SHARE", "CHAT_SID", "CHAT_RESUME", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "CHAT_STUB_SLEEP", "HOME", "DFS_RUN_DIR")}
+        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CODEX_CMD", "OPENCODE_CMD", "KIRO_CMD", "KIRO_HOME", "XDG_DATA_HOME", "CHAT_SHARE", "CHAT_SID", "CHAT_RESUME", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "CHAT_STUB_SLEEP", "HOME", "DFS_RUN_DIR")}
         os.environ.update(CLAUDE_CMD=str(self.stub), CHAT_STUB_LOG=str(self.log), HOME=str(self.root / "home"),
                           DFS_RUN_DIR=str(self.root / ".dfs" / "runs"))     # the chat logs are this project's, not the real one's
         (self.root / "home").mkdir()
@@ -141,6 +182,11 @@ class Chat(unittest.TestCase):
         self.opencode.write_text(OPENCODE_STUB)
         self.opencode.chmod(self.opencode.stat().st_mode | stat.S_IEXEC)
         os.environ["OPENCODE_CMD"] = str(self.opencode)
+        self.kiro = self.root / "kiro-stub"
+        self.kiro.write_text(KIRO_STUB)
+        self.kiro.chmod(self.kiro.stat().st_mode | stat.S_IEXEC)
+        os.environ["KIRO_CMD"] = str(self.kiro)
+        os.environ.pop("KIRO_HOME", None)           # .kiro is under HOME, as kiro-cli finds it
         os.environ.pop("XDG_DATA_HOME", None)       # the store is under HOME, as opencode finds it
         for k in ("CHAT_SHARE", "CHAT_SID", "CHAT_RESUME"):
             os.environ.pop(k, None)
@@ -504,6 +550,94 @@ class Chat(unittest.TestCase):
         died = dfs_chat.opencode_result([], "kept")
         self.assertEqual((died["session_id"], died["is_error"], died["result"]), ("kept", True, ""))
 
+    def use_kiro(self):
+        Path(dfs_chat.agent_file()).parent.mkdir(parents=True, exist_ok=True)
+        Path(dfs_chat.agent_file()).write_text("kiro\n")
+
+    def test_a_kiro_conversation_is_read_from_its_session_files_without_its_tools(self):
+        sid = "sess_abc"
+        self.assertFalse(dfs_chat.has_transcript(sid, "kiro"))
+        self.assertEqual(dfs_chat.transcript_messages(sid, "kiro"), [])           # no sessions at all
+        subprocess.run([str(self.kiro), "chat", "--v3", "--output-format", "stream-json", "--resume-id", sid, "--",
+                        "You are talking with the author about task W1. The author writes: hello"],
+                       text=True, capture_output=True, check=True, env=dict(os.environ))
+        self.assertTrue(dfs_chat.has_transcript(sid, "kiro"))
+        self.assertEqual(dfs_chat.transcript_messages(sid, "kiro"),
+                         [dict(role="you", text="hello"), dict(role="agent", text="I read it. Fine.")])
+        self.assertAlmostEqual(dfs_chat.transcript_mtime(sid, "kiro"), time.time(), delta=60)
+        self.assertIsNone(dfs_chat.kiro_messages("../../etc"), "an id is a name, not a path")
+
+    def test_a_kiro_message_is_read_with_the_text_where_the_record_or_its_payload_has_it(self):
+        read = lambda rec: dfs_chat.kiro_turns(rec)
+        self.assertEqual(read({"role": "user", "content": "plain"}), [("you", "plain", None)])
+        self.assertEqual(read({"id": "m1", "payload": {"type": "assistant", "content": [{"type": "text", "text": "a"}, {"type": "tool_use"}]}}),
+                         [("agent", "a", "m1")])
+        self.assertEqual(read({"payload": {"type": "user", "content": "--- USER MESSAGE BEGIN ---\nhi\n--- USER MESSAGE END ---"}}),
+                         [("you", "\nhi\n", None)])
+        self.assertEqual(read({"payload": {"type": "tool_result", "content": "x"}}), [])
+
+    def test_a_kiro_turn_is_answered_kept_and_resumed_by_the_id_kiro_made(self):
+        self.use_kiro()
+        self.chats.send("W1", "Where is the work?")
+        st = self.settle("W1")
+        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
+                         [("you", "Where is the work?"), ("agent", "I read it. Fine.")])
+        rec = json.loads(self.chats.path("W1").read_text())
+        self.assertEqual(rec["agent"], "kiro")
+        self.assertTrue(rec["sid"].startswith("sess_"), "the id is the one kiro printed, not one chosen here")
+        self.chats.send("W1", "-and then?")
+        st = self.settle("W1")
+        first, first_prompt, second, second_prompt = self.calls()
+        self.assertEqual(first, "chat --v3 --output-format stream-json --no-interactive --trust-all-tools -- %s" % first_prompt[len("prompt: "):])
+        self.assertIn("The author writes: Where is the work?", first_prompt)
+        self.assertEqual(second, "chat --v3 --output-format stream-json --no-interactive --trust-all-tools --resume-id %s -- -and then?" % rec["sid"])
+        self.assertEqual(second_prompt, "prompt: -and then?", "`--` keeps a message that starts with a dash from being a flag")
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["Where is the work?", "-and then?"])
+
+    def test_a_failed_kiro_turn_says_why_and_leaves_no_conversation(self):
+        self.use_kiro()
+        os.environ["CHAT_STUB_FAIL"] = "1"
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
+        self.assertIn("not logged in", st["messages"][-1]["text"])
+        self.assertFalse(self.chats.path("W1").exists())
+
+    def test_the_screens_kiro_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
+        self.use_kiro()
+        self.assertEqual(dfs_chat.claim("W1", "kiro"), ("", False), "kiro has no id to name for a new conversation")
+        run = lambda **env: subprocess.run([str(HERE / "run.sh"), "--kiro", "--chat", "W1"], cwd=self.root, text=True,
+                                           capture_output=True, env=dict(os.environ, CHAT_SHARE="1", **env))
+        r = run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rec = json.loads(self.chats.path("W1").read_text())
+        self.assertEqual(rec["agent"], "kiro")
+        opening, opening_prompt, interactive = self.calls()
+        self.assertIn("--output-format stream-json --no-interactive", opening)
+        self.assertIn("Discuss task W1 with the author", opening_prompt)
+        self.assertEqual(interactive, "chat --v3 --resume-id %s --trust-all-tools" % rec["sid"])
+        self.assertEqual(self.chats.state("W1")["messages"][-1]["text"], "I read it. Fine.")
+        sid, resume = dfs_chat.claim("W1", "kiro")
+        self.assertEqual((sid, resume), (rec["sid"], True))
+        r = run(CHAT_SID=sid, CHAT_RESUME="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.calls()[3:], ["chat --v3 --resume-id %s --trust-all-tools" % sid])
+
+    def test_a_kiro_stream_is_read_to_the_one_line_a_turn_is_read_from(self):
+        upd = lambda kind, **u: json.dumps({"type": "sessionUpdate", "payload": {"sessionId": "sess_1", "update": dict(sessionUpdate=kind, **u)}})
+        chunk = lambda t: upd("agent_message_chunk", content={"type": "text", "text": t})
+        ok = dfs_chat.kiro_result([json.dumps({"type": "runStarted", "sessionId": "sess_1"}), chunk("before"), upd("tool_call"),
+                                   chunk("the "), "not json", chunk("answer"), json.dumps({"type": "runFinished", "finalText": "the answer."})])
+        self.assertEqual((ok["session_id"], ok["is_error"], ok["result"]), ("sess_1", False, "the answer."))
+        chunks = dfs_chat.kiro_result([chunk("before"), upd("tool_call"), chunk("the "), chunk("answer")])
+        self.assertEqual((chunks["session_id"], chunks["is_error"], chunks["result"]), ("sess_1", False, "the answer"),
+                         "without a final text the answer is what was said since the last tool call")
+        bad = dfs_chat.kiro_result(["error: not logged in", "run `kiro-cli login`"], "kept")
+        self.assertEqual((bad["session_id"], bad["is_error"], bad["result"]), ("kept", True, "error: not logged in\nrun `kiro-cli login`"))
+        failed = dfs_chat.kiro_result([json.dumps({"type": "error", "message": "rate limited"})])
+        self.assertEqual((failed["is_error"], failed["result"]), (True, "rate limited"))
+        self.assertEqual(dfs_chat.kiro_result([])["result"], "the turn ended without an answer")
+
     def test_the_screens_chat_env_names_what_the_agent_can_share(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location("dfs_tui", HERE / "tui.py")
@@ -524,7 +658,11 @@ class Chat(unittest.TestCase):
         self.assertNotIn("CHAT_SID", env)                    # opencode makes the id too
         self.assertEqual(env["CHAT_SHARE"], "1")
         ui.agent = "kiro"
-        self.assertIsNone(ui.chat_env("W1"))                 # not shared yet: a chat of its own
+        env = ui.chat_env("W1")
+        self.assertNotIn("CHAT_SID", env)                    # and kiro
+        self.assertEqual(env["CHAT_SHARE"], "1")
+        ui.agent = "someagent"
+        self.assertIsNone(ui.chat_env("W1"))                 # one with no chat here
 
     def test_a_turn_records_the_agent_with_the_session(self):
         self.chats.send("W1", "hello")
@@ -750,6 +888,8 @@ class Chat(unittest.TestCase):
     def test_under_another_agent_it_says_so_rather_than_run_it(self):
         Path(dfs_paths.state() / "runs").mkdir(parents=True, exist_ok=True)
         (dfs_paths.state() / "runs" / "agent").write_text("kiro\n")
+        self.addCleanup(setattr, dfs_chat, "CHAT_AGENTS", dfs_chat.CHAT_AGENTS)
+        dfs_chat.CHAT_AGENTS = ("claude", "codex", "opencode")      # an agent a chat does not run under
         with self.assertRaises(ValueError) as cm:
             self.chats.send("W1", "hi")
         self.assertIn("claude, codex or opencode", str(cm.exception))

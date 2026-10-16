@@ -24,6 +24,7 @@ last screen, who closed it and a note when it went quiet after a message (DFS_CH
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
 walk (`--no-walk`): a server that may not start agents does not chat either.
 """
+import glob
 import json
 import os
 import re
@@ -119,7 +120,7 @@ def turns(sid, agent):
     if agent in STORES:
         yield from read(sid)
         return
-    path = dfs_context.transcript_path(sid, agent)
+    path = transcript_file(sid, agent)
     if not path or not os.path.exists(path):
         return
     try:
@@ -213,8 +214,60 @@ def opencode_turns(sid):
     return out
 
 
-READERS = dict(claude=claude_turns, codex=codex_turns, opencode=opencode_turns)
+def kiro_home():
+    """Where kiro-cli keeps its `.kiro` directory: $KIRO_HOME, else the home directory."""
+    return os.environ.get("KIRO_HOME") or os.path.expanduser("~")
+
+
+def kiro_messages(sid):
+    """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions are
+    `sess_<uuid>` directories (`session.json`, `messages.jsonl`) under `.kiro/sessions/`, in a
+    bucket per workspace; its sqlite database holds only auth and history. Taken from the names
+    in the binary, not from a captured session (W81.6's hypothesis)."""
+    if not sid or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}", sid) or ".." in sid:
+        return None
+    root = os.path.join(kiro_home(), ".kiro", "sessions")
+    for pattern in (os.path.join(root, "*", sid, "messages.jsonl"), os.path.join(root, sid, "messages.jsonl")):
+        found = sorted(glob.glob(pattern))
+        if found:
+            return found[0]
+    return None
+
+
+def kiro_turns(rec):
+    """(role, text, message id) for one line of a kiro session's `messages.jsonl`: a message
+    with a user (or steering) or assistant role, its text in `content` (a string or blocks).
+    Tool calls and results are not words. The words are looked for in the record or in its
+    `payload`, as the binary shows both, and what kiro wraps around a typed message for the
+    model is cut away."""
+    body = rec.get("payload") if isinstance(rec.get("payload"), dict) else rec
+    role = {"user": "you", "steer": "you", "assistant": "agent"}.get(
+        body.get("role") or body.get("type") or rec.get("role") or rec.get("type"))
+    content = body.get("content", body.get("text"))
+    if not role or content is None:
+        return []
+    if isinstance(content, str):
+        text = content
+    else:
+        blocks = content if isinstance(content, list) else [content]
+        text = "\n".join(b if isinstance(b, str) else b.get("text", "") for b in blocks
+                         if isinstance(b, str) or (isinstance(b, dict) and b.get("type", "text") == "text"
+                                                   and isinstance(b.get("text"), str)))
+    if "--- USER MESSAGE BEGIN ---" in text:
+        text = text.split("--- USER MESSAGE BEGIN ---", 1)[1].split("--- USER MESSAGE END ---", 1)[0]
+    return [(role, text, rec.get("messageId") or rec.get("id") or body.get("id") or body.get("messageId"))]
+
+
+READERS = dict(claude=claude_turns, codex=codex_turns, opencode=opencode_turns, kiro=kiro_turns)
 STORES = ("opencode",)       # the agents whose conversation is read from a store, not a transcript file
+
+
+def transcript_file(sid, agent):
+    """The file a session's transcript is in, or None (kiro's is its own `messages.jsonl`:
+    `dfs_context.transcript_path` gives a chain's run log for kiro, which a chat has none of)."""
+    if not sid:
+        return None
+    return kiro_messages(sid) if agent == "kiro" else dfs_context.transcript_path(sid, agent)
 
 
 def has_transcript(sid, agent):
@@ -224,7 +277,7 @@ def has_transcript(sid, agent):
         return False
     if agent in STORES:
         return bool(opencode_query("select 1 from session where id = ?", (sid,)))
-    p = dfs_context.transcript_path(sid, agent)
+    p = transcript_file(sid, agent)
     return bool(p and os.path.exists(p))
 
 
@@ -233,14 +286,14 @@ def transcript_mtime(sid, agent):
     if agent in STORES:
         rows = opencode_query("select time_updated from session where id = ?", (sid,))
         return rows[0][0] / 1000 if rows else None
-    p = dfs_context.transcript_path(sid, agent) if sid else None
+    p = transcript_file(sid, agent)
     try:
         return os.path.getmtime(p) if p else None
     except OSError:
         return None
 
 
-CHAT_AGENTS = ("claude", "codex", "opencode")      # the agents a chat can run under, here and on the screen
+CHAT_AGENTS = ("claude", "codex", "opencode", "kiro")      # the agents a chat can run under, here and on the screen
 
 
 def codex_result(lines, sid=""):
@@ -300,6 +353,41 @@ def opencode_result(lines, sid=""):
     text = "".join(answer).strip()
     failed = bool(error) or not done
     return dict(type="result", session_id=sid, is_error=failed, result=(error or text) if failed else text)
+
+
+def kiro_result(lines, sid=""):
+    """One turn of `kiro-cli chat --output-format stream-json` as the single JSON line a turn is
+    read from ({session_id, is_error, result}, as codex_result). The stream is ACP's events, one
+    JSON object a line, the session's id a `sessionId` anywhere in the first of them; the answer
+    is the run's `finalText`, else the `agent_message_chunk`s since its last tool call. Lines
+    that are not JSON are kiro's own words (a failed login, a limit: it says those on stderr,
+    which run.sh sends here too) and are the error when no answer came."""
+    chunks, final, noise, error = [], None, [], ""
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            if line.strip():
+                noise.append(line.strip())
+            continue
+        if not isinstance(rec, dict):
+            continue
+        sid = sid or dfs_context.kiro_session_id([rec])
+        if rec.get("type") == "runFinished" and isinstance(rec.get("finalText"), str):
+            final = rec["finalText"]
+        elif rec.get("type") in ("error", "runFailed"):
+            err = rec.get("error") if isinstance(rec.get("error"), (dict, str)) else rec.get("message")
+            error = (err.get("message") if isinstance(err, dict) else err) or error or "the turn failed"
+        for u in dfs_context.acp_updates(rec):
+            kind, content = u.get("sessionUpdate"), u.get("content")
+            if kind == "tool_call":
+                chunks = []
+            elif kind == "agent_message_chunk" and isinstance(content, dict) and isinstance(content.get("text"), str):
+                chunks.append(content["text"])
+    answer = (final if final is not None else "".join(chunks)).strip()
+    failed = bool(error) or not answer
+    reason = error or "\n".join(noise[-3:]) or "the turn ended without an answer"
+    return dict(type="result", session_id=sid, is_error=failed, result=reason if failed else answer)
 
 
 PAGE_OPENING = re.compile(r"^You are talking with the author about ", re.S)
@@ -644,10 +732,10 @@ def save(scope, sid, agent):
 
 
 def main(argv):
-    """`--codex-result [sid]`, `--opencode-result [sid]`: that agent's JSON stream of a turn on
+    """`--codex-result [sid]`, `--opencode-result [sid]`, `--kiro-result [sid]`: that agent's JSON stream of a turn on
     stdin, the turn's one JSON line on stdout (exit 1 if it failed). `--save scope sid agent`:
     record a scope's conversation."""
-    results = {"--codex-result": codex_result, "--opencode-result": opencode_result}
+    results = {"--codex-result": codex_result, "--opencode-result": opencode_result, "--kiro-result": kiro_result}
     if argv[:1] and argv[0] in results:
         out = results[argv[0]](sys.stdin, argv[1] if len(argv) > 1 else "")
         print(json.dumps(out))
@@ -655,7 +743,7 @@ def main(argv):
     if argv[:1] == ["--save"] and len(argv) == 4:
         save(*argv[1:])
         return 0
-    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --save scope sid agent", file=sys.stderr)
+    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --kiro-result [sid] | --save scope sid agent", file=sys.stderr)
     return 2
 
 
