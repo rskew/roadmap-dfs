@@ -378,6 +378,15 @@ class Chain(unittest.TestCase):
         self.assertEqual(len(self.log("raise")), 1)
         self.assert_authors_merge_untouched()
 
+    def test_a_chain_in_a_repo_with_no_commit_yet_works_in_place(self):
+        shutil.rmtree(self.root / ".git")
+        subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
+        rc, meta, out = self.run_chain("work,confirm", cap=2)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.kinds_run(), ["work", "work"], out)
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("log", "--format=%s"), "W1.1: the step is done")
+
     def test_the_authors_accept_merges_the_branch_too(self):
         rc, meta, out = self.run_chain("work,confirm", cap=2)
         self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))

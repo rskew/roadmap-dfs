@@ -130,8 +130,12 @@ def keep_worktrees_untracked():
 
 
 def enter(task):
-    """The worktree `task` is worked in, cut on the first call; None to work where we are."""
+    """The worktree `task` is worked in, cut on the first call; None to work where we are:
+    the roadmap is ignored, the checkout is off the default branch, or no commit exists yet
+    for a branch to start from."""
     if dfs_paths.ignored() or dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
+        return None
+    if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
         return None
     wt = dfs_paths.worktrees() / task
     name = dfs_paths.item_branch(task)
