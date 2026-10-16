@@ -4122,19 +4122,28 @@ class UI(WalkMixin):
 
     # ---- acting --------------------------------------------------------------
 
-    def chat_env(self, scope):
-        """The session this scope's chat shares with the web page (chat.py): CHAT_SID, and
-        CHAT_RESUME when it has already got a transcript. codex mints its own id, so for a new
-        conversation there is none to name: CHAT_SHARE has run.sh record the one it makes."""
+    def chat_agent(self, scope):
+        """The agent this scope's chat runs: the one its conversation began with, since no
+        agent can resume another's session, and only for one not begun yet the screen's (`x`)."""
         import chat as dfs_chat
-        if self.agent not in dfs_chat.CHAT_AGENTS:
+        chats = dfs_chat.Chats()
+        return chats.agent(scope) if chats.sid(scope) else self.agent
+
+    def chat_env(self, scope, agent=None):
+        """The session this scope's chat shares with the web page (chat.py): CHAT_SID, and
+        CHAT_RESUME when it has already got a transcript. codex, opencode and kiro mint their own
+        id, so for a new conversation there is none to name: CHAT_SHARE has run.sh record the one
+        it makes."""
+        import chat as dfs_chat
+        agent = agent or self.chat_agent(scope)
+        if agent not in dfs_chat.CHAT_AGENTS:
             return None
         try:
-            sid, resume = dfs_chat.claim(scope, self.agent)
+            sid, resume = dfs_chat.claim(scope, agent)
         except (OSError, ValueError):
             return None
         env = dict(os.environ, **({"CHAT_SID": sid} if sid else {}), **({"CHAT_RESUME": "1"} if resume else {}))
-        if self.agent != "claude":
+        if agent != "claude":
             env["CHAT_SHARE"] = "1"
         return env
 
@@ -4150,8 +4159,9 @@ class UI(WalkMixin):
         """The chat for this scope, running in the BACKGROUND (started if it is not). Any
         number can be going: the page types into them, `c` looks at one. A new one opens with
         the summary (run.sh); one with a conversation already is resumed."""
-        argv = self.runner("--chat", scope)
-        return self.chats_running().ensure(scope, lambda: (argv, self.chat_env(scope) or dict(os.environ), ROOT), agent=self.agent)
+        agent = self.chat_agent(scope)
+        argv = self.runner("--chat", scope, agent=agent)
+        return self.chats_running().ensure(scope, lambda: (argv, self.chat_env(scope, agent) or dict(os.environ), ROOT), agent=agent)
 
     def open_chat(self, scope):
         """What `c` and `C` do: look at this scope's chat, running it first if it is not.
@@ -5018,7 +5028,7 @@ class UiWalker:
 
     def chat_send(self, scope, text):
         import chat as dfs_chat
-        if self.ui.agent not in dfs_chat.CHAT_AGENTS:
+        if self.ui.chat_agent(scope) not in dfs_chat.CHAT_AGENTS:
             return False
         return self.ui.start_chat(scope).send(text)
 

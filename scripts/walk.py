@@ -486,16 +486,17 @@ class WalkMixin:
         """Put `body` to the author on `item`, as a raise in its log."""
         dfs_tree.append_log(item, "raise", (), body)
 
-    def runner(self, *args):
-        """The runner argv for a pass.
+    def runner(self, *args, agent=None):
+        """The runner argv for a pass, under `agent` (the screen's, by default).
 
         `can_fold` and the `--fold` it put on the line are gone with the fold session:
         the fold is the first act of the session that picks the item up (§0.1 step 3),
         so there is no flag and nothing to ask about.
         """
         argv = [RUNNER]
-        if self.agent != "claude":
-            argv.append("--" + self.agent)
+        agent = agent or self.agent
+        if agent != "claude":
+            argv.append("--" + agent)
         return argv + [a for a in args if a]
 
     def start_chain(self, item, cap):

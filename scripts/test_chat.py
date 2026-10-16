@@ -729,6 +729,43 @@ class Chat(unittest.TestCase):
         ui.agent = "someagent"
         self.assertIsNone(ui.chat_env("W1"))                 # one with no chat here
 
+    def test_the_screens_chat_runs_the_conversations_agent_not_what_x_names_now(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("dfs_tui", HERE / "tui.py")
+        tui = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tui)
+        started = []
+        class Host:
+            def ensure(s, scope, make, agent="claude"):
+                argv, env, cwd = make()
+                started.append((scope, argv, env, agent))
+                return s
+            def send(s, text):
+                started.append(("sent", text))
+                return True
+        ui = object.__new__(tui.UI)
+        ui.chat_host = Host()
+        ui.agent = "claude"
+        sid, _ = dfs_chat.claim("W1")                        # a claude conversation, begun
+        ui.agent = "codex"                                   # then `x` names another agent
+        self.assertEqual(ui.chat_agent("W1"), "claude")
+        self.assertEqual(ui.chat_agent("W2"), "codex")       # nothing begun there: `x` decides
+        ui.start_chat("W1")
+        scope, argv, env, agent = started[-1]
+        self.assertEqual(agent, "claude")
+        self.assertNotIn("--codex", argv)
+        self.assertEqual(env.get("CHAT_SID"), sid)           # the page's session, not a new one
+        self.assertNotIn("CHAT_SHARE", env)
+        # the page's message reaches that chat while the agents differ
+        self.assertTrue(tui.UiWalker(ui).chat_send("W1", "hello"))
+        self.assertEqual(started[-1], ("sent", "hello"))
+        # and a codex conversation stays codex's when the screen's agent is claude
+        self.chats.save_sid("W3", "thread-1", "codex")
+        ui.agent = "claude"
+        self.assertEqual(ui.chat_agent("W3"), "codex")
+        ui.start_chat("W3")
+        self.assertEqual((started[-1][3], "--codex" in started[-1][1]), ("codex", True))
+
     def test_a_turn_records_the_agent_with_the_session(self):
         self.chats.send("W1", "hello")
         self.settle("W1")
