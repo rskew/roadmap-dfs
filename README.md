@@ -86,6 +86,9 @@ one was cut off mid-node.
 
 A task's page lists the chains that worked it under **Runs**; tap one to read its console log
 (the same `console.log` the terminal's `l` opens), which keeps growing while the chain is live.
+Each session the chain ran is a tab beside the console, drawn as the terminal's log pane draws
+it: what the agent said, the commands it ran and what they printed. Under codex that is where
+the work is, since its console holds only the runner's own lines.
 Whoever can reach the page can read those logs too.
 
 Chrome on Android offers Install only on a secure origin: https, or `localhost`. Over plain

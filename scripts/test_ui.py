@@ -363,6 +363,28 @@ class Flows(unittest.TestCase):
         finally:
             dfs_runs.pid_is_chain = real
 
+    def test_a_codex_runs_session_opens_beside_its_console_and_grows(self):
+        import runs as dfs_runs
+        d = self.root / ".dfs" / "runs" / "dfs_run_codex"
+        d.mkdir(parents=True)
+        (d / "console.log").write_text("dfs_run: task W9, cap 5, agent codex\n\n── run 1/5 · work ──\n")
+        (d / "meta.json").write_text(json.dumps(dict(
+            item="W9", agent="codex", mode="work", cap="5", run="1", pid="4000000",
+            started="2026-10-09T03:47:39+00:00", finished="")))
+        cmd = "/bin/bash -lc \"sed -n '1,40p' .dfs/items/W9.md\""
+        (d / "run-1.json").write_text("".join(json.dumps(e) + "\n" for e in (
+            {"type": "thread.started", "thread_id": "01a14374-0252-7903-b819-bc05e4439f47"},
+            {"type": "turn.started"},
+            {"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "Reading the task file first."}},
+            {"type": "item.completed", "item": {"id": "item_1", "type": "command_execution", "command": cmd,
+                                                "aggregated_output": "# W9 · Something\n", "exit_code": 0, "status": "completed"}})))
+        real = dfs_runs.pid_is_chain
+        dfs_runs.pid_is_chain = lambda pid: True
+        try:
+            self.flow("run_session")
+        finally:
+            dfs_runs.pid_is_chain = real
+
     def test_a_child_is_drawn_right_of_its_parent_and_siblings_share_a_column(self):
         self.flow("indent")
 

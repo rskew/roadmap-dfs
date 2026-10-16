@@ -1666,6 +1666,32 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors.filter(e => !/404/.test(e)), [], "no page errors");
   },
 
+  // A codex run's sessions are tabs beside its console, each drawn as the terminal's log pane draws it, and a live one grows.
+  async run_session(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("a.runrow");
+    await page.waitForSelector(".runtabs a");
+    same(await page.$$eval(".runtabs a", a => a.map(x => x.textContent)), ["Console", "Session 1"], "the console and the one session are tabs");
+    await page.click(".runtabs a:has-text('Session 1')");
+    await page.waitForFunction(() => document.querySelector("#runlog .r-run"), null, { timeout: 4000 });
+    assert((await page.textContent("#runlog .r-run")).includes("→ exec  sed -n '1,40p' .dfs/items/W9.md"), "the command codex ran is a row of its own");
+    assert((await page.textContent("#runlog .r-say")).includes("Reading the task file first."), "what codex said is shown");
+    same(await page.getAttribute(".runtabs a[aria-current=true]", "href"), "#/r/W9/dfs_run_codex/run-1", "the open session is the current tab");
+    assert((await page.textContent("#runhead")).includes("session 01a14374"), "the head names the codex thread");
+    const r = await page.evaluate(AUDIT);
+    assert(!r.overflow && !r.low.length && !r.small.length, `the session: ${r.overflow ? "scrolls sideways; " : ""}${r.low.join("; ")} ${r.small.join("; ")}`);
+    fs.appendFileSync(path.join(DIR, ".dfs", "runs", "dfs_run_codex", "run-1.json"),
+      JSON.stringify({ type: "item.completed", item: { id: "item_9", type: "agent_message", text: "W9.12 is confirmed." } }) + "\n");
+    await page.waitForFunction(() => document.querySelector("#runlog").textContent.includes("W9.12 is confirmed."), null, { timeout: 8000 })
+      .catch(() => { throw new Error("a live session grows by itself"); });
+    if (process.env.DFS_UI_SHOT) await page.screenshot({ path: process.env.DFS_UI_SHOT });
+    await page.goto(URL_ + "/#/r/W9/dfs_run_codex/run-7");
+    await page.waitForSelector(".hint");
+    assert((await page.textContent(".hint")).includes("No such session"), "an unknown session says so");
+    same(errors.filter(e => !/404/.test(e)), [], "no page errors");
+  },
+
   // A change made elsewhere (a chain, the terminal) reaches an open page by itself.
   async live(b) {
     const { page, errors } = await open(b, PHONE);

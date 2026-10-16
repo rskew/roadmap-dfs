@@ -79,6 +79,14 @@ pre.runlog { margin: 0; padding: var(--s3); border: var(--rule) solid var(--line
 .runhead { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; padding-bottom: var(--s3); }
 a.runrow { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; min-height: calc(44px * var(--z)); padding: var(--s2) 0; color: inherit; text-decoration: none; border-top: var(--rule) solid var(--line); }
 .runhead .muted, a.runrow .muted { font-size: var(--fs-small); }
+/* a run's sessions beside its console, and a session's rows by what each is: said, ran, printed, failed */
+.runtabs { display: flex; flex-wrap: wrap; gap: var(--s2); padding-bottom: var(--s3); }
+.runtabs a { display: inline-flex; align-items: center; min-height: calc(44px * var(--z)); padding: 0 var(--s3); border: var(--rule) solid var(--line); border-radius: var(--radius); color: inherit; text-decoration: none; }
+.runtabs a[aria-current="true"] { border-color: var(--ink); font-weight: 600; }
+pre.runlog .r-run, pre.runlog .r-head { font-weight: 600; }
+pre.runlog .r-out, pre.runlog .r-dim, pre.runlog .r-meta { color: var(--muted); }
+pre.runlog .r-think { color: var(--muted); font-style: italic; }
+pre.runlog .r-err { color: var(--attention); }
 
 /* tabs: two words; the current one carries a line */
 #tabs {
@@ -427,7 +435,7 @@ function route(hash = location.hash) {
   if (p[0] === "t" && p[1]) return { view: "task", task: p[1], node: p[2] || null };
   if (p[0] === "chats") return { view: "chats" };
   if (p[0] === "a" && p[1] && p[2]) return { view: "artefact", task: p[1], name: p[2] };
-  if (p[0] === "r" && p[1] && p[2]) return { view: "run", task: p[1], name: p[2] };
+  if (p[0] === "r" && p[1] && p[2]) return { view: "run", task: p[1], name: p[2], session: p[3] || null };
   return { view: "tasks" };
 }
 const go = (h, replace) => {
@@ -676,7 +684,38 @@ function drawArtefact(r) {
 /* A run's log, `#/r/<task>/<run>`: the console of the chain, read from where the last look ended, so a
    live one grows in place and a push or the poll below adds only what was written since. */
 const RUNLOG = { key: "", end: 0, text: "", info: null };
+/* The console and each session the chain captured, as tabs: the console is the runner's own lines, and a
+   session (`#/r/<task>/<run>/run-2`) is what the agent did, which is all a codex run streams. */
+function runTabs(r, x) {
+  const base = `#/r/${encodeURIComponent(r.task)}/${encodeURIComponent(r.name)}`, cur = r.session || "";
+  const tab = (href, label, on) => `<a href="${href}" aria-current="${on}">${label}</a>`;
+  return `<nav class="runtabs" aria-label="Console and sessions">${tab(base, "Console", !cur)}`
+    + (x.sessions || []).map(s => tab(base + "/" + encodeURIComponent(s), "Session " + esc(s.replace(/^run-/, "")), s === cur)).join("") + `</nav>`;
+}
+/* One session, condensed by the server as the terminal's log pane draws it; asked for whole on each look,
+   since a condensed row is not a byte range, and kept at the end while the reader is there. */
+async function drawSession(r, mine) {
+  const key = r.task + "/" + r.name + "/" + r.session, view = $("#view");
+  let got;
+  try { got = await api("/api/run/" + encodeURIComponent(r.name) + "?session=" + encodeURIComponent(r.session)); }
+  catch (e) { if (mine === RENDERS) { RUNLOG.key = ""; view.className = ""; view.dataset.run = ""; view.innerHTML = `<p class="hint">No such session: ${esc(r.session)} is not one of ${esc(r.name)}'s.</p>`; } return; }
+  if (mine !== RENDERS) return;
+  const fresh = RUNLOG.key !== key;
+  Object.assign(RUNLOG, { key, end: 0, text: "", info: got });
+  if (!view.querySelector("#runlog") || view.dataset.run !== key) {
+    view.className = ""; view.dataset.run = key;
+    view.innerHTML = `<div class="runhead" id="runhead"></div><div id="runtabs"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Session ${esc(r.session)} of ${esc(got.progress)}"></pre>`;
+  }
+  $("#runhead").innerHTML = runTags(got) + (got.sid ? `<span class="muted">session ${esc(got.sid)}</span>` : "");
+  $("#runtabs").innerHTML = runTabs(r, got);
+  const box = $("#runlog"), atEnd = fresh || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const html = (got.cut ? `<span class="r-dim">… ${got.cut} earlier rows are not shown …</span>\n` : "")
+    + (got.rows.length ? got.rows.map(([t, role]) => `<span class="r-${esc(role)}">${esc(t)}</span>`).join("\n") : "(nothing written yet)");
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  if (atEnd) box.scrollTop = box.scrollHeight;
+}
 async function drawRun(r, mine) {
+  if (r.session) return drawSession(r, mine);
   const key = r.task + "/" + r.name, view = $("#view"), fresh = RUNLOG.key !== key;
   if (fresh) Object.assign(RUNLOG, { key, end: 0, text: "", info: null });
   let got;
@@ -689,9 +728,10 @@ async function drawRun(r, mine) {
   const head = runTags(got);
   if (!view.querySelector("#runlog") || view.dataset.run !== key) {
     view.className = ""; view.dataset.run = key;
-    view.innerHTML = `<div class="runhead" id="runhead"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Log of ${esc(got.progress)}"></pre>`;
+    view.innerHTML = `<div class="runhead" id="runhead"></div><div id="runtabs"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Log of ${esc(got.progress)}"></pre>`;
   }
   $("#runhead").innerHTML = head;
+  $("#runtabs").innerHTML = (got.sessions || []).length ? runTabs(r, got) : "";
   const box = $("#runlog"), atEnd = fresh || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   if (fresh || got.text || got.start !== got.end - got.text.length) box.textContent = (got.has_log ? (got.start > 0 && fresh ? "… earlier output is not shown …\n" : "") + RUNLOG.text || "(nothing written yet)" : "No log was kept for this run.");
   if (atEnd) box.scrollTop = box.scrollHeight;

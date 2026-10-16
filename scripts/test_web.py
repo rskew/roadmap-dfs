@@ -1275,6 +1275,44 @@ class Web(unittest.TestCase):
         self.assertEqual((log["start"], log["end"]), (0, len(log["text"].encode())))
         self.assertEqual(self.call("GET", "/api/run/dfs_run_ccc")[1]["text"], "")
 
+    def test_a_codex_runs_sessions_are_listed_and_read_condensed_as_the_terminal_draws_them(self):
+        d = self.make_run("dfs_run_cdx", console="dfs_run: task W1, cap 5, agent codex\n── run 1/5 · work ──\n")
+        meta = json.loads((d / "meta.json").read_text())
+        meta["agent"] = "codex"
+        (d / "meta.json").write_text(json.dumps(meta))
+        stream = [
+            {"type": "thread.started", "thread_id": "01a14374-0252-7903-b819-bc05e4439f47"},
+            {"type": "turn.started"},
+            {"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "Reading the task file first."}},
+            {"type": "item.started", "item": {"id": "item_1", "type": "command_execution",
+                                              "command": "/bin/bash -lc \"sed -n '1,40p' .dfs/items/W1.md\"", "status": "in_progress"}},
+            {"type": "item.completed", "item": {"id": "item_1", "type": "command_execution",
+                                                "command": "/bin/bash -lc \"sed -n '1,40p' .dfs/items/W1.md\"",
+                                                "aggregated_output": "# W1 · Something\n", "exit_code": 0, "status": "completed"}},
+            {"type": "turn.failed", "error": {"message": "You've hit your usage limit. Try again at 8:51 AM."}},
+        ]
+        (d / "run-1.json").write_text("".join(json.dumps(e) + "\n" for e in stream))
+        (d / "run-2.json").write_text("")        # a session that has written nothing yet is not a tab
+        task = self.call("GET", "/api/task/W1")[1]
+        self.assertEqual(next(r for r in task["runs"] if r["name"] == "dfs_run_cdx")["sessions"], ["run-1"])
+        status, got, _ = self.call("GET", "/api/run/dfs_run_cdx?session=run-1")
+        self.assertEqual(status, 200)
+        self.assertEqual((got["session"], got["sid"], got["cut"]), ("run-1", "01a14374-0252-7903-b819-bc05e4439f47", 0))
+        rows = [tuple(r) for r in got["rows"]]
+        self.assertIn(("  Reading the task file first.", "say"), rows)
+        self.assertIn(("  → exec  sed -n '1,40p' .dfs/items/W1.md", "run"), rows)
+        self.assertEqual(sum(1 for t, _ in rows if "→ exec" in t), 1, "a command started and completed is one command")
+        self.assertTrue(any(role == "err" and "usage limit" in t for t, role in rows))
+        self.assertIn("── run 1/5 · work ──", self.call("GET", "/api/run/dfs_run_cdx")[1]["text"], "the console is still the default")
+        for bad in ("run-2", "run-9", "meta", "..%2Fdfs_run_cdx%2Frun-1", "run-1.json"):
+            self.assertEqual(self.call("GET", "/api/run/dfs_run_cdx?session=" + bad)[0], 404, bad)
+
+    def test_a_claude_session_is_read_as_its_result(self):
+        d = self.make_run("dfs_run_cld", console="x\n")
+        (d / "run-1.json").write_text(json.dumps({"type": "result", "session_id": "abc", "result": "W1.2 confirmed.\nDone.", "is_error": False}))
+        got = self.call("GET", "/api/run/dfs_run_cld?session=run-1")[1]
+        self.assertEqual((got["sid"], [tuple(r) for r in got["rows"]]), ("abc", [("  W1.2 confirmed.", "say"), ("  Done.", "say")]))
+
     def test_the_readme_says_where_the_page_shows_a_runs_log(self):
         readme = (HERE.parent / "README.md").read_text()
         self.assertIn("**Runs**", readme)

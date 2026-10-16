@@ -16,7 +16,9 @@ terminal or from a chain, is pushed to every open page, which then reads what it
 showing.
 
 A task's page lists the chains that worked it (`runs.py`) and opens one's `console.log` (`/api/run/<name>`,
-read by the directory's name and never by a path), so what the terminal's `l` shows is on the phone too.
+read by the directory's name and never by a path), and each session it captured (`run-N.json`, by
+`?session=run-N`) condensed by the log pane's own renderers, so what the terminal's `l` shows is on the
+phone too, a codex session's commands and messages included.
 
 It also steers the walk (`walk.py`: one engine, the terminal's `w`, `n` and `K`): start it with a
 session budget, stop it, choose where it goes next, interrupt a chain.
@@ -373,7 +375,61 @@ def run_entry(r):
     return dict(name=os.path.basename(r["dir"]), item=r["item"], state=r["state"],
                 progress=dfs_runs.progress(r), mode=r["mode"], agent=r["agent"],
                 started=r["started"], finished=r["finished"], stop=r["stop"], rc=r["rc"],
-                peak=r["peak"], turns=r["turns"], has_log=bool(r["console"]))
+                peak=r["peak"], turns=r["turns"], has_log=bool(r["console"]), sessions=run_sessions(r))
+
+
+SESSION_NAME = r"run-[0-9]+"
+SESSION_ROWS = 3000         # the most of a session's rows one answer carries: its tail
+
+
+def run_sessions(r):
+    """The sessions a chain has captured, `run-1` first: each `run-N.json` beside its console.
+
+    ⚠️ **THE CONSOLE IS NOT THE SESSION.** It is the runner's own lines, and under codex
+    that is all it is for the whole run: `exec --json` streams the session into its
+    `run-N.json`, so a page that opened the console alone showed a codex run as four lines
+    of the runner and nothing of what the session did."""
+    try:
+        names = os.listdir(r["dir"])
+    except OSError:
+        return []
+    found = [n[:-len(".json")] for n in names if re.fullmatch(SESSION_NAME + r"\.json", n)
+             and os.path.getsize(os.path.join(r["dir"], n)) > 0]
+    return sorted(found, key=lambda n: int(n.split("-")[1]))
+
+
+def session_rows(path, agent):
+    """One session's capture as (session id, rows of [text, role]), by the terminal log pane's own
+    renderers, so the page and the screen condense a session alike."""
+    result, events = dfs_tui.read_result(path)
+    # A stream that is one line (a run that died on its first event) parses as one object,
+    # which `read_result` takes for claude's result.
+    if result is not None and agent != "claude":
+        result, events = None, [result]
+    if result is not None:
+        sid = str(result.get("session_id") or "")
+        text = str(result.get("result") or "")
+        role = "err" if result.get("is_error") else "say"
+        return sid, [("  " + ln, role) for ln in text.splitlines() if ln.strip()] or [("  (no result text)", "dim")]
+    if agent == "kiro":
+        return dfs_tui.kiro_session_id(events), dfs_tui.kiro_result_lines(events)
+    if agent == "opencode":
+        return dfs_tui.opencode_session_id(events), dfs_tui.opencode_result_lines(events)
+    return dfs_tui.codex_session_id(events), dfs_tui.codex_result_lines(events)
+
+
+def run_session(run, session):
+    """One session of a chain, condensed: the tail of its rows, and how many were cut before them."""
+    if session not in run_sessions(run):
+        raise Refused("no such session in that run", 404)
+    agent = run["agent"] or "claude"
+    try:
+        sid, rows = session_rows(os.path.join(run["dir"], session + ".json"), agent)
+    except OSError as e:
+        raise Refused("cannot read that session: %s" % e, 500)
+    cut = max(0, len(rows) - SESSION_ROWS)
+    return dict(run_entry(run), session=session, sid=sid, cut=cut,
+                rows=[[dfs_tui.strip_ansi(t), role] for t, role in rows[cut:]])
 
 
 def runs_for(task):
@@ -381,14 +437,17 @@ def runs_for(task):
     return [run_entry(r) for r in dfs_runs.run_dirs() if r["item"] == task][:RUN_LISTED]
 
 
-def run_log(name, start=None):
+def run_log(name, start=None, session=None):
     """A chain's console log. With no `start` the last `RUN_CHUNK` bytes, from a line start;
     with one, what has been written since that byte, so a live log is followed by asking
-    again from the `end` the last answer gave. `name` is matched against the run directories
-    that exist, never joined onto a path."""
+    again from the `end` the last answer gave. With a `session` (`run-2`), that session's
+    capture condensed instead (`run_session`). `name` is matched against the run directories
+    that exist, never joined onto a path, and `session` against the sessions found in it."""
     run = next((r for r in dfs_runs.run_dirs() if os.path.basename(r["dir"]) == name), None)
     if run is None:
         raise Refused("no such run", 404)
+    if session is not None:
+        return run_session(run, session)
     if not run["console"]:
         return dict(run_entry(run), text="", start=0, end=0)
     try:
@@ -1104,8 +1163,11 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/task/"):
             return self.json(200, task_json(segment(path, "/api/task/", dfs_tree.TASK_RE, "task")))
         if path.startswith("/api/run/"):
-            from_ = parse_qs(urlparse(self.path).query).get("from", [""])[0]
-            return self.json(200, run_log(segment(path, "/api/run/", RUN_NAME, "run"), int(from_) if from_.isdigit() else None))
+            query = parse_qs(urlparse(self.path).query)
+            from_, session = query.get("from", [""])[0], query.get("session", [None])[0]
+            if session is not None and not re.fullmatch(SESSION_NAME, session):
+                raise Refused("no such session in that run", 404)
+            return self.json(200, run_log(segment(path, "/api/run/", RUN_NAME, "run"), int(from_) if from_.isdigit() else None, session))
         if path == "/background-image":
             mode = parse_qs(urlparse(self.path).query).get("mode", [""])[0]
             image = dfs_paths.read_background_image(mode if mode in dfs_paths.MODES else "")
