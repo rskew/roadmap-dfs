@@ -386,6 +386,38 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.wt / ".dfs" / "items" / "W1" / "fix.md").read_text(), "a part\n")
         self.assertEqual(self.git("status", "--porcelain", "--", ".dfs/items"), "")
 
+    def test_an_attachment_named_in_a_task_before_its_first_run_goes_to_the_worktree_and_merges(self):
+        name = "0f1e2d3c-4b5a-4968-8776-655443322111.png"
+        other = "0f1e2d3c-4b5a-4968-8776-655443322112.png"
+        (self.root / ".dfs" / "artefacts").mkdir()
+        (self.root / ".dfs" / "artefacts" / name).write_bytes(b"png")
+        (self.root / ".dfs" / "artefacts" / other).write_bytes(b"png")
+        (self.root / ".dfs" / "items" / "W1.md").write_text(
+            TASK.replace("## Goal\n", "## Goal\n\nSee ![x](.dfs/artefacts/%s)\n" % name, 1))
+        self.assertIn(name, (self.root / ".dfs" / "items" / "W1.md").read_text())
+        self.enter()
+        self.assertFalse((self.root / ".dfs" / "artefacts" / name).exists())
+        self.assertEqual((self.wt / ".dfs" / "artefacts" / name).read_bytes(), b"png")
+        self.assertTrue((self.root / ".dfs" / "artefacts" / other).exists())   # not named: stays
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.wt
+        try:
+            text = "\n".join(f.read_text() for f in dfs_tree.part_files("W1"))
+            self.assertEqual(dfs_tree.untracked_artefacts(text), [name])
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+
+    def test_a_chain_merges_a_task_whose_goal_names_an_attachment_added_before_it_ran(self):
+        name = "0f1e2d3c-4b5a-4968-8776-655443322111.png"
+        (self.root / ".dfs" / "artefacts").mkdir()
+        (self.root / ".dfs" / "artefacts" / name).write_bytes(b"png")
+        (self.root / ".dfs" / "items" / "W1.md").write_text(
+            TASK.replace("## Goal\n", "## Goal\n\nSee ![x](.dfs/artefacts/%s)\n" % name, 1))
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.git("ls-files", ".dfs/artefacts/" + name), ".dfs/artefacts/" + name)
+        self.assertFalse(self.wt.exists())
+
     def test_a_branch_the_chain_did_not_cut_is_reused_and_main_s_edits_left_alone(self):
         self.git("branch", "dfs/W1")
         item = self.root / ".dfs" / "items" / "W1.md"

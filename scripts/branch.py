@@ -94,6 +94,20 @@ def carry_uncommitted(task, wt):
     return moved
 
 
+def carry_named_attachments(task, wt):
+    """Move the files the task's text names in this checkout's `.dfs/artefacts` into `wt`,
+    as `tree.carry_attachments` does for words written once the worktree exists: an
+    attachment named in a task before its first run is untracked here, and `carry_uncommitted`
+    moves only the task's own files. Returns the names moved."""
+    import tree as dfs_tree
+    texts = []
+    for p in task_paths(task):
+        base = wt / p
+        for f in ([base] if base.is_file() else sorted(base.rglob("*.md")) if base.is_dir() else []):
+            texts.append(f.read_text())
+    return dfs_tree.carry_attachments(task, "\n".join(texts))
+
+
 def default_branch():
     for name in dfs_paths.DEFAULT_BRANCHES:
         if _has_branch(name):
@@ -138,6 +152,7 @@ def enter(task):
     else:
         print("dfs_branch: %s existed; reused, and %s's uncommitted edits here are left as they are" %
               (name, task), file=sys.stderr)
+    carry_named_attachments(task, wt)
     return wt
 
 
