@@ -4124,15 +4124,19 @@ class UI(WalkMixin):
 
     def chat_env(self, scope):
         """The session this scope's chat shares with the web page (chat.py): CHAT_SID, and
-        CHAT_RESUME when it has already got a transcript. Only claude's can be shared."""
-        if self.agent != "claude":
+        CHAT_RESUME when it has already got a transcript. codex mints its own id, so for a new
+        conversation there is none to name: CHAT_SHARE has run.sh record the one it makes."""
+        import chat as dfs_chat
+        if self.agent not in dfs_chat.CHAT_AGENTS:
             return None
         try:
-            import chat as dfs_chat
-            sid, resume = dfs_chat.claim(scope)
-        except (OSError, ValueError, ImportError):
+            sid, resume = dfs_chat.claim(scope, self.agent)
+        except (OSError, ValueError):
             return None
-        return dict(os.environ, CHAT_SID=sid, **({"CHAT_RESUME": "1"} if resume else {}))
+        env = dict(os.environ, **({"CHAT_SID": sid} if sid else {}), **({"CHAT_RESUME": "1"} if resume else {}))
+        if self.agent != "claude":
+            env["CHAT_SHARE"] = "1"
+        return env
 
     chat_host = None        # the chats running in the background, by scope (ptyrelay.ChatHost)
 
@@ -5013,7 +5017,8 @@ class UiWalker:
         return True
 
     def chat_send(self, scope, text):
-        if self.ui.agent != "claude":
+        import chat as dfs_chat
+        if self.ui.agent not in dfs_chat.CHAT_AGENTS:
             return False
         return self.ui.start_chat(scope).send(text)
 

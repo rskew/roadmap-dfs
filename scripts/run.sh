@@ -288,6 +288,25 @@ if [ "$MODE" = chat ]; then
     else
       chat_session=(--session-id "$CHAT_SID")
     fi
+  elif [ "$AGENT" = codex ] && [ -n "${CHAT_SHARE:-}" ]; then
+    # codex mints its own session id, so a NEW shared chat cannot be started under one the way
+    # claude's is. Its opening turn runs headless first (what the interactive one would have
+    # done with the same prompt), the id is recorded for the page, and the chat then RESUMES
+    # that session: the opening is in its history and the page and this terminal share it.
+    if [ -z "${CHAT_RESUME:-}" ]; then
+      echo "dfs_run: codex has no session to resume for $chat_subject; running its opening turn first"
+      opening_json="$(mktemp)"
+      printf '%s' "$CHAT_PROMPT" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" exec --json "${PERMISSION_ARGV[@]}" - \
+        | python3 "$HERE/chat.py" --codex-result > "$opening_json" || true
+      opening_field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$opening_json" "$1" 2>/dev/null || true; }
+      if [ "$(opening_field is_error)" != False ] || [ -z "$(opening_field session_id)" ]; then
+        echo "dfs_run: the opening turn failed: $(opening_field result)" >&2
+        rm -f "$opening_json"; exit 1
+      fi
+      CHAT_SID="$(opening_field session_id)"; rm -f "$opening_json"
+      python3 "$HERE/chat.py" --save "$ITEM" "$CHAT_SID" codex || exit 1
+    fi
+    chat_session=(resume "$CHAT_SID"); CHAT_PROMPT=""
   fi
   echo "dfs_run: opening an interactive $AGENT session for $chat_subject"
   if [ -n "$CHAT_PROMPT" ]; then
@@ -304,7 +323,7 @@ fi
 # turn reads the cached prefix. The first turn gets the framing; a resumed one is just the
 # message, the session already has it.
 if [ "$MODE" = chatturn ]; then
-  [ "$AGENT" = claude ] || { echo "dfs_run: a chat from the web page runs under claude; \`c\` on the screen opens the others" >&2; exit 2; }
+  [ "$AGENT" = claude ] || [ "$AGENT" = codex ] || { echo "dfs_run: a chat from the web page runs under claude or codex; \`c\` on the screen opens the others" >&2; exit 2; }
   message="$(cat)"
   # CHAT_OPENING: the page opened a new chat and nobody has said anything yet, so the turn is
   # the same opening the screen's chat starts with: the summary, unprompted.
@@ -312,6 +331,7 @@ if [ "$MODE" = chatturn ]; then
   if [ -n "${CHAT_SID:-}" ] && [ -n "${CHAT_RESUME:-}" ]; then
     prompt="$message"
     session_flag=(--resume "$CHAT_SID")
+    [ "$AGENT" = codex ] && session_flag=("$CHAT_SID")      # codex exec resume <id>
   else
     if [ "$ITEM" = project ]; then
       about="the project as a whole: read $DFS_ROADMAP_REL for how it stands"
@@ -329,6 +349,16 @@ if [ "$MODE" = chatturn ]; then
       prompt="$framing The author writes: $message"
     fi
     session_flag=(--session-id "${CHAT_SID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}")
+    [ "$AGENT" = codex ] && session_flag=()                 # codex names the session itself
+  fi
+  if [ "$AGENT" = codex ]; then
+    # The prompt goes in on stdin (`-`): a message that starts with a dash is not a flag, and
+    # its length is not an argv's. codex prints a stream of events, read down to the one JSON
+    # line chat.py wants; the pipeline's status is the reader's, which fails when the turn did.
+    resume_word=(); [ -n "${CHAT_SID:-}" ] && [ -n "${CHAT_RESUME:-}" ] && resume_word=(resume)
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" exec "${resume_word[@]}" --json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" - \
+      | python3 "$HERE/chat.py" --codex-result "${CHAT_SID:-}"
+    exit "${PIPESTATUS[1]}"
   fi
   exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json "${session_flag[@]}" \
     "${PERMISSION_ARGV[@]}" < /dev/null

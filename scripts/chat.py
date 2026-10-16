@@ -157,12 +157,44 @@ def codex_turns(rec):
 READERS = dict(claude=claude_turns, codex=codex_turns)
 
 
+CHAT_AGENTS = ("claude", "codex")      # the agents a chat can run under, here and on the screen
+
+
+def codex_result(lines, sid=""):
+    """One turn of `codex exec --json` as the single JSON line a turn is read from, the shape
+    claude's `--output-format json` prints: {session_id, is_error, result}. The id is the
+    stream's `thread.started` (codex mints it, on a resumed turn too), the result is the last
+    `agent_message`, and a failure is an `error` or `turn.failed` event. With nothing said at
+    all, `result` is empty and the caller has the agent's stderr."""
+    answer, error, done = "", "", False
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        kind = rec.get("type")
+        if kind == "thread.started":
+            sid = rec.get("thread_id") or sid
+        elif kind == "item.completed" and isinstance(rec.get("item"), dict) and rec["item"].get("type") == "agent_message":
+            answer = rec["item"].get("text") or answer
+        elif kind == "error":
+            error = rec.get("message") or error
+        elif kind == "turn.failed":
+            error = (rec.get("error") or {}).get("message") or error or "the turn failed"
+        elif kind == "turn.completed":
+            done = True
+    failed = bool(error) or not done
+    return dict(type="result", session_id=sid, is_error=failed, result=(error or answer) if failed else answer)
+
+
 PAGE_OPENING = re.compile(r"^You are talking with the author about ", re.S)
 OPENING = re.compile(r"^Read \S*ROADMAP\.md\b.*(Discuss|discuss)", re.S)
 
 
-def running_elsewhere(sid, own=()):
-    """Whether some process other than ours has a claude running on this session: the
+def running_elsewhere(sid, own=(), agent="claude"):
+    """Whether some process other than ours has the agent running on this session: the
     screen's chat, open now. Found by its command line (it names the session id)."""
     me = {os.getpid(), *own}
     try:
@@ -176,7 +208,7 @@ def running_elsewhere(sid, own=()):
             cmd = Path("/proc/%d/cmdline" % pid).read_bytes().replace(b"\0", b" ").decode(errors="replace")
         except OSError:
             continue
-        if sid in cmd and "claude" in cmd and "--chat-turn" not in cmd:
+        if sid in cmd and agent in cmd and "--chat-turn" not in cmd:
             return True
     return False
 
@@ -249,7 +281,7 @@ class Chats:
             return dict(scope=scope, messages=messages, busy=bool(started) or talking,
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
-                        elsewhere=bool(sid) and not started and not live and running_elsewhere(sid),
+                        elsewhere=bool(sid) and not started and not live and running_elsewhere(sid, agent=agent),
                         agent=agent)
 
     # ── a turn ────────────────────────────────────────────────────────────────────────
@@ -261,9 +293,8 @@ class Chats:
         if len(message) > MAX_MESSAGE:
             raise ValueError("a message is %d characters or fewer" % MAX_MESSAGE)
         agent = self.agent(scope)
-        if agent != "claude":
-            raise ValueError("chat on the page runs under claude; the agent is %s (the screen's c "
-                             "opens the others)" % agent)
+        if agent not in CHAT_AGENTS:
+            raise ValueError("chat on the page runs under %s; the agent is %s" % (" or ".join(CHAT_AGENTS), agent))
         w = self.walker()
         with self.lock:
             # A chat running on this screen has the session: type into it, as the keyboard does.
@@ -279,7 +310,7 @@ class Chats:
                             % (time.time() - self.busy[scope]))
                 raise ValueError("it is still answering the last message")
             sid = self.sid(scope)
-            if sid and running_elsewhere(sid):
+            if sid and running_elsewhere(sid, agent=agent):
                 chatlog.log(scope, "page: message refused, another terminal has session %s open" % sid)
                 raise ValueError("another terminal has this conversation open: type there, or "
                                  "close it and send from here")
@@ -352,17 +383,18 @@ class Chats:
             env.pop("RUNDIR", None)
             env.pop("CHAT_SID", None)
             env.pop("CHAT_RESUME", None)
-            if not new_sid:
+            if not new_sid and agent == "claude":
                 # chosen here, not by run.sh, so a first turn that is stopped still has its session
                 new_sid = str(uuid.uuid4())
-            env["CHAT_SID"] = new_sid
+            if new_sid:         # codex mints its own: a first turn has none to name, and is read from the stream
+                env["CHAT_SID"] = new_sid
             if sid:
                 # Resume only a session that has a transcript: one the screen made and the
                 # author left at once has none, and `--resume` would refuse it.
                 p = dfs_context.transcript_path(sid, agent)
                 if p and os.path.exists(p):
                     env["CHAT_RESUME"] = "1"
-            r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
+            r = run_turn(self.argv() + ["--" + agent] * (agent != "claude") + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
                          on_start=lambda p: self.started(scope, p))
             rc = r.returncode
             out = {}
@@ -408,9 +440,10 @@ class Chats:
         self.check(scope)
         w = self.walker()
         note = ""
-        if self.agent(scope) == "claude":
+        agent = self.agent(scope)
+        if agent in CHAT_AGENTS:
             sid = self.sid(scope)
-            p = dfs_context.transcript_path(sid, "claude") if sid else None
+            p = dfs_context.transcript_path(sid, agent) if sid else None
             began = bool(p and os.path.exists(p)) or bool(w and w.chat_live(scope))
             if not began:
                 chatlog.log(scope, "page: opened a new chat%s" % (", on the screen" if w and w.has_screen else ""))
@@ -425,7 +458,7 @@ class Chats:
                         if scope not in self.busy:
                             self.busy[scope] = time.time()
                             self.notes.pop(scope, None)
-                            threading.Thread(target=self.turn, args=(scope, "", sid, True, "claude"), daemon=True).start()
+                            threading.Thread(target=self.turn, args=(scope, "", sid, True, agent), daemon=True).start()
             self.on_change()
         return dict(self.state(scope), note=note)
 
@@ -475,17 +508,48 @@ class Chats:
         return self.state(scope)
 
 
-def claim(scope):
+def claim(scope, agent="claude"):
     """For the screen's `c`: the session to open for this scope, as (sid, resume). The record
     is made now, before the chat starts, so the page can resume it, and `resume` is whether
-    there is a transcript to resume (else it starts the session under that id)."""
+    there is a transcript to resume (else it starts the session under that id). An agent that
+    mints its own id (codex) has none to name for a new conversation: it comes back ("", False)
+    and run.sh records the id once the opening turn has made it (`save`)."""
     chats = Chats()
     chats.check(scope)
     sid = chats.sid(scope)
-    if sid and chats.agent(scope) != "claude":
+    if sid and chats.agent(scope) != agent:
         raise ValueError("the %s conversation is %s's" % (scope, chats.agent(scope)))
+    if agent != "claude":
+        p = dfs_context.transcript_path(sid, agent) if sid else None
+        return (sid, True) if p and os.path.exists(p) else ("", False)
     if not sid:
         sid = str(uuid.uuid4())
         chats.save_sid(scope, sid, "claude")
     p = dfs_context.transcript_path(sid, "claude")
     return sid, bool(p and os.path.exists(p))
+
+
+def save(scope, sid, agent):
+    """The conversation for this scope is session `sid` under `agent` (run.sh, once codex has
+    minted the id of a chat the screen opened)."""
+    chats = Chats()
+    chats.check(scope)
+    chats.save_sid(scope, sid, agent)
+
+
+def main(argv):
+    """`--codex-result [sid]`: a `codex exec --json` stream on stdin, the turn's one JSON line on
+    stdout (exit 1 if it failed). `--save scope sid agent`: record a scope's conversation."""
+    if argv[:1] == ["--codex-result"]:
+        out = codex_result(sys.stdin, argv[1] if len(argv) > 1 else "")
+        print(json.dumps(out))
+        return 1 if out["is_error"] else 0
+    if argv[:1] == ["--save"] and len(argv) == 4:
+        save(*argv[1:])
+        return 0
+    print("usage: chat.py --codex-result [sid] | --save scope sid agent", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

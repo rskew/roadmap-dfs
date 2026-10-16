@@ -44,6 +44,34 @@ PY
 printf '{"type":"result","is_error":false,"result":"I read it. %s","session_id":"%s"}\n' "${CHAT_STUB_SAY:-Fine.}" "$sid"
 """
 
+CODEX_STUB = r"""#!/usr/bin/env bash
+# a codex that records its arguments and what it was told, keeps a rollout as codex does, and
+# prints `exec --json` events. `resume <id>` alone is the interactive chat: it only records itself.
+echo "$@" >> "$CHAT_STUB_LOG"
+[ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","message":"not logged in"}'; echo '{"type":"turn.failed","error":{"message":"not logged in"}}'; exit 1; }
+[ "$1" = exec ] || exit 0
+shift; [ "$1" = resume ] && shift
+sid=""; for a in "$@"; do case "$a" in -*) ;; *) sid="$a" ;; esac; done
+[ "$sid" = - ] && sid=""
+prompt="$(cat)"; echo "stdin: $prompt" >> "$CHAT_STUB_LOG"
+[ -n "$sid" ] || sid="01a14447-0000-7000-8000-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:12])')"
+python3 - "$sid" "$prompt" "${CHAT_STUB_SAY:-Fine.}" <<'PY'
+import json, os, sys
+sid, prompt, say = sys.argv[1:4]
+d = os.path.join(os.environ["HOME"], ".codex", "sessions", "2026", "10", "16"); os.makedirs(d, exist_ok=True)
+def item(kind, text, i):
+    block = {"type": "text", "text": text, "text_elements": []} if kind == "UserMessage" else {"type": "Text", "text": text}
+    return {"type": "event_msg", "payload": {"type": "item_completed", "item": {"type": kind, "id": i, "content": [block]}}}
+with open(os.path.join(d, "rollout-2026-10-16T10-30-15-%s.jsonl" % sid), "a") as f:
+    f.write(json.dumps(item("UserMessage", prompt, "u")) + "\n" + json.dumps(item("AgentMessage", "I read it. " + say, "a")) + "\n")
+print(json.dumps({"type": "thread.started", "thread_id": sid}))
+print(json.dumps({"type": "turn.started"}))
+print(json.dumps({"type": "item.completed", "item": {"id": "item_0", "type": "agent_message", "text": "Reading."}}))
+print(json.dumps({"type": "item.completed", "item": {"id": "item_1", "type": "agent_message", "text": "I read it. " + say}}))
+print(json.dumps({"type": "turn.completed", "usage": {}}))
+PY
+"""
+
 
 class Chat(unittest.TestCase):
     def setUp(self):
@@ -57,10 +85,16 @@ class Chat(unittest.TestCase):
         self.stub.write_text(STUB)
         self.stub.chmod(self.stub.stat().st_mode | stat.S_IEXEC)
         self.log = self.root / "stub.log"
-        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "CHAT_STUB_SLEEP", "HOME", "DFS_RUN_DIR")}
+        self._env = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "CODEX_CMD", "CHAT_SHARE", "CHAT_SID", "CHAT_RESUME", "CHAT_STUB_LOG", "CHAT_STUB_FAIL", "CHAT_STUB_SAY", "CHAT_STUB_SLEEP", "HOME", "DFS_RUN_DIR")}
         os.environ.update(CLAUDE_CMD=str(self.stub), CHAT_STUB_LOG=str(self.log), HOME=str(self.root / "home"),
                           DFS_RUN_DIR=str(self.root / ".dfs" / "runs"))     # the chat logs are this project's, not the real one's
         (self.root / "home").mkdir()
+        self.codex = self.root / "codex-stub"
+        self.codex.write_text(CODEX_STUB)
+        self.codex.chmod(self.codex.stat().st_mode | stat.S_IEXEC)
+        os.environ["CODEX_CMD"] = str(self.codex)
+        for k in ("CHAT_SHARE", "CHAT_SID", "CHAT_RESUME"):
+            os.environ.pop(k, None)
         os.environ.pop("CHAT_STUB_FAIL", None)
         os.environ.pop("CHAT_STUB_SLEEP", None)
         self._wr = dfs_paths.work_root
@@ -273,6 +307,92 @@ class Chat(unittest.TestCase):
         self.chats.save_sid("W1", "s-new", "codex")
         with self.assertRaises(ValueError):
             dfs_chat.claim("W1")                                      # the screen's claude cannot resume codex's session
+
+    def use_codex(self):
+        Path(dfs_chat.agent_file()).parent.mkdir(parents=True, exist_ok=True)
+        Path(dfs_chat.agent_file()).write_text("codex\n")
+
+    def test_a_codex_turn_is_answered_kept_and_resumed_by_the_id_codex_made(self):
+        self.use_codex()
+        self.chats.send("W1", "Where is the work?")
+        st = self.settle("W1")
+        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
+                         [("you", "Where is the work?"), ("agent", "I read it. Fine.")])
+        rec = json.loads(self.chats.path("W1").read_text())
+        self.assertEqual(rec["agent"], "codex")
+        self.assertTrue(rec["sid"].startswith("01a14447-"), "the id is the one codex printed, not one chosen here")
+        self.chats.send("W1", "-and then?")
+        st = self.settle("W1")
+        first, first_in, second, second_in = self.calls()
+        self.assertEqual(first, "exec --json --dangerously-bypass-approvals-and-sandbox -")
+        self.assertIn("The author writes: Where is the work?", first_in)
+        self.assertEqual(second, "exec resume --json --dangerously-bypass-approvals-and-sandbox %s -" % rec["sid"])
+        self.assertEqual(second_in, "stdin: -and then?", "a message that starts with a dash is the prompt, not a flag")
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["Where is the work?", "-and then?"])
+
+    def test_a_failed_codex_turn_says_why_and_leaves_no_conversation(self):
+        self.use_codex()
+        os.environ["CHAT_STUB_FAIL"] = "1"
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
+        self.assertIn("not logged in", st["messages"][-1]["text"])
+        self.assertFalse(self.chats.path("W1").exists())
+
+    def test_the_screens_codex_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
+        self.use_codex()
+        self.assertEqual(dfs_chat.claim("W1", "codex"), ("", False), "codex has no id to name for a new conversation")
+        self.assertFalse(self.chats.path("W1").exists())
+        run = lambda **env: subprocess.run([str(HERE / "run.sh"), "--codex", "--chat", "W1"], cwd=self.root, text=True,
+                                           capture_output=True, env=dict(os.environ, CHAT_SHARE="1", **env))
+        r = run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rec = json.loads(self.chats.path("W1").read_text())
+        self.assertEqual(rec["agent"], "codex")
+        opening, opening_in, interactive = self.calls()
+        self.assertEqual(opening, "exec --json --dangerously-bypass-approvals-and-sandbox -")
+        self.assertIn("Discuss task W1 with the author", opening_in)
+        self.assertEqual(interactive, "resume %s --dangerously-bypass-approvals-and-sandbox" % rec["sid"])
+        self.assertEqual(self.chats.state("W1")["messages"][-1]["text"], "I read it. Fine.")
+        # opened again: the conversation exists, so it is resumed and no new opening turn runs
+        sid, resume = dfs_chat.claim("W1", "codex")
+        self.assertEqual((sid, resume), (rec["sid"], True))
+        r = run(CHAT_SID=sid, CHAT_RESUME="1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.calls()[3:], ["resume %s --dangerously-bypass-approvals-and-sandbox" % sid])
+        with self.assertRaises(ValueError):
+            dfs_chat.claim("W1", "claude")      # claude cannot resume codex's session
+
+    def test_a_codex_stream_is_read_to_the_one_line_a_turn_is_read_from(self):
+        ok = dfs_chat.codex_result(['{"type":"thread.started","thread_id":"t1"}', "not json",
+                                    '{"type":"item.completed","item":{"type":"agent_message","text":"a"}}',
+                                    '{"type":"item.completed","item":{"type":"command_execution"}}',
+                                    '{"type":"item.completed","item":{"type":"agent_message","text":"b"}}',
+                                    '{"type":"turn.completed"}'])
+        self.assertEqual((ok["session_id"], ok["is_error"], ok["result"]), ("t1", False, "b"))
+        bad = dfs_chat.codex_result(['{"type":"thread.started","thread_id":"t1"}', '{"type":"turn.started"}',
+                                     '{"type":"turn.failed","error":{"message":"rate limited"}}'])
+        self.assertEqual((bad["is_error"], bad["result"]), (True, "rate limited"))
+        died = dfs_chat.codex_result([], "kept")
+        self.assertEqual((died["session_id"], died["is_error"], died["result"]), ("kept", True, ""))
+
+    def test_the_screens_chat_env_names_what_the_agent_can_share(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("dfs_tui", HERE / "tui.py")
+        tui = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tui)
+        ui = object.__new__(tui.UI)
+        ui.agent = "claude"
+        env = ui.chat_env("W1")
+        self.assertTrue(env["CHAT_SID"])
+        self.assertNotIn("CHAT_SHARE", env)
+        self.chats.path("W1").unlink()
+        ui.agent = "codex"
+        env = ui.chat_env("W1")
+        self.assertNotIn("CHAT_SID", env)                    # codex makes the id; run.sh records it
+        self.assertEqual(env["CHAT_SHARE"], "1")
+        ui.agent = "kiro"
+        self.assertIsNone(ui.chat_env("W1"))                 # not shared yet: a chat of its own
 
     def test_a_turn_records_the_agent_with_the_session(self):
         self.chats.send("W1", "hello")
@@ -497,10 +617,10 @@ class Chat(unittest.TestCase):
 
     def test_under_another_agent_it_says_so_rather_than_run_it(self):
         Path(dfs_paths.state() / "runs").mkdir(parents=True, exist_ok=True)
-        (dfs_paths.state() / "runs" / "agent").write_text("codex\n")
+        (dfs_paths.state() / "runs" / "agent").write_text("kiro\n")
         with self.assertRaises(ValueError) as cm:
             self.chats.send("W1", "hi")
-        self.assertIn("claude", str(cm.exception))
+        self.assertIn("claude or codex", str(cm.exception))
 
 
 class TurnTimeout(unittest.TestCase):
