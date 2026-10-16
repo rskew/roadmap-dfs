@@ -210,8 +210,10 @@ def exists(task):
 
 def path_for(task):
     """The file THIS branch writes for `task`: what a session edits and commits.
-    Raises dfs_paths.NoBranch on a detached HEAD."""
-    return part_path(task, dfs_paths.branch_tag())
+    A task worked in an item worktree is written there, untagged, whatever this checkout has
+    out (a detached HEAD during the author's rebase must not stop a raise being logged).
+    Raises dfs_paths.NoBranch on a detached HEAD otherwise."""
+    return part_path(task, "" if dfs_paths.worktree(task) else dfs_paths.branch_tag())
 
 
 def part_files(task):

@@ -378,6 +378,45 @@ class Chain(unittest.TestCase):
         self.assertEqual(len(self.log("raise")), 1)
         self.assert_authors_merge_untouched()
 
+    def authors_rebase_in_progress(self):
+        """The author's own `git rebase side` of main, stopped on a conflict in mine.txt: HEAD
+        is detached for as long as it is unfinished."""
+        main = self.git("symbolic-ref", "--short", "HEAD")
+        self.git("checkout", "-q", "-b", "up")
+        (self.root / "mine.txt").write_text("up\n")
+        self.git("add", "mine.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "up edits mine")
+        self.git("checkout", "-q", main)
+        (self.root / "mine.txt").write_text("main\n")
+        self.git("add", "mine.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main edits mine")
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "up"],
+                       cwd=self.root, capture_output=True, text=True)
+        self.assertTrue(list((self.root / ".git").glob("rebase-*")), "the rebase should be stopped")
+
+    def test_a_merge_while_the_author_is_mid_rebase_is_a_logged_raise_and_the_task_reads_blocked(self):
+        self.run_chain("work,confirm", cap=2)
+        self.authors_rebase_in_progress()
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+        self.assertEqual(len(self.log("raise")), 1)
+        self.assertIn("rebase unfinished", self.log("raise")[0]["body"])
+        self.assertTrue(list((self.root / ".git").glob("rebase-*")))
+        self.assertTrue(self.wt.exists())
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "blocked")
+
+    def test_a_merge_from_a_detached_head_is_a_logged_raise_naming_it(self):
+        self.run_chain("work,confirm", cap=2)
+        self.git("checkout", "-q", "--detach")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertEqual(len(self.log("raise")), 1)
+        self.assertIn("detached HEAD", self.log("raise")[0]["body"])
+        self.assertTrue(self.wt.exists())
+
     def test_a_chain_in_a_repo_with_no_commit_yet_works_in_place(self):
         shutil.rmtree(self.root / ".git")
         subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)

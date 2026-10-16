@@ -321,20 +321,26 @@ def merge(task):
     refused a clean merge or the task's files (an open node names its message) or "refused"
     when the author's edits overlap (a raise is logged); see `_unmerged`. A merge, cherry-pick,
     revert or rebase the author has left unfinished in the checkout is a `BranchError` before
-    anything is touched: it is theirs, and `_unmerged` would abort it.
+    anything is touched (it is theirs, and `_unmerged` would abort it), and it is met before the
+    off-branch check, since a rebase detaches HEAD; so is a checkout on another branch or on a
+    detached HEAD.
     """
     name = dfs_paths.item_branch(task)
     wt = dfs_paths.worktree(task)
     if wt is None and (not _has_branch(name) or dfs_paths.branch() == name):
         return "none"
-    if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
-        raise BranchError("%s is merged from the default branch; this checkout is on %s" %
-                          (name, dfs_paths.branch()))
-    wt = wt or _restore(task)
     started = _in_progress()
     if started:
         raise BranchError("the checkout has its own %s unfinished, which a merge would take for "
                           "its own and abort" % started)
+    here = dfs_paths.branch()
+    if here is None:
+        raise BranchError("%s is merged from the default branch; this checkout has a detached HEAD"
+                          % name)
+    if here not in dfs_paths.DEFAULT_BRANCHES:
+        raise BranchError("%s is merged from the default branch; this checkout is on %s" %
+                          (name, here))
+    wt = wt or _restore(task)
     try:
         _commit_task_files(task, wt, "the log and edits left uncommitted")
     except BranchError as e:
