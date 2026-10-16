@@ -217,6 +217,14 @@ def out_of(r):
     return r.stderr + r.stdout
 
 
+def _gist(text, limit=400):
+    """A hook's or git's output on one line, without the guard's own "--warn" aside, cut at
+    a word and marked when cut."""
+    one = " ".join(l.strip() for l in text.splitlines() if "--warn covers" not in l)
+    one = " ".join(one.split())
+    return one if len(one) <= limit else one[:limit].rsplit(" ", 1)[0] + " …"
+
+
 def _unmerged(task, wt, name, r):
     """A merge git did not complete leaves the default branch as it was, and the item
     open. A conflict is work (the default branch moved after the rebase): the merge is
@@ -235,7 +243,7 @@ def _unmerged(task, wt, name, r):
         _reopen_with(task, wt, "Fix what refused the merge of %s into %s" % (name, default),
                      "git merged %s into %s without a conflict, but refused to commit the merge: %s "
                      "Change the branch so the merge is accepted (the guard's message says what "
-                     "to fix), and commit it." % (name, default, " ".join(out_of(r).split())[:400]),
+                     "to fix), and commit it." % (name, default, _gist(out_of(r))),
                      "a hook refused the merge into %s" % default)
         return "guard"
     out = r.stderr + r.stdout
@@ -276,7 +284,8 @@ def merge(task):
         _commit_task_files(task, wt, "the log and edits left uncommitted")
     except BranchError as e:
         _reopen_with(task, wt, "Fix what refuses the commit of %s's files on %s" % (task, name),
-                     "The runner could not commit the task's own files on %s: %s" % (name, e), "")
+                     "The runner could not commit the task's own files on %s: %s" % (name, e),
+                     "the node asking for the refused commit to be fixed")
         return "guard"
     stray = [l[3:] for l in _git("status", "--porcelain", cwd=wt).stdout.splitlines()]
     if stray:
@@ -292,8 +301,11 @@ def merge(task):
     r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
     if r.returncode != 0:
         return _unmerged(task, wt, name, r)
-    _git("worktree", "remove", "--force", str(wt))
-    _git("branch", "-d", name)
+    for what, r in (("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))),
+                    ("its branch could not be deleted", _git("branch", "-d", name))):
+        if r.returncode != 0:
+            print("dfs_branch: %s merged, but %s: %s" % (task, what, " ".join(out_of(r).split())),
+                  file=sys.stderr)
     return "merged"
 
 
@@ -307,7 +319,8 @@ def main(argv):
             raise_unmerged(argv[2], e)
             return MERGE_EXIT["blocked"]
         print("dfs_branch: %s: %s" % (argv[2], {
-            "merged": "dfs/%s merged into %s, its worktree removed" % (argv[2], dfs_paths.branch()),
+            "merged": "dfs/%s merged into %s%s" % (argv[2], dfs_paths.branch(),
+                      ", its worktree removed" if dfs_paths.worktree(argv[2]) is None else ""),
             "dirty": "not merged: its worktree holds uncommitted work that is not the task's, so a node asks for it to be committed or dropped",
             "guard": "not merged: a hook refused the commit, so a node asks for what it names to be fixed",
             "conflict": "not merged: it conflicts with %s, so a node asks for the branch to be rebased onto it" %

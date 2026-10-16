@@ -992,6 +992,31 @@ class ATreeRowDrawsItsMarkdown(unittest.TestCase):
         self.assertEqual(text.count(TUI.CODE_ON), text.count(TUI.CODE_OFF))
 
 
+class ArtefactsOfAWorkedTask(unittest.TestCase):
+    """The pane lists, and titles, a page made on an item's branch before it is merged."""
+
+    def test_a_page_in_an_item_worktree_is_listed_and_titled(self):
+        import tempfile, shutil
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
+        main_dir, wt = root / ".dfs" / "artefacts", root / ".dfs" / "worktrees" / "W1"
+        (wt / ".dfs" / "artefacts").mkdir(parents=True)
+        main_dir.mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: elsewhere\n")
+        (main_dir / "main.html").write_text("<title>On main</title>")
+        (wt / ".dfs" / "artefacts" / "wt.html").write_text("<title>On the\n branch</title>")
+        real = (TUI.dfs_paths.work_root, TUI.ART_DIR)
+        TUI.dfs_paths.work_root, TUI.ART_DIR = (lambda: root), main_dir
+        self.addCleanup(lambda: setattr(TUI.dfs_paths, "work_root", real[0]))
+        self.addCleanup(lambda: setattr(TUI, "ART_DIR", real[1]))
+        ui = object.__new__(TUI.UI)
+        ui.current, ui.data = (lambda: None), {"entries": []}
+        arts = ui.artefacts()
+        self.assertEqual([a["name"] for a in arts], ["main.html", "wt.html"])
+        self.assertEqual([TUI.art_title(TUI.dfs_paths.artefact_file(a["name"])) for a in arts],
+                         ["On main", "On the branch"])
+
+
 if __name__ == "__main__":
     curses.color_pair = lambda n: 0       # no initscr here; attrs are opaque
     unittest.main()

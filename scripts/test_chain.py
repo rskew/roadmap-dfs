@@ -231,7 +231,7 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.assertEqual(self.git("log", "--merges", "--format=%s", main).splitlines(),
                          ["W1: merge the item's branch dfs/W1"])
-        self.assertFalse((self.root / ".git" / "rebase-merge").exists())
+        self.assertEqual(list((self.root / ".git").glob("worktrees/*/rebase-merge")), [])
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s", main))
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
 
@@ -296,6 +296,27 @@ class Chain(unittest.TestCase):
         rc, meta, out = self.run_chain("unblock,rok", cap=2, BLOCK_FILE=str(block))
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         self.assertFalse(self.wt.exists())
+
+    def test_a_commit_of_the_task_s_files_that_is_refused_reopens_the_item(self):
+        self.run_chain("work,confirm", cap=2)
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        self.git("config", "commit.gpgsign", "true")
+        self.git("config", "gpg.program", "false")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 3, r.stderr)
+        self.assertIn("Fix what refuses the commit of W1's files on dfs/W1", item.read_text())
+        self.assertTrue(self.wt.exists())
+
+    def test_a_hooks_message_is_cut_at_a_word_without_the_guards_warn_aside(self):
+        import branch as dfs_branch
+        out = "first line\n(--warn covers only the warnings above)\n" + "word " * 200
+        gist = dfs_branch._gist(out, 40)
+        self.assertTrue(gist.startswith("first line word word"), gist)
+        self.assertTrue(gist.endswith("word …"), gist)
+        self.assertNotIn("--warn", gist)
+        self.assertEqual(dfs_branch._gist("a\nb"), "a b")
 
     def test_a_merge_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
         self.run_chain("work,confirm", cap=2)
