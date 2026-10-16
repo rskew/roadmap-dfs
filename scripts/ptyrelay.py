@@ -26,6 +26,15 @@ import chatlog
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
+# A fresh agent is quiet for more than QUIET while it starts and while it asks its first-launch
+# questions, so quiet alone types a message into the wrong place (found against the real TUIs):
+# opencode is quiet for seconds before its prompt is drawn, so its prompt screen's footer is waited
+# for; kiro-cli with --trust-all-tools asks "Yes, I accept" with "No, exit" highlighted, where Enter
+# exits it; codex asks to trust a folder it has not met, which swallows the message. Each is
+# answered once, before the first message: the agent's own default or "accept", never "don't ask
+# again", which writes the person's settings.
+READY = {"opencode": "ctrl+p commands"}
+FIRST_LAUNCH = {"codex": ("Trust and continue", (b"\r",)), "kiro": ("Yes, I accept", (b"\x1b[B", b"\r"))}   # the keys go one at a time
 MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004)      # private modes the terminal is brought in step with
 _MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
 TAIL = 16384                # bytes of the agent's last output kept, for the log
@@ -79,6 +88,8 @@ class Relay:
         self.closing = False
         self.started = self.first_out = self.last_out = 0.0
         self.outbox = queue.Queue()
+        self.typed = False          # a message has gone in: the agent's start-up is behind it
+        self.answered = False       # its first-launch question has been answered
         self.unsent = 0             # messages queued or taken by the typist and not yet typed
         self.stops = 0              # interrupts so far: a message taken before one is not typed after it
         self.out_fd = None          # where the terminal is, while attached
@@ -248,6 +259,27 @@ class Relay:
         self.log("interrupt: %s sent%s" % ("ESC" if len(keys) == 1 else "ESC x%d" % len(keys), ", %d unsent message(s) dropped" % dropped if dropped else ""))
         return dropped
 
+    def _ready(self):
+        """Whether the agent is at its prompt: it has settled, and shows what its prompt screen does
+        (READY), after any first-launch question has been answered (FIRST_LAUNCH). Only until the
+        first message is typed: after that quiet is all there is to go on."""
+        if not self.first_out or time.time() - self.last_out < QUIET:
+            return False
+        if self.typed:
+            return True
+        screen = chatlog.screen_text(self.tail, keep=TAIL)
+        asked = FIRST_LAUNCH.get(self.agent)
+        if asked and asked[0] in screen and not self.answered:
+            self.answered = True
+            self.log("first-launch question answered", screen[-400:])
+            for i, key in enumerate(asked[1]):
+                if i:
+                    time.sleep(INTERRUPT_GAP)       # kiro takes Down and Enter in one write as Enter
+                _try(os.write, self.fd, key)
+            self.last_out = time.time()         # wait for what the answer makes it draw
+            return False
+        return self.agent not in READY or READY[self.agent] in screen
+
     def _typist(self):
         while self.live:
             try:
@@ -256,7 +288,7 @@ class Relay:
                 continue
             waited, stops = time.time(), self.stops
             end = waited + READY_TIMEOUT      # not before the agent has drawn itself and settled
-            while self.live and time.time() < end and (not self.first_out or time.time() - self.last_out < QUIET):
+            while self.live and time.time() < end and not self._ready():
                 time.sleep(0.1)
             with self.lock:
                 fd = self.fd
@@ -268,6 +300,7 @@ class Relay:
                     continue
                 _try(os.write, fd, b"\x1b[200~" + text.encode() + b"\x1b[201~")
                 self.typed_at, self.typed_out = time.time(), self.total_out
+                self.typed = True
                 self.unsent = max(0, self.unsent - 1)
             self.log("typed %d characters after %.1fs wait (%s)" % (
                 len(text), time.time() - waited, "settled" if time.time() - waited < READY_TIMEOUT
