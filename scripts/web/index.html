@@ -412,7 +412,12 @@ function setLoading(on) {
   $("#loading").hidden = !on;
   $("#view").setAttribute("aria-busy", on ? "true" : "false");
 }
+/* `WROTE` counts the writes this page has sent. A read of the list's state notes the count when it began, so the
+   list is drawn from what the page holds only when no write of its own has been sent since: after a delete or a
+   draft the held state is known to be out of date. */
+let WROTE = 0;
 async function api(path, body) {
+  if (body !== undefined) WROTE++;
   loading(1);
   try {
     const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -511,12 +516,14 @@ async function renderDraw(force) {
   const mine = ++RENDERS;
   const r = route();
   const where = r.view + ":" + (r.task || "");
-  if (where !== lastView) { lastView = where; SCROLL.ready = false; window.scrollTo(0, 0); S.sig = ""; }
+  const arrived = where !== lastView;
+  if (arrived) { lastView = where; SCROLL.ready = false; window.scrollTo(0, 0); S.sig = ""; }
   try {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
-      let t;
+      let t; const at = WROTE;
       [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk")]);
+      S.walkAt = at;
       if (mine !== RENDERS) return;
       S.node = r.node;
       const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + JSON.stringify(walkOf(r.task));
@@ -535,11 +542,19 @@ async function renderDraw(force) {
       if (mine !== RENDERS) return;
       S.chats = list.chats; S.state = state; S.needs = state.needs_you; syncColour(state); S.node = null; drawChats();
     } else {
+      // Back to the list draws it at once from the state the page already holds (a task screen keeps it current,
+      // and a push renders again), since reading it again takes most of a second on a roadmap of many tasks.
+      // Not after a write of the page's own since that state was read. The read then redraws only if something changed.
+      let drawn = ""; const at = WROTE;
+      if (arrived && S.state && S.walk && S.stateAt === WROTE && S.walkAt === WROTE && !S.inflight) {
+        S.node = null; drawTasks(); chrome(r); scrollBack(where);
+        drawn = JSON.stringify([S.state, S.walk]);
+      }
       const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk")]);
       if (mine !== RENDERS) return;
       if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
-      S.state = state; S.needs = state.needs_you; S.walk = walk; syncColour(state);
-      S.node = null; drawTasks();
+      S.state = state; S.needs = state.needs_you; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
+      S.node = null; if (JSON.stringify([state, walk]) !== drawn) drawTasks();
     }
     chrome(r);
     if (r.view === "task") refreshNeeds();
@@ -554,7 +569,7 @@ async function renderDraw(force) {
 }
 // A task screen does not load the list, but the bar's Needs you carries the count.
 async function refreshNeeds() {
-  try { S.state = await api("/api/state"); S.needs = S.state.needs_you; drawBar(route()); drawRail(); } catch (e) { /* a count is a convenience */ }
+  try { const at = WROTE; S.state = await api("/api/state"); S.stateAt = at; S.needs = S.state.needs_you; drawBar(route()); drawRail(); } catch (e) { /* a count is a convenience */ }
 }
 /* The rail beside a task's tree on a wide screen: every task, the one you are in marked. It is drawn only when the
    tasks changed, so a push does not take the scroll from under a pointer. */

@@ -1595,6 +1595,28 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   },
 
   // A slow read shows "loading" and the stripe after a beat and clears them when it lands; a fast one shows nothing.
+  // Back to the list draws it from what the page holds, at its old scroll, without waiting on the list's reads.
+  async backinstant(b) {
+    for (const how of ["bar", "browser"]) {
+      const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true });
+      const y = () => page.evaluate(() => Math.round(window.scrollY));
+      await page.evaluate(() => window.scrollTo(0, 120)); await page.waitForTimeout(400);
+      await page.evaluate(() => document.querySelector(".item[data-id=W9]").click());   // a click that does not scroll the list first
+      await page.waitForSelector(".row"); await page.waitForTimeout(400);
+      let release;
+      const held = new Promise(r => { release = r; });
+      const hold = async route => { await held; await route.continue(); };
+      await page.route("**/api/state", hold); await page.route("**/api/walk", hold);
+      if (how === "bar") await page.click("#tabs [data-act=up]"); else await page.goBack();
+      await page.waitForSelector(".item[data-id=W9]", { timeout: 500 });
+      same(await y(), 120, how + ": the list is back where it was left while its reads are held");
+      release();
+      await page.waitForFunction(() => document.querySelector("#loading").hidden, null, { timeout: 5000 });
+      assert(await page.$(".item[data-id=W9]"), how + ": the list stays once the reads land");
+      same(await y(), 120, how + ": and keeps its place");
+      same(errors, [], how + ": no page errors");
+    }
+  },
   async loading(b) {
     const ctx = await b.newContext({ ...PHONE });
     const page = await ctx.newPage(); PAGES.push(page);
