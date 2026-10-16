@@ -309,6 +309,22 @@ def merge(task):
     return "merged"
 
 
+def release(task):
+    """Let go of a deleted task's worktree and branch: remove the worktree (its task files
+    have been moved out) and rename `dfs/<task>` to `dfs-deleted/<task>` rather than delete
+    it, so the commits it holds stay reachable. A failure is said on stderr."""
+    wt, name = dfs_paths.worktree(task), dfs_paths.item_branch(task)
+    steps = []
+    if wt:
+        steps.append(("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))))
+    if _has_branch(name):
+        steps.append(("its branch could not be renamed", _git("branch", "-m", name, "dfs-deleted/" + task)))
+    for what, r in steps:
+        if r.returncode != 0:
+            print("dfs_branch: %s released, but %s: %s" % (task, what, " ".join(out_of(r).split())),
+                  file=sys.stderr)
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "merge":
         try:

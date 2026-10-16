@@ -1261,6 +1261,26 @@ class Branches(InARepo):
         self.assertEqual(dfs_tree.task_ids(), ["W1", "W2"])
         self.assertTrue(dfs_tree.exists("W2"))
 
+    def test_deleting_a_worked_task_takes_its_worktree_files_and_frees_its_branch(self):
+        wt = self.worktree()
+        (wt / ".dfs/items/W1.md").write_text(task(node(1, "confirmed") + node(2, parent=1), "") + "branch copy\n")
+        (self.root / ".dfs/items/W2.md").write_text(task(node(1), "").replace("W1", "W2"))
+        wt2 = self.worktree("W2")
+        (wt2 / ".dfs/items").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs/items/W2.md").rename(wt2 / ".dfs/items/W2.md")
+        gone = self.root / ".dfs/archive/deleted/items"
+        for tid, tree_wt in (("W1", wt), ("W2", wt2)):
+            self.assertIn(tid, dfs_tree.task_ids())
+            self.assertEqual(dfs_tree.delete_task(tid), ["items/%s.md" % tid])
+            self.assertNotIn(tid, dfs_tree.task_ids())
+            self.assertFalse(dfs_tree.exists(tid))
+            self.assertFalse(tree_wt.exists())
+            self.assertNotEqual(self.git("rev-parse --verify -q dfs/%s" % tid).returncode, 0)
+            self.assertEqual(self.git("rev-parse --verify -q dfs-deleted/%s" % tid).returncode, 0)
+            self.assertTrue((gone / ("%s.md" % tid)).is_file())
+        self.assertIn("branch copy", (gone / "W1.md").read_text())   # the worktree's copy, not main's stale one
+        self.assertFalse((self.root / ".dfs/items/W1.md").exists())
+
     def test_an_item_branch_writes_plain_ids_into_the_top_level_file(self):
         self.switch("checkout -qb dfs/W1")
         self.assertEqual(dfs_paths.branch_tag(), "")

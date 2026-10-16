@@ -82,6 +82,7 @@ Usage:
 import calendar
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -740,21 +741,33 @@ def _retire(task, dest, verb):
         raise ValueError("%s was %s before, and its files are still under %s"
                          % (task, verb, dfs_paths.rel(dfs_paths.state() / "archive")))
     state = dfs_paths.state()
-    moves = []
-    for sub in ("items", "archive/items"):
-        base = state / sub
-        for src in [base / ("%s.md" % task), base / task]:
-            if src.exists():
-                moves.append((src, dest / ("items" if sub == "items" else "archive")
-                              / src.relative_to(base)))
-    for src, dst in moves:
+    wt = dfs_paths.worktree(task)
+    # A worked task's live files are its worktree's; the main checkout holds a stale copy
+    # of them, or none when the task was never committed there. The worktree's win.
+    moves, stale = {}, []
+    for base_state in ([wt / dfs_paths.STATE_DIR_NAME] if wt else []) + [state]:
+        for sub in ("items", "archive/items"):
+            base = base_state / sub
+            for src in [base / ("%s.md" % task), base / task]:
+                if src.exists():
+                    dst = dest / ("items" if sub == "items" else "archive") / src.relative_to(base)
+                    if dst in moves:
+                        stale.append(src)
+                    else:
+                        moves[dst] = (src, str(Path(sub) / src.relative_to(base)))
+    for dst, (src, _) in moves.items():
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
+    for src in stale:
+        shutil.rmtree(src) if src.is_dir() else src.unlink()
+    if wt:
+        import branch as dfs_branch
+        dfs_branch.release(task)
     text = dfs_order.read_text()
     left = dfs_order.removed(dfs_order.nodes_of(text), task)
     if left is not None:
         dfs_order.write_order(left)
-    return [str(src.relative_to(state)) for src, _ in moves]
+    return [rel for _, rel in moves.values()]
 
 
 def delete_task(task):
