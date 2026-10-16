@@ -41,7 +41,7 @@ import tree as dfs_tree      # noqa: E402
 import context as dfs_context   # noqa: E402
 import chatlog   # noqa: E402
 import uuid
-from walk import agent_file, read_agent   # noqa: E402
+from walk import AGENTS, agent_file, read_agent   # noqa: E402
 
 
 def signal_turn(p, sig):
@@ -81,15 +81,17 @@ TURN_GRACE = 5              # seconds an agent asked to stop has before it is ki
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
 
 
-def transcript_messages(sid):
+def transcript_messages(sid, agent="claude"):
     """The human turns and the agent's words in a session's transcript, in order:
     [{role: you|agent, text}]. Tool calls and results, thinking, and the harness's own
     notes are not part of a conversation, and the opening prompt the screen's chat starts
-    with is the screen's, not something the author said."""
-    path = dfs_context.transcript_path(sid, "claude") if sid else None
+    with is the screen's, not something the author said. Each agent keeps its transcript
+    in its own shape (`READERS`); one with no reader here reads as no conversation yet."""
+    read = READERS.get(agent)
+    path = dfs_context.transcript_path(sid, agent) if sid and read else None
     if not path or not os.path.exists(path):
         return []
-    out, agent = [], {}
+    out, agent_at = [], {}
     try:
         fh = open(path, errors="replace")
     except OSError:
@@ -100,30 +102,59 @@ def transcript_messages(sid):
                 rec = json.loads(line)
             except ValueError:
                 continue
-            msg = rec.get("message") or {}
-            content = msg.get("content")
-            if rec.get("type") == "user" and not rec.get("isMeta") and not rec.get("isSidechain"):
-                text = content if isinstance(content, str) else "\n".join(
-                    b.get("text", "") for b in (content or []) if isinstance(b, dict) and b.get("type") == "text")
+            for role, text, key in read(rec):
                 text = text.strip()
-                if not text or text.startswith(("<command-", "<local-command", "<system-reminder")):
-                    continue
-                if "The author writes: " in text:                 # the page's first turn carries framing
-                    text = text.rsplit("The author writes: ", 1)[1].strip()
-                elif OPENING.match(text) or PAGE_OPENING.match(text):   # an opening prompt: the tool's words
-                    continue
-                out.append(dict(role="you", text=text))
-            elif rec.get("type") == "assistant" and not rec.get("isSidechain") and isinstance(content, list):
-                text = "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text").strip()
                 if not text:
                     continue
-                key = msg.get("id")
-                if key and key in agent:                           # one message, one line per block
-                    out[agent[key]]["text"] += "\n" + text
+                if role == "you":
+                    if text.startswith(("<command-", "<local-command", "<system-reminder")):
+                        continue
+                    if "The author writes: " in text:                 # the page's first turn carries framing
+                        text = text.rsplit("The author writes: ", 1)[1].strip()
+                    elif OPENING.match(text) or PAGE_OPENING.match(text):   # an opening prompt: the tool's words
+                        continue
+                    out.append(dict(role="you", text=text))
+                elif key and key in agent_at:                        # one message, one line per block
+                    out[agent_at[key]]["text"] += "\n" + text
                 else:
-                    agent[key] = len(out)
+                    agent_at[key] = len(out)
                     out.append(dict(role="agent", text=text))
     return out
+
+
+def claude_turns(rec):
+    """(role, text, message id) for what one line of claude's jsonl transcript says."""
+    msg = rec.get("message") or {}
+    content = msg.get("content")
+    if rec.get("type") == "user" and not rec.get("isMeta") and not rec.get("isSidechain"):
+        text = content if isinstance(content, str) else "\n".join(
+            b.get("text", "") for b in (content or []) if isinstance(b, dict) and b.get("type") == "text")
+        return [("you", text, None)]
+    if rec.get("type") == "assistant" and not rec.get("isSidechain") and isinstance(content, list):
+        return [("agent", "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"),
+                 msg.get("id"))]
+    return []
+
+
+def codex_turns(rec):
+    """(role, text, item id) for one record of a codex rollout. The conversation is its
+    `item_completed` events: a `UserMessage` is what was typed, without the environment and
+    instructions codex sends beside it as user messages of its own, and an `AgentMessage`
+    is what it said (a `commentary` phase between tool calls as well as the final answer).
+    Read from codex-cli 0.162.0's rollout, `exec` and `exec resume` both appending to one file."""
+    payload = rec.get("payload") if rec.get("type") == "event_msg" else None
+    if not isinstance(payload, dict) or payload.get("type") != "item_completed":
+        return []
+    item = payload.get("item") if isinstance(payload.get("item"), dict) else {}
+    role = {"UserMessage": "you", "AgentMessage": "agent"}.get(item.get("type"))
+    if not role:
+        return []
+    text = "\n".join(b.get("text", "") for b in item.get("content") or []
+                     if isinstance(b, dict) and isinstance(b.get("text"), str))
+    return [(role, text, item.get("id"))]
+
+
+READERS = dict(claude=claude_turns, codex=codex_turns)
 
 
 PAGE_OPENING = re.compile(r"^You are talking with the author about ", re.S)
@@ -172,24 +203,37 @@ class Chats:
         if scope != "project" and not dfs_tree.exists(scope):
             raise ValueError("no task %s" % scope)
 
-    def sid(self, scope):
+    def record(self, scope):
         try:
-            return json.loads(self.path(scope).read_text()).get("sid", "")
+            rec = json.loads(self.path(scope).read_text())
         except (OSError, ValueError):
-            return ""
+            return {}
+        return rec if isinstance(rec, dict) else {}
 
-    def save_sid(self, scope, sid):
+    def sid(self, scope):
+        return self.record(scope).get("sid", "")
+
+    def agent(self, scope):
+        """The agent this scope's conversation runs under. A conversation keeps the agent it
+        began with, since none can resume another's session; one not begun yet takes the
+        screen's choice (`x`). A record from before the agent was kept is claude's."""
+        rec = self.record(scope)
+        if not rec.get("sid"):
+            return read_agent(agent_file())
+        return rec.get("agent") if rec.get("agent") in AGENTS else "claude"
+
+    def save_sid(self, scope, sid, agent):
         p = self.path(scope)
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(dict(sid=sid)))
+        tmp.write_text(json.dumps(dict(sid=sid, agent=agent)))
         os.replace(tmp, p)
 
     def state(self, scope):
         self.check(scope)
         with self.lock:
-            sid = self.sid(scope)
-            messages = transcript_messages(sid)
+            sid, agent = self.sid(scope), self.agent(scope)
+            messages = transcript_messages(sid, agent)
             pending = self.pending.get(scope)
             if pending and not any(m["role"] == "you" and m["text"] == pending for m in messages[-3:]):
                 messages.append(dict(role="you", text=pending))
@@ -206,7 +250,7 @@ class Chats:
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
                         elsewhere=bool(sid) and not started and not live and running_elsewhere(sid),
-                        agent=read_agent(agent_file()))
+                        agent=agent)
 
     # ── a turn ────────────────────────────────────────────────────────────────────────
     def send(self, scope, message):
@@ -216,7 +260,7 @@ class Chats:
             raise ValueError("a message is needed")
         if len(message) > MAX_MESSAGE:
             raise ValueError("a message is %d characters or fewer" % MAX_MESSAGE)
-        agent = read_agent(agent_file())
+        agent = self.agent(scope)
         if agent != "claude":
             raise ValueError("chat on the page runs under claude; the agent is %s (the screen's c "
                              "opens the others)" % agent)
@@ -243,7 +287,7 @@ class Chats:
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
             self.busy[scope] = time.time()
-        threading.Thread(target=self.turn, args=(scope, message, sid), daemon=True).start()
+        threading.Thread(target=self.turn, args=(scope, message, sid, False, agent), daemon=True).start()
         self.on_change()
         return self.state(scope)
 
@@ -296,7 +340,7 @@ class Chats:
     def argv(self):
         return [str(dfs_paths.SCRIPTS / "run.sh")]
 
-    def turn(self, scope, message, sid, opening=False):
+    def turn(self, scope, message, sid, opening=False, agent="claude"):
         error, new_sid, began, said = "", sid, time.time(), ""
         chatlog.log(scope, "turn: %s, %d characters, session %s" % (
             "opening" if opening else "message", len(message), sid or "(new)"))
@@ -315,7 +359,7 @@ class Chats:
             if sid:
                 # Resume only a session that has a transcript: one the screen made and the
                 # author left at once has none, and `--resume` would refuse it.
-                p = dfs_context.transcript_path(sid, "claude")
+                p = dfs_context.transcript_path(sid, agent)
                 if p and os.path.exists(p):
                     env["CHAT_RESUME"] = "1"
             r = run_turn(self.argv() + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
@@ -347,7 +391,7 @@ class Chats:
             (error + "\n" + said) if said else error)
         with self.lock:
             if new_sid and new_sid != sid:
-                self.save_sid(scope, new_sid)
+                self.save_sid(scope, new_sid, agent)
             if error:
                 self.notes[scope] = [error]
             if stopped:
@@ -364,7 +408,7 @@ class Chats:
         self.check(scope)
         w = self.walker()
         note = ""
-        if read_agent(agent_file()) == "claude":
+        if self.agent(scope) == "claude":
             sid = self.sid(scope)
             p = dfs_context.transcript_path(sid, "claude") if sid else None
             began = bool(p and os.path.exists(p)) or bool(w and w.chat_live(scope))
@@ -381,7 +425,7 @@ class Chats:
                         if scope not in self.busy:
                             self.busy[scope] = time.time()
                             self.notes.pop(scope, None)
-                            threading.Thread(target=self.turn, args=(scope, "", sid, True), daemon=True).start()
+                            threading.Thread(target=self.turn, args=(scope, "", sid, True, "claude"), daemon=True).start()
             self.on_change()
         return dict(self.state(scope), note=note)
 
@@ -394,9 +438,9 @@ class Chats:
             scope = p.stem
             if not SCOPE.fullmatch(scope) or (scope != "project" and not dfs_tree.exists(scope)):
                 continue
-            sid = self.sid(scope)
-            messages = transcript_messages(sid)
-            tp = dfs_context.transcript_path(sid, "claude") if sid else None
+            sid, agent = self.sid(scope), self.agent(scope)
+            messages = transcript_messages(sid, agent)
+            tp = dfs_context.transcript_path(sid, agent) if sid else None
             live = bool(w and w.chat_live(scope))
             busy = scope in self.busy or bool(live and w.chat_active(scope))
             if not messages and not live and not busy:
@@ -438,8 +482,10 @@ def claim(scope):
     chats = Chats()
     chats.check(scope)
     sid = chats.sid(scope)
+    if sid and chats.agent(scope) != "claude":
+        raise ValueError("the %s conversation is %s's" % (scope, chats.agent(scope)))
     if not sid:
         sid = str(uuid.uuid4())
-        chats.save_sid(scope, sid)
+        chats.save_sid(scope, sid, "claude")
     p = dfs_context.transcript_path(sid, "claude")
     return sid, bool(p and os.path.exists(p))

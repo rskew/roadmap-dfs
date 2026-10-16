@@ -222,6 +222,63 @@ class Chat(unittest.TestCase):
         self.assertEqual([(m["role"], m["text"]) for m in self.chats.state("W1")["messages"]],
                          [("agent", "Here is where it stands."), ("you", "What next?")])
 
+    def codex_rollout(self, sid, records):
+        """A codex rollout as codex-cli 0.162.0 writes one: an envelope per line, the
+        conversation in `item_completed` events. Only the ids and the words are made up."""
+        os.environ.pop("CODEX_HOME", None)
+        d = self.root / "home" / ".codex" / "sessions" / "2026" / "10" / "16"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / ("rollout-2026-10-16T10-30-15-%s.jsonl" % sid)).write_text("".join(json.dumps(r) + "\n" for r in records))
+
+    def test_a_codex_conversation_is_read_from_its_rollout(self):
+        sid = "01a14443-2085-7d12-8fb4-d7b6245af0c1"
+        def said(kind, text, i):
+            block = {"type": "text", "text": text, "text_elements": []} if kind == "UserMessage" else {"type": "Text", "text": text}
+            return {"type": "event_msg", "payload": {"type": "item_completed", "thread_id": sid, "turn_id": "t%d" % i,
+                                                     "item": {"type": kind, "id": "i%d" % i, "content": [block]}}}
+        self.codex_rollout(sid, [
+            {"type": "session_meta", "payload": {"id": sid}},
+            {"type": "response_item", "payload": {"type": "message", "role": "developer",
+                                                  "content": [{"type": "input_text", "text": "<permissions instructions>"}]}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "<environment_context>x</environment_context>"}]}},
+            {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                                  "content": [{"type": "input_text", "text": "You are talking with the author about task W1. The author writes: how is it?"}]}},
+            said("UserMessage", "You are talking with the author about task W1. The author writes: how is it?", 1),
+            said("AgentMessage", "Let me read the tree.", 2),
+            {"type": "event_msg", "payload": {"type": "item_completed", "item": {"type": "CommandExecution", "command": ["cat", "x"]}}},
+            said("AgentMessage", "It is open at W1.2.", 3),
+            {"type": "response_item", "payload": {"type": "message", "role": "assistant",
+                                                  "content": [{"type": "output_text", "text": "It is open at W1.2."}]}},
+            said("UserMessage", "and next?", 4),
+            said("AgentMessage", "W1.3.", 5),
+        ])
+        self.chats.save_sid("W1", sid, "codex")
+        st = self.chats.state("W1")
+        self.assertEqual(st["agent"], "codex")
+        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
+                         [("you", "how is it?"), ("agent", "Let me read the tree."), ("agent", "It is open at W1.2."),
+                          ("you", "and next?"), ("agent", "W1.3.")])
+        self.assertEqual([c["count"] for c in self.chats.list() if c["scope"] == "W1"], [5])
+
+    def test_a_conversation_keeps_its_agent_and_a_new_one_takes_the_screens(self):
+        Path(dfs_chat.agent_file()).parent.mkdir(parents=True, exist_ok=True)
+        Path(dfs_chat.agent_file()).write_text("codex\n")
+        self.assertEqual(self.chats.agent("W1"), "codex")             # nothing begun: x's choice
+        self.chats.path("W1").parent.mkdir(parents=True, exist_ok=True)
+        self.chats.path("W1").write_text(json.dumps(dict(sid="s-old")))
+        self.assertEqual(self.chats.agent("W1"), "claude")            # a record from before the agent was kept
+        self.chats.save_sid("W1", "s-new", "claude")
+        self.assertEqual(self.chats.agent("W1"), "claude")            # x says codex; the conversation is claude's
+        self.chats.save_sid("W1", "s-new", "codex")
+        with self.assertRaises(ValueError):
+            dfs_chat.claim("W1")                                      # the screen's claude cannot resume codex's session
+
+    def test_a_turn_records_the_agent_with_the_session(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        self.assertEqual(json.loads(self.chats.path("W1").read_text())["agent"], "claude")
+
     def test_it_will_not_send_while_the_screens_chat_is_open_on_the_session(self):
         sid, _ = dfs_chat.claim("W1")
         # a bash under the screen's name, not sleep: a multicall sleep (nix coreutils) refuses to run as
