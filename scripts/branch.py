@@ -326,12 +326,12 @@ def merge(task):
     return "merged"
 
 
-def keep_leftover_work(task):
+def keep_leftover_work(task, verb="deleted"):
     """Keep what the task's worktree holds uncommitted before it is removed (`release`'s
     `--force` would drop it): the untracked files in its `.dfs/artefacts`, the author's
     attachments and the pages a session made, are copied back to this checkout's, where an
     unworked task keeps them, and everything else is committed onto `dfs/<task>`, which
-    `release` then keeps as `dfs-deleted/<task>`. BranchError when git refuses the commit,
+    `release` then keeps as `dfs-<verb>/<task>`. BranchError when git refuses the commit,
     so the delete can be refused with the worktree untouched."""
     wt = dfs_paths.worktree(task)
     if not wt:
@@ -347,23 +347,24 @@ def keep_leftover_work(task):
     _git("add", "-A", cwd=wt)
     if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
         r = _git(*_identity(), "commit", "-q", "-m",
-                 "%s: work left in its worktree when the task was deleted" % task, cwd=wt)
+                 "%s: work left in its worktree when the task was %s" % (task, verb), cwd=wt)
         if r.returncode != 0:
             raise BranchError("what %s's worktree holds could not be kept on %s: %s" %
                               (task, dfs_paths.item_branch(task), out_of(r).strip()))
 
 
-def release(task):
-    """Let go of a deleted task's worktree and branch: remove the worktree (its task files
-    have been moved out, and `keep_leftover_work` has kept the rest) and rename
-    `dfs/<task>` to `dfs-deleted/<task>` rather than delete it, so the commits it holds stay
+def release(task, verb="deleted"):
+    """Let go of the worktree and branch of a task that was `verb` ("deleted" or "archived"):
+    remove the worktree (its task files have been moved out and `keep_leftover_work` has
+    committed the rest, so `--force` drops only the moved files' entries) and rename
+    `dfs/<task>` to `dfs-<verb>/<task>` rather than delete it, so the commits it holds stay
     reachable. A failure is said on stderr."""
     wt, name = dfs_paths.worktree(task), dfs_paths.item_branch(task)
     steps = []
     if wt:
         steps.append(("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))))
     if _has_branch(name):
-        steps.append(("its branch could not be renamed", _git("branch", "-m", name, "dfs-deleted/" + task)))
+        steps.append(("its branch could not be renamed", _git("branch", "-m", name, "dfs-%s/%s" % (verb, task))))
     for what, r in steps:
         if r.returncode != 0:
             print("dfs_branch: %s released, but %s: %s" % (task, what, " ".join(out_of(r).split())),

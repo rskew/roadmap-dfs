@@ -745,7 +745,7 @@ def _retire(task, dest, verb):
     if wt:
         import branch as dfs_branch
         try:
-            dfs_branch.keep_leftover_work(task)
+            dfs_branch.keep_leftover_work(task, verb)
         except dfs_branch.BranchError as e:
             raise ValueError(str(e))
     # A worked task's live files are its worktree's; the main checkout holds a stale copy
@@ -767,7 +767,7 @@ def _retire(task, dest, verb):
     for src in stale:
         shutil.rmtree(src) if src.is_dir() else src.unlink()
     if wt:
-        dfs_branch.release(task)
+        dfs_branch.release(task, verb)
     text = dfs_order.read_text()
     left = dfs_order.removed(dfs_order.nodes_of(text), task)
     if left is not None:
@@ -777,7 +777,9 @@ def _retire(task, dest, verb):
 
 def delete_task(task):
     """Delete a task: `_retire` it under `deleted_dir()`. Nothing is erased, so putting the
-    files back restores it. ValueError says what is wrong."""
+    files back restores it; a worked task's worktree is removed after its attachments are
+    copied back to `.dfs/artefacts` and its other uncommitted work is committed onto its
+    branch, kept as `dfs-deleted/<task>`. ValueError says what is wrong."""
     return _retire(task, deleted_dir(), "deleted")
 
 

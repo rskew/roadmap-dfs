@@ -1316,6 +1316,16 @@ class Branches(InARepo):
         self.assertEqual(self.git("show dfs-deleted/W1:app.txt").stdout, "a session's edit\n")
         self.assertEqual(self.git("show dfs-deleted/W1:new.txt").stdout, "a session's new file\n")
 
+    def test_archiving_a_worked_task_sets_its_branch_aside_as_archived(self):
+        wt = self.worktree()
+        (wt / "new.txt").write_text("a session's new file\n")
+        dfs_tree._retire("W1", dfs_tree.archived_dir(), "archived")
+        self.assertFalse(wt.exists())
+        self.assertEqual(self.git("rev-parse --verify -q dfs-archived/W1").returncode, 0)
+        self.assertNotEqual(self.git("rev-parse --verify -q dfs-deleted/W1").returncode, 0)
+        self.assertEqual(self.git("show -s --format=%s dfs-archived/W1").stdout.strip(),
+                         "W1: work left in its worktree when the task was archived")
+
     def test_a_worked_task_whose_leftover_work_cannot_be_kept_is_not_deleted(self):
         wt = self.worktree()
         (wt / "app.txt").write_text("a session's edit\n")
