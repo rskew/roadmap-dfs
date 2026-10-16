@@ -229,7 +229,9 @@ def raise_unmerged(task, error):
 def _in_progress():
     """The git operation the author has begun and not finished in the main checkout (a merge
     that conflicted, a cherry-pick, a revert, a rebase), or "". `_unmerged` takes a MERGE_HEAD
-    for the merge it started, so none of these may be there when `merge` begins."""
+    for the merge it started, so none of these may be there when `merge` begins. A rebase of
+    the checked-out branch detaches HEAD, so `merge` asks this before it asks which branch
+    the checkout is on."""
     for what, marker in (("merge", "MERGE_HEAD"), ("cherry-pick", "CHERRY_PICK_HEAD"),
                          ("revert", "REVERT_HEAD"), ("rebase", "rebase-merge"),
                          ("rebase", "rebase-apply")):
@@ -249,6 +251,17 @@ def _rebase(task, wt, name):
     default = dfs_paths.branch()
     if _git("merge-base", "--is-ancestor", default, name).returncode == 0:
         return True
+    for marker in ("rebase-merge", "rebase-apply"):
+        path = Path(_git("rev-parse", "--git-path", marker, cwd=wt).stdout.strip())
+        if (path if path.is_absolute() else wt / path).exists():
+            # A session left its own rebase unfinished: aborting it would throw its
+            # resolutions away, and there are no conflicts of ours to name.
+            _reopen_with(task, wt, "Finish or abort the rebase left unfinished in the %s worktree" % name,
+                         "%s is finished and reviewed, but a rebase is unfinished in its worktree %s. "
+                         "Run `git rebase --continue` (or `--abort`), and rebase it onto %s if it "
+                         "is not yet on it." % (name, dfs_paths.rel(wt), default),
+                         "a rebase was left unfinished in the worktree")
+            return False
     r = _git(*_identity(), "rebase", default, cwd=wt)
     if r.returncode == 0:
         return True
@@ -327,8 +340,13 @@ def merge(task):
     """
     name = dfs_paths.item_branch(task)
     wt = dfs_paths.worktree(task)
-    if wt is None and (not _has_branch(name) or dfs_paths.branch() == name):
+    if wt is None and not _has_branch(name):
         return "none"
+    if wt is None and dfs_paths.branch() == name:
+        if _git("rev-parse", "--git-dir").stdout != _git("rev-parse", "--git-common-dir").stdout:
+            return "none"   # run inside a linked worktree, which has nothing to merge from here
+        raise BranchError("%s is merged from the default branch; this checkout has %s itself "
+                          "checked out, with no worktree for it" % (name, name))
     started = _in_progress()
     if started:
         raise BranchError("the checkout has its own %s unfinished, which a merge would take for "

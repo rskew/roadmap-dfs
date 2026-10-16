@@ -417,6 +417,51 @@ class Chain(unittest.TestCase):
         self.assertIn("detached HEAD", self.log("raise")[0]["body"])
         self.assertTrue(self.wt.exists())
 
+    def test_a_merge_with_the_branch_checked_out_in_the_main_checkout_is_a_raise_not_a_pass(self):
+        self.run_chain("work,confirm", cap=2)
+        shutil.rmtree(self.wt)
+        self.git("worktree", "prune")
+        main = self.git("symbolic-ref", "--short", "HEAD")
+        self.git("checkout", "-q", "dfs/W1")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertEqual(len(self.log("raise")), 1)
+        self.assertIn("checked out", self.log("raise")[0]["body"])
+        self.assertEqual(self.git("symbolic-ref", "--short", "HEAD"), "dfs/W1")
+        self.assertNotIn("W1.1", self.git("log", "--format=%s", main))
+
+    def test_a_rebase_left_unfinished_in_the_worktree_is_said_so_not_aborted(self):
+        main = self.git("symbolic-ref", "--short", "HEAD")
+        self.run_chain("work,confirm", cap=2)
+        (self.root / "other.txt").write_text("main's own file\n")
+        self.git("add", "other.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moves")
+        # a session's `git rebase -i`, stopped at an `edit` with nothing staged
+        started = subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", "rebase", "--autostash", "-i", main],
+            cwd=self.wt, capture_output=True, text=True,
+            env=dict(os.environ, GIT_SEQUENCE_EDITOR="sed -i 's/^pick/edit/'"))
+        self.assertTrue(list((self.root / ".git").glob("worktrees/*/rebase-merge")),
+                        started.stdout + started.stderr)
+        self.assertTrue(list((self.root / ".git").glob("worktrees/*/rebase-merge")))
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 3, r.stderr)
+        self.assertTrue(list((self.root / ".git").glob("worktrees/*/rebase-merge")))
+        self.assertIn("rebase left unfinished", (self.wt / ".dfs/items/W1.md").read_text())
+        self.assertNotIn("W1.1", self.git("log", "--format=%s", main))
+
+    def test_an_item_is_worked_in_place_when_the_checkout_is_off_main_and_master(self):
+        self.git("checkout", "-q", "-b", "elsewhere")
+        rc, meta, out = self.run_chain("work,confirm", cap=2)
+        self.assertEqual(rc, 0, out)
+        self.assertEqual(self.kinds_run(), ["work", "work"], out)
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+        self.assertEqual(self.git("symbolic-ref", "--short", "HEAD"), "elsewhere")
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
+
     def test_a_chain_in_a_repo_with_no_commit_yet_works_in_place(self):
         shutil.rmtree(self.root / ".git")
         subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
