@@ -704,6 +704,10 @@ const FLOWS = {
       const f = await page.evaluate(() => ({ y: scrollY, in: !!document.activeElement.closest("#walkbox") }));
       assert(f.in && f.y === y1, `${name}: Tab ${i + 1} stays in the box without scrolling the list (scrollY ${f.y}, was ${y1})`);
     }
+    // A push from the server redraws the list; the control being Tabbed to in the box keeps focus through it.
+    const was = await page.evaluate(() => document.activeElement.outerHTML.slice(0, 120));
+    await page.evaluate(() => render(true)); await page.waitForTimeout(150);
+    same(await page.evaluate(() => document.activeElement.closest("#walkbox") ? document.activeElement.outerHTML.slice(0, 120) : "lost to " + document.activeElement.tagName), was, `${name}: a redraw leaves focus on the control in the Walk box`);
     p = await at();
     assert(Math.abs(p.top - p.bar) <= 2 && p.bottom - p.top <= 0.6 * p.h, `open, it stays put and takes at most 60% of the screen (${p.bottom - p.top} of ${p.h})`);
     if (await page.$eval("#nextsel", e => e.value) !== "W2") await page.selectOption("#nextsel", "W2");   // picking the pinned one again takes the pin away, and the other width left W2 pinned

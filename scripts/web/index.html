@@ -39,7 +39,7 @@ paintBackground();
    dialogs) is the design system, /design.css; what is here is where they go. */
 :root { --bar: calc(56px * var(--z)); --tabs: calc(52px * var(--z)); --col: calc(880px * var(--z)); --page: calc(1180px * var(--z)); }
 body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
-:root { scroll-padding: calc(var(--bar) + var(--s3)) 0 calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s3)); }
+:root { scroll-padding: calc(env(safe-area-inset-top, 0px) + var(--bar) + var(--s3)) 0 calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s3)); }
 :root:has(body.pad) { scroll-padding-bottom: calc(var(--tabs) + var(--hit) + env(safe-area-inset-bottom, 0px) + var(--s3)); }
 
 /* the bar: the mark, a name, a way back, and the three colours as one thin line */
@@ -160,7 +160,7 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
   top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule)))); }
 .walk[open] { max-height: 55dvh; overflow-y: auto; overscroll-behavior: contain; }
 .walk[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--paper); }
-:root:has(#walkbox) { scroll-padding-top: calc(var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule))) - 1px); }
+:root:has(#walkbox) { scroll-padding-top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule))) - 1px); }
 :root:has(#walkbox) :is(.item, .item :is(button, a, select), .arow > button) { scroll-margin-top: calc(var(--pin-h, 0px) + var(--s3) + 1px); }
 .walk > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
 .walk > summary::-webkit-details-marker { display: none; }
@@ -482,7 +482,7 @@ let lastView = "";
 let RENDERS = 0;
 /* With a pad focus is the cursor, and a draw replaces the controls: put focus back on the same one (by id, or its action
    and target, else its place among the focusable controls) when the draw left it on the page, so a push from the
-   server does not send the cursor home. */
+   server does not send the cursor home. The same for a keyboard user in the pinned Walk box, who goes there in the middle of a walk. */
 const FOCUSABLE = "button, a[href], summary, textarea, input:not([type=hidden]), select, [tabindex]:not([tabindex='-1'])";
 function focusKey(el) {
   if (!el || el === document.body) return null;
@@ -490,7 +490,7 @@ function focusKey(el) {
   return { sel, at: [...document.querySelectorAll(FOCUSABLE)].indexOf(el) };
 }
 async function render(force) {
-  const key = PAD.on ? focusKey(document.activeElement) : null;
+  const key = PAD.on || document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
   await renderDraw(force);
   if (key && (!document.activeElement || document.activeElement === document.body)) {
     const el = (key.sel && $(key.sel)) || document.querySelectorAll(FOCUSABLE)[key.at]; if (el) el.focus();
