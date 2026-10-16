@@ -1413,6 +1413,32 @@ def notes(t):
             if e["kind"] in ("critic", "review") and e["body"].strip()]
 
 
+def note_sessions(t):
+    """`notes(t)` grouped by the session that wrote them, newest session first:
+    `[dict(kind, ts, run, notes=[(ts, verdict, body)])]`, the notes in a group in the
+    order they were logged. A session is the `session · review|critic · <run>` entry
+    that opened it, and `ts` is when it started; a note logged outside one (a review
+    run by hand, or after the session's `end`) is a group of its own at its own time."""
+    groups, open_ = [], None
+    for e in t["log"]:
+        if e["kind"] == "session":
+            open_ = None
+            if e["args"] and e["args"][0] in ("critic", "review"):
+                open_ = dict(kind=e["args"][0], ts=e["ts"],
+                             run=e["args"][1] if len(e["args"]) > 1 else "", notes=[])
+        elif e["kind"] == "end":
+            open_ = None
+        elif e["kind"] in ("critic", "review") and e["body"].strip():
+            note = (e["ts"], e["args"][0] if e["args"] else "", e["body"].strip())
+            if open_ is not None and open_["kind"] == e["kind"]:
+                if not open_["notes"]:
+                    groups.append(open_)
+                open_["notes"].append(note)
+            else:
+                groups.append(dict(kind=e["kind"], ts=e["ts"], run="", notes=[note]))
+    return sorted(groups, key=lambda g: g["ts"], reverse=True)
+
+
 # ── commits ──────────────────────────────────────────────────────────────────
 
 def node_commits(task, cwd=None):

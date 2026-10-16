@@ -175,16 +175,19 @@ def tree_entries(t, folded=(), flagged=False):
             out.append(dict(key="section:%s:%s" % (t["task"], name), kind="section",
                             depth=0, indent=0, name=name, text=sections[name],
                             open_default=shown))
-    held = [] if dfs_tree.accepted(t) else dfs_tree.notes(t)
+    held = [] if dfs_tree.accepted(t) else dfs_tree.note_sessions(t)
     if held:
         # ⚠️ WHAT THE REVIEW SAID ON ITS WAY TO `ok`. A reviewer's minor findings and a
         # critic's remarks live in the log body and the skill tells the author to read
         # them when they accept, but nothing on the screen did. Listed folded: they can
         # run long, and the accept prompt counts them for the author who wants to read.
+        # One group per review or critic session, the newest on top: what the last
+        # review said is what is still true, and the earlier ones are its history.
         out.append(dict(key="section:%s:Notes" % t["task"], kind="section", depth=0, indent=0,
                         name="Reviewer and critic notes", open_default=False,
-                        text="\n".join("%s %s:\n%s\n" % (k, v, body)
-                                       for k, _ts, v, body in held)))
+                        text="\n".join("**%s**\n\n%s\n" % (
+                            note_heading(g), "\n\n".join(b for _ts, _v, b in g["notes"]))
+                            for g in held)))
     for r in dfs_tree.open_raises(t):
         nid = r["args"][0] if r["args"] else ""
         if nid in nodes:
@@ -289,6 +292,18 @@ def age(ts, now=None):
         if secs >= size:
             return "%d%s ago" % (secs // size, unit)
     return "just now"
+
+
+def note_heading(g):
+    """A `dfs_tree.note_sessions` group's heading: `Review · Fri 16 Oct 09:33 · issues`,
+    the session's kind, when it started in local time, and the verdicts it logged."""
+    try:
+        when = time.strftime("%a %d %b %H:%M", time.localtime(
+            calendar.timegm(time.strptime(g["ts"], "%Y-%m-%dT%H:%M:%SZ"))))
+    except (ValueError, TypeError):
+        when = g["ts"]
+    verdicts = ", ".join(dict.fromkeys(v for _ts, v, _b in g["notes"] if v))
+    return " · ".join(x for x in (g["kind"].capitalize(), when, verdicts) if x)
 
 
 def clip(text, width):

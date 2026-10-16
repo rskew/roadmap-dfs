@@ -361,7 +361,9 @@ def task_json(task):
                 artefacts=artefacts_for("\n".join(strings(t))),
                 status=status, why=humanize(why), accepted=accepted,
                 acceptable=status == "done" and not accepted, rows=rows, assumed=assumed,
-                notes=[dict(kind=k, verdict=v, body=b) for k, _ts, v, b in dfs_tree.notes(t)],
+                notes=[dict(kind=g["kind"], heading=dfs_tui.note_heading(g),
+                            body="\n\n".join(b for _ts, _v, b in g["notes"]))
+                       for g in dfs_tree.note_sessions(t)],
                 sessions=dfs_tree.sessions_since_author(t), draft=dfs_tree.is_draft(t))
 
 

@@ -1062,6 +1062,25 @@ class Check(InARepo):
         self.assertEqual(dfs_tree.notes(dfs_tree.load("W1")),
                          [("review", "2026-09-25T09:13:00Z", "ok", "`_locks` grows.")])
 
+    def test_notes_are_grouped_by_the_session_that_wrote_them_newest_first(self):
+        log = ("- 2026-09-25T10:00:00Z · session · review · run-1\n"
+               "- 2026-09-25T10:05:00Z · review · issues\n  W1.2 is wrong.\n"
+               "- 2026-09-25T10:06:00Z · end · review · ok · peak 1\n"
+               "- 2026-09-25T10:07:00Z · review · ok\n  By hand.\n"
+               "- 2026-09-25T11:00:00Z · session · critic · run-2\n"
+               "- 2026-09-25T11:04:00Z · critic · ok\n  W1.1 holds.\n"
+               "- 2026-09-25T11:05:00Z · end · critic · ok · peak 1\n"
+               "- 2026-09-25T12:00:00Z · session · review · run-3\n"
+               "- 2026-09-25T12:01:00Z · review · ok\n")
+        self.write(task(node(1), self.LOG + log))
+        self.assertEqual(dfs_tree.note_sessions(dfs_tree.load("W1")), [
+            dict(kind="critic", ts="2026-09-25T11:00:00Z", run="run-2",
+                 notes=[("2026-09-25T11:04:00Z", "ok", "W1.1 holds.")]),
+            dict(kind="review", ts="2026-09-25T10:07:00Z", run="",
+                 notes=[("2026-09-25T10:07:00Z", "ok", "By hand.")]),
+            dict(kind="review", ts="2026-09-25T10:00:00Z", run="run-1",
+                 notes=[("2026-09-25T10:05:00Z", "issues", "W1.2 is wrong.")])])
+
     def test_a_node_that_asks_is_assumed_too(self):
         self.write(task(node(1, extra="Ask: Should it warn or fail?\n"), self.LOG))
         self.assertEqual(dfs_tree.assumed(dfs_tree.load("W1")), ["W1.1"])

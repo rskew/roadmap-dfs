@@ -206,6 +206,19 @@ class Rows(unittest.TestCase):
         rows = {r["key"]: r for r in TUI.tree_entries(dfs_tree.parse(noted, "W1"))}
         self.assertFalse(rows["section:W1:Notes"]["open_default"])
 
+    def test_the_reviewer_notes_are_one_group_per_session_the_newest_first(self):
+        noted = TREE.replace("## Log\n", "## Log\n\n"
+                             "- 2026-09-27T02:00:00Z · session · review · run-2\n"
+                             "- 2026-09-27T02:05:00Z · review · issues\n  The first review.\n"
+                             "- 2026-09-27T03:00:00Z · session · review · run-3\n"
+                             "- 2026-09-27T03:05:00Z · review · ok\n  The second review.\n", 1)
+        t = dfs_tree.parse(noted, "W1")
+        text = {r["key"]: r for r in TUI.tree_entries(t)}["section:W1:Notes"]["text"]
+        first, second = (TUI.note_heading(g) for g in dfs_tree.note_sessions(t)[::-1])
+        self.assertTrue(first.startswith("Review · ") and first.endswith(" · issues"), first)
+        self.assertEqual(text, "**%s**\n\nThe second review.\n\n**%s**\n\nThe first review.\n"
+                         % (second, first))
+
     def test_a_missing_section_has_no_row(self):
         t = dfs_tree.parse(TREE.replace("## Background\n\nWhy this came up, at length.\n\n",
                                         ""), "W1")
