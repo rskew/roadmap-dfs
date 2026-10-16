@@ -28,6 +28,7 @@ import json
 import os
 import re
 import signal
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -86,40 +87,52 @@ def transcript_messages(sid, agent="claude"):
     [{role: you|agent, text}]. Tool calls and results, thinking, and the harness's own
     notes are not part of a conversation, and the opening prompt the screen's chat starts
     with is the screen's, not something the author said. Each agent keeps its transcript
-    in its own shape (`READERS`); one with no reader here reads as no conversation yet."""
-    read = READERS.get(agent)
-    path = dfs_context.transcript_path(sid, agent) if sid and read else None
-    if not path or not os.path.exists(path):
-        return []
+    in its own shape (`READERS`: a file of JSON lines, or opencode's sqlite store); one with
+    no reader here reads as no conversation yet."""
     out, agent_at = [], {}
+    for role, text, key in turns(sid, agent):
+        text = text.strip()
+        if not text:
+            continue
+        if role == "you":
+            if text.startswith(("<command-", "<local-command", "<system-reminder")):
+                continue
+            if "The author writes: " in text:                 # the page's first turn carries framing
+                text = text.rsplit("The author writes: ", 1)[1].strip()
+            elif OPENING.match(text) or PAGE_OPENING.match(text):   # an opening prompt: the tool's words
+                continue
+            out.append(dict(role="you", text=text))
+        elif key and key in agent_at:                        # one message, one line per block
+            out[agent_at[key]]["text"] += "\n" + text
+        else:
+            agent_at[key] = len(out)
+            out.append(dict(role="agent", text=text))
+    return out
+
+
+def turns(sid, agent):
+    """(role, text, message key) for each piece of a session's transcript, as its agent's
+    reader finds them: a line at a time from the transcript file, or from a store."""
+    read = READERS.get(agent)
+    if not sid or not read:
+        return
+    if agent in STORES:
+        yield from read(sid)
+        return
+    path = dfs_context.transcript_path(sid, agent)
+    if not path or not os.path.exists(path):
+        return
     try:
         fh = open(path, errors="replace")
     except OSError:
-        return []
+        return
     with fh:
         for line in fh:
             try:
                 rec = json.loads(line)
             except ValueError:
                 continue
-            for role, text, key in read(rec):
-                text = text.strip()
-                if not text:
-                    continue
-                if role == "you":
-                    if text.startswith(("<command-", "<local-command", "<system-reminder")):
-                        continue
-                    if "The author writes: " in text:                 # the page's first turn carries framing
-                        text = text.rsplit("The author writes: ", 1)[1].strip()
-                    elif OPENING.match(text) or PAGE_OPENING.match(text):   # an opening prompt: the tool's words
-                        continue
-                    out.append(dict(role="you", text=text))
-                elif key and key in agent_at:                        # one message, one line per block
-                    out[agent_at[key]]["text"] += "\n" + text
-                else:
-                    agent_at[key] = len(out)
-                    out.append(dict(role="agent", text=text))
-    return out
+            yield from read(rec)
 
 
 def claude_turns(rec):
@@ -154,10 +167,80 @@ def codex_turns(rec):
     return [(role, text, item.get("id"))]
 
 
-READERS = dict(claude=claude_turns, codex=codex_turns)
+def opencode_db():
+    """opencode's sqlite store (`opencode.db`), where all its sessions live. Under
+    $XDG_DATA_HOME/opencode, or ~/.local/share/opencode, as opencode itself finds it."""
+    data = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+    return os.path.join(data, "opencode", "opencode.db")
 
 
-CHAT_AGENTS = ("claude", "codex")      # the agents a chat can run under, here and on the screen
+def opencode_query(sql, args=()):
+    """Rows from opencode's store, opened read-only (it is opencode's, and may be in use);
+    none if there is no store or it cannot be read."""
+    db = opencode_db()
+    if not os.path.exists(db):
+        return []
+    try:
+        con = sqlite3.connect("file:%s?mode=ro" % db, uri=True, timeout=2)
+        try:
+            return con.execute(sql, args).fetchall()
+        finally:
+            con.close()
+    except sqlite3.Error:
+        return []
+
+
+def opencode_turns(sid):
+    """(role, text, message id) for an opencode session, from its `message` and `part`
+    tables (opencode 1.18.35): a message's `data` holds its role, and its text is its `text`
+    parts in order. Tool, patch and step parts are not words, and a `synthetic` or `ignored`
+    text is opencode's own note to the model."""
+    rows = opencode_query(
+        "select m.id, m.data, p.data from message m join part p on p.message_id = m.id "
+        "where m.session_id = ? order by m.time_created, m.id, p.time_created, p.id", (sid,))
+    out = []
+    for mid, mdata, pdata in rows:
+        try:
+            role = json.loads(mdata).get("role")
+            part = json.loads(pdata)
+        except (ValueError, AttributeError):
+            continue
+        if role not in ("user", "assistant") or not isinstance(part, dict) or part.get("type") != "text":
+            continue
+        if part.get("synthetic") or part.get("ignored") or not isinstance(part.get("text"), str):
+            continue
+        out.append(("you" if role == "user" else "agent", part["text"], mid))
+    return out
+
+
+READERS = dict(claude=claude_turns, codex=codex_turns, opencode=opencode_turns)
+STORES = ("opencode",)       # the agents whose conversation is read from a store, not a transcript file
+
+
+def has_transcript(sid, agent):
+    """Whether this session has a conversation to resume yet (one the screen opened and the
+    author left at once has none, and the agent would refuse to resume it)."""
+    if not sid:
+        return False
+    if agent in STORES:
+        return bool(opencode_query("select 1 from session where id = ?", (sid,)))
+    p = dfs_context.transcript_path(sid, agent)
+    return bool(p and os.path.exists(p))
+
+
+def transcript_mtime(sid, agent):
+    """When the conversation last changed, or None."""
+    if agent in STORES:
+        rows = opencode_query("select time_updated from session where id = ?", (sid,))
+        return rows[0][0] / 1000 if rows else None
+    p = dfs_context.transcript_path(sid, agent) if sid else None
+    try:
+        return os.path.getmtime(p) if p else None
+    except OSError:
+        return None
+
+
+CHAT_AGENTS = ("claude", "codex", "opencode")      # the agents a chat can run under, here and on the screen
 
 
 def codex_result(lines, sid=""):
@@ -187,6 +270,36 @@ def codex_result(lines, sid=""):
             done = True
     failed = bool(error) or not done
     return dict(type="result", session_id=sid, is_error=failed, result=(error or answer) if failed else answer)
+
+
+def opencode_result(lines, sid=""):
+    """One turn of `opencode run --format json` as the single JSON line a turn is read from
+    ({session_id, is_error, result}, as codex_result). Every event carries the `sessionID`
+    (opencode mints it, on a resumed turn too). The answer is the `text` of the last step,
+    after its tool calls; a failure is an `error` event (its `error.data.message`), and a
+    stream that never finished a step on `stop` is one too."""
+    answer, error, done = [], "", False
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        sid = rec.get("sessionID") or sid
+        kind, part = rec.get("type"), rec.get("part") if isinstance(rec.get("part"), dict) else {}
+        if kind == "step_start":
+            answer = []
+        elif kind == "text" and isinstance(part.get("text"), str):
+            answer.append(part["text"])
+        elif kind == "step_finish":
+            done = part.get("reason") == "stop"
+        elif kind == "error":
+            err = rec.get("error") if isinstance(rec.get("error"), dict) else {}
+            error = (err.get("data") or {}).get("message") or err.get("message") or err.get("name") or error or "the turn failed"
+    text = "".join(answer).strip()
+    failed = bool(error) or not done
+    return dict(type="result", session_id=sid, is_error=failed, result=(error or text) if failed else text)
 
 
 PAGE_OPENING = re.compile(r"^You are talking with the author about ", re.S)
@@ -294,7 +407,7 @@ class Chats:
             raise ValueError("a message is %d characters or fewer" % MAX_MESSAGE)
         agent = self.agent(scope)
         if agent not in CHAT_AGENTS:
-            raise ValueError("chat on the page runs under %s; the agent is %s" % (" or ".join(CHAT_AGENTS), agent))
+            raise ValueError("chat on the page runs under %s or %s; the agent is %s" % (", ".join(CHAT_AGENTS[:-1]), CHAT_AGENTS[-1], agent))
         w = self.walker()
         with self.lock:
             # A chat running on this screen has the session: type into it, as the keyboard does.
@@ -391,8 +504,7 @@ class Chats:
             if sid:
                 # Resume only a session that has a transcript: one the screen made and the
                 # author left at once has none, and `--resume` would refuse it.
-                p = dfs_context.transcript_path(sid, agent)
-                if p and os.path.exists(p):
+                if has_transcript(sid, agent):
                     env["CHAT_RESUME"] = "1"
             r = run_turn(self.argv() + ["--" + agent] * (agent != "claude") + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
                          on_start=lambda p: self.started(scope, p))
@@ -443,8 +555,7 @@ class Chats:
         agent = self.agent(scope)
         if agent in CHAT_AGENTS:
             sid = self.sid(scope)
-            p = dfs_context.transcript_path(sid, agent) if sid else None
-            began = bool(p and os.path.exists(p)) or bool(w and w.chat_live(scope))
+            began = has_transcript(sid, agent) or bool(w and w.chat_live(scope))
             if not began:
                 chatlog.log(scope, "page: opened a new chat%s" % (", on the screen" if w and w.has_screen else ""))
                 if w and w.has_screen:
@@ -473,16 +584,12 @@ class Chats:
                 continue
             sid, agent = self.sid(scope), self.agent(scope)
             messages = transcript_messages(sid, agent)
-            tp = dfs_context.transcript_path(sid, agent) if sid else None
             live = bool(w and w.chat_live(scope))
             busy = scope in self.busy or bool(live and w.chat_active(scope))
             if not messages and not live and not busy:
                 continue
             last = messages[-1] if messages else dict(role="", text="")
-            try:
-                updated = os.path.getmtime(tp) if tp else p.stat().st_mtime
-            except OSError:
-                updated = p.stat().st_mtime
+            updated = transcript_mtime(sid, agent) or p.stat().st_mtime
             out.append(dict(scope=scope, count=len(messages), role=last["role"], last=last["text"][:160],
                             updated=updated, live=live, busy=busy))
         return sorted(out, key=lambda c: -c["updated"])
@@ -520,8 +627,7 @@ def claim(scope, agent="claude"):
     if sid and chats.agent(scope) != agent:
         raise ValueError("the %s conversation is %s's" % (scope, chats.agent(scope)))
     if agent != "claude":
-        p = dfs_context.transcript_path(sid, agent) if sid else None
-        return (sid, True) if p and os.path.exists(p) else ("", False)
+        return (sid, True) if has_transcript(sid, agent) else ("", False)
     if not sid:
         sid = str(uuid.uuid4())
         chats.save_sid(scope, sid, "claude")
@@ -538,16 +644,18 @@ def save(scope, sid, agent):
 
 
 def main(argv):
-    """`--codex-result [sid]`: a `codex exec --json` stream on stdin, the turn's one JSON line on
-    stdout (exit 1 if it failed). `--save scope sid agent`: record a scope's conversation."""
-    if argv[:1] == ["--codex-result"]:
-        out = codex_result(sys.stdin, argv[1] if len(argv) > 1 else "")
+    """`--codex-result [sid]`, `--opencode-result [sid]`: that agent's JSON stream of a turn on
+    stdin, the turn's one JSON line on stdout (exit 1 if it failed). `--save scope sid agent`:
+    record a scope's conversation."""
+    results = {"--codex-result": codex_result, "--opencode-result": opencode_result}
+    if argv[:1] and argv[0] in results:
+        out = results[argv[0]](sys.stdin, argv[1] if len(argv) > 1 else "")
         print(json.dumps(out))
         return 1 if out["is_error"] else 0
     if argv[:1] == ["--save"] and len(argv) == 4:
         save(*argv[1:])
         return 0
-    print("usage: chat.py --codex-result [sid] | --save scope sid agent", file=sys.stderr)
+    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --save scope sid agent", file=sys.stderr)
     return 2
 
 
