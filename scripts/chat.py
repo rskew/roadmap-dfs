@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """A chat about a task, or about the project, that is THE chat session the screen's `c` opens.
 
-One conversation per scope (a task, or `project`): a claude session whose id is kept in a
+One conversation per scope (a task, or `project`): an agent session (claude, codex, opencode
+or kiro: the one it began under) whose id is kept in a
 small file under the run root. The terminal's `c` (and `C`) starts or RESUMES that session
 interactively; the web page resumes the same one a turn at a time, headless, with the same
 permission-skipping flags as the screen's chat (`run.sh --chat-turn`): every tool works and
@@ -14,7 +15,7 @@ screen runs in the BACKGROUND (ptyrelay.py): any number at once, one per task an
 none of them on the screen unless you ask. The page types into them and reads them from the
 transcript; the screen's `c` attaches to the running one (ctrl-] leaves it running). They end with
 the screen, with "New chat", or after DFS_CHAT_IDLE seconds (30 minutes; 0 never) with nobody using
-them: the conversation stays, and the next message resumes it. With no screen (web.py alone) the page runs its own turns. A claude
+them: the conversation stays, and the next message resumes it. With no screen (web.py alone) the page runs its own turns. An agent
 running on the session in some OTHER terminal would tangle it, so then the page does not send.
 
 Each scope keeps a log, `<run root>/chat/<scope>.log` (chatlog.py): what the page sent and what became of
@@ -57,7 +58,8 @@ def signal_turn(p, sig):
 
 def run_turn(argv, message, cwd, env, on_start=None):
     """`subprocess.run` with the agent's end done as ctrl-c would: on a timeout it is sent
-    SIGTERM (run.sh execs the agent, so this is the agent, which stops what it started) and
+    SIGTERM (the whole process group, so the agent and what it started; claude is run.sh's own exec, the others
+    sit in a pipeline into chat.py's reader) and
     SIGKILLed only if it has not gone after a grace. `run` itself would SIGKILL at once."""
     p = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, cwd=cwd, env=env, start_new_session=True)
@@ -530,7 +532,7 @@ class Chats:
 
     def interrupt(self, scope):
         """Stop pressed: end what the chat is doing and leave the conversation as it is. The screen's
-        chat (a background agent) is sent claude's interrupt key; a headless turn's process is ended
+        chat (a background agent) is sent that agent's own interrupt keys (ptyrelay's INTERRUPT); a headless turn's process is ended
         as ctrl-c would, and the turn then says it was interrupted rather than that it failed."""
         self.check(scope)
         w = self.walker()
@@ -559,7 +561,7 @@ class Chats:
         p = self.procs.get(scope)
         if p is None or p.poll() is not None:
             return
-        signal_turn(p, signal.SIGTERM)      # run.sh execs the agent, so this is the agent, which stops what it started
+        signal_turn(p, signal.SIGTERM)      # the group: the agent, which stops what it started, and the reader after it
 
         def reap():
             try:
@@ -592,7 +594,7 @@ class Chats:
             if not new_sid and agent == "claude":
                 # chosen here, not by run.sh, so a first turn that is stopped still has its session
                 new_sid = str(uuid.uuid4())
-            if new_sid:         # codex mints its own: a first turn has none to name, and is read from the stream
+            if new_sid:         # codex, opencode and kiro mint their own: a first turn has none to name, and is read from the stream
                 env["CHAT_SID"] = new_sid
             if sid:
                 # Resume only a session that has a transcript: one the screen made and the
@@ -623,14 +625,18 @@ class Chats:
             stopped = scope in self.stopped
         if stopped:
             error = ""      # ended on purpose: not a failure, whatever the killed agent left behind
+        # a first turn that codex, opencode or kiro did not finish names no session to record, so
+        # the message is in one of the agent's own that nothing here knows: say so
+        lost = ("the message was not kept: %s had not recorded a session to continue" % agent
+                if agent != "claude" and not new_sid and (error or stopped) else "")
         chatlog.log(scope, "turn: %s after %ds, rc=%s, session %s" % (
             "STOPPED" if stopped else "FAILED" if error else "answered", time.time() - began, rc, new_sid or "(none)"),
             (error + "\n" + said) if said else error)
         with self.lock:
             if new_sid and new_sid != sid:
                 self.save_sid(scope, new_sid, agent)
-            if error:
-                self.notes[scope] = [error]
+            if error or lost:
+                self.notes[scope] = [x for x in (error, lost) if x]
             if stopped:
                 self.stops[scope] = True
             self.stopped.discard(scope)
@@ -688,7 +694,7 @@ class Chats:
         return sorted(out, key=lambda c: -c["updated"])
 
     def clear(self, scope):
-        """Start over: the next message is a new session. The old one stays in claude's own history."""
+        """Start over: the next message is a new session. The old one stays in the agent's own history."""
         self.check(scope)
         with self.lock:
             if scope in self.busy:
@@ -712,7 +718,7 @@ def claim(scope, agent="claude"):
     """For the screen's `c`: the session to open for this scope, as (sid, resume). The record
     is made now, before the chat starts, so the page can resume it, and `resume` is whether
     there is a transcript to resume (else it starts the session under that id). An agent that
-    mints its own id (codex) has none to name for a new conversation: it comes back ("", False)
+    mints its own id (codex, opencode, kiro) has none to name for a new conversation: it comes back ("", False)
     and run.sh records the id once the opening turn has made it (`save`)."""
     chats = Chats()
     chats.check(scope)

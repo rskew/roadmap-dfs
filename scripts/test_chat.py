@@ -443,8 +443,9 @@ class Chat(unittest.TestCase):
         os.environ["CHAT_STUB_FAIL"] = "1"
         self.chats.send("W1", "hi")
         st = self.settle("W1")
-        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
-        self.assertIn("not logged in", st["messages"][-1]["text"])
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
+        self.assertIn("not logged in", st["messages"][1]["text"])
+        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
         self.assertFalse(self.chats.path("W1").exists())
 
     def test_the_screens_codex_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
@@ -527,8 +528,9 @@ class Chat(unittest.TestCase):
         os.environ["CHAT_STUB_FAIL"] = "1"
         self.chats.send("W1", "hi")
         st = self.settle("W1")
-        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
-        self.assertIn("not logged in", st["messages"][-1]["text"])
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
+        self.assertIn("not logged in", st["messages"][1]["text"])
+        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
         self.assertFalse(self.chats.path("W1").exists())
 
     def test_the_screens_opencode_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
@@ -629,8 +631,9 @@ class Chat(unittest.TestCase):
         finally:
             for k in ("KIRO_API_KEY", "KIRO_KAS_ENDPOINT", "KIRO_KAS_CONTROL_PLANE_ENDPOINT"):
                 os.environ.pop(k, None)
-        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
-        self.assertIn("could not load the available models", st["messages"][-1]["text"])
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
+        self.assertIn("could not load the available models", st["messages"][1]["text"])
+        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
         self.assertFalse(self.chats.path("W1").exists())
 
     def test_a_kiro_turn_is_answered_kept_and_resumed_by_the_id_kiro_made(self):
@@ -656,8 +659,9 @@ class Chat(unittest.TestCase):
         os.environ["CHAT_STUB_FAIL"] = "1"
         self.chats.send("W1", "hi")
         st = self.settle("W1")
-        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
-        self.assertIn("Not logged in", st["messages"][-1]["text"])
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
+        self.assertIn("Not logged in", st["messages"][1]["text"])
+        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
         self.assertFalse(self.chats.path("W1").exists())
 
     def test_the_screens_kiro_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
