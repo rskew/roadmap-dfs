@@ -781,9 +781,8 @@ PY
 }
 
 # ── writing a new task (--open) ──────────────────────────────────────────────────
-# The author's words go in unchanged. The todo lines become a LINEAR chain of open
-# nodes, each the child of the one before, which is the shape a task usually starts
-# in; the sessions add nodes, branch and back up from there.
+# The author's words go in unchanged, under an empty tree: the author adds nodes for
+# explicit steps, and the sessions plan, branch and back up from there.
 open_mode() {
   python3 - "${ITEM:-}" "$HERE" <<'PY'
 import os, re, sys
@@ -817,18 +816,12 @@ name = ask("  short name: ")
 if not name:
     say("dfs_run: nothing opened."); raise SystemExit(0)
 goal = block("  Goal — what done looks like and WHY (lone '.' ends it):")
-say("  Todos — one per line, in order; each becomes a node (lone '.' ends it, none is fine):")
-todos = []
-while True:
-    ln = tty_in.readline()
-    if ln == "" or ln.rstrip("\n") == ".": break
-    if ln.strip(): todos.append(ln.strip().lstrip("-[ ]x").strip())
 draft = ask("  Draft, so the walk passes it over until it is marked ready? [y/N]: ").lower().startswith("y")
 try:
-    task = dfs_tree.create_task(name, goal, todos, task=task, draft=draft)
+    task = dfs_tree.create_task(name, goal, task=task, draft=draft)
 except ValueError as e:
     say("dfs_run: %s." % e); raise SystemExit(2)
-say("\ndfs_run: wrote %s — %d node%s%s." % (dfs_tree.part_path(task, dfs_paths.branch_tag()), len(todos), "" if len(todos) == 1 else "s", ", a draft" if draft else ""))
+say("\ndfs_run: wrote %s%s." % (dfs_tree.part_path(task, dfs_paths.branch_tag()), ", a draft" if draft else ""))
 PY
   python3 "$HERE/check.py" --warn || true
 }

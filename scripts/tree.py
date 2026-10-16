@@ -640,10 +640,9 @@ def next_task_id():
     return "W%d%s" % (max(nums, default=0) + 1, "@" + tag if tag else "")
 
 
-def create_task(name, goal="", todos=(), task=None, draft=False):
-    """Write a new task file: the author's words unchanged, the todo lines a LINEAR chain of
-    open nodes (each the child of the one before, the shape a task starts in; the sessions
-    add nodes, branch and back up from there). `task` is an id the author chose (letters then
+def create_task(name, goal="", task=None, draft=False):
+    """Write a new task file: the author's words unchanged and an empty tree (the author adds
+    nodes for explicit steps, and the sessions plan, branch and back up from there). `task` is an id the author chose (letters then
     a number, tagged here), else the next one. `draft` logs it a draft, which the walk passes
     over until a `ready` entry (`is_draft`). Returns the id; ValueError says what is wrong."""
     tag = dfs_paths.branch_tag()
@@ -660,14 +659,8 @@ def create_task(name, goal="", todos=(), task=None, draft=False):
     if exists(task) or task in retired_ids():
         raise ValueError("%s already exists: pick another id" % task)
     path = part_path(task, tag)
-    todos = [" ".join(x.split()) for x in todos if x and x.strip()]
-    body = ["# %s · %s" % (task, name), "", "## Goal", "", (goal or "").strip() or name, "", "## Tree", ""]
-    for n, todo in enumerate(todos, 1):
-        body += ["### %s · %s" % (node_id(task, n, tag), todo)]
-        if n > 1:
-            body += ["Parent: %s" % node_id(task, n - 1, tag)]
-        body += ["Status: open", ""]
-    body += ["## Log", ""]
+    body = ["# %s · %s" % (task, name), "", "## Goal", "", (goal or "").strip() or name, "",
+            "## Tree", "", "## Log", ""]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(body).rstrip() + "\n")
     if draft:

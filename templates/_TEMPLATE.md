@@ -11,12 +11,10 @@ session reads first, so it carries the intent the nodes cannot.>
 
 ## Tree
 
-### W<n>.1 · <the first todo>
-Status: open
-Approach: <what this node does>
+<Empty when the task is made: the first session plans it. A step the author wants taken
+is a node added here, in the web page or the screen, or by hand:>
 
-### W<n>.2 · <the next todo>
-Parent: W<n>.1
+### W<n>.1 · <a step>
 Status: open
 Approach: <what this node does>
 

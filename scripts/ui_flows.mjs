@@ -1479,7 +1479,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.click("[data-act=newtask]"); await dialog(page);
     await page.fill("#nn", "Cache the lookups");
     await page.fill("#ng", "Hits above 90%.");
-    await page.fill("#nt", "profile it\nadd the cache");
+    assert(!(await page.$("dialog textarea[name=todos]")), "the form asks for no first steps: nodes are added to the task after");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });   // for a node's screenshot
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => [...document.querySelectorAll(".item .goal")].some(e => /Cache the lookups/.test(e.textContent)), null, { timeout: 8000 });
     assert(!(await page.$(".row")), "creating the task leaves the list open, not the new task");

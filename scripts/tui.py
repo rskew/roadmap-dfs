@@ -228,8 +228,8 @@ def tree_entries(t, folded=(), flagged=False):
                 else:
                     out.pop()
             if nid not in folded:
-                # ⚠️ INDENT ONLY AT A FORK. `--open` makes every todo the child of the
-                # one before, so a twenty-step task was a staircase forty columns
+                # ⚠️ INDENT ONLY AT A FORK. A chain of steps makes each node the child
+                # of the one before, so a twenty-step task was a staircase forty columns
                 # deep and a real alternative (two siblings) looked like one more
                 # step. A node that is the only child of its parent continues at its
                 # parent's column; its siblings, when there are any, step in.

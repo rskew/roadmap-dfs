@@ -526,15 +526,10 @@ def set_theme(body):
 
 
 def new_task(body):
-    """A new task, as `run --open` writes one: a name, the goal in the author's words, and
-    todo lines that become a linear chain of open nodes; `draft` makes it one the walk passes
+    """A new task, as `run --open` writes one: a name and the goal in the author's words, with
+    an empty tree (steps are added as nodes after); `draft` makes it one the walk passes
     over."""
     name = need(body, "name", "a name")
-    todos = body.get("todos") or []
-    if isinstance(todos, str):
-        todos = todos.splitlines()
-    if not isinstance(todos, list) or not all(isinstance(x, str) for x in todos) or len(todos) > 100:
-        raise Refused("todos are lines of text")
     goal = body.get("goal") or ""
     if not isinstance(goal, str) or len(goal) > 20000:
         raise Refused("the goal is text")
@@ -543,7 +538,7 @@ def new_task(body):
         raise Refused("draft is true or false")
     with LOCK:
         try:
-            task = dfs_tree.create_task(name, goal, todos, task=body.get("id") or None,
+            task = dfs_tree.create_task(name, goal, task=body.get("id") or None,
                                         draft=draft)
         except (ValueError, dfs_paths.NoBranch) as e:
             raise Refused(str(e), 409)

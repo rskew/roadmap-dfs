@@ -1137,15 +1137,13 @@ class Web(unittest.TestCase):
         self.assertIs(row["archivable"], False)
 
     def test_a_new_task_is_written_as_run_open_writes_it(self):
-        status, data, _ = self.call("POST", "/api/new", dict(name="Cache the lookups", goal="Hits above 90%.", todos="profile it\nadd the cache\n"))
+        status, data, _ = self.call("POST", "/api/new", dict(name="Cache the lookups", goal="Hits above 90%."))
         self.assertEqual(status, 200)
         new = data["added"]
-        t = dfs_tree.by_id(dfs_tree.load(new))
-        self.assertEqual([(n["title"], n["status"]) for n in t.values()], [("profile it", "open"), ("add the cache", "open")])
+        self.assertEqual(dfs_tree.by_id(dfs_tree.load(new)), {})      # no first steps: nodes are added after
         self.assertIn(new, [i["id"] for i in self.call("GET", "/api/state")[1]["items"]])
         self.assertEqual(self.call("POST", "/api/new", dict(name=""))[0], 400)
         self.assertEqual(self.call("POST", "/api/new", dict(name="x", id="W1"))[0], 409)     # taken
-        self.assertEqual(self.call("POST", "/api/new", dict(name="x", todos=[1]))[0], 400)
 
     def test_a_new_task_can_be_a_draft_the_walk_passes_over(self):
         new = self.call("POST", "/api/new", dict(name="Later, maybe", draft=True))[1]["added"]

@@ -301,16 +301,14 @@ class NewTask(InARepo):
     def test_the_next_id_is_one_past_the_highest_and_the_words_go_in_unchanged(self):
         self.write(task())
         self.assertEqual(dfs_tree.next_task_id(), "W2")
-        got = dfs_tree.create_task("  Cache   the lookups ", "Done is: hits above 90%.\nBecause the p99 hurts.", ["- [ ] profile it", "", "add the cache"])
+        got = dfs_tree.create_task("  Cache   the lookups ", "Done is: hits above 90%.\nBecause the p99 hurts.")
         self.assertEqual(got, "W2")
         t = dfs_tree.load("W2")
         self.assertIn("Done is: hits above 90%.\nBecause the p99 hurts.", (self.root / ".dfs" / "items" / "W2.md").read_text())
-        nodes = dfs_tree.by_id(t)
-        self.assertEqual([(n["id"], n["parent"], n["status"]) for n in nodes.values()],
-                         [("W2.1", None, "open"), ("W2.2", "W2.1", "open")])
+        self.assertEqual(dfs_tree.by_id(t), {})       # no first steps: nodes are added after
         self.assertEqual(dfs_tree.next_task_id(), "W3")
 
-    def test_a_task_with_no_todos_and_no_goal_is_still_a_task(self):
+    def test_a_task_with_no_goal_is_still_a_task(self):
         got = dfs_tree.create_task("Just a name")
         self.assertIn("Just a name", (self.root / ".dfs" / "items" / (got + ".md")).read_text())
         self.assertEqual(dfs_tree.by_id(dfs_tree.load(got)), {})
