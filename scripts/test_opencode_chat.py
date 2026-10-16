@@ -129,6 +129,16 @@ class OpencodeCrossing(unittest.TestCase):
         self.assertEqual([t for r, t in self.texts() if r == "you"], ["PAGE-ONE", "SCREEN-TWO", "PAGE-THREE"])
         self.assertEqual(self.sessions(), 1, "one session in opencode.db holds the whole conversation")
 
+    def test_a_message_sent_while_the_opening_turn_runs_waits_for_opencode_and_reaches_it(self):
+        self.model.hold = 30            # a slow opening turn, longer than the 25s the typist waits for a prompt
+        relay = self.screen(CHAT_PROMPT="take your time over the summary")
+        relay.send("EARLY-MSG")         # the author types before the summary is done
+        time.sleep(5)
+        self.assertFalse(self.heard("EARLY-MSG"), "nothing is typed into the headless opening turn")
+        self.assertTrue(until(lambda: self.heard("EARLY-MSG"), 120),
+                        "opencode on the screen asked the model with the early message; its screen:\n%s" % ptyrelay.chatlog.screen_text(relay.tail))
+        self.assertTrue(until(lambda: ("you", "EARLY-MSG") in self.texts(), 20), "and the page reads it from the same session")
+
     def test_a_conversation_the_screen_began_is_read_and_continued_by_the_page(self):
         self.assertEqual(dfs_chat.claim("project", "opencode"), ("", False))
         relay = self.screen()

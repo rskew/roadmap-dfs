@@ -35,6 +35,12 @@ READY_TIMEOUT = 25.0
 # again", which writes the person's settings.
 READY = {"opencode": "ctrl+p commands"}
 FIRST_LAUNCH = {"codex": ("Trust and continue", (b"\r",)), "kiro": ("Yes, I accept", (b"\x1b[B", b"\r"))}   # the keys go one at a time
+# A new codex, opencode or kiro chat runs its opening turn headless (run.sh) before it execs the
+# interactive agent, saying so on either side. Nothing reads the terminal during that turn, which
+# takes as long as the summary does, so a message waits for the line that opens the interactive
+# session and for the agent to draw itself after it, however long that is.
+OPENING = b"running its opening turn first"
+OPENED = b"opening an interactive"
 MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004)      # private modes the terminal is brought in step with
 _MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
 TAIL = 16384                # bytes of the agent's last output kept, for the log
@@ -87,6 +93,8 @@ class Relay:
         self.attached = False
         self.closing = False
         self.started = self.first_out = self.last_out = 0.0
+        self.opening = False        # run.sh is running the chat's headless opening turn: no agent to type into yet
+        self._seam = b""            # the end of the last read, for a marker that straddles two
         self.outbox = queue.Queue()
         self.typed = False          # a message has gone in: the agent's start-up is behind it
         self.answered = False       # its first-launch question has been answered
@@ -157,6 +165,7 @@ class Relay:
             self.tail += data
             del self.tail[:-TAIL]
             self._follow_modes(data)
+            self._follow_opening(data)
             if self.attached and self.out_fd is not None:
                 _try(os.write, self.out_fd, data)
         with self.lock:
@@ -173,6 +182,20 @@ class Relay:
             "%ds since its last output" % (time.time() - self.last_out) if self.last_out else "no output",
             " (closed)" if self.why == "closed" else " (closed: %s)" % self.why if self.why else " (nobody closed it)"),
             chatlog.screen_text(self.tail))
+
+    def _follow_opening(self, data):
+        """Note when run.sh starts its headless opening turn and when it hands over to the
+        interactive agent. That agent has not drawn anything yet, so what run.sh printed does not
+        count as it being up: `first_out` waits for the agent's own first output."""
+        seen = self._seam + data
+        self._seam = seen[-len(OPENING):]
+        if OPENING in seen:
+            self.opening = True
+        at = seen.rfind(OPENED)
+        if self.opening and at >= 0:
+            self.opening = False
+            if b"\x1b" not in seen[at:]:
+                self.first_out = 0.0
 
     def _watch(self):
         """Say so in the log when a message has gone in and the agent then says nothing for STALL
@@ -263,7 +286,7 @@ class Relay:
         """Whether the agent is at its prompt: it has settled, and shows what its prompt screen does
         (READY), after any first-launch question has been answered (FIRST_LAUNCH). Only until the
         first message is typed: after that quiet is all there is to go on."""
-        if not self.first_out or time.time() - self.last_out < QUIET:
+        if self.opening or not self.first_out or time.time() - self.last_out < QUIET:
             return False
         if self.typed:
             return True
@@ -289,6 +312,8 @@ class Relay:
             waited, stops = time.time(), self.stops
             end = waited + READY_TIMEOUT      # not before the agent has drawn itself and settled
             while self.live and time.time() < end and not self._ready():
+                if self.opening:
+                    end = time.time() + READY_TIMEOUT       # the opening turn is not the agent being slow
                 time.sleep(0.1)
             with self.lock:
                 fd = self.fd
