@@ -723,10 +723,14 @@ const FLOWS = {
       const g = [...document.querySelectorAll("[data-grip]")].map(e => e.getBoundingClientRect()).filter(r => r.top > 250 && r.bottom < innerHeight - 130).pop();
       return { x: g.left + g.width / 2, y: g.top + g.height / 2, under: document.querySelector("#walkbox").getBoundingClientRect().bottom + 8, at: scrollY };
     });
+    await page.evaluate(() => document.addEventListener("pointerdown", e => { window.dragPointer = e.pointerId; }, { once: true, capture: true }));
     await page.mouse.move(drag.x, drag.y); await page.mouse.down(); await page.mouse.move(drag.x, drag.under, { steps: 4 });
     await page.waitForTimeout(400);
     const up = await page.evaluate(() => scrollY);
-    await page.mouse.move(drag.x, drag.y, { steps: 4 }); await page.mouse.up();
+    // Cancel the drag rather than release it: the list has scrolled, so a release is a real drop, which writes the fixture's order
+    // and makes the page redraw (replacing the focused control) a second later, in the middle of the Tab loops that follow.
+    await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: window.dragPointer, bubbles: true })));
+    await page.mouse.up();
     assert(up < drag.at - 50, `${name}: held just under the Walk box, a dragged row scrolls the list up (${drag.at} to ${up})`);
     // Still in reorder mode: a grip and a Move-out button lying just under the box come into view below it, focused as the pad
     // does (focus, then scrollIntoView) and as Shift+Tab does (the browser's own scroll to the control it lands on). Each is read
