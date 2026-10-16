@@ -188,6 +188,14 @@ def _raise_blocked(task, text):
     dfs_tree.append_log(task, "raise", [], text)
 
 
+def raise_unmerged(task, error):
+    """The merge of a finished item could not start (`BranchError`: the checkout is on another
+    branch): a raise, so the screen and the web page show it and the task is not done."""
+    _raise_blocked(task, "%s is finished and reviewed, but it was not merged: %s. Put the "
+                         "checkout right and run the chain again, or tell me to leave the "
+                         "branch unmerged." % (task, error))
+
+
 def _rebase(task, wt, name):
     """Replay the branch's commits on the default branch, in the worktree, so the merge
     that follows is a plain `--no-ff` of a branch that starts at the default branch's tip.
@@ -296,9 +304,7 @@ def main(argv):
         except BranchError as e:
             # Only the author can settle it (the checkout is on another branch): a raise.
             print("dfs_branch: %s" % e, file=sys.stderr)
-            _raise_blocked(argv[2], "%s is finished and reviewed, but it was not merged: %s. Put the "
-                                    "checkout right and run the chain again, or tell me to leave the "
-                                    "branch unmerged." % (argv[2], e))
+            raise_unmerged(argv[2], e)
             return MERGE_EXIT["blocked"]
         print("dfs_branch: %s: %s" % (argv[2], {
             "merged": "dfs/%s merged into %s, its worktree removed" % (argv[2], dfs_paths.branch()),

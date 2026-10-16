@@ -315,6 +315,18 @@ class Chain(unittest.TestCase):
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
         self.assertTrue(self.log("accept"))
 
+    def test_the_authors_accept_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
+        self.run_chain("work,confirm", cap=2)
+        self.git("checkout", "-q", "-b", "elsewhere")
+        r = subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                           cwd=self.root, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.log("raise")), 1)
+        self.assertIn("was not merged", self.log("raise")[0]["body"])
+        self.assertTrue(self.wt.exists())
+        self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "blocked")
+
     def test_the_sessions_are_told_their_paths_from_the_worktree(self):
         self.run_chain("work", cap=1)
         self.assertEqual(Path((self.aside / "kinds.cwd").read_text().strip()), self.wt.resolve())

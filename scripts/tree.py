@@ -616,7 +616,8 @@ def append_log(task, kind, args=(), body=""):
     if kind == "accept":
         # The author taking the finished tree is as good as a passing review: the item's
         # branch, if it has one, goes into the default branch. A merge that cannot go
-        # through leaves the accept written and the branch where it is.
+        # through leaves the accept written and the branch where it is, with an open node
+        # or a raise saying why, so the task is not done (`run.sh` does the same).
         import branch as dfs_branch
         try:
             result = dfs_branch.merge(task)
@@ -625,6 +626,7 @@ def append_log(task, kind, args=(), body=""):
                       file=sys.stderr)
         except dfs_branch.BranchError as e:
             print("dfs_tree: %s was accepted but not merged: %s" % (task, e), file=sys.stderr)
+            dfs_branch.raise_unmerged(task, e)
     return ts
 
 
