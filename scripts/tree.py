@@ -742,6 +742,12 @@ def _retire(task, dest, verb):
                          % (task, verb, dfs_paths.rel(dfs_paths.state() / "archive")))
     state = dfs_paths.state()
     wt = dfs_paths.worktree(task)
+    if wt:
+        import branch as dfs_branch
+        try:
+            dfs_branch.keep_leftover_work(task)
+        except dfs_branch.BranchError as e:
+            raise ValueError(str(e))
     # A worked task's live files are its worktree's; the main checkout holds a stale copy
     # of them, or none when the task was never committed there. The worktree's win.
     moves, stale = {}, []
@@ -761,7 +767,6 @@ def _retire(task, dest, verb):
     for src in stale:
         shutil.rmtree(src) if src.is_dir() else src.unlink()
     if wt:
-        import branch as dfs_branch
         dfs_branch.release(task)
     text = dfs_order.read_text()
     left = dfs_order.removed(dfs_order.nodes_of(text), task)

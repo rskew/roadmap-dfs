@@ -326,10 +326,38 @@ def merge(task):
     return "merged"
 
 
+def keep_leftover_work(task):
+    """Keep what the task's worktree holds uncommitted before it is removed (`release`'s
+    `--force` would drop it): the untracked files in its `.dfs/artefacts`, the author's
+    attachments and the pages a session made, are copied back to this checkout's, where an
+    unworked task keeps them, and everything else is committed onto `dfs/<task>`, which
+    `release` then keeps as `dfs-deleted/<task>`. BranchError when git refuses the commit,
+    so the delete can be refused with the worktree untouched."""
+    wt = dfs_paths.worktree(task)
+    if not wt:
+        return
+    art = "%s/artefacts" % dfs_paths.STATE_DIR_NAME
+    r = _git("status", "--porcelain", "-z", "--untracked-files=all", "--", art, cwd=wt)
+    for entry in r.stdout.split("\0"):
+        if entry.startswith("?? "):
+            src, dst = wt / entry[3:], dfs_paths.work_root() / entry[3:]
+            if not dst.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+    _git("add", "-A", cwd=wt)
+    if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
+        r = _git(*_identity(), "commit", "-q", "-m",
+                 "%s: work left in its worktree when the task was deleted" % task, cwd=wt)
+        if r.returncode != 0:
+            raise BranchError("what %s's worktree holds could not be kept on %s: %s" %
+                              (task, dfs_paths.item_branch(task), out_of(r).strip()))
+
+
 def release(task):
     """Let go of a deleted task's worktree and branch: remove the worktree (its task files
-    have been moved out) and rename `dfs/<task>` to `dfs-deleted/<task>` rather than delete
-    it, so the commits it holds stay reachable. A failure is said on stderr."""
+    have been moved out, and `keep_leftover_work` has kept the rest) and rename
+    `dfs/<task>` to `dfs-deleted/<task>` rather than delete it, so the commits it holds stay
+    reachable. A failure is said on stderr."""
     wt, name = dfs_paths.worktree(task), dfs_paths.item_branch(task)
     steps = []
     if wt:

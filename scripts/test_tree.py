@@ -1296,6 +1296,42 @@ class Branches(InARepo):
         self.assertIn("branch copy", (gone / "W1.md").read_text())   # the worktree's copy, not main's stale one
         self.assertFalse((self.root / ".dfs/items/W1.md").exists())
 
+    def test_deleting_a_worked_task_keeps_what_its_worktree_held_uncommitted(self):
+        wt = self.worktree()
+        name = "0a1b2c3d-0000-4000-8000-000000000004.png"
+        (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs/artefacts" / name).write_bytes(b"png")
+        dfs_tree.add_node("W1", "look", None, "See ![x](.dfs/artefacts/%s)" % name)
+        self.assertTrue((wt / ".dfs/artefacts" / name).is_file())
+        (wt / "app.txt").write_text("a session's edit\n")
+        (wt / "new.txt").write_text("a session's new file\n")
+        dfs_tree.delete_task("W1")
+        self.assertFalse(wt.exists())
+        # the attachment the archived task file names is back where an unworked task keeps it
+        self.assertEqual((self.root / ".dfs/artefacts" / name).read_bytes(), b"png")
+        self.assertIn(name, (self.root / ".dfs/archive/deleted/items/W1.md").read_text())
+        # the edits are a commit on the set-aside branch
+        self.assertEqual(self.git("show -s --format=%s dfs-deleted/W1").stdout.strip(),
+                         "W1: work left in its worktree when the task was deleted")
+        self.assertEqual(self.git("show dfs-deleted/W1:app.txt").stdout, "a session's edit\n")
+        self.assertEqual(self.git("show dfs-deleted/W1:new.txt").stdout, "a session's new file\n")
+
+    def test_a_worked_task_whose_leftover_work_cannot_be_kept_is_not_deleted(self):
+        wt = self.worktree()
+        (wt / "app.txt").write_text("a session's edit\n")
+        hook = self.root / ".git/hooks/pre-commit"
+        hook.parent.mkdir(exist_ok=True)
+        hook.write_text("#!/bin/sh\necho refused >&2\nexit 1\n")
+        hook.chmod(0o755)
+        if subprocess.run([str(hook)], capture_output=True).returncode != 1:
+            self.skipTest("the temp directory is mounted noexec")
+        with self.assertRaises(ValueError) as cm:
+            dfs_tree.delete_task("W1")
+        self.assertIn("could not be kept", str(cm.exception))
+        self.assertTrue(wt.exists())
+        self.assertTrue(dfs_tree.exists("W1"))
+        self.assertEqual((wt / "app.txt").read_text(), "a session's edit\n")
+
     def test_an_item_branch_writes_plain_ids_into_the_top_level_file(self):
         self.switch("checkout -qb dfs/W1")
         self.assertEqual(dfs_paths.branch_tag(), "")
