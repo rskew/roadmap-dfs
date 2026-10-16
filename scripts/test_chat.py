@@ -401,6 +401,7 @@ class Chat(unittest.TestCase):
                          [("you", "how is it?"), ("agent", "Let me read the tree."), ("agent", "It is open at W1.2."),
                           ("you", "and next?"), ("agent", "W1.3.")])
         self.assertEqual([c["count"] for c in self.chats.list() if c["scope"] == "W1"], [5])
+        self.assertEqual([c["agent"] for c in self.chats.list() if c["scope"] == "W1"], ["codex"])   # the page's list names it
 
     def test_a_conversation_keeps_its_agent_and_a_new_one_takes_the_screens(self):
         Path(dfs_chat.agent_file()).parent.mkdir(parents=True, exist_ok=True)

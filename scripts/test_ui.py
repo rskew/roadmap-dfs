@@ -156,6 +156,9 @@ class Flows(unittest.TestCase):
     def test_the_chats_top_button_goes_to_the_top_of_the_message_being_read(self):
         self.flow("chat_top")
 
+    def test_a_chat_names_the_agent_it_runs_under_in_its_header_and_in_the_list(self):
+        self.flow("chat_agent")
+
     def test_the_chat_follows_a_reader_near_its_end_or_just_after_sending_and_no_one_else(self):
         self.flow("chat_follow")
 

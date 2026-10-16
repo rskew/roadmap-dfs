@@ -266,6 +266,27 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A chat names the agent it runs under, in its header and in the list of chats.
+  async chat_agent(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: "W81.10 is open." }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "codex" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    await page.route("**/api/chats", r => r.fulfill({ contentType: "application/json", body: JSON.stringify({ chats: [{ scope: "W9", count: 2, role: "agent", last: "W81.10 is open.", updated: Date.now() / 1000, live: false, busy: false, agent: "codex" }] }) }));
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    same(await page.$eval("#chat-agent", e => e.hidden ? "" : e.textContent), "codex", "the chat's header names the agent it runs under");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    state.agent = "";
+    await page.click("[data-act=chatclose]"); await page.click("#tabs [data-act=chat]");
+    await page.waitForFunction(() => document.querySelector("#chat-agent").hidden);
+    await page.click("[data-act=chatclose]");
+    await page.evaluate(() => { location.hash = "#/chats"; });
+    await page.waitForSelector(".chatrow");
+    assert((await page.$eval(".chatrow .meta", e => e.textContent)).includes("codex"), "the list of chats names each agent");
+    same(errors, [], "no page errors");
+  },
+
   // The chat's Top button goes to the top of the message being read, and on again to the one before.
   async chat_top(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });

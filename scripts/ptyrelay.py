@@ -55,8 +55,16 @@ def _try(fn, *a):
         return None
 
 
+# The keys that stop an answer in each agent's terminal, checked against the real TUIs (claude,
+# codex and kiro stop on one Esc: a second would open codex's "edit previous message"; opencode
+# arms on the first, shows "esc again to interrupt", and stops on the second).
+INTERRUPT = {"opencode": (b"\x1b", b"\x1b")}
+INTERRUPT_GAP = 0.3
+
+
 class Relay:
-    def __init__(self, log=None):
+    def __init__(self, log=None, agent="claude"):
+        self.agent = agent
         self.log = log or (lambda text, detail="": None)    # the chat's record: chatlog.log, bound to a scope
         self.tail = bytearray()     # the last TAIL bytes the agent wrote
         self.typed_at = 0.0         # when the last message went in, until the quiet after it is logged
@@ -218,7 +226,7 @@ class Relay:
 
     def interrupt(self):
         """Stop what the agent is answering, as pressing Esc in its terminal does: messages still
-        waiting to be typed are dropped, then ESC is written to it. Returns how many messages were
+        waiting to be typed are dropped, then the agent's interrupt keys (ESC; twice for opencode) are written to it. Returns how many messages were
         dropped untyped, or None if it is not running."""
         with self.lock:
             if not self.live:
@@ -232,8 +240,12 @@ class Relay:
                     break
             self.typed_at = 0.0
             self.stops += 1
-            _try(os.write, self.fd, b"\x1b")
-        self.log("interrupt: ESC sent%s" % (", %d unsent message(s) dropped" % dropped if dropped else ""))
+            keys = INTERRUPT.get(self.agent, (b"\x1b",))
+            for i, key in enumerate(keys):
+                if i:
+                    time.sleep(INTERRUPT_GAP)
+                _try(os.write, self.fd, key)
+        self.log("interrupt: %s sent%s" % ("ESC" if len(keys) == 1 else "ESC x%d" % len(keys), ", %d unsent message(s) dropped" % dropped if dropped else ""))
         return dropped
 
     def _typist(self):
@@ -351,13 +363,14 @@ class ChatHost:
             r = self.relays.get(scope)
         return r if r is not None and r.live else None
 
-    def ensure(self, scope, make):
-        """The running chat for `scope`, started by `make()` -> (argv, env, cwd) if there is none."""
+    def ensure(self, scope, make, agent="claude"):
+        """The running chat for `scope`, started by `make()` -> (argv, env, cwd) if there is none.
+        `agent` is the one it runs, which says how it is interrupted."""
         with self.lock:
             r = self.relays.get(scope)
             if r is None or not r.live:
                 argv, env, cwd = make()
-                r = self.relays[scope] = Relay(lambda t, d="": self.log(scope, t, d)).start(argv, env=env, cwd=cwd)
+                r = self.relays[scope] = Relay(lambda t, d="": self.log(scope, t, d), agent).start(argv, env=env, cwd=cwd)
             return r
 
     def close(self, scope, wait=False, why="closed"):

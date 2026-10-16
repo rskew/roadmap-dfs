@@ -7,6 +7,9 @@ it prints are its own, which is what the chat reads.
     with FakeKiroModel(say="It has one file.") as model:
         env = model.env()          # the variables to run kiro-cli under
 
+A message that asks to "take your time" is answered in two parts with `hold` seconds between them
+(or until `release` is set), so a turn can be interrupted while it is still answering.
+
 A message that asks to "use a tool" is answered with a `list_directory` call first, and the
 tool's result with `say`, as a model that uses a tool does.
 """
@@ -15,6 +18,8 @@ import json
 import struct
 import threading
 import zlib
+
+from test_agent_models import wait_or_hang_up
 
 MODEL = {"modelId": "fake-model", "modelName": "Fake", "description": "a stand-in", "rateMultiplier": 1.0,
          "rateUnit": "Credit", "tokenLimits": {"maxInputTokens": 200000, "maxOutputTokens": 8000},
@@ -42,6 +47,9 @@ METERING = event("meteringEvent", {"unit": "credit", "unitPlural": "credits", "u
 class FakeKiroModel:
     def __init__(self, say="hello from the fake model"):
         self.say = say
+        self.hold = 30              # seconds a "take your time" answer waits between its parts
+        self.release = threading.Event()
+        self.cancelled = threading.Event()      # kiro hung up on a slow answer: it was interrupted
         self.requests = []          # (x-amz-target, body) of each call kiro made
         model = self
 
@@ -53,9 +61,26 @@ class FakeKiroModel:
                 if target.endswith("ListAvailableModels"):
                     self.reply("application/x-amz-json-1.0", json.dumps({"models": [MODEL], "defaultModel": MODEL}).encode())
                 elif target.endswith("GenerateAssistantResponse"):
-                    self.reply("application/vnd.amazon.eventstream", model.generate(json.loads(body)))
+                    request = json.loads(body)
+                    if "take your time" in request["conversationState"]["currentMessage"]["userInputMessage"].get("content", ""):
+                        return self.slowly(request)
+                    self.reply("application/vnd.amazon.eventstream", model.generate(request))
                 else:
                     self.reply("text/plain", b"", 404)
+
+            def slowly(self, request):
+                self.send_response(200)
+                self.send_header("content-type", "application/vnd.amazon.eventstream")
+                self.end_headers()                  # no length: the body ends when the connection does
+                try:
+                    self.wfile.write(event("assistantResponseEvent", {"content": "Starting. "}))
+                    self.wfile.flush()
+                    if wait_or_hang_up(model, self.connection):
+                        return
+                    self.wfile.write(event("assistantResponseEvent", {"content": model.say}) + METERING
+                                     + event("metadataEvent", {"stopReason": "end_turn"}))
+                except OSError:
+                    model.cancelled.set()           # kiro hung up: it was interrupted
 
             def reply(self, kind, data, status=200):
                 self.send_response(status)

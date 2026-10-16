@@ -4151,7 +4151,7 @@ class UI(WalkMixin):
         number can be going: the page types into them, `c` looks at one. A new one opens with
         the summary (run.sh); one with a conversation already is resumed."""
         argv = self.runner("--chat", scope)
-        return self.chats_running().ensure(scope, lambda: (argv, self.chat_env(scope) or dict(os.environ), ROOT))
+        return self.chats_running().ensure(scope, lambda: (argv, self.chat_env(scope) or dict(os.environ), ROOT), agent=self.agent)
 
     def open_chat(self, scope):
         """What `c` and `C` do: look at this scope's chat, running it first if it is not.

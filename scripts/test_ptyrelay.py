@@ -99,6 +99,18 @@ class Background(unittest.TestCase):
         r.send("x")
         self.assertTrue(until(lambda: "c:x" in self.lines()), "and it still hears what is sent next")
 
+    def test_opencode_is_interrupted_by_two_escapes_and_the_others_by_one(self):
+        agent = r'''echo ready; while IFS= read -rsn1 c; do if [ "$c" = $'\e' ]; then echo esc >> "$LOG"; fi; done'''
+        for name, presses in (("claude", 1), ("codex", 1), ("kiro", 1), ("opencode", 2)):
+            self.log.write_text("")
+            r = ptyrelay.Relay(agent=name).start(["bash", "-c", agent], env=self.env)
+            self.addCleanup(r.close)
+            self.assertTrue(until(lambda: r.first_out))
+            r.interrupt()
+            self.assertTrue(until(lambda: self.lines() == ["esc"] * presses), name)
+            time.sleep(0.6)
+            self.assertEqual(self.lines(), ["esc"] * presses, "%s: no more than it takes" % name)
+
     def test_interrupt_drops_a_message_that_has_not_been_typed(self):
         agent = r'''sleep 1.5; echo ready; while IFS= read -rsn1 c; do echo "c:$c" >> "$LOG"; done'''
         r = ptyrelay.Relay().start(["bash", "-c", agent], env=self.env)

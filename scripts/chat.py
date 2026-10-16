@@ -684,7 +684,7 @@ class Chats:
             last = messages[-1] if messages else dict(role="", text="")
             updated = transcript_mtime(sid, agent) or p.stat().st_mtime
             out.append(dict(scope=scope, count=len(messages), role=last["role"], last=last["text"][:160],
-                            updated=updated, live=live, busy=busy))
+                            updated=updated, live=live, busy=busy, agent=agent))
         return sorted(out, key=lambda c: -c["updated"])
 
     def clear(self, scope):
