@@ -1320,6 +1320,22 @@ class Branches(InARepo):
         self.assertIn("branch copy", (gone / "W1.md").read_text())   # the worktree's copy, not main's stale one
         self.assertFalse((self.root / ".dfs/items/W1.md").exists())
 
+    def test_deleting_a_worked_task_of_a_gitignored_roadmap_moves_the_one_shared_file(self):
+        (self.root / ".gitignore").write_text(".dfs/\n")
+        self.git("rm -r -q --cached .dfs")
+        self.git("add .gitignore")
+        self.git("commit -qm ignore")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W1"], cwd=self.root,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        wt = dfs_paths.worktree("W1")
+        self.assertTrue((wt / ".dfs/items").is_symlink())
+        self.assertEqual(dfs_tree.delete_task("W1"), ["items/W1.md"])
+        self.assertFalse(wt.exists())
+        self.assertFalse(dfs_tree.exists("W1"))
+        self.assertTrue((self.root / ".dfs/archive/deleted/items/W1.md").is_file())
+        self.assertEqual(self.git("rev-parse --verify -q dfs-deleted/W1").returncode, 0)
+
     def test_deleting_a_worked_task_keeps_what_its_worktree_held_uncommitted(self):
         wt = self.worktree()
         name = "0a1b2c3d-0000-4000-8000-000000000004.png"

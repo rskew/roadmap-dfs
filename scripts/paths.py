@@ -566,6 +566,11 @@ def ignored() -> bool:
     ignore rule was added cannot answer for the new ones, which are what a session
     writes. False outside git.
     """
+    if state().is_symlink() or (state() / "items").is_symlink():
+        # An item worktree of an ignored roadmap shares the main checkout's planning files
+        # through links (`branch.share_ignored_state`), and git refuses to check a path
+        # beyond a link: only an ignored roadmap is ever linked, so this is the answer.
+        return True
     probe = "%s/items/W0.md" % STATE_DIR_NAME
     return _git("check-ignore", "-q", probe).returncode == 0
 

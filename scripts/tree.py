@@ -745,12 +745,13 @@ def _retire(task, dest, verb):
             raise ValueError(str(e))
     # A worked task's live files are its worktree's; the main checkout holds a stale copy
     # of them, or none when the task was never committed there. The worktree's win.
-    moves, stale = {}, []
+    moves, stale, seen = {}, [], set()
     for base_state in ([wt / dfs_paths.STATE_DIR_NAME] if wt else []) + [state]:
         for sub in ("items", "archive/items"):
             base = base_state / sub
             for src in [base / ("%s.md" % task), base / task]:
-                if src.exists():
+                if src.exists() and src.resolve() not in seen:   # a gitignored roadmap's worktree links to ours
+                    seen.add(src.resolve())
                     dst = dest / ("items" if sub == "items" else "archive") / src.relative_to(base)
                     if dst in moves:
                         stale.append(src)

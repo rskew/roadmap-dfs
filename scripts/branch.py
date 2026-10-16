@@ -14,10 +14,11 @@ worktree").
                                                # branch, merge, drop the worktree
 
 `enter` cuts the branch and the worktree on the task's first run and reuses them
-after. It leaves the chain where it is, printing nothing, when the roadmap is
-gitignored (no task file is committed, so there is nothing for a branch to carry),
-when the checkout is not on the default branch (a tagged branch writes its own part;
-an item branch is already the place), and outside git.
+after. A gitignored roadmap is in no commit, so the worktree is given links to the main
+checkout's ignored planning files (`share_ignored_state`) and both read the one copy. It
+leaves the chain where it is, printing nothing, when the checkout is not on the default
+branch (a tagged branch writes its own part; an item branch is already the place), when no
+commit exists yet, and outside git.
 """
 import os
 import shutil
@@ -108,31 +109,65 @@ def carry_named_attachments(task, wt):
     return dfs_tree.carry_attachments(task, "\n".join(texts))
 
 
-def keep_worktrees_untracked():
-    """Make git ignore `.dfs/worktrees`, in `.git/info/exclude` when no ignore file does:
-    a roadmap started before worktrees has no `worktrees/` line in `.dfs/.gitignore`, and
-    this is local, so it dirties nothing the author would commit."""
-    probe = "%s/worktrees/x" % dfs_paths.STATE_DIR_NAME
-    if _git("check-ignore", "-q", probe).returncode == 0:
-        return
+def _exclude(line):
+    """Append `line` to `.git/info/exclude`: git's local ignore list, which dirties nothing
+    the author would commit."""
     common = _git("rev-parse", "--git-common-dir").stdout.strip()
     exclude = (dfs_paths.work_root() / common / "info" / "exclude")
     exclude.parent.mkdir(parents=True, exist_ok=True)
     with open(exclude, "a") as fh:
-        fh.write("/%s/worktrees/\n" % dfs_paths.STATE_DIR_NAME)
+        fh.write(line + "\n")
+
+
+def keep_worktrees_untracked():
+    """Make git ignore `.dfs/worktrees`, in `.git/info/exclude` when no ignore file does:
+    a roadmap started before worktrees has no `worktrees/` line in `.dfs/.gitignore`."""
+    probe = "%s/worktrees/x" % dfs_paths.STATE_DIR_NAME
+    if _git("check-ignore", "-q", probe).returncode != 0:
+        _exclude("/%s/worktrees/" % dfs_paths.STATE_DIR_NAME)
+
+
+def share_ignored_state(wt):
+    """Give the worktree the planning files git does not carry. A gitignored roadmap is in
+    no commit, so the branch's checkout has none of it: each entry of this checkout's
+    `.dfs` that git ignores and `wt` lacks (`items`, `archive`, `artefacts`, `runs` …, never
+    `worktrees`) is linked into the worktree's `.dfs`, so a session there reads and writes
+    the one copy the screen and the web page read. Returns the names linked."""
+    s = dfs_paths.STATE_DIR_NAME
+    here, there = dfs_paths.state(), wt / s
+    linked = []
+    if not here.is_dir():
+        return linked
+    there.mkdir(exist_ok=True)
+    for entry in sorted(here.iterdir()):
+        dest = there / entry.name
+        rel = "%s/%s" % (s, entry.name)
+        if entry.name == "worktrees" or dest.exists() or dest.is_symlink():
+            continue
+        if _git("check-ignore", "-q", rel).returncode != 0:
+            continue
+        os.symlink(os.path.relpath(entry, there), dest)
+        if _git("check-ignore", "-q", rel, cwd=wt).returncode != 0:
+            _exclude("/" + rel)   # `items/` matches a directory, and a link is not one
+        linked.append(entry.name)
+    return linked
 
 
 def enter(task):
     """The worktree `task` is worked in, cut on the first call; None to work where we are:
-    the roadmap is ignored, the checkout is off the default branch, or no commit exists yet
-    for a branch to start from."""
-    if dfs_paths.ignored() or dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
+    the checkout is off the default branch, or no commit exists yet for a branch to start
+    from. A gitignored roadmap is worked in a worktree too, with its planning files shared
+    (`share_ignored_state`)."""
+    if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
         return None
     if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
         return None
     wt = dfs_paths.worktrees() / task
     name = dfs_paths.item_branch(task)
+    ignored = dfs_paths.ignored()
     if dfs_paths.worktree(task):
+        if ignored:
+            share_ignored_state(wt)
         return wt
     fresh = not _has_branch(name)
     _git("worktree", "prune")   # a worktree deleted by hand stays registered, and blocks the add
@@ -142,6 +177,8 @@ def enter(task):
     r = _git(*args)
     if r.returncode != 0:
         raise BranchError("cannot work %s in a worktree on %s: %s" % (task, name, r.stderr.strip()))
+    if ignored:
+        share_ignored_state(wt)
     if fresh:
         moved = carry_uncommitted(task, wt)
         if moved:
@@ -179,7 +216,10 @@ def _identity():
 
 
 def _commit_task_files(task, wt, what):
-    """Commit the task's own files left uncommitted in its worktree onto its branch."""
+    """Commit the task's own files left uncommitted in its worktree onto its branch. None
+    to commit when the roadmap is gitignored: they are linked in, not the branch's."""
+    if dfs_paths.ignored():
+        return
     _git("add", "--", *[p for p in task_paths(task) if (wt / p).exists()], cwd=wt)
     if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
         r = _git(*_identity(), "commit", "-q", "-m", "%s: %s" % (task, what), cwd=wt)

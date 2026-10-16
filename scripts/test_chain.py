@@ -79,7 +79,7 @@ case "$recipe" in
   work)    python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n" ;;
   code)    echo "change $n" >> app.txt ;;
   confirm) python3 -c 'import os; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Status: open","Status: confirmed\nDetermination: done.",1))'
-           git add -A && git -c user.name=t -c user.email=t@t commit -qm "W1.1: the step is done" ;;
+           git add -A && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m "W1.1: the step is done" ;;
   raise)   echo "which way?" | $T log W1 raise W1.1 > /dev/null ;;
   ok)      echo "W1.1: re-ran its check; it passes" | $T log W1 critic ok > /dev/null ;;
   okbare)  $T log W1 critic ok < /dev/null > /dev/null ;;
@@ -592,11 +592,48 @@ class Chain(unittest.TestCase):
         self.enter()
         self.assertEqual(self.git("status", "--porcelain"), "")
 
-    def test_a_chain_on_a_gitignored_roadmap_stays_where_it_is(self):
-        # no task file is committed there, so a branch would carry nothing
-        (self.root / ".gitignore").write_text(".dfs/items/\n.dfs/runs/\n")
-        r = self.enter()
-        self.assertEqual((r.stdout.strip(), self.wt.exists()), ("", False))
+    def ignore_roadmap(self, rules=".dfs/\n"):
+        """Make the repo's roadmap gitignored whole, as a project that keeps its planning out
+        of git does: no task file is in any commit."""
+        (self.root / ".gitignore").write_text(rules)
+        self.git("rm", "-r", "-q", "--cached", "--ignore-unmatch", ".dfs")
+        self.git("add", ".gitignore")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore .dfs")
+
+    def test_a_gitignored_roadmap_is_worked_in_a_worktree_that_shares_its_planning_files(self):
+        for rules in (".dfs/\n", ".dfs/items/\n.dfs/runs/\n"):
+            with self.subTest(rules=rules):
+                self.ignore_roadmap(rules)
+                r = self.enter()
+                self.assertEqual((r.stdout.strip(), self.wt.is_dir()), (str(self.wt), True), r.stderr)
+                link = self.wt / ".dfs" / "items"
+                self.assertTrue(link.is_symlink())
+                self.assertEqual(link.resolve(), (self.root / ".dfs" / "items").resolve())
+                self.assertEqual(self.git("status", "--porcelain", cwd=self.wt), "")
+                old = dfs_tree.dfs_paths.work_root
+                dfs_tree.dfs_paths.work_root = lambda: self.wt
+                try:
+                    self.assertTrue(dfs_tree.dfs_paths.ignored())
+                finally:
+                    dfs_tree.dfs_paths.work_root = old
+                subprocess.run(["git", "worktree", "remove", "--force", str(self.wt)], cwd=self.root,
+                               check=True, capture_output=True)
+                self.git("branch", "-D", "dfs/W1")
+                self.assertTrue((self.root / ".dfs" / "items" / "W1.md").is_file())   # the links, not the files, went
+
+    def test_a_chain_on_a_gitignored_roadmap_works_in_the_worktree_and_merges_the_code(self):
+        self.ignore_roadmap()
+        rc, meta, out = self.run_chain("work,fix,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(Path((self.kinds.parent / "kinds.cwd").read_text().strip()), self.wt.resolve())
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("branch", "--list", "dfs/*"), "")
+        self.assertIn("W1: merge the item's branch dfs/W1", self.git("log", "--format=%s", "-3"))
+        self.assertIn("fixed", (self.root / "app.txt").read_text())
+        text = (self.root / ".dfs" / "items" / "W1.md").read_text()
+        self.assertIn("Status: confirmed", text)
+        self.assertIn("· review · ok", text)
+        self.assertEqual(self.git("status", "--porcelain"), "")
 
     def test_a_chain_on_another_branch_stays_where_it_is(self):
         self.git("switch", "-q", "-c", "alt")

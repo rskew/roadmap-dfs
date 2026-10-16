@@ -183,6 +183,11 @@ raise says so), which the runner leaves untouched. The rebase rewrites the
 branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
 by a hash that would dangle once the branch is merged and deleted.
 
+When `.dfs/` is gitignored the worktree is cut all the same. The ignored planning files are in
+no commit, so the worktree's `.dfs/items`, `.dfs/artefacts` and the rest are links to the
+author's checkout, and the task file you write there is the one copy: it is never staged, and
+your node commits carry the code alone (below).
+
 ## When `.dfs/` is gitignored
 
 Supported: `.dfs/` is planning, and git history shows the walk. Your briefing says

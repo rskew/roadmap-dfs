@@ -20,6 +20,7 @@ Usage:
 """
 import hashlib
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -381,10 +382,16 @@ def fingerprint(outside_dfs=False, exclude_runs=True):
         # ⚠️ A gitignored `.dfs` is invisible to both git calls above, so a session
         # that wrote only its task file (evidence so far, a raise) would read as idle.
         # Read from disk instead, `runs/` still left out: the runner writes there.
+        # An item worktree links the main checkout's ignored files in, so links are followed;
+        # `worktrees/` is other checkouts' code, not planning.
         state = dfs_paths.state()
-        for f in sorted(state.rglob("*")) if state.is_dir() else []:
+        found = []
+        for d, dirs, files in os.walk(state, followlinks=True) if state.is_dir() else []:
+            dirs[:] = [x for x in dirs if Path(d, x) != dfs_paths.worktrees()]
+            found += [Path(d, x) for x in files]
+        for f in sorted(found):
             r = f.relative_to(state).as_posix()
-            if not f.is_file() or (exclude_runs and r.startswith("runs/")):
+            if exclude_runs and r.startswith("runs/"):
                 continue
             h.update(("%s/%s" % (dfs_paths.STATE_DIR_NAME, r)).encode())
             try:
