@@ -642,8 +642,8 @@ def next_task_id():
 
 def create_task(name, goal="", task=None, draft=False):
     """Write a new task file: the author's words unchanged and an empty tree (the author adds
-    nodes for explicit steps, and the sessions plan, branch and back up from there). `task` is an id the author chose (letters then
-    a number, tagged here), else the next one. `draft` logs it a draft, which the walk passes
+    nodes for explicit steps, and the sessions plan, branch and back up from there). `task`
+    is an id the author chose (letters then a number, tagged here), else the next one. `draft` logs it a draft, which the walk passes
     over until a `ready` entry (`is_draft`). Returns the id; ValueError says what is wrong."""
     tag = dfs_paths.branch_tag()
     suffix = "@" + tag if tag else ""

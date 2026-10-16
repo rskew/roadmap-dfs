@@ -514,7 +514,7 @@ BACKREF = re.compile(r"^\s*(see|as in|same as|as for|fix what|the other|per|like
 def standalone_notes(task, text, head=None, archive=""):
     """Notes (not violations) on nodes new in `text`, against the standalone rule: an
     Approach that is a pointer ("Fix what W9.6 found", "See W9.6.") or too short to
-    say what to do. A node with no Approach at all is one `--open` wrote and is left
+    say what to do. A node with no Approach at all (one the author added by hand) is left
     alone. Advice only: the guard does not refuse a commit for it."""
     t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
     old = {nd["id"] for nd in dfs_tree.parse(head, task)["nodes"]} if head else set()
