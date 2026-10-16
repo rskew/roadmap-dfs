@@ -264,6 +264,17 @@ class Chain(unittest.TestCase):
         self.assertTrue(self.wt.exists())
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
 
+    def test_a_staged_edit_that_stops_the_merge_is_named_in_the_raise(self):
+        (self.root / "other.txt").write_text("staged\n")
+        self.git("add", "other.txt")
+        head = self.git("rev-parse", "HEAD")
+        rc, meta, out = self.run_chain("code,confirm,rok")
+        self.assertEqual(meta.get("stop"), "blocked", out)
+        body = self.log("raise")[0]["body"]
+        self.assertIn("stop the merge: other.txt", body)
+        self.assertNotIn("overlap", body)
+        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+
     def test_a_review_ok_over_a_dirty_worktree_reopens_the_item_and_is_never_done_unmerged(self):
         rc, meta, out = self.run_chain("work,confirm,rmeddle", cap=3)
         self.assertNotEqual(meta.get("stop"), "done", out)

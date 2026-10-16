@@ -1261,6 +1261,21 @@ class Branches(InARepo):
         self.assertEqual(dfs_tree.task_ids(), ["W1", "W2"])
         self.assertTrue(dfs_tree.exists("W2"))
 
+    def test_the_marks_count_a_worked_tasks_edits_and_commits_in_its_worktree(self):
+        wt = self.worktree()
+        self.git("update-ref refs/remotes/origin/master HEAD")
+        dfs_tree._uncommitted_seen.clear()
+        dfs_tree._unpushed_seen.clear()
+        self.assertEqual(dfs_tree.unpushed(ttl=0), (set(), {}))
+        self.assertEqual(dfs_tree.uncommitted(ttl=0), {})
+        sub = lambda *a: subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a],
+                                        cwd=wt, capture_output=True, text=True, check=True)
+        sub("commit", "-q", "--allow-empty", "-m", "W1.3: done on the branch")
+        (wt / ".dfs/items/W1.md").write_text((wt / ".dfs/items/W1.md").read_text().replace("Make it work.", "Make it fly."))
+        shas, tasks = dfs_tree.unpushed(ttl=0)
+        self.assertEqual((len(shas), tasks), (1, {"W1": 1}))
+        self.assertEqual(dfs_tree.uncommitted(ttl=0), {"W1": "edits"})
+
     def test_deleting_a_worked_task_takes_its_worktree_files_and_frees_its_branch(self):
         wt = self.worktree()
         (wt / ".dfs/items/W1.md").write_text(task(node(1, "confirmed") + node(2, parent=1), "") + "branch copy\n")

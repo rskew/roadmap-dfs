@@ -229,7 +229,7 @@ def _unmerged(task, wt, name, r):
     """A merge git did not complete leaves the default branch as it was, and the item
     open. A conflict is work (the default branch moved after the rebase): the merge is
     aborted and the item reopened as `_reopen` does. A merge git refused before starting,
-    because the author's uncommitted edits here overlap it, is theirs to settle: a raise
+    because the author's uncommitted or staged edits here are in its way, is theirs to settle: a raise
     naming the paths."""
     import tree as dfs_tree
     default = dfs_paths.branch()
@@ -247,10 +247,12 @@ def _unmerged(task, wt, name, r):
                      "a hook refused the merge into %s" % default)
         return "guard"
     out = r.stderr + r.stdout
-    paths = [l.strip() for l in out.splitlines() if l.startswith("\t")]
+    # git lists the paths indented, by a tab when the edits are in the working tree and by
+    # spaces when they are staged.
+    paths = [l.strip() for l in out.splitlines() if l[:1] in ("\t", " ") and l.strip()]
     _raise_blocked(task, (
         "%s is finished and reviewed, but git would not merge %s into %s: %s\n"
-        "Your uncommitted edits in %s overlap the merge: %s.\n"
+        "Your uncommitted edits in %s stop the merge: %s.\n"
         "Options: commit or stash those edits and answer this, after which the chain works the item "
         "again and merges it when the next review passes, or tell me to leave the branch unmerged. "
         "I would commit them.") % (

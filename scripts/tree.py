@@ -1463,8 +1463,26 @@ def unpushed(cwd=None, ttl=5.0):
     """`(shas, {task: count})` for the node commits HEAD has and the default branch on
     origin (`default_ref`) lacks, or None when there is none here to compare with. That
     ref is as last fetched: nothing here touches the network. Kept `ttl` seconds, since
-    the screens ask on every draw and a push moves no file their own caches are keyed by."""
-    key = str(cwd or dfs_paths.work_root())
+    the screens ask on every draw and a push moves no file their own caches are keyed by.
+    Asked of this work root (no `cwd`), it also counts the commits on each item worktree's
+    branch, which the main checkout's HEAD does not hold until the merge."""
+    own = _unpushed_commits(str(cwd or dfs_paths.work_root()), ttl)
+    if own is None:
+        return None
+    found = dict(own)
+    if cwd is None:
+        for s in dfs_paths.worktree_states():
+            found.update(_unpushed_commits(str(s.parent), ttl) or {})
+    tasks = {}
+    for task in found.values():
+        if task:
+            tasks[task] = tasks.get(task, 0) + 1
+    return set(found), tasks
+
+
+def _unpushed_commits(key, ttl):
+    """{sha: task or None} for the commits at `key`'s HEAD that origin's default branch
+    lacks; None when there is nothing to compare with."""
     hit = _unpushed_seen.get(key)
     if hit and time.monotonic() - hit[0] < ttl:
         return hit[1]
@@ -1474,14 +1492,11 @@ def unpushed(cwd=None, ttl=5.0):
         r = base and subprocess.run(["git", "log", "--format=%H%x09%s", "%s..HEAD" % base],
                                     capture_output=True, text=True, cwd=key)
         if r and r.returncode == 0:
-            shas, tasks = set(), {}
+            got = {}
             for line in r.stdout.splitlines():
                 sha, _, subj = line.partition("\t")
-                shas.add(sha)
                 m = re.match(r"^(%s)\.\d+(?:@%s)?:" % (TASK_RE, TAG_RE), subj)
-                if m:
-                    tasks[m.group(1)] = tasks.get(m.group(1), 0) + 1
-            got = (shas, tasks)
+                got[sha] = m.group(1) if m else None
     except OSError:
         pass
     _unpushed_seen[key] = (time.monotonic(), got)
@@ -1518,6 +1533,13 @@ def uncommitted(cwd=None, ttl=5.0):
     runner's own `session` and `end` lines alone make no entry: they are why one chain
     leaves every task it touched differing from HEAD. Empty when `.dfs/` is gitignored
     or there is no git here. Kept `ttl` seconds like `unpushed`."""
+    if cwd is None:     # this work root, and each item worktree's own edits
+        got = dict(uncommitted(dfs_paths.work_root(), ttl))
+        for st in dfs_paths.worktree_states():
+            for task, what in uncommitted(st.parent, ttl).items():
+                if what and got.get(task) != "edits":
+                    got[task] = what
+        return got
     key = str(cwd or dfs_paths.work_root())
     hit = _uncommitted_seen.get(key)
     if hit and time.monotonic() - hit[0] < ttl:
