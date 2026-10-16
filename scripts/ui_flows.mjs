@@ -14,6 +14,8 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
 const within = (p, what, ms = 8000) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`${what}: never happened in ${ms} ms`)), ms))]);
 function same(a, b, msg) { assert(JSON.stringify(a) === JSON.stringify(b), `${msg}: ${JSON.stringify(a)} != ${JSON.stringify(b)}`); }
 // a list render replaces the rows, and a row measured in that instant has no box: ask again
+// The page measures the bar and the Walk box into --bar-h and --pin-h once it has drawn them; the pin flows start from there.
+const pinned = page => page.waitForFunction(() => { const s = document.documentElement.style; return parseFloat(s.getPropertyValue("--bar-h")) > 0 && parseFloat(s.getPropertyValue("--pin-h")) > 0; });
 async function boxOf(page, sel) { for (let i = 0; i < 40; i++) { const e = await page.$(sel); const r = e && await e.boundingBox(); if (r) return r; await page.waitForTimeout(50); } throw new Error("no box for " + sel); }
 
 function chromiumPath() {
@@ -678,7 +680,7 @@ const FLOWS = {
     const ctx = await b.newContext(opts);
     const page = await ctx.newPage(); PAGES.push(page);
     const errors = []; page.on("pageerror", e => errors.push(String(e)));
-    await page.goto(URL_); await page.waitForSelector("#walkbox"); await page.waitForTimeout(600);   // the page draws again when its first polls land; let them
+    await page.goto(URL_); await page.waitForSelector("#walkbox"); await pinned(page);
     assert(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 200), "the task list is taller than the screen");
     const at = () => page.evaluate(() => {
       const bar = document.querySelector("#bar").getBoundingClientRect(), box = document.querySelector("#walkbox").getBoundingClientRect();
@@ -767,7 +769,7 @@ const FLOWS = {
     for (const [name, opts] of [["landscape phone", { viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true }], ["short desktop", { viewport: { width: 1280, height: 500 } }]]) {
       const ctx = await b.newContext(opts);
       const page = await ctx.newPage(); PAGES.push(page);
-      await page.goto(URL_); await page.waitForSelector("#walkbox"); await page.waitForTimeout(600);
+      await page.goto(URL_); await page.waitForSelector("#walkbox"); await pinned(page);
       await page.click("#walkbox summary"); await page.waitForSelector("#nextsel");
       await page.click("[data-act=reorder]"); await page.waitForSelector(".moves");
       const g = await page.evaluate(() => {   // scroll so a grip lies just under the box, and take hold of it there
