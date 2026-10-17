@@ -10,7 +10,9 @@
   option changes in it (docs/artefacts.md, "What an answer page shows"). Show, then
   caption: a drawing the reader switches between options beats paragraphs.
   The answer form at the end is the one shared part. Keep it as it is and edit only its
-  options; it is what posts the author's answer or ruling.
+  options (replace the two placeholder ones: a page that keeps them is refused); it is
+  what posts the author's answer or ruling. The drawing rules (.dg, .box, .link) are in
+  _TEMPLATE.html: copy them if the page draws boxes and arrows.
   SELF-CONTAINED: no CDN, no fonts, no fetch but the form's own to /artefact-state (the
   web page serves the page sandboxed, scripts allowed, the network off).
   MOBILE FIRST: the author reads on a phone. Write the rules for a 360px screen, widen
@@ -81,6 +83,9 @@
   // The page's own script may call dfsAnswer.choose(value) to pick an
   // option from its own controls, define window.dfsPageState() to return what the page
   // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
   //
   // The server this page came from keeps what the reader chose, so the page opens as they
   // left it; it records the answer when an open raise names this page ("Answer with: ...")

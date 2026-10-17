@@ -32,9 +32,12 @@ is an aid, never the carrier.
    phone lays out at 980px), full-width boxes in a column with the arrows pointing down,
    16px body text, buttons, inputs and `<summary>` at least 44px high, no fixed widths and
    no horizontal scroll. A diagram that cannot stack (a grid, a timeline) scrolls inside
-   its own box (`overflow-x: auto`) and says so in its caption. Both templates already
-   do all this.
-4. **State the layout, do not solve it.** Boxes are plain blocks in a flex column, the
+   its own box (`overflow-x: auto`) and says so in its caption. `_TEMPLATE.html` already
+   does all this; `_TEMPLATE_ANSWER.html` does it for the answer form alone, so a page
+   drawn above the form brings its own rules for 360px.
+4. **State the layout, do not solve it.** The drawing's `.dg`, `.box` and `.link` rules
+   are in `_TEMPLATE.html`, not in the answer template: copy them into an answer page that
+   draws boxes and arrows. Boxes are plain blocks in a flex column, the
    arrows are the `.link` rows between them, and a media query turns the column into a
    row. Every box carries `data-node="<name>"`, which is how the checker reports an
    overlap by name rather than as two rectangles.
@@ -113,7 +116,14 @@ note as the answer to an open raise, or with Confirm or Refute as the ruling on 
 and keeps both so the page reopens as the author left it. The page's own script may call
 `dfsAnswer.choose(<value>)` so its option buttons pick the answer too, define
 `window.dfsPageState()` to keep its own state, and listen for the `dfs-state` event,
-whose `detail` is that state when the page reopens.
+whose `detail` is that state when the page reopens. A control that changes the page's
+state without picking an option (a toggle, a slider) calls `dfsAnswer.keep()`, or nothing
+is saved. The form's script runs after the page's own, so `window.dfsAnswer` does not
+exist yet while that runs: call it from a handler, or guard with `if (window.dfsAnswer)`.
+Every id in the form starts with `dfs-`, so the page may use any id of its own. A raise
+that names a page still carrying the template's placeholder options ("Take the first
+option: ...") is refused, as is a Hypothesis's, since the author would send one as the
+answer.
 
 `check.py` tests that the page exists, has a control (`<input>`, `<button>`, `<select>`,
 `<textarea>` or `<details>`), has a handler (`addEventListener` or an `onclick`-style

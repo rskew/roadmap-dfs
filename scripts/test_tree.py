@@ -405,6 +405,8 @@ class Check(InARepo):
                      "{body: JSON.stringify({answer: 'x'})})</script>",
                      "<button onclick=\"go()\">x</button><script>({verdict: 'refuted'})</script>"):
             self.assertIn("cannot rule on its node", self.assumed(hyp(art), pages={"a1.html": page}), page)
+        self.assertIn("placeholder options", self.assumed(
+            hyp(art), pages={"a1.html": self.PAGE + '<input type="radio" value="Take the first option: what it commits the work to.">'}))
         self.assertIn("names no artefact", self.assumed(hyp(".dfs/artefacts/../x.html")))
         # a sentence's full stop after the name is not part of it; a longer name is another file
         self.assertEqual(self.assumed(hyp(art + "."), pages={"a1.html": self.PAGE}), "")

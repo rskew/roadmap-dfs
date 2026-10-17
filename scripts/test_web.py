@@ -365,6 +365,11 @@ class Web(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "needs a form"):
             dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/noform.html")
         dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/0a1b2c.html")
+        # The template's own options are placeholders: the author would send one as their answer.
+        shutil.copy(Path(__file__).resolve().parent.parent / "templates" / "_TEMPLATE_ANSWER.html",
+                    self.root / ".dfs" / "artefacts" / "tpl.html")
+        with self.assertRaisesRegex(ValueError, "placeholders"):
+            dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/tpl.html")
 
     def test_a_raise_cannot_name_an_answering_page_that_does_not_exist(self):
         with self.assertRaises(ValueError):

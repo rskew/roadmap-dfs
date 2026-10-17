@@ -596,6 +596,15 @@ HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|to
                      r"pointer\w+|mouse\w+|focus|select)\s*=", re.I)
 
 
+# The template's own options ("Take the first option: ..."): a page that still carries them
+# would send the author a placeholder as their answer.
+PLACEHOLDER_OPTION = re.compile(r"value=\"Take the (?:first|second) option: what it commits the work to\.\"")
+
+
+def has_placeholder_option(page):
+    return bool(PLACEHOLDER_OPTION.search(page))
+
+
 def can_answer(page):
     """Whether a page has a form that records an answer to a raise: a control, a handler,
     and the route and field the answer is posted with."""
@@ -612,6 +621,10 @@ def append_log(task, kind, args=(), body=""):
     if page and not dfs_paths.artefact_file(page).is_file():
         raise ValueError("the raise says to answer with %s, which is not in %s"
                          % (page, dfs_paths.rel(dfs_paths.artefacts())))
+    if page and has_placeholder_option(dfs_paths.artefact_file(page).read_text(errors="replace")):
+        raise ValueError("the raise says to answer with %s, whose options are still the template's "
+                         "placeholders (\"Take the first option: ...\"): write the options as the "
+                         "decisions the author chooses between" % page)
     if page and not can_answer(dfs_paths.artefact_file(page).read_text(errors="replace")):
         raise ValueError("the raise says to answer with %s, which cannot answer: the page needs a form, "
                          "a control and a handler that POSTs {answer: <text>} to "

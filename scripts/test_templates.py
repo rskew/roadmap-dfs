@@ -44,6 +44,9 @@ class MobileFirst(unittest.TestCase):
         import tree as dfs_tree
         self.assertTrue(dfs_check.can_rule(page), "what check.py demands of a Hypothesis's page")
         self.assertTrue(dfs_tree.can_answer(page), "what a raise's answering page must do")
+        self.assertTrue(dfs_tree.has_placeholder_option(page), "the template's options are placeholders to replace")
+        self.assertFalse(dfs_tree.has_placeholder_option(
+            page.replace("Take the first option: what it", "Keep WAL: it").replace("Take the second option: what it", "Drop WAL: it")))
         self.assertIn("j.node", page, "the buttons show only while a node waits on this page")
 
     def test_the_answer_form_stands_alone_so_the_page_above_it_is_free(self):

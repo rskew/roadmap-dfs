@@ -461,6 +461,10 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
             page = read(dfs_paths.artefacts() / name)
             if page is None:
                 why.append("%s does not exist" % name)
+            elif dfs_tree.has_placeholder_option(page):
+                why.append("%s still has the template's placeholder options (\"Take the first "
+                           "option: ...\"): write them as the decisions, or delete the fieldset "
+                           "when Confirm and Refute say it all" % name)
             elif CONTROL.search(page) and HANDLER.search(page) and not can_rule(page):
                 why.append("%s cannot rule on its node (it must POST {verdict: 'confirmed' or "
                            "'refuted', answer: <why>} to /artefact-state/<its file name>, as "
