@@ -183,6 +183,22 @@ class Relay:
             " (closed)" if self.why == "closed" else " (closed: %s)" % self.why if self.why else " (nobody closed it)"),
             chatlog.screen_text(self.tail))
 
+    def failure(self):
+        """Why the chat ended on its own with its job undone: the reason run.sh printed (`dfs_run:
+        the opening turn failed: ...`) when it exited with an error, or that a message was never
+        typed. None while it runs, when somebody closed it, or when it simply ended."""
+        if self.live or self.closing or self.why or self.rc is None:
+            return None
+        if self.rc != 0:
+            said = [m for m in re.findall(r"^dfs_run: (.+)$", chatlog.screen_text(self.tail, keep=TAIL), re.M)
+                    if OPENING.decode() not in m and OPENED.decode() not in m]
+            if said:
+                return said[-1].strip()
+        if self.unsent:
+            return "the chat ended (%s) before its message was typed" % (
+                "signal %d" % -self.rc if self.rc < 0 else "rc=%d" % self.rc)
+        return None
+
     def _follow_opening(self, data):
         """Note when run.sh starts its headless opening turn and when it hands over to the
         interactive agent. That agent has not drawn anything yet, so what run.sh printed does not
@@ -430,6 +446,15 @@ class ChatHost:
                 argv, env, cwd = make()
                 r = self.relays[scope] = Relay(lambda t, d="": self.log(scope, t, d), agent).start(argv, env=env, cwd=cwd)
             return r
+
+    def failure(self, scope):
+        """Why the chat for `scope` ended by itself (`Relay.failure`), once: asking forgets it."""
+        with self.lock:
+            r = self.relays.get(scope)
+            why = r.failure() if r is not None else None
+            if why:
+                del self.relays[scope]
+            return why
 
     def close(self, scope, wait=False, why="closed"):
         with self.lock:

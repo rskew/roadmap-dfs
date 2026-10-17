@@ -474,6 +474,12 @@ class Chats:
         with self.lock:
             sid, agent = self.sid(scope), self.agent(scope)
             messages = transcript_messages(sid, agent)
+            w = self.walker()
+            failed = w and getattr(w, "chat_failure", lambda s: None)(scope)
+            if failed:      # the screen's chat ended on its own (its opening turn failed): say why, and the message is not sent
+                chatlog.log(scope, "the screen's chat ended: %s" % failed)
+                self.notes[scope] = [failed]
+                self.pending.pop(scope, None)
             pending = self.pending.get(scope)
             if pending and not any(m["role"] == "you" and m["text"] == pending for m in messages[-3:]):
                 messages.append(dict(role="you", text=pending))
@@ -483,7 +489,6 @@ class Chats:
             if scope in self.stops:
                 messages.append(dict(role="note", text="Stopped before it answered."))
             started = self.busy.get(scope)
-            w = self.walker()
             live = bool(w and w.chat_live(scope))
             talking = bool(live and w.chat_active(scope))      # a background chat that is answering
             return dict(scope=scope, messages=messages, busy=bool(started) or talking,

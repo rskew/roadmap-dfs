@@ -642,6 +642,9 @@ class HeadlessWalk(WalkMixin):
     def chat_send(self, scope, text):
         return False
 
+    def chat_failure(self, scope):
+        return None
+
     def chat_close(self, scope):
         pass
 

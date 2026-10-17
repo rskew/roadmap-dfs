@@ -5032,6 +5032,9 @@ class UiWalker:
             return False
         return self.ui.start_chat(scope).send(text)
 
+    def chat_failure(self, scope):
+        return self.ui.chat_host.failure(scope) if self.ui.chat_host else None
+
     def chat_close(self, scope):
         if self.ui.chat_host:
             self.ui.chat_host.close(scope, why="new chat")

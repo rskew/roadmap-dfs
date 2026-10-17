@@ -770,6 +770,50 @@ class Chat(unittest.TestCase):
         ui.start_chat("W3")
         self.assertEqual((started[-1][3], "--codex" in started[-1][1]), ("codex", True))
 
+    def screen_serving(self, agent):
+        """A page whose chats live on a screen (tui.UI with a real ChatHost, run.sh as the chat) under `agent`."""
+        import importlib.util
+        import ptyrelay
+        import walk
+        spec = importlib.util.spec_from_file_location("dfs_tui", HERE / "tui.py")
+        tui = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tui)
+        for mod, name, value in ((walk, "RUNNER", str(HERE / "run.sh")), (tui, "ROOT", str(self.root))):
+            self.addCleanup(setattr, mod, name, getattr(mod, name))
+            setattr(mod, name, value)
+        ui = object.__new__(tui.UI)
+        ui.agent = agent
+        ui.chat_host = ptyrelay.ChatHost()
+        self.addCleanup(ui.chat_host.close_all)
+        return dfs_chat.Chats(walker=lambda: tui.UiWalker(ui))
+
+    def wait_for(self, chats, scope, ok, timeout=15):
+        end = time.time() + timeout
+        while time.time() < end:
+            st = chats.state(scope)
+            if ok(st):
+                return st
+            time.sleep(0.1)
+        self.fail("the page never showed it: %r" % chats.state(scope)["messages"])
+
+    def test_a_message_the_screens_chat_never_typed_because_its_opening_turn_failed_says_why(self):
+        for agent in ("codex", "opencode", "kiro"):
+            with self.subTest(agent=agent):
+                chats = self.screen_serving(agent)
+                os.environ["CHAT_STUB_FAIL"] = "1"
+                chats.send("W1", "hello there")
+                st = self.wait_for(chats, "W1", lambda st: any(m["role"] == "error" for m in st["messages"]))
+                self.assertEqual([m["role"] for m in st["messages"]], ["error"])      # the message was not sent
+                self.assertIn("the opening turn failed", st["messages"][0]["text"])
+                self.assertIn("not logged in", st["messages"][0]["text"].lower())
+                self.assertIn("the screen's chat ended", self.record("W1"))
+                self.assertEqual([m["role"] for m in chats.state("W1")["messages"]], ["error"], "said once, kept until the next message")
+                os.environ.pop("CHAT_STUB_FAIL")
+                chats.send("W1", "and again")       # the chat is started afresh and the note goes
+                st = self.wait_for(chats, "W1", lambda st: any(m["role"] == "you" for m in st["messages"]))
+                self.assertNotIn("error", [m["role"] for m in st["messages"]])
+                chats.clear("W1")
+
     def test_a_turn_records_the_agent_with_the_session(self):
         self.chats.send("W1", "hello")
         self.settle("W1")
