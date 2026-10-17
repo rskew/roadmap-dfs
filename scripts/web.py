@@ -1285,6 +1285,11 @@ class Handle:
     def __init__(self, server, thread, stop, url, public):
         self.server, self.thread, self._stop, self.url, self.public = server, thread, stop, url, public
 
+    def notify(self):
+        """Tell the pages to read again: for a change they cannot see in the files, as when
+        the terminal screen whose walk they read has caught up with them."""
+        HUB.notify()
+
     def stop(self):
         self._stop.set()
         self.server.shutdown()

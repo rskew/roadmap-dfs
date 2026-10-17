@@ -527,7 +527,7 @@ async function renderDraw(force) {
       S.walkAt = at;
       if (mine !== RENDERS) return;
       S.node = r.node;
-      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + JSON.stringify(walkOf(r.task));
+      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + walkHere(r.task) + "|" + JSON.stringify(walkOf(r.task));
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
     } else if (r.view === "artefact") {
@@ -972,6 +972,8 @@ function visibleRows(t) {
   const hidden = r => { let p = r.parent; while (p && byId[p]) { if (folded.has(p)) return true; p = byId[p].parent; } return false; };
   return t.rows.filter(r => r.kind !== "node" || !hidden(r));
 }
+// The walk may go to this task, so its screen offers "Walk here next": a node added to a finished task reopens it.
+const walkHere = id => !!(S.walk && S.walk.enabled && S.walk.candidates.some(c => c.id === id));
 /* The mark before a node's id, so its state is not told by the rule's colour alone: complete, started (a session has
    begun to change code for it), not begun. A node the work has left (refuted, parked) has none; its chip says. */
 const PROGRESS_LABEL = { done: ["✓", "complete"], started: ["", "started"], open: ["", "not started"] };
@@ -989,7 +991,7 @@ function drawTask() {
       <button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button>
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
-      ${S.walk && S.walk.enabled && S.walk.candidates.some(c => c.id === t.id) ? `<button class="btn" data-act="walkhere" data-item="${esc(t.id)}">${S.walk.pinned === t.id ? "Walk goes here next" : "Walk here next"}</button>` : ""}
+      ${walkHere(t.id) ? `<button class="btn" data-act="walkhere" data-item="${esc(t.id)}">${S.walk.pinned === t.id ? "Walk goes here next" : "Walk here next"}</button>` : ""}
     </div>${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
   for (const r of visibleRows(t)) {
     if (r.kind === "section") {

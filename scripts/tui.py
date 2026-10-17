@@ -2125,6 +2125,7 @@ class UI(WalkMixin):
         was_node = self.tree_row() if self.tree_focused() else None
         was_run = (self.runs[self.run_sel]["path"]
                    if 0 <= self.run_sel < len(self.runs) else None)
+        was_walk = self.walk_view()
         self.data = load()
         self.dirty = roadmap_dirty()
         self.chains = dfs_runs.run_dirs()
@@ -2147,6 +2148,18 @@ class UI(WalkMixin):
                                  self.open_run)
         if note:
             self.msg = note
+        # ⚠️ The page beside this screen reads the walk from HERE (`UiWalker.snapshot`), not
+        # from the files, so after a write of its own (a node added to a finished task) it
+        # reads the walk as it stood before, and the file watcher's push can land before this
+        # reload too. Once the screen has caught up, the page is told to read again.
+        if self.web is not None and self.walk_view() != was_walk:
+            self.web.notify()
+
+    def walk_view(self):
+        """What the page's walk shows that a reload can change: the tasks it may go to, and
+        the one it goes to next."""
+        return ([i["id"] for i in self.items if i["status"] == "open"],
+                self.data.get("next_item"))
 
     # ---- activity ------------------------------------------------------------
 

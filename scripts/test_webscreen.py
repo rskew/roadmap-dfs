@@ -10,16 +10,19 @@ import json
 import os
 import queue
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
 import time
+import types
 import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
+import tree as dfs_tree     # noqa: E402
 import tui as TUI           # noqa: E402
 import web as dfs_web       # noqa: E402
 
@@ -216,6 +219,54 @@ class OverHttp(unittest.TestCase):
         self.assertLess(time.time() - t0, 3)
         self.screen = Screening(self.ui)
         self.screen.__enter__()
+
+
+class Reopening(unittest.TestCase):
+    """A node added on the page to a finished task reopens it, and the page's "Walk here
+    next" reads the walk from the screen: once the screen has reloaded, the page is told."""
+
+    DONE = ("# W1 · one\n\n## Goal\n\none\n\n## Tree\n\n### W1.1 · did it\nStatus: confirmed\n"
+            "Approach: x\nDetermination: done\n\n## Log\n\n"
+            "- 2026-10-01T00:00:00Z · session · work · dfs_run_a/run-1\n"
+            "- 2026-10-02T00:00:00Z · review · ok\n")
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        items = self.root / ".dfs" / "items"
+        items.mkdir(parents=True)
+        (self.root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
+        (self.root / ".dfs" / "order.md").write_text("# Order\n\n- W1\n- W2\n")
+        (items / "W1.md").write_text(self.DONE)
+        (items / "W2.md").write_text("# W2 · two\n\n## Goal\n\ntwo\n\n## Tree\n\n## Log\n")
+        for cmd in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t",
+                                                   "commit", "-qm", "init"]):
+            subprocess.run(["git"] + cmd, cwd=self.root, check=True)
+        self._wr, self._root = dfs_paths.work_root, TUI.ROOT
+        dfs_paths.work_root = lambda: self.root
+        TUI.ROOT = self.root                    # the screen reads `state.py` run there
+        dfs_paths._TAG_CACHE.clear()
+        self.ui = TUI.UI(None)
+        self.ui.real = False
+        self.told = []
+        self.ui.web = types.SimpleNamespace(notify=lambda: self.told.append(1))
+
+    def tearDown(self):
+        dfs_paths.work_root, TUI.ROOT = self._wr, self._root
+        dfs_paths._TAG_CACHE.clear()
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def candidates(self):
+        return [c["id"] for c in self.ui.walk_snapshot()["candidates"]]
+
+    def test_a_reload_that_reopens_a_task_tells_the_page(self):
+        self.assertEqual(self.candidates(), ["W2"])
+        self.ui.reload()
+        self.assertEqual(self.told, [], "nothing the walk shows changed")
+        dfs_tree.add_node("W1", "more work")
+        self.assertEqual(self.candidates(), ["W2"], "the screen has not read the file yet")
+        self.ui.reload()
+        self.assertEqual(self.candidates(), ["W1", "W2"])
+        self.assertEqual(self.told, [1], "the page reads the walk again once the screen has it")
 
 
 class Serving(unittest.TestCase):
