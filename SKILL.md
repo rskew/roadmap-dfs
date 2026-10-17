@@ -72,7 +72,7 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself: a page the author can
   operate, with the options to switch between, the inputs to move and the evidence to
   open, and with Confirm and Refute buttons that submit their ruling on the node (the
-  template does; see Raising). `check.py` refuses a commit that adds a Hypothesis
+  template's answer form does; see Raising). `check.py` refuses a commit that adds a Hypothesis
   naming no such page, or one with no control a handler answers, or that cannot post a
   verdict. A node with no assumption needs none. The screen marks a node with a
   Hypothesis (⚑) and names those nodes when the author accepts the tree, so keep it for
@@ -232,13 +232,18 @@ ran and what it showed, a layout, measured results as a chart or a table: if you
 otherwise be describing a shape in words, draw it. Skip it only for what has no shape:
 a budget, a tooling bug, a choice between two wordings.
 
-- **For an assumption, or a raise the author should answer on the page**, start from
-  `<scripts>/../templates/_TEMPLATE_ASSUMPTION.html`: it states the assumption or
-  decision, lets the reader change what it depends on, shows what follows, says what
-  would make it wrong, and posts the ruling itself. A page the reader can only look at
-  does not meet the rule. To make it a raise's answer, name it in the raise on a line of
-  its own, `Answer with: .dfs/artefacts/<uuid>.html` (one page, even when the raise
-  shows several); a raise naming a page that cannot post an answer is refused.
+- **For an assumption, or a raise the author should answer on the page**, copy
+  `<scripts>/../templates/_TEMPLATE_ANSWER.html`. Its body is empty and has no layout to
+  fill in: draw the issue the way it is best seen. Show the mechanism, how the part of
+  the system the decision touches works now, then each option as the change it makes to
+  that drawing and what follows from it (what it costs, what it risks, what it commits
+  later work to), with the page's own controls switching the drawing between options.
+  Draw first and caption in prose. The one fixed part is the answer form at its foot:
+  keep it as it is, write its options as the decisions they are, and it posts the
+  ruling or the answer. A page the reader can only look at does not meet the rule. To
+  make it a raise's answer, name it in the raise on a line of its own,
+  `Answer with: .dfs/artefacts/<uuid>.html` (one page, even when the raise shows
+  several); a raise naming a page that cannot post an answer is refused.
 - **For a picture alone**, start from `_TEMPLATE.html` and name the page in the raise by
   its path, `.dfs/artefacts/<uuid>.html` (the web page links it and the screen's `v`
   pane lists it).

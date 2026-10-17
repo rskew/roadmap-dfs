@@ -9,8 +9,8 @@ the entry was written. There are two kinds:
   would otherwise rebuild a shape from prose.
 - **An answer page**: one the author operates and that posts their ruling. A Hypothesis
   always names one (it confirms or refutes the node), and a raise may name one (it answers
-  the raise). It is a picture with controls, and it is built from
-  `templates/_TEMPLATE_ASSUMPTION.html`.
+  the raise). It is drawn freely, above the one part every answer page shares: the
+  answer form in `templates/_TEMPLATE_ANSWER.html`.
 
 Either way the entry that names a page stays complete without it: the options and the
 recommendation are written out in the raise, the assumption in the Hypothesis. The page
@@ -23,7 +23,7 @@ is an aid, never the carrier.
    appended, after the page exists, and a concurrent session can take the id you
    predicted.
 2. **Copy a template into `.dfs/artefacts/<uuid>.html`**: `templates/_TEMPLATE.html` for
-   a picture, `templates/_TEMPLATE_ASSUMPTION.html` for an answer page. Keep the page
+   a picture, `templates/_TEMPLATE_ANSWER.html` for an answer page. Keep the page
    self-contained: no CDN, no fonts, no scripts fetched at open time, since a page that
    renders blank offline looks like nothing was produced.
 3. **Write it mobile first.** The author usually reads on a phone, so design for 360px
@@ -74,15 +74,45 @@ its own, `Answer with: .dfs/artefacts/<uuid>.html`; a raise may link several pag
 at, and this line picks the one that answers. `tree.py log raise` refuses a page that is
 not there or cannot answer.
 
-The page explains the assumption or the decision and lets the author settle it, so it is
-**interactive**: the author changes the thing it turns on (the options to switch between,
-the input to move, the evidence to open) and sees what follows from each setting, ending
-on what would show the assumption wrong. Every control changes something visible. The
-template has no slider because a stock one moves nothing; add a slider or other input only
-when the assumption turns on a quantity and a result or drawing changes as it moves,
-otherwise case buttons and `<details>` are the controls. The checker refuses only a dead
-slider; whether the controls tell the reader anything is the screenshot's and the author's
-judgement.
+### What an answer page shows
+
+The answer template has no layout: its body is empty, because no one shape suits every
+decision. Draw the issue the way it is best seen, and draw before you write: a caption
+under a drawing, not paragraphs beside one. What a page usually needs:
+
+- **The mechanism.** How the part of the system the decision touches works now: what
+  calls what, where the data goes, which step decides. The author rules faster on a
+  wiring they can see than on one they rebuild from prose, and can check the drawing.
+- **Each option, as a change to that drawing.** What it adds, removes or rewires, set
+  side by side or switched between with the page's own buttons, so the difference is
+  what moves on screen.
+- **What follows from each.** What it costs, what it risks, what it commits later work
+  to, and where it breaks: a number that moves, a step that turns red, a list that
+  changes with the option.
+- **What would show it wrong**, for an assumption: the observation that refutes it,
+  and the evidence so far.
+
+Pick the form the issue has: a flow of boxes and arrows (`templates/_TEMPLATE.html`'s
+`.dg`, `.box` and `.link`), a before and after, a timeline of what ran, a table of the
+options against the same axes, a chart of measured results. Every control changes
+something visible. Add a slider only when the decision turns on a quantity and a result
+or drawing changes as it moves; otherwise buttons and `<details>` are the controls. The
+checker refuses only a dead slider; whether the page tells the reader anything is the
+screenshot's and the author's judgement.
+
+### The answer form
+
+The form at the foot of `templates/_TEMPLATE_ANSWER.html`, from the comment that says to
+keep it to the end of the file, is the one part every answer page shares. It carries its
+own style and script and needs nothing above it, so the page around it is yours. Edit
+only its options: one radio button each, whose `value` is the answer as the author should
+be seen to give it, so write the decision, not a letter (a Hypothesis page whose Confirm
+and Refute say it all may drop them). The form sends the option chosen and the author's
+note as the answer to an open raise, or with Confirm or Refute as the ruling on the node,
+and keeps both so the page reopens as the author left it. The page's own script may call
+`dfsAnswer.choose(<value>)` so its option buttons pick the answer too, define
+`window.dfsPageState()` to keep its own state, and listen for the `dfs-state` event,
+whose `detail` is that state when the page reopens.
 
 `check.py` tests that the page exists, has a control (`<input>`, `<button>`, `<select>`,
 `<textarea>` or `<details>`), has a handler (`addEventListener` or an `onclick`-style
@@ -111,7 +141,7 @@ When the web page opens the artefact beside its form (tapping Answer on a raise 
 `Answer with:` page, or Confirm or Refute on a node whose Hypothesis names one),
 `parent.postMessage({dfs: "answered"}, "*")` after a successful post closes the form;
 opened alone, that message goes nowhere. The text box stays, for ruling in words. The
-template's "Send as my answer", Confirm and Refute buttons do all of this. The author
+answer form's "Send as my answer", Confirm and Refute buttons do all of this. The author
 reads what is posted, so write it as the decision, not a dump of the state.
 
 ## Screenshots
