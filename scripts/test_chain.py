@@ -648,6 +648,23 @@ class Chain(unittest.TestCase):
         self.assertIn("shelved", (self.root / ".dfs" / "archive" / "items" / "W1.md").read_text())
         self.assertEqual((self.root / ".dfs" / "artefacts" / "page.html").read_text(), "<p>page</p>")
 
+    def test_a_shelved_archive_is_committed_when_only_the_items_directory_is_ignored(self):
+        # `.dfs/items/` ignored, `.dfs/archive` tracked: the task file is shared, the archive is the branch's
+        self.ignore_roadmap(".dfs/items/\n.dfs/runs/\n")
+        self.enter()
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        self.assertFalse((self.wt / ".dfs" / "archive").is_symlink())
+        (self.wt / ".dfs" / "archive" / "items").mkdir(parents=True)
+        (self.wt / ".dfs" / "archive" / "items" / "W1.md").write_text("**W1.1 Approach**: shelved\n")
+        self.commit_in_worktree()
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("merged into", r.stderr)
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("ls-files", ".dfs/archive/items/W1.md"), ".dfs/archive/items/W1.md")
+        self.assertIn("shelved", (self.root / ".dfs" / "archive" / "items" / "W1.md").read_text())
+        self.assertNotIn("archive", self.git("status", "--porcelain"))
+
     def test_ignored_planning_files_a_gitignored_worktree_holds_for_real_come_back_before_it_goes(self):
         self.ignore_roadmap()
         self.enter()

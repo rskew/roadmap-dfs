@@ -271,12 +271,27 @@ def _identity():
     return ["-c", "user.name=roadmap-dfs", "-c", "user.email=roadmap-dfs@localhost"]
 
 
+def _tracked_task_paths(task, wt):
+    """The task's own paths that exist in `wt` and that git does not ignore: the ones the
+    branch carries. A path beyond a link (the shared, ignored planning files) is not one."""
+    out = []
+    for p in task_paths(task):
+        if not (wt / p).exists():
+            continue
+        if any(q.is_symlink() for q in [wt / p, *(wt / p).parents] if wt in q.parents):
+            continue
+        if _git("check-ignore", "-q", p, cwd=wt).returncode != 0:
+            out.append(p)
+    return out
+
+
 def _commit_task_files(task, wt, what):
-    """Commit the task's own files left uncommitted in its worktree onto its branch. None
-    to commit when the roadmap is gitignored: they are linked in, not the branch's."""
-    if dfs_paths.ignored():
+    """Commit the task's own files left uncommitted in its worktree onto its branch. Those
+    git ignores (a gitignored roadmap, whole or in part) are shared, not the branch's."""
+    paths = _tracked_task_paths(task, wt)
+    if not paths:
         return
-    _git("add", "--", *[p for p in task_paths(task) if (wt / p).exists()], cwd=wt)
+    _git("add", "--", *paths, cwd=wt)
     if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
         r = _git(*_identity(), "commit", "-q", "-m", "%s: %s" % (task, what), cwd=wt)
         if r.returncode != 0:
