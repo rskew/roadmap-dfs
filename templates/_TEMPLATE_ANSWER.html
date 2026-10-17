@@ -45,8 +45,8 @@
   .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
                        border-radius: 6px; background: #fff; cursor: pointer; }
   .dfs-answer button:disabled { opacity: .5; cursor: default; }
-  .dfs-answer #parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
-  .dfs-answer #parkbox[hidden] { display: none; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
   .dfs-answer .where { color: #555; font-size: 14px; }
 </style>
 <section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
@@ -59,25 +59,26 @@
     <label class="opt"><input type="radio" name="dfs-option" value="Take the first option: what it commits the work to."> The first option</label>
     <label class="opt"><input type="radio" name="dfs-option" value="Take the second option: what it commits the work to."> The second option</label>
   </fieldset>
-  <label class="note" for="note">In your words (optional)</label>
-  <textarea id="note" rows="3"></textarea>
-  <div id="answerbox" hidden>
-    <div class="row"><button type="button" id="answer">Send as my answer</button></div>
-    <p id="answer-status" aria-live="polite"></p>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
   </div>
-  <div id="rulebox" hidden>
-    <label id="parkbox" hidden><input type="checkbox" id="park"> Confirming prunes <span id="parks"></span>, which hold work: park them</label>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
     <div class="row">
-      <button type="button" id="confirm">Confirm the node</button>
-      <button type="button" id="refute">Refute the node</button>
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
     </div>
-    <p id="rule-status" aria-live="polite"></p>
+    <p id="dfs-rule-status" aria-live="polite"></p>
   </div>
   <p class="where" id="dfs-where" aria-live="polite"></p>
 </section>
 
 <script>
-  // The answer form. The page's own script may call dfsAnswer.choose(value) to pick an
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
   // option from its own controls, define window.dfsPageState() to return what the page
   // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
   //
@@ -95,13 +96,13 @@
       });
     }
     function $(id) { return document.getElementById(id); }
-    function radios() { return Array.prototype.slice.call(document.querySelectorAll('input[name="dfs-option"]')); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
     function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
     // What the author reads in the log: the option, then their own words.
-    function said() { return [option(), $('note').value.trim()].filter(Boolean).join('\n\n'); }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
     var touched = false, saving;
     function mine() {
-      return { option: option(), note: $('note').value,
+      return { option: option(), note: $('dfs-note').value,
                page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
     }
     function keep() {
@@ -114,31 +115,31 @@
       keep: keep
     };
     radios().forEach(function (r) { r.addEventListener('change', keep); });
-    $('note').addEventListener('input', keep);
+    $('dfs-note').addEventListener('input', keep);
 
     function done(status, text) {
       status.textContent = text;
       parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
     }
     function rule(verdict) {
-      var status = $('rule-status'), buttons = document.querySelectorAll('#rulebox button');
-      if (verdict === 'confirmed' && !$('parkbox').hidden && !$('park').checked) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
         status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
         return;
       }
       var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
       buttons.forEach(function (b) { b.disabled = true; });
-      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('park').checked }).then(function () {
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
         done(status, 'Recorded: ' + verdict + '.');
       }).catch(function (e) {
         buttons.forEach(function (b) { b.disabled = false; });
         status.textContent = 'Not recorded: ' + e.message;
       });
     }
-    $('confirm').addEventListener('click', function () { rule('confirmed'); });
-    $('refute').addEventListener('click', function () { rule('refuted'); });
-    $('answer').addEventListener('click', function () {
-      var status = $('answer-status'), send = $('answer'), text = said();
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
       if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
       send.disabled = true;
       call('POST', { state: mine(), answer: text }).then(function () {
@@ -151,15 +152,15 @@
       var s = j.state || {};
       if (!touched) {
         if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
-        if (s.note) $('note').value = s.note;
+        if (s.note) $('dfs-note').value = s.note;
       }
       if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
-      $('rulebox').hidden = !j.node;
+      $('dfs-rulebox').hidden = !j.node;
       // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
       var parks = (j.node && j.node.parks) || [];
-      $('parks').textContent = parks.join(', ');
-      $('parkbox').hidden = !parks.length;
-      $('answerbox').hidden = !j.raise;
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
       $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
     }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
   })();

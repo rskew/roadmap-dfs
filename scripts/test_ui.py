@@ -179,7 +179,19 @@ class Flows(unittest.TestCase):
                          {"picked": "spinning"})
 
     def test_the_answer_templates_form_answers_a_raise_with_the_option_and_the_note(self):
-        shutil.copy(HERE.parent / "templates" / "_TEMPLATE_ANSWER.html", self.root / ".dfs" / "artefacts" / "c0ffee-ans.html")
+        self.answer_template_raises()
+
+    def test_the_answer_form_still_answers_under_a_page_that_uses_its_ids(self):
+        # A free page draws its own answer and confirm flow, and may well call its parts what
+        # the form once did: none of those ids may take the form's lookups.
+        self.answer_template_raises(above='<div class="box" id="answer"></div><p id="note">x</p>'
+                                         '<span id="confirm"></span><div id="answerbox"></div><i id="rulebox"></i>')
+
+    def answer_template_raises(self, above=""):
+        page = (HERE.parent / "templates" / "_TEMPLATE_ANSWER.html").read_text()
+        marker = "<!-- ===== The answer form"
+        self.assertIn(marker, page)
+        (self.root / ".dfs" / "artefacts" / "c0ffee-ans.html").write_text(page.replace(marker, above + marker, 1))
         w9 = self.root / ".dfs" / "items" / "W9.md"
         text = w9.read_text()
         tail = "WAL checkpoints may stall readers anyway."

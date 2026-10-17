@@ -58,6 +58,9 @@ class MobileFirst(unittest.TestCase):
         self.assertGreater(len(ids), 5)
         for i in ids:
             self.assertRegex(form, r'id="%s"' % re.escape(i), "the form's script needs #%s" % i)
+        for i in re.findall(r'\bid="([\w-]+)"', form):
+            self.assertTrue(i.startswith("dfs-"), "#%s could clash with an id on the page above" % i)
+        self.assertNotRegex(script, r"querySelector(All)?\(['\"][^'\"]*#(?!dfs-)", "a lookup by an unprefixed id")
         self.assertIn('name="dfs-option"', form)
         self.assertIn("dfsAnswer", script, "the page's own controls can pick an option")
         self.assertIn(".dfs-answer {", form, "the form carries its own style")
