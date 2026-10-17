@@ -55,6 +55,7 @@ CODEX_STUB = r"""#!/usr/bin/env bash
 echo "$@" >> "$CHAT_STUB_LOG"
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","message":"not logged in"}'; echo '{"type":"turn.failed","error":{"message":"not logged in"}}'; exit 1; }
 [ "$1" = exec ] || exit 0
+[ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 shift; [ "$1" = resume ] && shift
 sid=""; for a in "$@"; do case "$a" in -*) ;; *) sid="$a" ;; esac; done
 [ "$sid" = - ] && sid=""
@@ -82,6 +83,7 @@ OPENCODE_STUB = r"""#!/usr/bin/env bash
 # as opencode does, and prints `run --format json` events. Without `run` it is the interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
 [ "$1" = run ] || exit 0
+[ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"not logged in","statusCode":401}}}'; exit 1; }
 shift
 sid=""; while [ $# -gt 0 ]; do [ "$1" = --session ] && { sid="$2"; shift; }; shift; done
@@ -128,6 +130,7 @@ KIRO_STUB = r"""#!/usr/bin/env bash
 # interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
 case "$*" in *--output-format*) ;; *) exit 0 ;; esac
+[ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 if [ -n "${CHAT_STUB_FAIL:-}" ]; then
   echo '{"type":"runError","data":{"sessionId":null,"stage":"auth","message":"Not logged in. Set the KIRO_API_KEY environment variable or run `kiro-cli login` first."}}'
   exit 0
@@ -250,6 +253,34 @@ class Chat(unittest.TestCase):
         st = self.settle("W1")
         self.assertEqual([m["role"] for m in st["messages"]][-2:], ["you", "agent"])
         self.assertNotIn("note", [m["role"] for m in st["messages"]], "the note goes once it moves on")
+
+    def test_stopping_a_first_codex_opencode_or_kiro_turn_says_the_message_was_not_kept(self):
+        for agent in ("codex", "opencode", "kiro"):
+            with self.subTest(agent=agent):
+                getattr(self, "use_" + agent)()
+                os.environ["CHAT_STUB_SLEEP"] = "60"
+                self.log.write_text("")
+                self.chats.send("W1", "a long one")
+                end = time.time() + 10
+                while "started" not in self.log.read_text() and time.time() < end:
+                    time.sleep(0.05)
+                self.assertTrue(self.chats.state("W1")["busy"])
+                self.chats.interrupt("W1")
+                st = self.settle("W1")
+                self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "note"], st["messages"])
+                self.assertIn("message was not kept", st["messages"][1]["text"])      # nothing was recorded to hold it
+                self.assertFalse(self.chats.path("W1").exists())
+                os.environ.pop("CHAT_STUB_SLEEP")
+                self.chats.clear("W1")
+
+    def test_a_page_run_opening_turn_that_fails_says_the_chat_did_not_open_not_that_a_message_was_lost(self):
+        self.use_codex()
+        os.environ["CHAT_STUB_FAIL"] = "1"
+        self.assertEqual(self.chats.open("W1")["messages"], [])
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"]], ["error", "error"])
+        self.assertIn("the chat did not open", st["messages"][-1]["text"])
+        self.assertNotIn("message was not kept", st["messages"][-1]["text"])
 
     def test_stop_is_pressed_in_the_screens_chat_when_it_is_the_one_answering(self):
         class Screen:
@@ -523,15 +554,14 @@ class Chat(unittest.TestCase):
         self.assertEqual(second_in, "stdin: -and then?", "the message goes in on stdin: opencode quotes one given as an argument")
         self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["Where is the work?", "-and then?"])
 
-    def test_a_failed_opencode_turn_says_why_and_leaves_no_conversation(self):
+    def test_a_failed_opencode_turn_says_why_and_keeps_the_session_it_named(self):
         self.use_opencode()
         os.environ["CHAT_STUB_FAIL"] = "1"
         self.chats.send("W1", "hi")
         st = self.settle("W1")
-        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
         self.assertIn("not logged in", st["messages"][1]["text"])
-        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
-        self.assertFalse(self.chats.path("W1").exists())
+        self.assertEqual(self.chats.sid("W1"), "ses_x", "opencode named a session before it failed: the message is in it, so it is kept")
 
     def test_the_screens_opencode_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
         self.use_opencode()
@@ -621,7 +651,7 @@ class Chat(unittest.TestCase):
                     os.environ.pop(k, None)
 
     @unittest.skipUnless(REAL_KIRO, "no kiro-cli here")
-    def test_a_real_kiro_that_cannot_reach_its_model_says_so_and_leaves_no_conversation(self):
+    def test_a_real_kiro_that_cannot_reach_its_model_says_so_and_keeps_the_session_it_made(self):
         self.use_kiro()
         os.environ.update(KIRO_CMD="kiro-cli", PATH=os.path.dirname(REAL_KIRO) + os.pathsep + os.environ["PATH"],
                           KIRO_API_KEY="any", KIRO_KAS_ENDPOINT="http://127.0.0.1:1", KIRO_KAS_CONTROL_PLANE_ENDPOINT="http://127.0.0.1:1")
@@ -631,10 +661,9 @@ class Chat(unittest.TestCase):
         finally:
             for k in ("KIRO_API_KEY", "KIRO_KAS_ENDPOINT", "KIRO_KAS_CONTROL_PLANE_ENDPOINT"):
                 os.environ.pop(k, None)
-        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
+        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
         self.assertIn("could not load the available models", st["messages"][1]["text"])
-        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
-        self.assertFalse(self.chats.path("W1").exists())
+        self.assertTrue(self.chats.sid("W1").startswith("sess_"), "kiro named its session before it failed: the message is in it, so it is kept")
 
     def test_a_kiro_turn_is_answered_kept_and_resumed_by_the_id_kiro_made(self):
         self.use_kiro()

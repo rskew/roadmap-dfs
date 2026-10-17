@@ -26,14 +26,15 @@ import chatlog
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
+HANDOVER_TIMEOUT = 90.0     # after run.sh's opening turn: a real kiro-cli drew nothing for 12s to 25s (test_kiro_chat)
 # A fresh agent is quiet for more than QUIET while it starts and while it asks its first-launch
 # questions, so quiet alone types a message into the wrong place (found against the real TUIs):
-# opencode is quiet for seconds before its prompt is drawn, so its prompt screen's footer is waited
-# for; kiro-cli with --trust-all-tools asks "Yes, I accept" with "No, exit" highlighted, where Enter
+# opencode is quiet for seconds before its prompt is drawn, and kiro draws its warning and question
+# in stages, so the text of their prompt screens is waited for; kiro-cli with --trust-all-tools asks "Yes, I accept" with "No, exit" highlighted, where Enter
 # exits it; codex asks to trust a folder it has not met, which swallows the message. Each is
 # answered once, before the first message: the agent's own default or "accept", never "don't ask
 # again", which writes the person's settings.
-READY = {"opencode": "ctrl+p commands"}
+READY = {"opencode": "ctrl+p commands", "kiro": "ask a question or describe a task"}
 FIRST_LAUNCH = {"codex": ("Trust and continue", (b"\r",)), "kiro": ("Yes, I accept", (b"\x1b[B", b"\r"))}   # the keys go one at a time
 # A new codex, opencode or kiro chat runs its opening turn headless (run.sh) before it execs the
 # interactive agent, saying so on either side. Nothing reads the terminal during that turn, which
@@ -93,6 +94,7 @@ class Relay:
         self.attached = False
         self.closing = False
         self.started = self.first_out = self.last_out = 0.0
+        self.handed = 0.0           # when run.sh handed over from its opening turn to the interactive agent
         self.opening = False        # run.sh is running the chat's headless opening turn: no agent to type into yet
         self._seam = b""            # the end of the last read, for a marker that straddles two
         self.outbox = queue.Queue()
@@ -210,6 +212,7 @@ class Relay:
         at = seen.rfind(OPENED)
         if self.opening and at >= 0:
             self.opening = False
+            self.handed = time.time()
             if b"\x1b" not in seen[at:]:
                 self.first_out = 0.0
 
@@ -330,6 +333,8 @@ class Relay:
             while self.live and time.time() < end and not self._ready():
                 if self.opening:
                     end = time.time() + READY_TIMEOUT       # the opening turn is not the agent being slow
+                elif self.handed and not self.first_out:
+                    end = max(end, self.handed + HANDOVER_TIMEOUT)      # nor is the agent's own slow start
                 time.sleep(0.1)
             with self.lock:
                 fd = self.fd

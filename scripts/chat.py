@@ -619,6 +619,8 @@ class Chats:
             else:
                 error = ((out.get("result") if isinstance(out, dict) else "") or r.stderr.strip()
                          or r.stdout.strip() or "the agent exited %d" % r.returncode)[-600:]
+                if not new_sid and isinstance(out, dict):
+                    new_sid = out.get("session_id") or ""      # it minted a session before it failed: the message is in it
         except subprocess.TimeoutExpired as e:
             error = "no answer in %d minutes" % (TURN_TIMEOUT // 60)
             said = "\n".join(x for x in (e.stderr, e.output) if isinstance(x, str) and x.strip())[-600:]
@@ -632,7 +634,7 @@ class Chats:
             error = ""      # ended on purpose: not a failure, whatever the killed agent left behind
         # a first turn that codex, opencode or kiro did not finish names no session to record, so
         # the message is in one of the agent's own that nothing here knows: say so
-        lost = ("the message was not kept: %s had not recorded a session to continue" % agent
+        lost = ("%s: %s had not recorded a session to continue" % ("the chat did not open" if opening else "the message was not kept", agent)
                 if agent != "claude" and not new_sid and (error or stopped) else "")
         chatlog.log(scope, "turn: %s after %ds, rc=%s, session %s" % (
             "STOPPED" if stopped else "FAILED" if error else "answered", time.time() - began, rc, new_sid or "(none)"),
