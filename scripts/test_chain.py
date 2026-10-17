@@ -621,6 +621,52 @@ class Chain(unittest.TestCase):
                 self.git("branch", "-D", "dfs/W1")
                 self.assertTrue((self.root / ".dfs" / "items" / "W1.md").is_file())   # the links, not the files, went
 
+    def merge_by_hand(self):
+        return subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                              capture_output=True, text=True)
+
+    def commit_in_worktree(self):
+        (self.wt / "app.txt").write_text("worked\n")
+        self.git("add", "app.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+
+    def test_the_first_archive_and_page_written_in_a_gitignored_worktree_survive_the_merge(self):
+        # no `.dfs/archive` or `.dfs/artefacts` exists yet when the worktree is cut
+        self.ignore_roadmap()
+        self.assertFalse((self.root / ".dfs" / "archive").exists())
+        self.enter()
+        for name in ("items", "archive", "artefacts"):
+            self.assertTrue((self.wt / ".dfs" / name).is_symlink(), name)
+        (self.wt / ".dfs" / "archive" / "items").mkdir()
+        (self.wt / ".dfs" / "archive" / "items" / "W1.md").write_text("**W1.1 Approach**: shelved\n")
+        (self.wt / ".dfs" / "artefacts" / "page.html").write_text("<p>page</p>")
+        self.commit_in_worktree()
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("merged into", r.stderr)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("shelved", (self.root / ".dfs" / "archive" / "items" / "W1.md").read_text())
+        self.assertEqual((self.root / ".dfs" / "artefacts" / "page.html").read_text(), "<p>page</p>")
+
+    def test_ignored_planning_files_a_gitignored_worktree_holds_for_real_come_back_before_it_goes(self):
+        self.ignore_roadmap()
+        self.enter()
+        # an entry nothing linked, made in the worktree after it was cut, and a real
+        # directory left by a worktree cut before `share_ignored_state` made the shared ones
+        (self.wt / ".dfs" / "notes").mkdir()
+        (self.wt / ".dfs" / "notes" / "n.md").write_text("a note\n")
+        (self.wt / ".dfs" / "archive").unlink(missing_ok=True)
+        (self.wt / ".dfs" / "archive" / "items").mkdir(parents=True)
+        (self.wt / ".dfs" / "archive" / "items" / "W1.md").write_text("shelved\n")
+        self.enter()
+        self.assertTrue((self.wt / ".dfs" / "archive").is_symlink())
+        self.assertEqual((self.root / ".dfs" / "archive" / "items" / "W1.md").read_text(), "shelved\n")
+        self.commit_in_worktree()
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("merged into", r.stderr)
+        self.assertEqual((self.root / ".dfs" / "notes" / "n.md").read_text(), "a note\n")
+
     def test_a_chain_on_a_gitignored_roadmap_works_in_the_worktree_and_merges_the_code(self):
         self.ignore_roadmap()
         rc, meta, out = self.run_chain("work,fix,confirm,rok")

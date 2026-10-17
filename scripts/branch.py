@@ -127,18 +127,74 @@ def keep_worktrees_untracked():
         _exclude("/%s/worktrees/" % dfs_paths.STATE_DIR_NAME)
 
 
+SHARED = ("items", "archive", "artefacts")   # the `.dfs` directories a session writes into
+
+
+def _ignored_dir(rel, cwd=None):
+    """Whether git ignores the directory `rel`, though it need not exist (a trailing slash
+    makes the path a directory to `check-ignore`)."""
+    return _git("check-ignore", "-q", rel + "/", cwd=cwd).returncode == 0
+
+
+def _move_into(src, dst):
+    """Move the files of the directory `src` into `dst`, keeping both when a file is in each:
+    the one from `src` lands beside the other as `<name>.from-worktree`. `src` is left empty."""
+    for f in sorted(src.rglob("*")):
+        if f.is_dir() and not f.is_symlink():
+            continue
+        target = dst / f.relative_to(src)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() or target.is_symlink():
+            target = target.with_name(target.name + ".from-worktree")
+        shutil.move(str(f), str(target))
+    shutil.rmtree(src)
+
+
+def rescue_ignored_state(wt):
+    """Bring back to this checkout what the worktree `wt` holds for real under a `.dfs` entry
+    git ignores: such files are in no commit, so `git worktree remove --force` would erase
+    them, and they are the task's own (a first `.dfs/archive` from `tree.py shelve`, a page in
+    a first `.dfs/artefacts`). Each real entry moves into this checkout's `.dfs` (merged with
+    what is there) and is left linked to it. Returns the names moved."""
+    s = dfs_paths.STATE_DIR_NAME
+    here, there = dfs_paths.state(), wt / s
+    moved = []
+    if not there.is_dir():
+        return moved
+    for entry in sorted(there.iterdir()):
+        if entry.name == "worktrees" or entry.is_symlink() or not entry.is_dir():
+            continue
+        if not _ignored_dir("%s/%s" % (s, entry.name)):
+            continue
+        here.mkdir(exist_ok=True)
+        dest = here / entry.name
+        dest.mkdir(exist_ok=True)
+        _move_into(entry, dest)
+        os.symlink(os.path.relpath(dest, there), entry)
+        moved.append(entry.name)
+    return moved
+
+
 def share_ignored_state(wt):
     """Give the worktree the planning files git does not carry. A gitignored roadmap is in
     no commit, so the branch's checkout has none of it: each entry of this checkout's
     `.dfs` that git ignores and `wt` lacks (`items`, `archive`, `artefacts`, `runs` …, never
     `worktrees`) is linked into the worktree's `.dfs`, so a session there reads and writes
-    the one copy the screen and the web page read. Returns the names linked."""
+    the one copy the screen and the web page read. The directories a session writes into
+    (`SHARED`) are made here first when git ignores them, so the first `.dfs/archive` or page
+    is written through the link, not into the worktree, which is removed at the merge. A real
+    directory the worktree already holds under an ignored name is moved back first
+    (`rescue_ignored_state`). Returns the names linked."""
     s = dfs_paths.STATE_DIR_NAME
     here, there = dfs_paths.state(), wt / s
     linked = []
     if not here.is_dir():
         return linked
     there.mkdir(exist_ok=True)
+    rescue_ignored_state(wt)
+    for name in SHARED:
+        if not (here / name).exists() and _ignored_dir("%s/%s" % (s, name)):
+            (here / name).mkdir()
     for entry in sorted(here.iterdir()):
         dest = there / entry.name
         rel = "%s/%s" % (s, entry.name)
@@ -420,6 +476,8 @@ def merge(task):
     r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
     if r.returncode != 0:
         return _unmerged(task, wt, name, r)
+    if dfs_paths.ignored():
+        rescue_ignored_state(wt)
     for what, r in (("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))),
                     ("its branch could not be deleted", _git("branch", "-d", name))):
         if r.returncode != 0:
@@ -464,6 +522,8 @@ def release(task, verb="deleted"):
     wt, name = dfs_paths.worktree(task), dfs_paths.item_branch(task)
     steps = []
     if wt:
+        if dfs_paths.ignored():
+            rescue_ignored_state(wt)
         steps.append(("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))))
     if _has_branch(name):
         steps.append(("its branch could not be renamed", _git("branch", "-m", name, "dfs-%s/%s" % (verb, task))))
