@@ -684,6 +684,24 @@ class Chain(unittest.TestCase):
         self.assertIn("merged into", r.stderr)
         self.assertEqual((self.root / ".dfs" / "notes" / "n.md").read_text(), "a note\n")
 
+    def test_an_ignored_file_at_the_top_of_a_gitignored_worktree_comes_back_and_a_clash_is_named(self):
+        self.ignore_roadmap()
+        (self.root / ".dfs" / "archive" / "items").mkdir(parents=True)
+        (self.root / ".dfs" / "archive" / "items" / "W1.md").write_text("main's\n")
+        self.enter()
+        (self.wt / ".dfs" / "memo.txt").write_text("a memo\n")
+        (self.wt / ".dfs" / "archive").unlink()
+        (self.wt / ".dfs" / "archive" / "items").mkdir(parents=True)
+        (self.wt / ".dfs" / "archive" / "items" / "W1.md").write_text("worktree's\n")
+        self.commit_in_worktree()
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((self.root / ".dfs" / "memo.txt").read_text(), "a memo\n")
+        self.assertEqual((self.root / ".dfs" / "archive" / "items" / "W1.md").read_text(), "main's\n")
+        self.assertEqual((self.root / ".dfs" / "archive" / "items" / "W1.md.from-worktree").read_text(),
+                         "worktree's\n")
+        self.assertIn("W1.md.from-worktree", r.stderr)
+
     def test_a_chain_on_a_gitignored_roadmap_works_in_the_worktree_and_merges_the_code(self):
         self.ignore_roadmap()
         rc, meta, out = self.run_chain("work,fix,confirm,rok")

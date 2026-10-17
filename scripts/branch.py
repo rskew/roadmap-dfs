@@ -138,7 +138,8 @@ def _ignored_dir(rel, cwd=None):
 
 def _move_into(src, dst):
     """Move the files of the directory `src` into `dst`, keeping both when a file is in each:
-    the one from `src` lands beside the other as `<name>.from-worktree`. `src` is left empty."""
+    the one from `src` lands beside the other as `<name>.from-worktree`, named on stderr.
+    `src` is left empty."""
     for f in sorted(src.rglob("*")):
         if f.is_dir() and not f.is_symlink():
             continue
@@ -146,23 +147,45 @@ def _move_into(src, dst):
         target.parent.mkdir(parents=True, exist_ok=True)
         if target.exists() or target.is_symlink():
             target = target.with_name(target.name + ".from-worktree")
+            print("dfs_branch: %s exists here too; the worktree's copy is kept as %s" %
+                  (dfs_paths.rel(target.with_name(target.name[:-len(".from-worktree")])),
+                   dfs_paths.rel(target)), file=sys.stderr)
         shutil.move(str(f), str(target))
     shutil.rmtree(src)
+
+
+def _move_file(src, dst):
+    """Move the file `src` to `dst`, or beside it as `<name>.from-worktree` (named on
+    stderr) when `dst` exists."""
+    if dst.exists() or dst.is_symlink():
+        keep = dst.with_name(dst.name + ".from-worktree")
+        print("dfs_branch: %s exists here too; the worktree's copy is kept as %s" %
+              (dfs_paths.rel(dst), dfs_paths.rel(keep)), file=sys.stderr)
+        dst = keep
+    shutil.move(str(src), str(dst))
 
 
 def rescue_ignored_state(wt):
     """Bring back to this checkout what the worktree `wt` holds for real under a `.dfs` entry
     git ignores: such files are in no commit, so `git worktree remove --force` would erase
     them, and they are the task's own (a first `.dfs/archive` from `tree.py shelve`, a page in
-    a first `.dfs/artefacts`). Each real entry moves into this checkout's `.dfs` (merged with
-    what is there) and is left linked to it. Returns the names moved."""
+    a first `.dfs/artefacts`). Each real directory moves into this checkout's `.dfs` (merged
+    with what is there) and is left linked to it; a real ignored file at the top moves across
+    as it is. Returns the names moved."""
     s = dfs_paths.STATE_DIR_NAME
     here, there = dfs_paths.state(), wt / s
     moved = []
     if not there.is_dir():
         return moved
     for entry in sorted(there.iterdir()):
-        if entry.name == "worktrees" or entry.is_symlink() or not entry.is_dir():
+        if entry.name == "worktrees" or entry.is_symlink():
+            continue
+        if not entry.is_dir():
+            if _git("check-ignore", "-q", "%s/%s" % (s, entry.name)).returncode == 0:
+                here.mkdir(exist_ok=True)
+                _move_file(entry, here / entry.name)
+                os.symlink(os.path.relpath(here / entry.name, there), entry)
+                moved.append(entry.name)
             continue
         if not _ignored_dir("%s/%s" % (s, entry.name)):
             continue
