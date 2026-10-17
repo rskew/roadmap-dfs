@@ -464,6 +464,31 @@ class Ticking(unittest.TestCase):
         ui.walk_toggle()
         self.assertEqual(lowered, [])
 
+    def typed(self, line, budget=12):
+        """`w` on an off walk, with `line` read off the footer: "" is ⏎, None is Esc."""
+        ui = self.ui(walk_on=False, walk_budget=budget)
+        ui.pane, ui.scroll, ui.answers, ui.labels, ui.begun = "items", 0, [], [], []
+        ui.read_line = lambda label: ui.labels.append(label) or line
+        ui.walk_begin = ui.begun.append
+        ui.walk_toggle()
+        return ui
+
+    def test_enter_at_the_walk_prompt_walks_the_budget_it_shows(self):
+        # W82: ⏎ on a number the screen is showing took nothing and said
+        # "walk: not started"; it is the previous walk's budget again.
+        ui = self.typed("")
+        self.assertEqual(ui.labels, ["walk: how many sessions? [12], esc cancels:"])
+        self.assertEqual(ui.begun, [12])
+
+    def test_esc_at_the_walk_prompt_leaves_the_walk_off(self):
+        ui = self.typed(None)
+        self.assertEqual(ui.begun, [])
+        self.assertIn("not started", ui.msg)
+
+    def test_a_number_typed_at_the_walk_prompt_is_the_budget(self):
+        self.assertEqual(self.typed("7").begun, [7])
+        self.assertEqual(self.typed("seven").begun, [])
+
     def test_why_it_stopped_outlives_the_message_line(self):
         # ⚠️ `walk_off` writes `self.msg`, and `poll` overwrites it with "refreshed"
         # in the same tick — so the reason was gone before the screen was drawn and

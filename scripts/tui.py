@@ -4254,14 +4254,13 @@ class UI(WalkMixin):
         until the budget or the tree runs out, so a bare keypress is not enough of a
         decision. Escaping it leaves the walk off.
 
-        ⚠️ WHICH IS WHY THE NUMBER IS NOT OFFERED IN BRACKETS. It read
-        `session budget [20], empty to cancel:`, and `[n]` means the opposite two
-        keys away: `cap [5]:` is the one other prompt here and Enter on it takes the
-        5. So Enter on this one — the natural way to accept a number the screen is
-        already showing — cancelled, and answered "walk: not started", which is a
-        sentence about a keypress nobody made. The last budget is still worth
-        showing, since it is what you would usually type again; it is shown as the
-        last one rather than as an offer.
+        ⚠️ ⏎ TAKES THE NUMBER SHOWN; ESC IS THE CANCEL. It once read `session budget
+        [20], empty to cancel:`, where `[n]` meant the opposite of what it means two
+        keys away at `cap [5]:`, so ⏎ on the number the screen was showing answered
+        "walk: not started". The brackets then went, and ⏎ still took nothing. Now
+        it is the other prompt's convention: `[n]` is what ⏎ takes, the last walk's
+        budget being what you would usually type again (W82), and the decision is
+        still two keys, `w` then ⏎, with Esc between them leaving the walk off.
         """
         if self.walk_on:
             self.walk_end_chain()
@@ -4269,12 +4268,12 @@ class UI(WalkMixin):
         was = (self.pane, self.scroll)
         self.pane, self.scroll = "plan", 0
         try:
-            raw = self.prompt("walk: how many sessions? (last walk: %d, nothing cancels)"
-                              % self.walk_budget, "")
+            raw = self.prompt("walk: how many sessions? [%d], esc cancels:"
+                              % self.walk_budget, str(self.walk_budget))
         finally:
             self.pane, self.scroll = was
         if not raw:
-            self.msg = "walk: not started — it wants a number of sessions"
+            self.msg = "walk: not started"
             return
         try:
             budget = int(raw)
