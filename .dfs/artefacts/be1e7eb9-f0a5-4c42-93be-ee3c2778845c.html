@@ -1,0 +1,150 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>roadmap-dfs and AI-DLC</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 78ch; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  h2 { font-size: 18px; margin: 28px 0 8px; padding-top: 8px; border-top: 1px solid #ddd; }
+  h3 { font-size: 14px; margin: 0 0 4px; }
+  p, li { max-width: 70ch; overflow-wrap: anywhere; }
+  li { margin-bottom: 6px; }
+  ul, ol { padding-left: 22px; }
+  code { font: 13px/1.4 ui-monospace, Menlo, monospace; background: #eee9dd; padding: 1px 4px;
+         border-radius: 3px; overflow-wrap: anywhere; }
+  a { color: #1b4f9c; }
+  .note { color: #555; font-size: 14px; }
+  .ctl { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .seg { min-height: 44px; padding: 0 14px; border: 1.5px solid #333; border-radius: 6px;
+         background: #fff; font: inherit; color: #1a1a1a; cursor: pointer; }
+  .seg.on { background: #1a1a1a; color: #fff; }
+  .seg.act { border-style: dashed; }
+  .count { font-size: 14px; color: #555; margin: 4px 0 8px; }
+  .axes { display: flex; flex-direction: column; gap: 8px; }
+  details.axis { border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  details.axis summary { min-height: 44px; padding: 10px 12px; box-sizing: border-box;
+         cursor: pointer; font-weight: 600; display: flex; align-items: center; }
+  .pair { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
+  .side { box-sizing: border-box; padding: 8px 10px; border-radius: 6px; border: 1px solid #ccc; }
+  .side p { margin: 0; font-size: 15px; }
+  .side.a { background: #eef3fb; border-color: #9db6dc; }
+  .side.r { background: #f3f7ee; border-color: #a9c58e; }
+  body[data-show="a"] .side.r, body[data-show="r"] .side.a { display: none; }
+  @media (min-width: 720px) {
+    body { padding: 28px 32px; }
+    .pair[data-both="1"] { flex-direction: row; }
+    body[data-show="both"] .pair { flex-direction: row; }
+    .side { flex: 1 1 0; }
+  }
+</style>
+<body data-show="both">
+<main>
+<h1>roadmap-dfs and AI-DLC</h1>
+<p>A comparison of this tool with <a href="https://github.com/awslabs/aidlc-workflows" rel="noopener">awslabs/aidlc-workflows</a> (AI-DLC). It was made by reading both; nothing was run.</p>
+<p class="note">This page is docs/aidlc-comparison.md laid out for a phone; the document is the source and carries the same words.</p>
+<p><strong>What was read.</strong> AI-DLC at commit <code>c2d8477</code> of <code>main</code> (release 2.11.0): <code>README.md</code>, <code>AGENTS.md</code>, <code>docs/guide/</code> chapters 00, 04, 06, 07, 09, 10, 11, workflow-profiles and the glossary, <code>docs/harness-engineering/06-sensors.md</code> and <code>docs/reference/02-plane-architecture.md</code>. roadmap-dfs at <code>efbe2a9</code>: <code>README.md</code>, <code>SKILL.md</code>, <code>templates/ROADMAP.md</code> and the headers of <code>scripts/check.py</code>, <code>hook.sh</code>, <code>run.sh</code>, <code>branch.py</code> and <code>walk.py</code>. <strong>Not read:</strong> AI-DLC's specification PDF, the rest of <code>docs/reference/</code>, the agents' knowledge files, its tests and its source beyond the file list. Where a claim about AI-DLC rests on a file, the file is named in brackets, relative to that repo.</p>
+<section id="what-each-is-for"><h2>What each is for</h2>
+<p><strong>AI-DLC</strong> is a software factory for one person driving an agent through a delivery lifecycle: intent, then spec and plan, then code, then deployment. "The person drives it, and it delivers their project" [<code>AGENTS.md</code>]. The unit is an <em>intent</em> run through a <em>scope</em> (a fixed route through up to 33 <em>stages</em> in 5 phases) with 14 agent personas, and the person approves at a gate after every stage [<code>docs/guide/04-phases-and-stages.md</code>, <code>docs/guide/00-introduction.md</code>]. Its answer to "AI coding loses context as projects grow" is structure the engine enforces: one deterministic engine decides which stage is next and the chat session carries it out [<code>README.md</code>, <code>docs/guide/00-introduction.md</code>].</p>
+<p><strong>roadmap-dfs</strong> is a to-do list for agents: each task is a decision tree whose branches are different ways to reach the goal, worked by short non-interactive sessions that pursue one branch, record evidence, and jump to a sibling when the evidence refutes the branch [<code>templates/ROADMAP.md</code> §0, <code>README.md</code>]. The person is not in the loop while a session runs; they are asked only for what needs them (a raise), and otherwise review the finished tree, where every assumption was declared with what would show it wrong.</p>
+<p>So the two are not rivals for the same job. AI-DLC is a <em>method for delivering software with a person steering live</em>. roadmap-dfs is a <em>method for letting an agent work unattended on a backlog and keeping its reasoning auditable</em>. They overlap in the middle, where an agent takes a piece of work from idea to code.</p>
+</section>
+<section id="side-by-side"><h2>Side by side</h2>
+<div class="ctl" role="group" aria-label="Show">
+<button type="button" class="seg on" data-show="both">Both</button>
+<button type="button" class="seg" data-show="a">AI-DLC</button>
+<button type="button" class="seg" data-show="r">roadmap-dfs</button>
+<button type="button" class="seg act" data-act="open">Open all</button>
+<button type="button" class="seg act" data-act="close">Close all</button>
+</div>
+<p class="count" id="count" aria-live="polite"></p>
+<div class="axes">
+<details class="axis" data-node="axis-1"><summary>Unit of work</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>An <em>intent</em>: one run of a lifecycle in a <em>space</em> [<code>docs/guide/03-spaces-and-intents.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>A <em>task</em>: one file, <code>.dfs/items/W&lt;n&gt;.md</code>, with a Goal, a Tree and a Log</p></div></div></details>
+<details class="axis" data-node="axis-3"><summary>How it is planned</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>Chosen from a catalogue: 11 scopes (Classic 18 of 33 stages, Express 10, Enterprise 33…), or a plan the composer agent proposes from the request; depth and test strategy set per work [<code>docs/guide/workflow-profiles.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>No catalogue. The agent writes the tree for the task: sibling nodes are the alternatives, one is pursued, the rest parked with a reason; the tree is re-planned after every node</p></div></div></details>
+<details class="axis" data-node="axis-5"><summary>What a step is</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>A stage with declared inputs, outputs and a lead agent; stages run in lifecycle order, jumps mark skipped stages <code>[S]</code> [<code>docs/guide/04-…</code>, <code>docs/guide/10-…</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>A node: an Approach, optionally a Hypothesis and Evidence, a Determination (confirmed or refuted), and a commit whose subject starts with the node id</p></div></div></details>
+<details class="axis" data-node="axis-7"><summary>Where the human is</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>In the session. A gate after every stage (Approve / Request Changes), a questions file in three modes (Guide me, Edit file, Chat), Plan Approval before code generation; in Construction the person may let routine checkpoints pass [<code>docs/guide/07-interaction-modes.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>Outside it. Sessions are non-interactive. A choice is made by the agent and written as a falsifiable Hypothesis with a page the author can operate; a raise is only for a fact, a preference between outcomes, access, or an ordering dependency; the author's ruling prunes or confirms a subtree [<code>templates/ROADMAP.md</code>, <code>SKILL.md</code>]</p></div></div></details>
+<details class="axis" data-node="axis-9"><summary>Default when unsure</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>Ask once, in plain words, with a recommendation [<code>AGENTS.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>Choose, and declare the assumption; "anything you could reasonably choose, choose"</p></div></div></details>
+<details class="axis" data-node="axis-11"><summary>A session</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>One long conversation; the <em>conductor</em> asks the engine for the next step, does it and reports back. Resume reads the state file [<code>docs/guide/00-…</code>, <code>docs/guide/11-…</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>One turn of <code>claude -p</code>, ended near a context checkpoint. The briefing is derived by <code>state.py</code>; unfinished work is left uncommitted for the next session; ten sessions without the author raises for review [<code>SKILL.md</code>]</p></div></div></details>
+<details class="axis" data-node="axis-13"><summary>State</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p><code>aidlc-state.md</code> per intent: scope, depth, six-state stage checkboxes, current stage, resume point; the engine rewrites it [<code>docs/guide/10-state-and-audit.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>The task file's Tree is the state; there is no separate state file. Status is derived from nodes and log entries</p></div></div></details>
+<details class="axis" data-node="axis-15"><summary>Audit</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>A 119-event taxonomy written as Markdown shards by tools and hooks (stage, gate, question, guard, sensor, subagent events…) [<code>docs/guide/10-…</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>The append-only Log and git history: one commit per node. A determined node cannot be edited; later understanding is a new node</p></div></div></details>
+<details class="axis" data-node="axis-17"><summary>Checks on the work</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p><em>Sensors</em>: deterministic checks (required sections, upstream coverage, claim sources, traceability, linter, type-check), advisory unless the team makes one block at a gate; verification gates at phase boundaries; 2 reviewer agents on stages that declare one [<code>docs/harness-engineering/06-sensors.md</code>, <code>docs/guide/06-agents.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>A <em>critic</em> every fifth session judges the tree's reasoning (is the evidence true, independent, and does it support the path?); a <em>reviewer</em> judges the finished implementation against the Goal; findings become nodes. Tests are part of nodes' Approach, not a separate mechanism</p></div></div></details>
+<details class="axis" data-node="axis-19"><summary>Enforcement</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>17 hooks plus an engine: fences (plan approval, review freeze, state transition, reviewer read scope, human presence) under a Guard Policy of strict / relaxed / off; a gate needs a real message from the person [<code>AGENTS.md</code>, <code>docs/guide/glossary.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>A git pre-commit and pre-merge-commit hook runs <code>check.py</code> and refuses commits that break the tree's invariants: edited determined nodes, edited log, new <code>Ask:</code>, a Hypothesis without an interactive artefact, an oversize task file [<code>scripts/check.py</code>, <code>scripts/hook.sh</code>]</p></div></div></details>
+<details class="axis" data-node="axis-21"><summary>What guards protect</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>The workers staying on the spec and plan the person last approved; "never stand between the person and what the person asks for" [<code>AGENTS.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>The record: that what the author later reads is what was reasoned at the time</p></div></div></details>
+<details class="axis" data-node="axis-23"><summary>Learning</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>The <em>learning loop</em>: a stage diary (<code>memory.md</code>), candidates surfaced at the gate, kept ones written into layered rules <code>org → team → project → phase</code> [<code>docs/guide/09-…</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>The author settles a rule into the law (§1, L1…); the critic can backtrack a node. Nothing is learned automatically</p></div></div></details>
+<details class="axis" data-node="axis-25"><summary>Agents</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>14 personas ("small mob, broad agents"); most stages run inline in the conductor's own context, four dispatch subagents; agents never call each other [<code>docs/guide/00-…</code>, <code>docs/guide/06-…</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>One agent per session, no personas; separate prompts for work, critic and review. Plan sessions and implement sessions can run on different models (<code>PLAN_MODEL</code>, <code>IMPLEMENT_MODEL</code> in <code>scripts/run.sh</code>)</p></div></div></details>
+<details class="axis" data-node="axis-27"><summary>Harnesses</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>One authored core packaged into per-harness trees: Claude Code, Kiro CLI, Kiro IDE, Codex CLI, Cursor, opencode, GitHub Copilot; a native <code>aidlc</code> binary installs them [<code>README.md</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>One skill file and a runner that launches claude (default), codex, kiro or opencode (<code>run.sh --codex</code>…); packaged as a nix flake</p></div></div></details>
+<details class="axis" data-node="axis-29"><summary>Many things at once</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>Spaces and intents; team mode where each person claims a Unit in their own checkout; parallel Unit batches (<code>swarm</code>); git worktrees for Units [<code>docs/guide/04-…</code>, <code>docs/guide/10-…</code>]</p></div><div class="side r"><h3>roadmap-dfs</h3><p>One branch and worktree per task (<code>dfs/&lt;task&gt;</code>, merged <code>--no-ff</code> when the review passes); <code>order.md</code> orders tasks as a tree with breaks; an item that raises blocks only its subtree [<code>README.md</code>, <code>.dfs/order.md</code>]</p></div></div></details>
+<details class="axis" data-node="axis-31"><summary>Surfaces</summary>
+<div class="pair"><div class="side a"><h3>AI-DLC</h3><p>The chat, a statusline, <code>aidlc status</code> / <code>doctor</code>, plain-Markdown records</p></div><div class="side r"><h3>roadmap-dfs</h3><p>A terminal screen, a phone-sized web page (installable), and chats; the author answers raises and Hypotheses on the page</p></div></div></details>
+</div>
+</section>
+<section id="what-they-share"><h2>What they share</h2>
+<ul><li><strong>Records in the repo, in plain files.</strong> Both keep their working state in text under version control, so a fresh session (or a person) can pick the work up from disk, not from a conversation.</li><li><strong>A tool for the bookkeeping, the model for the judgement.</strong> AI-DLC's first tenets are "Tools for determinism. LLM for knowledge. Human for judgement" [<code>AGENTS.md</code>]; roadmap-dfs derives the briefing and the stop conditions in <code>state.py</code>, "the same code the runner stops on".</li><li><strong>Hooks that refuse.</strong> Each stops an action rather than asking the agent to behave.</li><li><strong>The human decides what only they can.</strong> They differ on <em>when</em> and <em>how often</em>.</li></ul>
+</section>
+<section id="where-they-differ-in-kind"><h2>Where they differ in kind</h2>
+<ol><li><strong>Prescribed route against derived route.</strong> AI-DLC knows the stations in advance and the work is to pass through them well; the value is in the catalogue (stages, agents, knowledge, rules). roadmap-dfs has no catalogue; the value is in the discipline of the tree: alternatives written down, assumptions stated with what would refute them, backing up when the evidence says so. AI-DLC can go back ("Redo" or "Jump") but nothing in the chapters read treats a refuted branch as a concept.</li><li><strong>Approval against review.</strong> AI-DLC's human approves <em>each stage's output before the next starts</em>. roadmap-dfs's author reviews <em>the whole tree after the agent has finished</em>, and can prune any node. That is cheaper in attention and far riskier if an early assumption is wrong, which is why every assumption is named and has a page to rule on it.</li><li><strong>What the audit audits.</strong> AI-DLC's trail records what happened and who approved it (119 event types, with the person's words kept whole). roadmap-dfs's record is of <em>why</em>: the evidence for and against each assumption, and the critic checks that evidence for independence.</li><li><strong>Interactive against unattended.</strong> AI-DLC supports unattended runs only as a declared exception (<code>AIDLC_UNATTENDED=1</code>) [<code>docs/guide/07-interaction-modes.md</code>]. For roadmap-dfs it is the only mode, and cost control (short sessions, a context checkpoint, cache-aware limits) is part of the design.</li><li><strong>Scope of the lifecycle.</strong> AI-DLC reaches from market research and mockups to deployment pipelines and feedback loops. roadmap-dfs says nothing about what a task's nodes should contain; it is a planner and a record, not a delivery process.</li></ol>
+</section>
+<section id="what-each-has-that-the-other-does-not"><h2>What each has that the other does not</h2>
+<p><strong>In AI-DLC, not in roadmap-dfs</strong></p>
+<ul><li>A delivery lifecycle with domain knowledge built in: agent personas, per-agent knowledge, stage definitions, and team knowledge indexed from documents.</li><li>Profiles that size the ceremony to the work (Express at 10 of 33 stages, Enterprise at all 33).</li><li>Sensors: deterministic content checks on the <em>work product</em> (headings present, upstream artefacts cited). roadmap-dfs checks the <em>shape of its own record</em>, not the code or documents a node produces.</li><li>A learning loop that turns a correction into a standing rule.</li><li>Many-harness packaging, with a determinism check on the build and a native installer.</li><li>Team features: spaces, Unit claims, pinned merge-back.</li><li>A rule that nothing shown to the person is engine jargon (<code>AGENTS.md</code>, "What the person reads").</li></ul>
+<p><strong>In roadmap-dfs, not in AI-DLC</strong></p>
+<ul><li>A refutable plan: nodes with a Hypothesis, a <code>Wrong if</code>, evidence for and against, and a jump to a parked sibling when refuted, with the refuted code reverted and kept in history.</li><li>A critic that reviews the reasoning rather than the output, and backtracks to the first node whose evidence does not carry its determination.</li><li>Immutability: a determined node, and the log, cannot be rewritten, and the commit guard enforces it.</li><li>Unattended operation as the design centre: budgeted sessions, a derived briefing, usage-limit holds, a phone page to answer on.</li><li>Raises only for things that need the author, with tooling faults kept out of the task.</li></ul>
+</section>
+<section id="ideas-that-could-carry-over"><h2>Ideas that could carry over</h2>
+<p>These are suggestions only; nothing here has been decided or built.</p>
+<p><em>From AI-DLC to roadmap-dfs</em></p>
+<ol><li><strong>Learned rules.</strong> The critic and the author's corrections already produce reusable findings; AI-DLC's diary-and-confirm loop is a model for proposing them as candidate law (§1) for the author to accept.</li><li><strong>Sensors on node output.</strong> <code>check.py</code> could be joined by checks on what a node <em>produced</em> (a Determination that answers its Approach, a screenshot where the node changes what the user sees), run at commit, as AI-DLC runs them at a gate.</li><li><strong>Sized trees.</strong> AI-DLC's profiles suggest that a bugfix and a feature want differently shaped trees; a few starting shapes could save the first planning session.</li><li><strong>A shared vocabulary rule.</strong> The "never show engine words" rule maps onto what the author reads on the page.</li></ol>
+<p><em>From roadmap-dfs to AI-DLC</em></p>
+<ol><li><strong>Hypotheses at the points it already asks.</strong> AI-DLC's questions are the person's decisions; a defaulted one could be recorded with what would show it wrong, so unanswered questions do not stall unattended runs.</li><li><strong>A critic stage</strong> over a whole intent's decisions (not artefacts), at intervals.</li><li><strong>Immutable history for approved stages</strong>, so that a change after approval is a new record, not an edit.</li></ol>
+</section>
+<section id="when-to-use-which"><h2>When to use which</h2>
+<p>Use AI-DLC to build a product with a person steering and a team's conventions encoded as stages and rules. Use roadmap-dfs to let an agent work through a backlog while the author is elsewhere, and to find out afterwards <em>why</em> it chose what it chose. Nothing stops a roadmap-dfs task from being "run AI-DLC's express scope on this", with the tree recording what that run assumed.</p>
+</section>
+<section id="limits-of-this-comparison"><h2>Limits of this comparison</h2>
+<p>It is a reading, not a measurement. It says nothing about output quality, token cost, time to a working feature or how often each stops for the human; comparing those means running both on the same piece of work, which needs AI-DLC installed from its release script and paid model time on two runs. AI-DLC's counts (33 stages, 14 agents, 119 events) are as its documents state them, and were not recounted from source.</p>
+</section>
+</main>
+<script>
+(function () {
+  var body = document.body, axes = [].slice.call(document.querySelectorAll("details.axis"));
+  var count = document.getElementById("count");
+  function upd() {
+    var n = axes.filter(function (d) { return d.open; }).length;
+    count.textContent = axes.length + " axes, " + n + " open";
+  }
+  [].forEach.call(document.querySelectorAll(".seg[data-show]"), function (b) {
+    b.addEventListener("click", function () {
+      body.setAttribute("data-show", b.getAttribute("data-show"));
+      [].forEach.call(document.querySelectorAll(".seg[data-show]"), function (x) {
+        x.classList.toggle("on", x === b);
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+    });
+  });
+  [].forEach.call(document.querySelectorAll(".seg[data-act]"), function (b) {
+    b.addEventListener("click", function () {
+      var open = b.getAttribute("data-act") === "open";
+      axes.forEach(function (d) { d.open = open; });
+      upd();
+    });
+  });
+  axes.forEach(function (d) { d.addEventListener("toggle", upd); });
+  upd();
+})();
+</script>
