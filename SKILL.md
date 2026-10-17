@@ -188,6 +188,12 @@ no commit, so the worktree's `.dfs/items`, `.dfs/artefacts` and the rest are lin
 author's checkout, and the task file you write there is the one copy: it is never staged, and
 your node commits carry the code alone (below).
 
+Two cases have no branch: a first run while the checkout is off `main`/`master`, and a repo
+with no commit yet. Then the item is worked in place, on whatever is checked out, and
+nothing is rebased or merged, since there is nothing to cut a branch from or merge into. A
+task that already has a worktree is still worked in it off `main`/`master`, and its merge
+is the raise above until the checkout is back on the default branch.
+
 ## When `.dfs/` is gitignored
 
 Supported: `.dfs/` is planning, and git history shows the walk. Your briefing says

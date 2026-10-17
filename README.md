@@ -26,6 +26,11 @@ or rebase of yours left unfinished in the checkout, raise instead and are left a
 gitignored `.dfs/` is worked the same way: the worktree links to your checkout's ignored
 planning files, so the screen and the sessions read and write one copy.
 
+There is no branch when the checkout is off `main`/`master` or the repo has no commit yet:
+the item is worked in place, on whatever is checked out, and nothing is merged. A task that
+already has a worktree stays in it off `main`/`master`, and its merge raises until you are
+back on the default branch.
+
 ## Running the sandbox as a daemon
 
 `sandbox daemon [command args]` runs the command (default: the repo's `CONTAINER_APP_CMD`, from `.container.env`)
