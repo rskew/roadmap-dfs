@@ -414,11 +414,8 @@ def check_history(task, text, head, archive=""):
 # picture is a raise's artefact, not an assumption's, and a button nothing listens to is a
 # picture. A floor, not a proof of a good page: the author's reading of the page judges that.
 ARTEFACT_REF = dfs_tree.ARTEFACT_REF
-_TAGS = "input|button|select|textarea|details"
-CONTROL = re.compile(r"<(?:%s)\b|createElement\(\s*['\"](?:%s)['\"]" % (_TAGS, _TAGS), re.I)
-HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|toggle|key\w+|"
-                     r"pointer\w+|mouse\w+|focus|select)\s*=", re.I)
-
+CONTROL = dfs_tree.CONTROL
+HANDLER = dfs_tree.HANDLER
 
 # And it must be able to rule: reach `/artefact-state/<its file>` and send a `verdict`, which is
 # how the author confirms or refutes the node from the page (web.py `artefact_state`).

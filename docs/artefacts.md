@@ -72,7 +72,8 @@ A Hypothesis names its page as `.dfs/artefacts/<uuid>.html` inside the Hypothesi
 `check.py` refuses a commit that adds one without it. A raise names its page on a line of
 its own, `Answer with: .dfs/artefacts/<uuid>.html`; a raise may link several pages to look
 at, and this line picks the one that answers. `tree.py log raise` refuses a page that is
-not there or cannot answer.
+not there or cannot answer: one with no control, no handler, or no post of an `answer` to
+`/artefact-state/`.
 
 ### What an answer page shows
 

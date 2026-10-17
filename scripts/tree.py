@@ -587,9 +587,20 @@ def answer_page(body):
     return m.group(1) if m else None
 
 
+# A page is interactive when it has a control and a handler that answers it: a button
+# nothing listens to is a picture. A floor, not a proof of a good page (check.py uses
+# the same two for a Hypothesis's page).
+_TAGS = "input|button|select|textarea|details"
+CONTROL = re.compile(r"<(?:%s)\b|createElement\(\s*['\"](?:%s)['\"]" % (_TAGS, _TAGS), re.I)
+HANDLER = re.compile(r"addEventListener\s*\(|\bon(?:click|input|change|submit|toggle|key\w+|"
+                     r"pointer\w+|mouse\w+|focus|select)\s*=", re.I)
+
+
 def can_answer(page):
-    """Whether a page names the route and the field that record an answer to a raise."""
-    return "/artefact-state/" in page and bool(re.search(r"\banswer\b", page))
+    """Whether a page has a form that records an answer to a raise: a control, a handler,
+    and the route and field the answer is posted with."""
+    return ("/artefact-state/" in page and bool(re.search(r"\banswer\b", page))
+            and bool(CONTROL.search(page)) and bool(HANDLER.search(page)))
 
 
 def append_log(task, kind, args=(), body=""):
@@ -602,9 +613,10 @@ def append_log(task, kind, args=(), body=""):
         raise ValueError("the raise says to answer with %s, which is not in %s"
                          % (page, dfs_paths.rel(dfs_paths.artefacts())))
     if page and not can_answer(dfs_paths.artefact_file(page).read_text(errors="replace")):
-        raise ValueError("the raise says to answer with %s, which cannot answer: the page must POST "
-                         "{answer: <text>} to /artefact-state/<its file name> "
-                         "(templates/_TEMPLATE_ANSWER.html does)" % page)
+        raise ValueError("the raise says to answer with %s, which cannot answer: the page needs a form, "
+                         "a control and a handler that POSTs {answer: <text>} to "
+                         "/artefact-state/<its file name> (templates/_TEMPLATE_ANSWER.html's "
+                         "answer form does)" % page)
     carry_attachments(task, body)
     p = ensure_part(task)
     t = parse(p.read_text(), task)

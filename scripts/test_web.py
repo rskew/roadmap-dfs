@@ -215,8 +215,9 @@ class Web(unittest.TestCase):
     def put_artefact(self, name="0a1b2c.html", title="How the limiter is wired"):
         d = self.root / ".dfs" / "artefacts"
         d.mkdir(parents=True, exist_ok=True)
-        (d / name).write_text("<!doctype html><title>%s</title><p>hello</p><script>"
-                              "fetch('/artefact-state/%s', {body: JSON.stringify({answer: 'x'})})</script>"
+        (d / name).write_text("<!doctype html><title>%s</title><p>hello</p><button id=send>Send</button><script>"
+                              "send.addEventListener('click', () => "
+                              "fetch('/artefact-state/%s', {body: JSON.stringify({answer: 'x'})}))</script>"
                               % (title, name))
         (d / "_TEMPLATE.html").write_text("<title>template</title>")
         (self.root / ".dfs" / "secret.html").write_text("<title>not an artefact</title>")
@@ -358,6 +359,11 @@ class Web(unittest.TestCase):
         (self.root / ".dfs" / "artefacts" / "still.html").write_text("<title>A picture</title><p>hello</p>")
         with self.assertRaisesRegex(ValueError, "cannot answer"):
             dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/still.html")
+        # The route and the word are not a form: a page that posts on load answers nothing the author chose.
+        (self.root / ".dfs" / "artefacts" / "noform.html").write_text(
+            "<p>hello</p><script>fetch('/artefact-state/noform.html', {body: JSON.stringify({answer: 'x'})})</script>")
+        with self.assertRaisesRegex(ValueError, "needs a form"):
+            dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/noform.html")
         dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/0a1b2c.html")
 
     def test_a_raise_cannot_name_an_answering_page_that_does_not_exist(self):
