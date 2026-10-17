@@ -235,12 +235,10 @@ def share_ignored_state(wt):
 def enter(task):
     """The worktree `task` is worked in, cut on the first call; None to work where we are:
     the checkout is off the default branch, or no commit exists yet for a branch to start
-    from. A gitignored roadmap is worked in a worktree too, with its planning files shared
-    (`share_ignored_state`)."""
-    if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
-        return None
-    if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
-        return None
+    from. A task that already has a worktree is worked in it wherever the checkout is, since
+    the task's files are read from there; the merge then raises off the default branch
+    (`merge`) rather than the task ending done unmerged. A gitignored roadmap is worked in a
+    worktree too, with its planning files shared (`share_ignored_state`)."""
     wt = dfs_paths.worktrees() / task
     name = dfs_paths.item_branch(task)
     ignored = dfs_paths.ignored()
@@ -248,6 +246,10 @@ def enter(task):
         if ignored:
             share_ignored_state(wt)
         return wt
+    if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
+        return None
+    if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
+        return None
     fresh = not _has_branch(name)
     _git("worktree", "prune")   # a worktree deleted by hand stays registered, and blocks the add
     keep_worktrees_untracked()

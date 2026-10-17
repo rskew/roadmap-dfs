@@ -462,6 +462,24 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.git("symbolic-ref", "--short", "HEAD"), "elsewhere")
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
 
+    def test_a_task_with_a_worktree_is_not_done_unmerged_when_the_checkout_is_off_main_and_master(self):
+        self.run_chain("work", cap=1)
+        main = self.git("symbolic-ref", "--short", "HEAD")
+        self.git("checkout", "-q", "-b", "elsewhere")
+        elsewhere = self.git("rev-parse", "HEAD")
+        rc, meta, out = self.run_chain("work,confirm,rok", cap=3)
+        self.assertNotEqual(meta.get("stop"), "done", out)
+        self.assertEqual(self.git("rev-parse", "HEAD"), elsewhere, out)
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s", "dfs/W1"))
+        self.assertTrue(self.wt.exists())
+        self.assertEqual(len(self.log("raise")), 1, out)
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "blocked")
+        self.git("checkout", "-q", main)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
+
     def test_a_chain_in_a_repo_with_no_commit_yet_works_in_place(self):
         shutil.rmtree(self.root / ".git")
         subprocess.run(["git", "init", "-q"], cwd=self.root, check=True)
