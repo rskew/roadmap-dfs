@@ -457,7 +457,7 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
             bad.append("%s states a Hypothesis and names no artefact. Draw an interactive "
                        "page that explains the assumption and lets the author decide it, "
                        "and name it in the Hypothesis as `.dfs/artefacts/<uuid>.html` "
-                       "(templates/_TEMPLATE_ASSUMPTION.html)" % nd["id"])
+                       "(templates/_TEMPLATE_ANSWER.html)" % nd["id"])
             continue
         why = []
         for name in names:
@@ -467,7 +467,7 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
             elif CONTROL.search(page) and HANDLER.search(page) and not can_rule(page):
                 why.append("%s cannot rule on its node (it must POST {verdict: 'confirmed' or "
                            "'refuted', answer: <why>} to /artefact-state/<its file name>, as "
-                           "templates/_TEMPLATE_ASSUMPTION.html does)" % name)
+                           "templates/_TEMPLATE_ANSWER.html does)" % name)
             elif not CONTROL.search(page) or not HANDLER.search(page):
                 why.append("%s is not interactive (it needs an <input>, <button>, <select>, "
                            "<textarea> or <details> and a handler that answers it: "
@@ -501,7 +501,7 @@ def check_no_new_ask(task, text, head):
         if ask and (not old or (old["fields"].get("Ask") or "").strip() != ask):
             bad.append("%s adds an Ask. Write it as a Hypothesis instead: the assumption, "
                        "`Wrong if` what would show it wrong, evidence, and an artefact "
-                       "(templates/_TEMPLATE_ASSUMPTION.html)" % nd["id"])
+                       "(templates/_TEMPLATE_ANSWER.html)" % nd["id"])
     return bad
 
 

@@ -604,7 +604,7 @@ def append_log(task, kind, args=(), body=""):
     if page and not can_answer(dfs_paths.artefact_file(page).read_text(errors="replace")):
         raise ValueError("the raise says to answer with %s, which cannot answer: the page must POST "
                          "{answer: <text>} to /artefact-state/<its file name> "
-                         "(templates/_TEMPLATE_ASSUMPTION.html does)" % page)
+                         "(templates/_TEMPLATE_ANSWER.html does)" % page)
     carry_attachments(task, body)
     p = ensure_part(task)
     t = parse(p.read_text(), task)

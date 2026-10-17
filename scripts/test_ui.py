@@ -178,6 +178,20 @@ class Flows(unittest.TestCase):
         self.assertEqual(json.loads((self.root / ".dfs" / "artefact-state" / "c0ffee-choose.html.json").read_text()),
                          {"picked": "spinning"})
 
+    def test_the_answer_templates_form_answers_a_raise_with_the_option_and_the_note(self):
+        shutil.copy(HERE.parent / "templates" / "_TEMPLATE_ANSWER.html", self.root / ".dfs" / "artefacts" / "c0ffee-ans.html")
+        w9 = self.root / ".dfs" / "items" / "W9.md"
+        text = w9.read_text()
+        tail = "WAL checkpoints may stall readers anyway."
+        self.assertIn(tail, text)
+        w9.write_text(text.replace(tail, tail + "\n  Answer with: .dfs/artefacts/c0ffee-ans.html", 1))
+        self.flow("template_answer")
+        answers = [e for e in self.log("W9") if e["kind"] == "answer"]
+        self.assertEqual([e["body"].strip() for e in answers],
+                         ["Take the second option: what it commits the work to.\n\nTest on one."])
+        state = json.loads((self.root / ".dfs" / "artefact-state" / "c0ffee-ans.html.json").read_text())
+        self.assertEqual(state["option"], "Take the second option: what it commits the work to.")
+
     def test_answering_a_raise_writes_the_terminals_log_entry(self):
         self.flow("answer")
         answers = [e for e in self.log("W9") if e["kind"] == "answer"]
@@ -209,7 +223,7 @@ class Flows(unittest.TestCase):
                          [(["W9.9", "confirmed"], "Spinning disks are fine.")])
 
     def test_the_assumption_template_holds_confirm_until_the_siblings_are_parked(self):
-        shutil.copy(HERE.parent / "templates" / "_TEMPLATE_ASSUMPTION.html", self.root / ".dfs" / "artefacts" / "c0ffee-tpl.html")
+        shutil.copy(HERE.parent / "templates" / "_TEMPLATE_ANSWER.html", self.root / ".dfs" / "artefacts" / "c0ffee-tpl.html")
         w9 = self.root / ".dfs" / "items" / "W9.md"
         text = w9.read_text()
         head = "### W9.9 \u00b7 Check the spinning-disk case\nParent: W9.8\nStatus: open\n"

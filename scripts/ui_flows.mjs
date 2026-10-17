@@ -552,6 +552,27 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // The answer template's own form answers a raise with the option chosen and the author's words.
+  async template_answer(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click(".row.hasraise .main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=answer]"); await dialog(page);
+    const f = page.frameLocator("dialog #answerpage");
+    await f.locator("#answerbox").waitFor({ state: "visible" });
+    assert(await f.locator("#rulebox").isHidden(), "no node waits on this page, so no Confirm or Refute");
+    await f.locator("#answer").click();
+    assert(/Choose an option/.test(await f.locator("#answer-status").textContent()), "an empty answer is not sent");
+    assert(await page.locator("dialog[open]").count() === 1, "and nothing was recorded");
+    await f.locator("label.opt", { hasText: "The second option" }).click();
+    await f.locator("#note").fill("Test on one.");
+    await f.locator("#answer").click();
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 });
+    await page.waitForFunction(() => !document.querySelector(".row.hasraise"), null, { timeout: 5000 });
+    same(errors, [], "no page errors");
+  },
+
   // The assumption template's own Confirm waits for the park box when the node would prune sibling work.
   async park_page(b) {
     const { page, errors } = await open(b, PHONE);

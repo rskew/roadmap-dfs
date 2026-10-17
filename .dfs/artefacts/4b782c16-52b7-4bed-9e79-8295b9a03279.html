@@ -1,0 +1,258 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W85.1: every answer page is free, and only its form is shared</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 860px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 14px; color: #444; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; text-align: left; }
+  .tabs button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  /* Two pages side by side from 720px, stacked on a phone: what a session copies for
+     a raise, and for a Hypothesis, under the chosen option. */
+  .pages { display: flex; flex-direction: column; gap: 14px; }
+  .page { border: 1.5px solid #333; border-radius: 8px; background: #fff; padding: 10px; }
+  .page > b { display: block; margin: 0 0 8px; }
+  .blk { box-sizing: border-box; border-radius: 4px; padding: 8px 10px; margin: 0 0 6px; font-size: 14px; }
+  .fixed { background: #e8e4da; border: 1.5px solid #8a8170; }
+  .free  { background: #e3f0e6; border: 1.5px dashed #2f6b3e; min-height: 96px; }
+  .hint  { background: #fdf3dc; border: 1.5px dashed #9a6b00; }
+  .form  { background: #1a1a1a; color: #fff; border: 1.5px solid #1a1a1a; }
+  .key { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 10px 0 0; font-size: 14px; }
+  .key span::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 6px;
+                      vertical-align: -2px; border-radius: 3px; }
+  .key .k-fixed::before { background: #e8e4da; border: 1.5px solid #8a8170; }
+  .key .k-free::before  { background: #e3f0e6; border: 1.5px dashed #2f6b3e; }
+  .key .k-hint::before  { background: #fdf3dc; border: 1.5px dashed #9a6b00; }
+  .key .k-form::before  { background: #1a1a1a; }
+  .follows { margin: 12px 0 0; padding: 10px 14px; border-left: 4px solid #1a1a1a; background: #fff; }
+  .follows ul { margin: 4px 0 0; padding-left: 20px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 2px 12px; color: #333; }
+  details { margin: 8px 0; }
+  summary { cursor: pointer; padding: 10px 0; }
+  @media (min-width: 720px) { .pages { flex-direction: row; } .page { flex: 1 1 0; } }
+</style>
+
+<h1>Every answer page is free; only the form that sends the answer is shared</h1>
+<p class="lede">W85 frees raise pages from the fixed template. The work takes the same
+  freedom for the page a Hypothesis names, so there is one kind of answer page:
+  an empty body the session draws in, and the shared form at its foot.</p>
+
+<h2>What a session starts from, under each reading</h2>
+<div class="tabs" role="group" aria-label="Which reading of the Goal">
+  <button type="button" data-opt="all" aria-pressed="true">Every answer page free (taken)</button>
+  <button type="button" data-opt="raise" aria-pressed="false">Raise pages only</button>
+  <button type="button" data-opt="skeleton" aria-pressed="false">A skeleton of sections</button>
+</div>
+<div class="pages">
+  <div class="page" data-node="raise-page"><b>A raise's answer page</b><div id="raise-blocks"></div></div>
+  <div class="page" data-node="hyp-page"><b>A Hypothesis's page</b><div id="hyp-blocks"></div></div>
+</div>
+<div class="key"><span class="k-fixed">fixed text and controls</span><span class="k-free">the session's own drawing</span>
+  <span class="k-hint">suggested section</span><span class="k-form">shared answer form</span></div>
+<div class="follows" id="follows" aria-live="polite"></div>
+
+<h2>What would show it wrong</h2>
+<p class="wrong">The author wants the Hypothesis page kept on its fixed holds/fails
+  layout, or wants raise pages to start from a suggested skeleton of sections rather
+  than an empty body.</p>
+<details>
+  <summary>The evidence so far</summary>
+  <p>The Goal names raise artefacts only. The same template served both kinds
+    (SKILL.md's Raising section: "For an assumption, or a raise ... start from
+    _TEMPLATE_ASSUMPTION.html"), and its reasons, showing the mechanism and each
+    option's implications, apply to an assumption as much as to a raise.</p>
+</details>
+
+<script>
+  var FORM = ['form', 'answer form: options, note, Send / Confirm / Refute'];
+  var FIXED_HYP = [['fixed', 'title and lede'], ['fixed', '"It holds" / "It does not" buttons'],
+                   ['fixed', 'one result sentence'], ['fixed', 'what would show it wrong'],
+                   ['fixed', 'the evidence so far']];
+  var FREE = [['fixed', 'title'], ['free', 'drawn freely: how the system works now, what each option changes in it, what follows']];
+  var SKEL = [['fixed', 'title'], ['hint', 'the mechanism now'], ['hint', 'each option, drawn'],
+              ['hint', 'what follows from each'], ['hint', 'what would show it wrong']];
+  var OPTS = {
+    all: { raise: FREE, hyp: FREE,
+      follows: ['One kind of answer page and one form; the docs describe what to show, not a layout.',
+                'A Hypothesis page shows its assumption the way it is best seen, e.g. as the mechanism it rests on.',
+                'Pages differ from each other more, so each is checked by artefact_check and read on its screenshot.'],
+      answer: 'Every answer page is free: raise and Hypothesis pages both start from an empty body, and only the answer form is shared.' },
+    raise: { raise: FREE, hyp: FIXED_HYP,
+      follows: ['Two kinds of page: raises drawn freely, Hypotheses kept on holds/fails.',
+                'Hypothesis pages stay uniform and quick to write, and as thin as before.',
+                'The template keeps its fixed body, and the docs need a second set of instructions.'],
+      answer: 'Free raise pages only: keep the Hypothesis page on its fixed holds/fails layout.' },
+    skeleton: { raise: SKEL, hyp: SKEL,
+      follows: ['Every page starts from the same suggested sections, which a session may drop.',
+                'More uniform pages, but a copied skeleton is still what gets filled in.',
+                'This is the parked alternative W85.3.'],
+      answer: 'Start answer pages from a skeleton of suggested sections rather than an empty body.' }
+  };
+  var chosen = 'all';
+  function blocks(id, list) {
+    document.getElementById(id).innerHTML = list.concat([FORM]).map(function (b) {
+      return '<div class="blk ' + b[0] + '">' + b[1] + '</div>';
+    }).join('');
+  }
+  function draw() {
+    var o = OPTS[chosen];
+    blocks('raise-blocks', o.raise); blocks('hyp-blocks', o.hyp);
+    document.getElementById('follows').innerHTML = '<b>What follows</b><ul>' +
+      o.follows.map(function (f) { return '<li>' + f + '</li>'; }).join('') + '</ul>';
+    document.querySelectorAll('[data-opt]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.opt === chosen));
+    });
+  }
+  document.querySelectorAll('[data-opt]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      chosen = b.dataset.opt; draw();
+      if (window.dfsAnswer) dfsAnswer.choose(OPTS[chosen].answer);
+    });
+  });
+  window.dfsPageState = function () { return chosen; };
+  document.addEventListener('dfs-state', function (e) { if (OPTS[e.detail]) { chosen = e.detail; draw(); } });
+  draw();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Every answer page is free: raise and Hypothesis pages both start from an empty body, and only the answer form is shared."> Every answer page free</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Free raise pages only: keep the Hypothesis page on its fixed holds/fails layout."> Raise pages only</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Start answer pages from a skeleton of suggested sections rather than an empty body."> A skeleton of sections</label>
+  </fieldset>
+  <label class="note" for="note">In your words (optional)</label>
+  <textarea id="note" rows="3"></textarea>
+  <div id="answerbox" hidden>
+    <div class="row"><button type="button" id="answer">Send as my answer</button></div>
+    <p id="answer-status" aria-live="polite"></p>
+  </div>
+  <div id="rulebox" hidden>
+    <label id="parkbox" hidden><input type="checkbox" id="park"> Confirming prunes <span id="parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="confirm">Confirm the node</button>
+      <button type="button" id="refute">Refute the node</button>
+    </div>
+    <p id="rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('rule-status'), buttons = document.querySelectorAll('#rulebox button');
+      if (verdict === 'confirmed' && !$('parkbox').hidden && !$('park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('refute').addEventListener('click', function () { rule('refuted'); });
+    $('answer').addEventListener('click', function () {
+      var status = $('answer-status'), send = $('answer'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('parks').textContent = parks.join(', ');
+      $('parkbox').hidden = !parks.length;
+      $('answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

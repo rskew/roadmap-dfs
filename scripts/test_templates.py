@@ -30,12 +30,12 @@ class MobileFirst(unittest.TestCase):
         self.assertNotRegex(css, r"(?<!-)width: *\d{3,}px", "a box wider than a phone")
         self.assertNotIn("position: absolute", css)
 
-    def test_the_assumption_template_has_no_slider_to_leave_pointless_in_a_copy(self):
-        page = (TEMPLATES / "_TEMPLATE_ASSUMPTION.html").read_text()
+    def test_the_answer_template_has_no_slider_to_leave_pointless_in_a_copy(self):
+        page = (TEMPLATES / "_TEMPLATE_ANSWER.html").read_text()
         self.assertNotRegex(page, r"type=[\"']?range", "a stock slider is copied into every page")
 
-    def test_the_assumption_template_can_confirm_or_refute_its_node(self):
-        page = (TEMPLATES / "_TEMPLATE_ASSUMPTION.html").read_text()
+    def test_the_answer_template_can_confirm_or_refute_its_node(self):
+        page = (TEMPLATES / "_TEMPLATE_ANSWER.html").read_text()
         self.assertIn("/artefact-state/", page)
         for verdict in ("'confirmed'", "'refuted'"):
             self.assertIn("rule(%s)" % verdict, page)
@@ -45,6 +45,22 @@ class MobileFirst(unittest.TestCase):
         self.assertTrue(dfs_check.can_rule(page), "what check.py demands of a Hypothesis's page")
         self.assertTrue(dfs_tree.can_answer(page), "what a raise's answering page must do")
         self.assertIn("j.node", page, "the buttons show only while a node waits on this page")
+
+    def test_the_answer_form_stands_alone_so_the_page_above_it_is_free(self):
+        # A session replaces everything between <h1> and the form; what the form's script
+        # needs must all be inside the form, or a free page breaks it.
+        page = (TEMPLATES / "_TEMPLATE_ANSWER.html").read_text()
+        mark = "<!-- ===== The answer form: keep from here to the end as it is"
+        self.assertIn(mark, page)
+        form = page[page.index(mark):]
+        script = form[form.index("<script>"):]
+        ids = set(re.findall(r"\$\('([\w-]+)'\)", script))
+        self.assertGreater(len(ids), 5)
+        for i in ids:
+            self.assertRegex(form, r'id="%s"' % re.escape(i), "the form's script needs #%s" % i)
+        self.assertIn('name="dfs-option"', form)
+        self.assertIn("dfsAnswer", script, "the page's own controls can pick an option")
+        self.assertIn(".dfs-answer {", form, "the form carries its own style")
 
 
 if __name__ == "__main__":
