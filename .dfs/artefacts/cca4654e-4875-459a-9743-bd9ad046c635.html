@@ -42,6 +42,7 @@
 
 <div id="rulebox" hidden>
   <p>Rule on this node: the reading above is what the work takes "actioned" to mean.</p>
+  <label id="parkbox" hidden><input type="checkbox" id="park"> Confirming prunes <span id="parks"></span>, which hold work: park them</label>
   <label for="note">Your note, sent with it (optional)</label>
   <textarea id="note" rows="3" style="width:100%; font: inherit; box-sizing: border-box;"></textarea>
   <div class="choices" style="margin-top:8px">
@@ -105,7 +106,7 @@
     var note = document.getElementById('rule-status'), why = document.getElementById('note').value.trim();
     var text = 'Actioned means: ' + document.querySelector('[data-case="' + chosen + '"]').textContent + '. ' + (why ? '\n\n' + why : '');
     document.querySelectorAll('#rulebox button').forEach(function (b) { b.disabled = true; });
-    call('POST', { state: mine(), verdict: verdict, answer: text, park: true }).then(function () {
+    call('POST', { state: mine(), verdict: verdict, answer: text, park: document.getElementById('park').checked }).then(function () {
       note.textContent = 'Recorded: ' + verdict + '.';
       parent.postMessage({ dfs: 'answered' }, '*');
     }).catch(function (e) {
@@ -119,5 +120,8 @@
   call('GET').then(function (j) {
     if (!touched && j.state && tests[j.state.chosen]) { chosen = j.state.chosen; show(); }
     document.getElementById('rulebox').hidden = !j.node;
+    var parks = (j.node && j.node.parks) || [];
+    document.getElementById('parks').textContent = parks.join(', ');
+    document.getElementById('parkbox').hidden = !parks.length;
   }).catch(function () {});
 </script>
