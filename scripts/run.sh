@@ -1107,7 +1107,8 @@ fi
 # with it, so the chain steps back into the main checkout first.
 # A merge that cannot go through (branch.py, `_unmerged`) is not a done item: a conflict
 # puts an open node back in the tree (exit 3) and the chain goes on and works it, and
-# edits of the author's that overlap the merge raise (exit 4). Both return non-zero here
+# edits of the author's that overlap the merge are stashed and put back around it (a raise,
+# exit 4, only when they conflict with what the merge brought in). Both return non-zero here
 # and the chain steps back into the worktree.
 merge_item() {
   [ -n "$ITEM_TREE" ] || return 0

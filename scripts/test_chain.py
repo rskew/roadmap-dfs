@@ -747,29 +747,50 @@ class Chain(unittest.TestCase):
         subprocess.run(["git", "merge-base", "--is-ancestor", moved, merge + "^2"], cwd=self.root, check=True)
         self.assertFalse(self.wt.exists())
 
-    def test_a_merge_over_the_authors_uncommitted_edits_is_a_raise_and_leaves_main_alone(self):
+    def commit_app(self, text):
+        (self.root / "app.txt").write_text(text)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "app")
+
+    def stashes(self):
+        return self.git("stash", "list", "--format=%gs")
+
+    def test_a_merge_over_the_authors_overlapping_edit_sets_it_aside_and_puts_it_back(self):
+        self.commit_app("one\ntwo\nthree\nfour\nfive\n")
+        (self.root / "app.txt").write_text("my one\ntwo\nthree\nfour\nfive\n")
+        rc, meta, out = self.run_chain("code,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.log("raise"), [], out)
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        # the author's line is back, on top of the merged one, and still uncommitted
+        text = (self.root / "app.txt").read_text()
+        self.assertTrue(text.startswith("my one\ntwo\n"), text)
+        self.assertIn("change", text)
+        self.assertEqual(self.git("status", "--porcelain", "--", "app.txt"), "M app.txt")
+        self.assertEqual(self.stashes(), "")
+
+    def test_a_merge_over_an_edit_that_conflicts_with_it_keeps_the_stash_and_raises(self):
         (self.root / "app.txt").write_text("the author's edit\n")
-        head = self.git("rev-parse", "HEAD")
         rc, meta, out = self.run_chain("code,confirm,rok")
         self.assertEqual(meta.get("stop"), "blocked", out)
         raised = self.log("raise")
         self.assertEqual(len(raised), 1, out)
         self.assertIn("app.txt", raised[0]["body"])
-        self.assertEqual(self.git("rev-parse", "HEAD"), head)
-        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
-        self.assertTrue(self.wt.exists())
+        self.assertIn("git stash apply", raised[0]["body"])
+        # merged, the paths as the merge left them, the author's edit safe in the stash
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertEqual(self.git("status", "--porcelain", "--", "app.txt"), "")
+        self.assertIn("dfs-merge-W1", self.stashes())
+        self.assertIn("the author's edit", self.git("stash", "show", "-p", "stash@{0}"))
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
 
-    def test_a_staged_edit_that_stops_the_merge_is_named_in_the_raise(self):
+    def test_an_edit_that_stops_the_merge_without_overlapping_is_set_aside_and_stays_staged(self):
         (self.root / "other.txt").write_text("staged\n")
         self.git("add", "other.txt")
-        head = self.git("rev-parse", "HEAD")
         rc, meta, out = self.run_chain("code,confirm,rok")
-        self.assertEqual(meta.get("stop"), "blocked", out)
-        body = self.log("raise")[0]["body"]
-        self.assertIn("stop the merge: other.txt", body)
-        self.assertNotIn("overlap", body)
-        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.git("status", "--porcelain", "--", "other.txt"), "A  other.txt")
+        self.assertEqual((self.root / "other.txt").read_text(), "staged\n")
+        self.assertEqual(self.stashes(), "")
 
     def test_a_review_ok_over_a_dirty_worktree_reopens_the_item_and_is_never_done_unmerged(self):
         rc, meta, out = self.run_chain("work,confirm,rmeddle", cap=3)

@@ -756,6 +756,46 @@ def _gist(text, limit=400):
     return one if len(one) <= limit else one[:limit].rsplit(" ", 1)[0] + " …"
 
 
+def _refused_paths(r):
+    """The paths git names when it refuses a merge over the author's edits: indented, by a
+    tab when the edits are in the working tree and by spaces when they are staged."""
+    return [l.strip() for l in out_of(r).splitlines() if l[:1] in ("\t", " ") and l.strip()]
+
+
+def _stash_index(sha):
+    """Where the stash entry `sha` stands now (`stash@{n}`), None when it is gone."""
+    for n, line in enumerate(_git("stash", "list", "--format=%H").stdout.split()):
+        if line == sha:
+            return "stash@{%d}" % n
+    return None
+
+
+def _set_aside(task, paths):
+    """Stash the author's edits to `paths` in the main checkout (untracked ones too, staged
+    state kept), so a merge git refused over them can go through. Returns the stash's sha,
+    None when nothing was set aside. The entry is found by its sha, never by position or a
+    bare `git stash`, since the stack is shared with every other checkout."""
+    tag = "dfs-merge-%s" % task
+    if _git(*_identity(), "stash", "push", "--include-untracked", "-q", "-m", tag, "--", *paths).returncode != 0:
+        return None
+    for line in _git("stash", "list", "--format=%H %gs").stdout.splitlines():
+        sha, _, subject = line.partition(" ")
+        if subject.endswith(tag):
+            return sha
+    return None
+
+
+def _put_back(sha, paths):
+    """Apply the stash `sha` again and drop it. When it conflicts with what the merge brought
+    in, the paths go back to the default branch's content and the stash is kept (False)."""
+    if _git(*_identity(), "stash", "apply", "--index", "-q", sha).returncode == 0:
+        _git("stash", "drop", "-q", _stash_index(sha) or "stash@{0}")
+        return True
+    _git("reset", "-q", "--", *paths)
+    _git("checkout", "-q", "--", *paths)
+    return False
+
+
 def _unmerged(task, wt, name, r, aside=None):
     """A merge git did not complete leaves the default branch as it was, and the item
     open. A conflict is work (the default branch moved after the rebase): the merge is
@@ -782,9 +822,7 @@ def _unmerged(task, wt, name, r, aside=None):
         return "guard"
     _put_back_shared_edits(aside or {})
     out = r.stderr + r.stdout
-    # git lists the paths indented, by a tab when the edits are in the working tree and by
-    # spaces when they are staged.
-    paths = [l.strip() for l in out.splitlines() if l[:1] in ("\t", " ") and l.strip()]
+    paths = _refused_paths(r)
     _raise_blocked(task, (
         "%s is finished and reviewed, but git would not merge %s into %s: %s\n"
         "Your uncommitted edits in %s stop the merge: %s.\n"
@@ -947,12 +985,19 @@ def merge(task):
     if not _rebase(task, wt, name):
         return "conflict"
     aside = {}
+    saved = paths = None
+
+    def join():
+        return _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
     try:
         _set_aside_shared_edits(name, wt, aside)
         r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name),
                  "-m", _task_details(task), name)
         if r.returncode != 0:
-            return _unmerged(task, wt, name, r, aside)
+            result = _unmerged(task, wt, name, r, aside)
+            if saved:
+                _put_back(saved, paths)
+            return result
     finally:
         # Every way out of the window puts the edits back, an interrupt (Stop chain's SIGINT
         # reaches this process) included: they have no other copy.
@@ -964,6 +1009,13 @@ def merge(task):
         if r.returncode != 0:
             print("dfs_branch: %s merged, but %s: %s" % (task, what, " ".join(out_of(r).split())),
                   file=sys.stderr)
+    if saved and not _put_back(saved, paths):
+        _raise_blocked(task, (
+            "%s is merged into %s, but your uncommitted edits to %s, which the merge needed out of the "
+            "way, conflict with what it brought in. They are kept in the stash %s (message "
+            "dfs-merge-%s) and those paths are as the merge left them: `git stash apply %s` "
+            "and resolve it.") % (task, dfs_paths.branch(), ", ".join(paths), saved[:12], task, saved[:12]))
+        return "blocked"
     return "merged"
 
 
