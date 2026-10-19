@@ -45,6 +45,12 @@ def _git(*args, cwd=None):
                           capture_output=True, text=True)
 
 
+def _git_bytes(*args, cwd=None):
+    """`git`'s stdout as the bytes it wrote, for comparing a file's content exactly."""
+    return subprocess.run(["git", *args], cwd=cwd or dfs_paths.work_root(),
+                          capture_output=True).stdout
+
+
 def _has_branch(name):
     return _git("rev-parse", "--verify", "--quiet", "refs/heads/" + name).returncode == 0
 
@@ -219,7 +225,7 @@ def _carry_branch_edits(wt, rel):
             continue
         if _git("diff", "--quiet", base, "--", p, cwd=wt).returncode == 0:
             continue   # the branch has not changed it, committed or not
-        was = _git("show", "%s:%s" % (base, p), cwd=wt).stdout.encode()
+        was = _git_bytes("show", "%s:%s" % (base, p), cwd=wt)
         now, theirs = mine.read_bytes(), root / p
         if theirs.is_file() and theirs.read_bytes() not in (now, was):
             clashes.append(p)
@@ -256,22 +262,23 @@ def put_back_tracked(wt):
     """Undo `_hide_tracked` before git rewrites the worktree: a rebase refuses to update a
     `--skip-worktree` path it finds through a link ("would be overwritten by checkout") when
     the default branch changed it. The links over hidden paths go, and the paths are checked
-    out from HEAD again. Returns whether there were any; `share_ignored_state` hides them
-    again."""
+    out from HEAD again. Returns the names of the `.dfs` entries that held any (none when
+    there were none); `share_ignored_state` hides them again."""
     s = dfs_paths.STATE_DIR_NAME
     hidden = [e[2:] for e in _git("ls-files", "-v", "-z", "--", s, cwd=wt).stdout.split("\0")
               if e.startswith("S ")]
     if not hidden:
-        return False
-    for top in sorted({"/".join(p.split("/")[:2]) for p in hidden}):
+        return []
+    tops = sorted({"/".join(p.split("/")[:2]) for p in hidden})
+    for top in tops:
         if (wt / top).is_symlink():
             (wt / top).unlink()
     _git("update-index", "--no-skip-worktree", "--", *hidden, cwd=wt)
     _git("checkout", "--", *hidden, cwd=wt)
-    return True
+    return [t.split("/")[1] for t in tops]
 
 
-def share_ignored_state(wt):
+def share_ignored_state(wt, again=None):
     """Give the worktree the planning files git does not carry. A gitignored roadmap is in
     no commit, so the branch's checkout has none of it: each entry of this checkout's
     `.dfs` that git ignores and `wt` lacks (`items`, `archive`, `artefacts`, `runs` …, never
@@ -280,7 +287,10 @@ def share_ignored_state(wt):
     (`SHARED`) are made here first when git ignores them, so the first `.dfs/archive` or page
     is written through the link, not into the worktree, which is removed at the merge. A real
     directory the worktree already holds under an ignored name is moved back first
-    (`rescue_ignored_state`). Returns the names linked."""
+    (`rescue_ignored_state`). `again`, the entries `put_back_tracked` unlinked around a
+    rebase, limits it to those and links them without `_carry_branch_edits`: they were
+    shared before, so this checkout's copy is the live one and is not to be weighed against
+    the rebased branch. Returns the names linked."""
     s = dfs_paths.STATE_DIR_NAME
     here, there = dfs_paths.state(), wt / s
     linked = []
@@ -296,12 +306,14 @@ def share_ignored_state(wt):
         rel = "%s/%s" % (s, entry.name)
         if entry.name == "worktrees" or dest.is_symlink():
             continue
+        if again is not None and entry.name not in again:
+            continue
         # `--no-index`: an entry the rules hide is shared even when git tracks part of it
         # (a blanket `.*` over files force-added once), or the branch's stale copy is read
         if _git("check-ignore", "-q", "--no-index", rel).returncode != 0:
             continue
         if dest.exists():
-            clashes = _carry_branch_edits(wt, rel)
+            clashes = [] if again is not None else _carry_branch_edits(wt, rel)
             if clashes:
                 print("dfs_branch: %s is changed both on %s and here (%s); it is not shared, and "
                       "the worktree keeps its own copy" % (rel, dfs_paths.item_branch(wt.name),
@@ -508,7 +520,7 @@ def _rebase(task, wt, name):
         files = _git("diff", "--name-only", "--diff-filter=U", cwd=wt).stdout.split()
         _git("rebase", "--abort", cwd=wt)
     if hidden:
-        share_ignored_state(wt)
+        share_ignored_state(wt, again=hidden)
     if r.returncode == 0:
         return True
     _reopen(task, wt, name, files)

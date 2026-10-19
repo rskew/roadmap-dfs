@@ -814,6 +814,38 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nhere\n")
         self.assertFalse((self.wt / ".dfs" / "items").is_symlink())
 
+    def force_tracked_worktree_with_a_branch_commit(self, base):
+        """The pre-sharing state: a blanket rule, W1.md force-tracked with the text `base`, and a
+        worktree that committed `base + "in the branch"` to it for real."""
+        (self.root / ".dfs" / "items" / "W1.md").write_bytes(base)
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        (self.wt / ".dfs" / "items" / "W1.md").write_bytes(base + b"in the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+
+    def test_the_rebase_at_the_merge_does_not_call_the_shared_copy_a_clash_when_main_has_moved(self):
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        (self.root / ".dfs" / "items" / "W1.md").open("a").write("and edited since\n")   # through the link
+        (self.root / "other.txt").write_text("main's own file\n")
+        self.git("add", "other.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moves")
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("changed both", r.stderr)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("and edited since", (self.root / ".dfs" / "items" / "W1.md").read_text())
+
+    def test_a_crlf_task_file_the_main_checkout_never_changed_is_not_taken_for_a_clash(self):
+        self.force_tracked_worktree_with_a_branch_commit(TASK.replace("\n", "\r\n").encode())
+        r = self.enter()
+        self.assertNotIn("changed both", r.stderr)
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        self.assertIn(b"in the branch", (self.root / ".dfs" / "items" / "W1.md").read_bytes())
+
     def test_a_merge_does_not_write_the_authors_edit_over_the_branchs_change_to_a_tracked_roadmap_file(self):
         # `.dfs` is tracked whole: the worktree's `order.md` is its own, so an edit of the
         # author's here was not made on the branch's version, and the merge is theirs to settle
