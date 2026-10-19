@@ -79,6 +79,7 @@ tree. A move staged without its archive copy is refused only under --staged.
 Run:  python3 <scripts>/check.py [--warn] [--staged] [--merge]
 Exit: 0 clean, 1 violation (0 with --warn when only warnings).
 """
+import collections
 import re
 import subprocess
 import sys
@@ -493,6 +494,19 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
     return bad
 
 
+def coordinates(text):
+    """Each coordinate (`file.js:123`) in the task file's prose, as (line number, hit):
+    not in the log, nor on a comment or heading line."""
+    in_log, found = False, []
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.startswith("## "):
+            in_log = line.strip() == "## Log"
+        if in_log or line.lstrip().startswith(("<", "#")):
+            continue
+        found += [(n, hit) for hit in COORD.findall(line)]
+    return found
+
+
 def check_attachments(text, head=None):
     """One refusal per file in `.dfs/artefacts` that `text` names and that git's index
     does not hold. Nothing else stages the author's upload; see `dfs_tree.untracked_artefacts`.
@@ -600,7 +614,7 @@ def main() -> int:
     # So is every commit on an item branch `dfs/<task>`, where sessions commit: a new
     # roadmap's first task is branched while main holds no task file, and its first node
     # is the guard's to judge. An adoption is made on main, or on any branch that is not one.
-    adopting = (not dfs_paths.ignored() and not head_names("items")
+    adopting = (from_index and not dfs_paths.ignored() and not head_names("items")
                 and not dfs_paths.is_item_branch(dfs_paths.branch()))
     grand = []
     tasks = {}
@@ -611,6 +625,10 @@ def main() -> int:
         parts = {tag: (read(items_dir / rel) or "", read(arc_dir / rel) or "")
                  for tag, rel in tasks[task].items()}
         whole = dfs_tree.combine(task, [(g, x, a) for g, (x, a) in parts.items()])
+        # what HEAD held of the task, to judge its copy by the rules of its own whole
+        old_parts = [(g, at_head(items_dir / tasks[task][g]),
+                      at_head(arc_dir / tasks[task][g]) or "") for g in parts]
+        head_whole = dfs_tree.combine(task, [(g, x, a) for g, x, a in old_parts if x is not None])
         for tag, (text, arc) in sorted(parts.items()):
             held = len(fatal), len(bad)
             path = items_dir / tasks[task][tag]
@@ -619,8 +637,14 @@ def main() -> int:
             head_arc = at_head(arc_dir / tasks[task][tag]) or ""
             shape = check_shape(task, text, arc, tag, whole)
             if head is not None:   # a fault HEAD already had is not this commit's
-                had = set(check_shape(task, head, head_arc, tag, whole))
-                shape = [b for b in shape if b not in had]
+                had = collections.Counter(check_shape(task, head, head_arc, tag, head_whole))
+                fresh = []
+                for b in shape:   # counted: a second fault with the same text is new
+                    if had[b] > 0:
+                        had[b] -= 1
+                    else:
+                        fresh.append(b)
+                shape = fresh
             fatal += ["%s: %s" % (rel, b) for b in shape]
             fatal += ["%s %s" % (rel, b) for b in check_attachments(
                 text + "\n" + arc, None if head is None else head + "\n" + head_arc)]
@@ -653,15 +677,13 @@ def main() -> int:
                       f"{budget:,} budget. Not grown here.")
             for note in standalone_notes(task, text, head, arc):
                 print(f"dfs_check: note — {rel}: {note}")
-            in_log = False
-            for n, line in enumerate(text.splitlines() if text != head else (), 1):
-                if line.startswith("## "):
-                    in_log = line.strip() == "## Log"
-                if in_log or line.lstrip().startswith(("<", "#")):
+            old_hits = collections.Counter(h for _, h in coordinates(head)) if head is not None else None
+            for n, hit in coordinates(text) if text != head else ():
+                if old_hits is not None and old_hits[hit] > 0:   # a coordinate HEAD's copy held
+                    old_hits[hit] -= 1
                     continue
-                for hit in COORD.findall(line):
-                    bad.append(f"{rel} line {n} carries a coordinate, '{hit}'. Name a thing by "
-                               "what makes it that thing; a line number rots with no sign.")
+                bad.append(f"{rel} line {n} carries a coordinate, '{hit}'. Name a thing by "
+                           "what makes it that thing; a line number rots with no sign.")
             if adopting:
                 grand += fatal[held[0]:] + bad[held[1]:]
                 del fatal[held[0]:], bad[held[1]:]

@@ -20,8 +20,10 @@ adopted by committing its task files in one commit, on `main` (a commit on a `df
 and is judged in full), with the hook on. While git holds no task file, the guard judges
 that commit against nothing: every finding on what the files already hold (a rule added after a task was written,
 a file over the size budget) is printed as grandfathered and none refuses the commit, and an artefact page a task
-names is committed only if you stage it. Every later commit is judged only on what it changes, so an old finding
-never blocks one. A task file added once git already holds others is new work and is judged in full.
+names is committed only if you stage it. Every later commit is judged only on what it changes, so an old rule
+finding never blocks one. The size budget is the exception: a file adopted over it is refused ("GREW it") by the
+next commit that adds to it, a session's log line included, until `tree.py shelve` brings it under. A task file added once git already holds others is new work and is
+judged in full.
 
 ## Where an item is worked
 

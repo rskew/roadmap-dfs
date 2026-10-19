@@ -113,6 +113,14 @@ def content(t):
     return out
 
 
+def _at_head(path: Path) -> str:
+    """HEAD's copy of a file under the roadmap's `.dfs`, "" when HEAD has none."""
+    state = dfs_paths.state()
+    r = subprocess.run(["git", "show", f"HEAD:./{path.relative_to(state)}"], cwd=state,
+                       capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else ""
+
+
 def state_for(task: str):
     """The runner's stop facts and the screen's row, for one task."""
     t = dfs_tree.load(task)
@@ -604,6 +612,13 @@ def brief(task: str) -> str:
                     "go on with the session as usual."]
         out += [""]
     loose = dfs_tree.untracked_artefacts("\n".join(p.read_text() for p in dfs_tree.part_files(task)))
+    if loose:   # a name HEAD's text already carried is not refused (`check.py`), so not listed
+        items_dir = dfs_paths.items()
+        arc_dir = dfs_paths.state() / "archive" / "items"
+        held = "\n".join(_at_head(d / p.relative_to(items_dir))
+                         for p in dfs_tree.part_files(task) for d in (items_dir, arc_dir))
+        named = set(dfs_tree.ATTACHED_REF.findall(held))
+        loose = [n for n in loose if n not in named]
     if loose:
         out += ["### Attachments to commit", "",
                 "The task's text names these files in `.dfs/artefacts`, which git does not "

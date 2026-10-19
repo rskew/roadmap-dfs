@@ -707,6 +707,49 @@ class Check(InARepo):
         for seen in ("names Parent W1,", "names no artefact"):
             self.assertIn(seen, out)
 
+    def test_the_working_tree_check_of_a_fresh_task_is_no_adoption(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")
+        self.write(self.old_roadmap_file())
+        code, out = self.run_check("--warn")
+        self.assertNotIn("adopts the roadmap", out)
+        self.assertNotIn("grandfathered", out)
+
+    def test_a_coordinate_head_already_held_is_not_warned_of_again(self):
+        old = "### W1.1 · step 1\nParent: W1\nStatus: open\nApproach: see check.py:12 for it\n\n"
+        self.write(task(old))
+        self.git_commit(".dfs/items/W1.md")
+        self.write(task("A new line above.\n\n" + old))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertNotIn("coordinate", out)
+        self.write(task(old + node(2, parent=1, extra="Approach: and also web.py:7 here\n")))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertIn("'web.py:7'", out)
+        self.assertNotIn("check.py:12", out)
+
+    def test_a_new_malformed_log_line_is_not_hidden_by_an_old_one_with_the_same_start(self):
+        line = "- not a log line " + "x" * 60
+        self.write(task(node(1), line + "\n"))
+        self.git_commit(".dfs/items/W1.md")
+        self.write(task(node(1), line + "\n" + line + "y\n"))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("is not `- <ts> · <kind> · <args>`", out)
+
+    def test_the_briefing_lists_only_the_attachments_the_guard_would_refuse(self):
+        name = self.attached_picture()
+        self.git_commit(".dfs/items/W1.md")   # HEAD's text now names it
+        self.assertNotIn("Attachments to commit", dfs_state.brief("W1"))
+        other = "1f1e2d3c-4b5a-4968-8776-655443322110.png"
+        (self.root / ".dfs/artefacts" / other).write_bytes(b"\x89PNG\r\n\x1a\n")
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"], "![b](.dfs/artefacts/%s)" % other)
+        brief = dfs_state.brief("W1")
+        self.assertIn("    .dfs/artefacts/" + other, brief)
+        self.assertNotIn("    .dfs/artefacts/" + name, brief)
+
     def test_a_task_file_new_to_a_tracked_roadmap_is_judged_in_full(self):
         (self.root / ".dfs/items/W2.md").write_text(task().replace("W1", "W2"))
         self.git_commit(".dfs/items/W2.md")
