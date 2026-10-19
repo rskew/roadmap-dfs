@@ -408,7 +408,7 @@ def task_json(task, include_archived=False):
                 name=t["name"], goal_text=t["goal"], runs=runs_for(task),
                 artefacts=artefacts_for("\n".join(strings(t))),
                 status=status, why=humanize(why), accepted=accepted,
-                acceptable=status == "done" and not accepted, rows=rows, assumed=assumed,
+                acceptable=dfs_tree.acceptable(t), rows=rows, assumed=assumed,
                 notes=[dict(kind=g["kind"], heading=dfs_tui.note_heading(g),
                             body="\n\n".join(b for _ts, _v, b in g["notes"]))
                        for g in dfs_tree.note_sessions(t)],
