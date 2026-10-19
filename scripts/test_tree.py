@@ -9,11 +9,13 @@ Run:  python3 roadmap-dfs/scripts/test_tree.py
 """
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -627,6 +629,184 @@ class Check(InARepo):
         self.assertEqual(code, 0, out)
         self.assertEqual(dfs_tree.untracked_artefacts(
             (self.root / ".dfs/items/W1.md").read_text()), [])
+
+    def git_commit(self, *paths):
+        subprocess.run(["git", "add", *paths], cwd=self.root, check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+                       cwd=self.root, check=True)
+
+    def test_an_unstaged_attachment_head_already_named_does_not_refuse_a_later_commit(self):
+        name = self.attached_picture()
+        self.git_commit(".dfs/items/W1.md")   # past the guard, as an adopted roadmap was
+        dfs_tree.append_log("W1", "session", ["work"])
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        # naming it again in this commit is this commit's to carry
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"],
+                            "still cut off: ![bar](.dfs/artefacts/%s)" % name)
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)   # the name is the same file HEAD's text named
+        other = "1f1e2d3c-4b5a-4968-8776-655443322110.png"
+        (self.root / ".dfs/artefacts" / other).write_bytes(b"\x89PNG\r\n\x1a\n")
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"], "![b](.dfs/artefacts/%s)" % other)
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn(other, out)
+        self.assertNotIn(name, out)
+
+    def test_a_shape_fault_head_already_had_refuses_only_the_commit_that_adds_one(self):
+        old = "### W1.1 · step 1\nParent: W1\nStatus: open\n\n"
+        self.write(task(old))
+        self.git_commit(".dfs/items/W1.md")   # written before the rule, or past the guard
+        self.write(task(old + node(2, parent=1)))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.write(task(old + node(2, parent=1) + node(3, parent=9)))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("W1.3 names Parent W1.9", out)
+        self.assertNotIn("W1.1 names Parent", out)
+
+    def old_roadmap_file(self):
+        """A task written before the guard saw it: a Parent naming the task, a Hypothesis
+        naming no page, an artefact on disk it never committed, and over the budget."""
+        (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs/artefacts/0f1e2d3c-4b5a-4968-8776-655443322110.png").write_bytes(b"x")
+        bulk = "Evidence:\n" + "- for: it ran\n" * (dfs_state.HANDOFF_BUDGET // 2)
+        return task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+                    "Hypothesis: It holds. Wrong if not.\n" + bulk + "\n",
+                    "- 2026-09-25T09:00:00Z · session · work\n"
+                    "  ![x](.dfs/artefacts/0f1e2d3c-4b5a-4968-8776-655443322110.png)\n")
+
+    def test_the_commit_that_adopts_a_roadmap_grandfathers_what_its_files_hold(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")   # the project is in git; its roadmap is not
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")   # said to be no adoption: judged in full
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        self.assertIn("DFS_ADOPT=1", out)
+        with mock.patch.dict(os.environ, {"DFS_ADOPT": "1"}):
+            code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.assertIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged"):
+            self.assertIn(seen, out)
+        self.assertNotIn("GREW", out)
+        self.assertNotIn("broke its own rules", out)
+
+    def first_node_is_refused(self):
+        self.write(task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+                        "Hypothesis: It holds. Wrong if not.\n"))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact"):
+            self.assertIn(seen, out)
+
+    def test_a_first_node_worked_in_place_off_main_is_judged_in_full(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")
+        subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.root, check=True)
+        self.first_node_is_refused()
+
+    def test_a_first_node_in_a_repo_with_no_commit_is_judged_in_full(self):
+        self.first_node_is_refused()
+
+    def test_the_first_node_of_a_new_roadmaps_first_task_on_its_branch_is_judged_in_full(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")   # a fresh roadmap: main holds no task file
+        subprocess.run(["git", "checkout", "-qb", "dfs/W1"], cwd=self.root, check=True)
+        self.write(task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+                        "Hypothesis: It holds. Wrong if not.\n"))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact"):
+            self.assertIn(seen, out)
+
+    def test_the_working_tree_check_of_a_fresh_task_is_no_adoption(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")
+        self.write(self.old_roadmap_file())
+        code, out = self.run_check("--warn")
+        self.assertNotIn("adopts the roadmap", out)
+        self.assertNotIn("grandfathered", out)
+
+    def test_a_copy_of_an_old_coordinate_is_warned_at_the_line_that_adds_it(self):
+        old = "### W1.1 · step 1\nParent: W1\nStatus: open\nApproach: see check.py:12 for it\n\n"
+        self.write(task(old))
+        self.git_commit(".dfs/items/W1.md")
+        self.write(task("Also check.py:12 above.\n\n" + old))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertIn("line 9 carries a coordinate, 'check.py:12'", out)
+        self.assertNotIn("line 14 ", out)
+
+    def test_a_coordinate_head_already_held_is_not_warned_of_again(self):
+        old = "### W1.1 · step 1\nParent: W1\nStatus: open\nApproach: see check.py:12 for it\n\n"
+        self.write(task(old))
+        self.git_commit(".dfs/items/W1.md")
+        self.write(task("A new line above.\n\n" + old))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertNotIn("coordinate", out)
+        self.write(task(old + node(2, parent=1, extra="Approach: and also web.py:7 here\n")))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertIn("'web.py:7'", out)
+        self.assertNotIn("check.py:12", out)
+
+    def test_a_new_malformed_log_line_is_not_hidden_by_an_old_one_with_the_same_start(self):
+        line = "- not a log line " + "x" * 60
+        self.write(task(node(1), line + "\n"))
+        self.git_commit(".dfs/items/W1.md")
+        self.write(task(node(1), line + "\n" + line + "y\n"))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("is not `- <ts> · <kind> · <args>`", out)
+
+    def test_the_briefing_lists_only_the_attachments_the_guard_would_refuse(self):
+        name = self.attached_picture()
+        self.git_commit(".dfs/items/W1.md")   # HEAD's text now names it
+        self.assertNotIn("Attachments to commit", dfs_state.brief("W1"))
+        other = "1f1e2d3c-4b5a-4968-8776-655443322110.png"
+        (self.root / ".dfs/artefacts" / other).write_bytes(b"\x89PNG\r\n\x1a\n")
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"], "![b](.dfs/artefacts/%s)" % other)
+        brief = dfs_state.brief("W1")
+        self.assertIn("    .dfs/artefacts/" + other, brief)
+        self.assertNotIn("    .dfs/artefacts/" + name, brief)
+
+    def test_the_briefing_compares_each_part_with_its_own_copy_at_head(self):
+        name = self.attached_picture()
+        self.git_commit(".dfs/items/W1.md")   # the default part's copy at HEAD names it
+        part = self.root / ".dfs/items/W1/fx.md"
+        part.parent.mkdir()
+        part.write_text("- 2026-09-25T09:00:00Z · correct · W1.1 · refuted\n"
+                        "  again: ![b](.dfs/artefacts/%s)\n" % name)
+        self.assertIn("    .dfs/artefacts/" + name, dfs_state.brief("W1"))
+
+    def test_a_task_file_new_to_a_tracked_roadmap_is_judged_in_full(self):
+        (self.root / ".dfs/items/W2.md").write_text(task().replace("W1", "W2"))
+        self.git_commit(".dfs/items/W2.md")
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged",
+                     "this commit\n    ADDS it."):
+            self.assertIn(seen, out)
+        self.assertNotIn("GREW", out)
 
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()

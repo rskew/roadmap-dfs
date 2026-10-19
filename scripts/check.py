@@ -46,13 +46,28 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a task file or an archive HEAD holds, deleted (the limit case of the two
       rules above; a staged rename is followed, not refused). A task retired on
       purpose is the author's rewrite of history, committed with --no-verify
-    - a task file (or archive) naming a file in `.dfs/artefacts` that is on disk but not
-      in the index: the author's attached picture or document is uploaded by the web
+    - a task file (or archive) newly naming a file in `.dfs/artefacts` that is on disk but
+      not in the index: the author's attached picture or document is uploaded by the web
       server, which commits nothing, so the commit carrying the text must carry the
       file or a push, a clone or `git clean` loses it (`check_attachments`)
     - a task file over the size budget that this commit grew
   warned:
-    - a coordinate (`file.js:123`) in a task file: it rots with no sign
+    - a coordinate (`file.js:123`) in a task file this commit changes: it rots with no sign
+
+A commit is judged on what it CHANGES. A shape fault in the first group that HEAD's
+copy of the file already has is not this commit's and is not refused, so a rule added
+after a task was written does not hold every later commit on it hostage; nor is a name
+of an unstaged artefact that HEAD's text already carried.
+
+The commit that ADOPTS a committed roadmap, the first to bring its task files into git
+(HEAD holds none), is judged against nothing when the author says it is one, by
+committing with DFS_ADOPT=1 in the environment: every finding on its files is printed
+as grandfathered and none refuses, including the size budget and the artefacts its text
+names, which it need not stage. Without it that commit is judged in full, and says so
+when it refuses, since HEAD holding no task file is also a new roadmap's state: its first
+task's first node, committed on `dfs/<task>`, on a branch a session works in place or in
+a repo with no commit, is no adoption. A task file new to a roadmap git already holds is
+new work and is judged in full either way.
 
 ⚠️ A GITIGNORED `.dfs` (`dfs_paths.ignored`) holds nothing at HEAD, so every check
 AGAINST HEAD above has nothing to compare and passes, and the hook never calls this,
@@ -67,6 +82,9 @@ tree. A move staged without its archive copy is refused only under --staged.
 Run:  python3 <scripts>/check.py [--warn] [--staged] [--merge]
 Exit: 0 clean, 1 violation (0 with --warn when only warnings).
 """
+import collections
+import difflib
+import os
 import re
 import subprocess
 import sys
@@ -481,12 +499,43 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
     return bad
 
 
-def check_attachments(text):
+def coordinates(text):
+    """Each coordinate (`file.js:123`) in the task file's prose, as (line number, hit):
+    not in the log, nor on a comment or heading line."""
+    in_log, found = False, []
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.startswith("## "):
+            in_log = line.strip() == "## Log"
+        if in_log or line.lstrip().startswith(("<", "#")):
+            continue
+        found += [(n, hit) for hit in COORD.findall(line)]
+    return found
+
+
+def old_coordinates(head, text):
+    """For each line number of `text`, the coordinates of the lines of `head` it is aligned
+    with: the line itself when unchanged, or the old lines of the block it replaces. A
+    coordinate on a line `text` adds, wherever it stands, is this commit's."""
+    old, new = head.splitlines(), text.splitlines()
+    held = {}
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if tag in ("equal", "replace"):
+            hits = {h for line in old[i1:i2] for h in COORD.findall(line)}
+            for j in range(j1, j2):
+                held[j + 1] = hits
+    return held
+
+
+def check_attachments(text, head=None):
     """One refusal per file in `.dfs/artefacts` that `text` names and that git's index
-    does not hold. Nothing else stages the author's upload; see `dfs_tree.untracked_artefacts`."""
+    does not hold. Nothing else stages the author's upload; see `dfs_tree.untracked_artefacts`.
+    A name `head` (HEAD's text) already carried is not this commit's to carry: the commit
+    that wrote it was judged, and refusing it again would hold every later commit hostage
+    to a file nobody is attaching now."""
+    had = set(dfs_tree.ATTACHED_REF.findall(head or ""))
     return ["names .dfs/artefacts/%s, which is on disk but not staged. Stage it with this "
             "file (`git add .dfs/artefacts/%s`): the author attached it, and nothing else "
-            "will commit it" % (n, n) for n in dfs_tree.untracked_artefacts(text)]
+            "will commit it" % (n, n) for n in dfs_tree.untracked_artefacts(text) if n not in had]
 
 
 def check_no_new_ask(task, text, head):
@@ -575,6 +624,20 @@ def main() -> int:
         if dfs_paths.branch() is not None:   # two branches with one tag, not detached
             fatal.append(str(e))
     judge_writer = not merging()   # also: the other parent's commits were judged there
+    # The commit that first brings a committed roadmap's task files into git has nothing
+    # to be judged against: what they hold was written before the guard saw them, under
+    # whatever rules stood then. Their findings are grandfathered, shown and not refused,
+    # and every later commit is judged on what it changes. But HEAD holding no task file
+    # is also a new roadmap's state, when its first task's first node is committed: on an
+    # item branch `dfs/<task>`, on a branch a session works in place when the checkout is
+    # off main, or in a repo with no commit. Nothing in the commit tells the two apart, so
+    # the author says so: an adoption is committed with DFS_ADOPT=1 in the environment
+    # and no other commit is one. A task file new to a roadmap git already holds is judged
+    # in full either way: a task written from the screen is first committed with its
+    # first node (`branch.py` `carry_uncommitted`), and a branch's part with its own.
+    adoptable = from_index and not dfs_paths.ignored() and not head_names("items")
+    adopting = adoptable and bool(os.environ.get("DFS_ADOPT"))
+    grand = []
     tasks = {}
     for rel in now_items:
         task, tag = dfs_tree.part_of(rel)
@@ -583,18 +646,34 @@ def main() -> int:
         parts = {tag: (read(items_dir / rel) or "", read(arc_dir / rel) or "")
                  for tag, rel in tasks[task].items()}
         whole = dfs_tree.combine(task, [(g, x, a) for g, (x, a) in parts.items()])
+        # what HEAD held of the task, to judge its copy by the rules of its own whole
+        old_parts = [(g, at_head(items_dir / tasks[task][g]),
+                      at_head(arc_dir / tasks[task][g]) or "") for g in parts]
+        head_whole = dfs_tree.combine(task, [(g, x, a) for g, x, a in old_parts if x is not None])
         for tag, (text, arc) in sorted(parts.items()):
+            held = len(fatal), len(bad)
             path = items_dir / tasks[task][tag]
             rel = dfs_paths.rel(path)
-            fatal += ["%s: %s" % (rel, b) for b in check_shape(task, text, arc, tag, whole)]
-            fatal += ["%s %s" % (rel, b) for b in check_attachments(text + "\n" + arc)]
             head = at_head(path)
+            head_arc = at_head(arc_dir / tasks[task][tag]) or ""
+            shape = check_shape(task, text, arc, tag, whole)
+            if head is not None:   # a fault HEAD already had is not this commit's
+                had = collections.Counter(check_shape(task, head, head_arc, tag, head_whole))
+                fresh = []
+                for b in shape:   # counted: a second fault with the same text is new
+                    if had[b] > 0:
+                        had[b] -= 1
+                    else:
+                        fresh.append(b)
+                shape = fresh
+            fatal += ["%s: %s" % (rel, b) for b in shape]
+            fatal += ["%s %s" % (rel, b) for b in check_attachments(
+                text + "\n" + arc, None if head is None else head + "\n" + head_arc)]
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]
             if judge_writer:   # a merge brings in nodes judged on their own branch
                 fatal += ["%s: %s" % (rel, b)
-                          for b in check_assumptions(task, text, head, read, arc,
-                                                     at_head(arc_dir / tasks[task][tag]) or "")]
+                          for b in check_assumptions(task, text, head, read, arc, head_arc)]
             if judge_writer:
                 fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, head)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
@@ -603,10 +682,14 @@ def main() -> int:
             was_tok = (len(head) // 4) if head is not None else 0
             budget = dfs_state.HANDOFF_BUDGET
             verdict = handoff_verdict(now_tok, was_tok, budget)
+            if verdict == "refuse" and adopting:
+                verdict = "note"
             if verdict == "refuse":
+                grew = ("ADDS it" if head is None
+                        else f"GREW it (~{was_tok:,} before)")
                 fatal.append(
                     f"{rel} is ~{now_tok:,} tokens, over the {budget:,} budget, and this commit\n"
-                    f"    GREW it (~{was_tok:,} before). A task file is re-read whole by every\n"
+                    f"    {grew}. A task file is re-read whole by every\n"
                     "    session on the task. Prune its Background, or move settled history to\n"
                     "    .dfs/archive/ (`tree.py shelve %s` moves determined nodes'\n"
                     "    Approaches and Hypotheses there)." % task)
@@ -615,16 +698,24 @@ def main() -> int:
                       f"{budget:,} budget. Not grown here.")
             for note in standalone_notes(task, text, head, arc):
                 print(f"dfs_check: note — {rel}: {note}")
-            in_log = False
-            for n, line in enumerate(text.splitlines(), 1):
-                if line.startswith("## "):
-                    in_log = line.strip() == "## Log"
-                if in_log or line.lstrip().startswith(("<", "#")):
+            held_hits = old_coordinates(head, text) if head is not None else {}
+            for n, hit in coordinates(text) if text != head else ():
+                if hit in held_hits.get(n, ()):   # on a line HEAD's copy held, or an edit of one
                     continue
-                for hit in COORD.findall(line):
-                    bad.append(f"{rel} line {n} carries a coordinate, '{hit}'. Name a thing by "
-                               "what makes it that thing; a line number rots with no sign.")
+                bad.append(f"{rel} line {n} carries a coordinate, '{hit}'. Name a thing by "
+                           "what makes it that thing; a line number rots with no sign.")
+            if adopting:
+                grand += fatal[held[0]:] + bad[held[1]:]
+                del fatal[held[0]:], bad[held[1]:]
     tasks = now_items
+
+    if grand:
+        print("dfs_check: note — no task file is in git yet, so this commit adopts the roadmap\n"
+              "  and what its files already hold is grandfathered: the %d finding%s below %s\n"
+              "  not refused, and every later commit is judged only on what it changes."
+              % (len(grand), "" if len(grand) == 1 else "s", "is" if len(grand) == 1 else "are"))
+        for g in grand:
+            print(f"    - {g}")
 
     if not bad and not fatal:
         print("dfs_check: clean (%d task file%s)" % (len(tasks), "" if len(tasks) == 1 else "s"))
@@ -632,6 +723,9 @@ def main() -> int:
     print("dfs_check: the roadmap broke its own rules.\n")
     for b in fatal + bad:
         print(f"  - {b}")
+    if adoptable and fatal:
+        print("\n  If this commit adopts a roadmap written before the guard, commit it again with\n"
+              "  DFS_ADOPT=1 in the environment, and its old findings are not refused.")
     if warn_only and not fatal:
         print("\n  (warning only — not blocking this commit)")
         return 0

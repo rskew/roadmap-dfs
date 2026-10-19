@@ -113,6 +113,14 @@ def content(t):
     return out
 
 
+def _at_head(path: Path) -> str:
+    """HEAD's copy of a file under the roadmap's `.dfs`, "" when HEAD has none."""
+    state = dfs_paths.state()
+    r = subprocess.run(["git", "show", f"HEAD:./{path.relative_to(state)}"], cwd=state,
+                       capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else ""
+
+
 def state_for(task: str):
     """The runner's stop facts and the screen's row, for one task."""
     t = dfs_tree.load(task)
@@ -603,7 +611,15 @@ def brief(task: str) -> str:
                     "in the Evidence of the node you are on, so the author can find it, and "
                     "go on with the session as usual."]
         out += [""]
-    loose = dfs_tree.untracked_artefacts("\n".join(p.read_text() for p in dfs_tree.part_files(task)))
+    items_dir = dfs_paths.items()
+    arc_dir = dfs_paths.state() / "archive" / "items"
+    loose = []   # per part, as `check.py` judges it: a name that part's copy at HEAD already
+    for p in dfs_tree.part_files(task):   # carried is not refused, so is not listed
+        rel = p.relative_to(items_dir)
+        arc = arc_dir / rel
+        mine = p.read_text() + "\n" + (arc.read_text() if arc.is_file() else "")
+        held = set(dfs_tree.ATTACHED_REF.findall(_at_head(p) + "\n" + _at_head(arc)))
+        loose += [n for n in dfs_tree.untracked_artefacts(mine) if n not in held and n not in loose]
     if loose:
         out += ["### Attachments to commit", "",
                 "The task's text names these files in `.dfs/artefacts`, which git does not "
