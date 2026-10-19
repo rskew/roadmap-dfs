@@ -718,6 +718,21 @@ class Chain(unittest.TestCase):
         self.assertIn("edited", (self.root / ".dfs" / "items" / "W1.md").read_text())
         self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no"), "M .dfs/order.md")
 
+    def test_entering_a_task_whose_force_tracked_file_has_uncommitted_edits_keeps_the_edits(self):
+        # the blanket rule links `items` into the worktree, so the task's own edited file is
+        # reached through the link: carrying it over would copy a file onto itself
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        task = self.root / ".dfs" / "items" / "W1.md"
+        task.write_text(TASK + "\nanswered\n")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W1"],
+                           cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), str(self.wt))
+        self.assertEqual((self.wt / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nanswered\n")
+        self.assertEqual(task.read_text(), TASK + "\nanswered\n")
+
     def merge_by_hand(self):
         return subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
                               capture_output=True, text=True)

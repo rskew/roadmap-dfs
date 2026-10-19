@@ -77,6 +77,8 @@ def carry_uncommitted(task, wt):
     moved = []
     for st, p in _dirty(task_paths(task)):
         src, dst = root / p, wt / p
+        if dst.parent.resolve() == src.parent.resolve():
+            continue   # the worktree reaches it through a link: it is the one copy, already shared
         if "D" in st:
             if dst.exists():
                 dst.unlink()
