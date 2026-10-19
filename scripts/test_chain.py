@@ -733,6 +733,45 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.wt / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nanswered\n")
         self.assertEqual(task.read_text(), TASK + "\nanswered\n")
 
+    def test_a_reused_worktree_that_worked_a_force_tracked_task_file_for_real_keeps_the_branchs_version(self):
+        # begun before the entry was shared: the worktree holds a real tracked W1.md and the
+        # branch committed a step in it, so the main checkout's copy is the stale one
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        mine = self.wt / ".dfs" / "items" / "W1.md"
+        mine.write_text(TASK + "\nconfirmed in the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+        mine.write_text(TASK + "\nconfirmed in the branch\nand edited since\n")
+        r = self.enter()
+        self.assertEqual(mine.read_text(), TASK + "\nconfirmed in the branch\nand edited since\n")
+        self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), mine.read_text())
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        self.assertNotIn("from-worktree", "".join(p.name for p in (self.root / ".dfs" / "items").iterdir()))
+        # the merge meets the branch's commit of the file the shared copy now holds
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("and edited since", (self.root / ".dfs" / "items" / "W1.md").read_text())
+
+    def test_a_reused_worktree_and_the_main_checkout_that_both_changed_a_force_tracked_file_are_left_unshared(self):
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        mine = self.wt / ".dfs" / "items" / "W1.md"
+        mine.write_text(TASK + "\nin the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK + "\nhere\n")
+        r = self.enter()
+        self.assertIn("changed both", r.stderr)
+        self.assertEqual(mine.read_text(), TASK + "\nin the branch\n")
+        self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nhere\n")
+        self.assertFalse((self.wt / ".dfs" / "items").is_symlink())
+
     def merge_by_hand(self):
         return subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
                               capture_output=True, text=True)
