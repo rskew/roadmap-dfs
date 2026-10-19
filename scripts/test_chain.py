@@ -1237,6 +1237,27 @@ class Chain(unittest.TestCase):
                              text=True, check=True).stdout
         self.assertEqual(out.strip(), "[('R ', 'moved.txt')]")
 
+    def branch_call(self, code):
+        return subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r); import branch; %s"
+                               % (str(HERE), code)], cwd=self.root, capture_output=True, text=True, check=True).stdout.strip()
+
+    def test_a_set_aside_that_saves_nothing_does_not_take_an_older_kept_stash_for_its_own(self):
+        (self.root / "app.txt").write_text("kept\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "dfs-merge-W1")
+        self.assertEqual(self.branch_call("print(branch._set_aside('W1', ['app.txt']))"), "None")
+        self.assertEqual(len(self.stashes().splitlines()), 1)
+
+    def test_putting_a_stash_back_never_drops_another_sessions_entry_when_its_own_is_gone(self):
+        (self.root / "app.txt").write_text("ours\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "dfs-merge-W1")
+        ours = self.git("rev-parse", "stash@{0}")
+        self.git("stash", "drop", "-q")
+        (self.root / "app.txt").write_text("theirs\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "another session")
+        self.assertEqual(self.branch_call("print(branch._put_back(%r, ['app.txt']))" % ours), "True")
+        self.assertEqual((self.root / "app.txt").read_text(), "ours\n")
+        self.assertEqual(self.stashes(), "On %s: another session" % self.git("symbolic-ref", "--short", "HEAD"))
+
     def test_a_worktree_git_will_not_remove_is_said_so_not_claimed_removed(self):
         self.run_chain("work,confirm", cap=2)
         self.git("worktree", "lock", str(self.wt))

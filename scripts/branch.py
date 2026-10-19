@@ -781,20 +781,21 @@ def _set_aside(task, paths):
     tracked = _git("ls-files", "-z", "--", *paths).stdout.split("\0")
     paths = [p for p in paths if p in tracked]
     tag = "dfs-merge-%s" % task
+    before = _git("rev-parse", "-q", "--verify", "refs/stash").stdout.strip()
     if not paths or _git(*_identity(), "stash", "push", "-q", "-m", tag, "--", *paths).returncode != 0:
         return None
-    for line in _git("stash", "list", "--format=%H %gs").stdout.splitlines():
-        sha, _, subject = line.partition(" ")
-        if subject.endswith(tag):
-            return sha
-    return None
+    # `stash push` exits 0 when it saved nothing, and an older kept entry of ours must not be taken for it
+    after = _git("rev-parse", "-q", "--verify", "refs/stash").stdout.strip()
+    return after if after != before else None
 
 
 def _put_back(sha, paths):
     """Apply the stash `sha` again and drop it. When it conflicts with what the merge brought
     in, the paths go back to the default branch's content and the stash is kept (False)."""
     if _git(*_identity(), "stash", "apply", "--index", "-q", sha).returncode == 0:
-        _git("stash", "drop", "-q", _stash_index(sha) or "stash@{0}")
+        at = _stash_index(sha)
+        if at:   # never another session's entry when ours is gone
+            _git("stash", "drop", "-q", at)
         return True
     _git("reset", "-q", "--", *paths)
     _git("checkout", "-q", "--", *paths)
@@ -935,8 +936,10 @@ def merge(task):
     uncommitted work that is not the task's (left in place, nothing merged; an open node
     asks for it to be committed or dropped), "conflict" when the branch cannot be rebased
     onto the default branch, which has moved (an open node is added), "guard" when a hook
-    refused a clean merge or the task's files (an open node names its message) or "refused"
-    when the author's edits overlap (a raise is logged); see `_unmerged`. A merge, cherry-pick,
+    refused a clean merge or the task's files (an open node names its message), "refused"
+    when the author's edits overlap (a raise is logged; see `_unmerged`) or "blocked" when the
+    merge went through (the worktree and branch are gone) but the author's edits set aside for
+    it conflict with what it brought in (a raise names the stash that keeps them). A merge, cherry-pick,
     revert or rebase the author has left unfinished in the checkout is a `BranchError` before
     anything is touched (it is theirs, and `_unmerged` would abort it), and it is met before the
     off-branch check, since a rebase detaches HEAD; so is a checkout on another branch or on a

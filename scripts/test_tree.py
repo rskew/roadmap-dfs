@@ -1816,8 +1816,8 @@ class Branches(InARepo):
         hook.parent.mkdir(exist_ok=True)
         hook.write_text("#!/bin/sh\necho refused >&2\nexit 1\n")
         hook.chmod(0o755)
-        if subprocess.run([str(hook)], capture_output=True).returncode != 1:
-            self.skipTest("the temp directory is mounted noexec")
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
         with self.assertRaises(ValueError) as cm:
             dfs_tree.delete_task("W1")
         self.assertIn("could not be kept", str(cm.exception))
