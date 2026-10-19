@@ -53,6 +53,20 @@ class Init(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(dfs_check.main(), 0)
 
+    def test_a_rule_that_hides_the_roadmap_is_named(self):
+        (self.root / ".gitignore").write_text("# dotfiles\n.*\n")
+        rc, out = self.run_init("--no-hooks")
+        self.assertEqual(rc, 0, out)
+        self.assertIn(".gitignore:2  .*   hides .dfs/", out)
+        self.assertIn("Settle the ignore rule named above first", out)
+
+    def test_a_roadmap_kept_as_planning_is_not_warned_about(self):
+        (self.root / ".gitignore").write_text(".dfs/\n")
+        rc, out = self.run_init("--no-hooks")
+        self.assertEqual(rc, 0, out)
+        self.assertNotIn("git will not add", out)
+        self.assertIn(".dfs/ is gitignored here", out)
+
     def test_a_second_run_keeps_everything(self):
         self.run_init()
         dfs_paths.roadmap().write_text("# Mine\n")

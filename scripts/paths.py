@@ -629,7 +629,7 @@ def hidden_message(found) -> str:
     for (source, line, pattern), paths in rules.items():
         shown = ", ".join(paths[:6]) + (", …" if len(paths) > 6 else "")
         lines.append("    %s:%s  %s   hides %s" % (source, line, pattern, shown))
-    lines.append("Track them with a `!` rule after that line, or keep "
+    lines.append("Track the roadmap with a `!` rule after that line, or keep "
                  "%s/ as planning: a rule naming it, `%s/`, and nothing in it tracked."
                  % (STATE_DIR_NAME, STATE_DIR_NAME))
     return "\n".join(lines)

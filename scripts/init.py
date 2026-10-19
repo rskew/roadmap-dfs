@@ -15,7 +15,8 @@ directory, `paths.py`). It creates only what is missing and never overwrites:
 
 `.dfs/` may be committed with the project or gitignored whole (`dfs_paths.ignored`):
 ignored, it is planning only, the hooks never fire, and git history is the record
-of the walk, one commit per node.
+of the walk, one commit per node. Ignored by any other rule (a blanket `.*`, a `*.html`)
+or half force-added, it is said here, with the rule (`dfs_paths.hidden`).
 
 Adopting a `.dfs` that already holds tasks: commit its task files in one commit with
 the hooks on and DFS_ADOPT=1 in the environment (`DFS_ADOPT=1 git commit`). While git
@@ -157,6 +158,12 @@ def main(argv):
         dfs_paths.playwright_shell().write_text(shell + "\n")
         say("wrote", dfs_paths.playwright_shell())
 
+    # `git add --dry-run .dfs` is no check: it exits 0 while it skips an ignored file
+    # inside, so ask which roadmap parts git will not add, and by which rule.
+    hidden = dfs_paths.hidden()
+    if hidden:
+        print("\ndfs_init: " + dfs_paths.hidden_message(hidden))
+
     hooks_to_add = []
     if "--no-hooks" not in argv:
         hooks = Path(git("rev-parse", "--git-path", "hooks").stdout.strip())
@@ -188,6 +195,7 @@ Next:
   Run all of them from here, the repo's root.
   Artefacts are served from .dfs/artefacts on port %s (DFS_ARTEFACT_PORT):
      python3 -m http.server %s --directory .dfs/artefacts""" % (
+        "Settle the ignore rule named above first, then run this again." if hidden else
         ".dfs/ is gitignored here, so there is nothing to commit: it stays planning,\n"
         "     and each node's commit carries its code alone." if dfs_paths.ignored() else
         "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).\n"
