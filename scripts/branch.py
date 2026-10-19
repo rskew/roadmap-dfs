@@ -539,17 +539,20 @@ def _gist(text, limit=400):
     return one if len(one) <= limit else one[:limit].rsplit(" ", 1)[0] + " …"
 
 
-def _unmerged(task, wt, name, r):
+def _unmerged(task, wt, name, r, aside=None):
     """A merge git did not complete leaves the default branch as it was, and the item
     open. A conflict is work (the default branch moved after the rebase): the merge is
     aborted and the item reopened as `_reopen` does. A merge git refused before starting,
     because the author's uncommitted or staged edits here are in its way, is theirs to settle: a raise
-    naming the paths."""
+    naming the paths. The shared edits `aside` (`_set_aside_shared_edits`) are put back before
+    anything is written into the task file, which they may be: the raise or node would land on
+    the restored copy and be overwritten by the put-back."""
     import tree as dfs_tree
     default = dfs_paths.branch()
     if _git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0:
         files = _git("diff", "--name-only", "--diff-filter=U").stdout.split()
         _git("merge", "--abort")
+        _put_back_shared_edits(aside or {})
         if files:
             _reopen(task, wt, name, files)
             return "conflict"
@@ -560,6 +563,7 @@ def _unmerged(task, wt, name, r):
                      "to fix), and commit it." % (name, default, _gist(out_of(r))),
                      "a hook refused the merge into %s" % default)
         return "guard"
+    _put_back_shared_edits(aside or {})
     out = r.stderr + r.stdout
     # git lists the paths indented, by a tab when the edits are in the working tree and by
     # spaces when they are staged.
@@ -664,9 +668,7 @@ def merge(task):
     aside = _set_aside_shared_edits(name, wt)
     r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
     if r.returncode != 0:
-        result = _unmerged(task, wt, name, r)
-        _put_back_shared_edits(aside)
-        return result
+        return _unmerged(task, wt, name, r, aside)
     _put_back_shared_edits(aside)
     if dfs_paths.ignored():
         rescue_ignored_state(wt)

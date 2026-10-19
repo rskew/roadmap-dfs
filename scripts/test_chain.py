@@ -839,6 +839,26 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.assertIn("and edited since", (self.root / ".dfs" / "items" / "W1.md").read_text())
 
+    def test_a_refused_merge_keeps_the_raise_it_writes_into_the_set_aside_task_file(self):
+        # the shared task file is set aside around the merge and written back after it: the
+        # raise for the refused merge is written into it, so it must be put back first
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        (self.wt / "app.txt").write_text("worked\n")
+        self.git("add", "app.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.2: app", cwd=self.wt)
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        (self.root / "app.txt").write_text("the author's edit\n")
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("raised for the author", r.stderr + r.stdout)
+        text = task.read_text()
+        self.assertIn("edited since", text)
+        self.assertIn("raise", text)
+        self.assertIn("app.txt", text)
+
     def test_a_crlf_task_file_the_main_checkout_never_changed_is_not_taken_for_a_clash(self):
         self.force_tracked_worktree_with_a_branch_commit(TASK.replace("\n", "\r\n").encode())
         r = self.enter()
