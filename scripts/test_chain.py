@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -859,6 +860,32 @@ class Chain(unittest.TestCase):
         self.assertIn("edited since", text)
         self.assertIn("raise", text)
         self.assertIn("app.txt", text)
+
+    def test_an_interrupted_merge_puts_back_the_shared_task_file_edit_it_set_aside(self):
+        # Stop chain's SIGINT reaches `branch.py merge` while git merges: the edit made through
+        # the link has no other copy, so it must be back in the checkout when the interrupt leaves
+        import branch as dfs_branch
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        real = dfs_branch._git
+
+        def interrupted(*args, **kw):
+            if "--no-ff" in args:
+                raise KeyboardInterrupt
+            return real(*args, **kw)
+
+        here = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(dfs_branch, "_git", interrupted):
+                with self.assertRaises(KeyboardInterrupt):
+                    dfs_branch.merge("W1")
+        finally:
+            os.chdir(here)
+        self.assertIn("edited since", task.read_text())
 
     def test_a_crlf_task_file_the_main_checkout_never_changed_is_not_taken_for_a_clash(self):
         self.force_tracked_worktree_with_a_branch_commit(TASK.replace("\n", "\r\n").encode())

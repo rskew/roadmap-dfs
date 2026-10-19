@@ -603,7 +603,11 @@ def _set_aside_shared_edits(name, wt):
 
 
 def _put_back_shared_edits(aside):
-    for p, data in aside.items():
+    """Write the saved edits back, each once: an entry leaves `aside` as it is written, so a
+    second call (the `finally` in `merge` after `_unmerged` has put them back and written its
+    raise) does not overwrite what was written since."""
+    while aside:
+        p, data = aside.popitem()
         (dfs_paths.work_root() / p).write_bytes(data)
 
 
@@ -666,10 +670,14 @@ def merge(task):
     if not _rebase(task, wt, name):
         return "conflict"
     aside = _set_aside_shared_edits(name, wt)
-    r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
-    if r.returncode != 0:
-        return _unmerged(task, wt, name, r, aside)
-    _put_back_shared_edits(aside)
+    try:
+        r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
+        if r.returncode != 0:
+            return _unmerged(task, wt, name, r, aside)
+    finally:
+        # Every way out of the window puts the edits back, an interrupt (Stop chain's SIGINT
+        # reaches this process) included: they have no other copy.
+        _put_back_shared_edits(aside)
     if dfs_paths.ignored():
         rescue_ignored_state(wt)
     for what, r in (("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))),
