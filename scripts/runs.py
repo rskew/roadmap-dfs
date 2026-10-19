@@ -287,6 +287,7 @@ def run_dirs():
             # walk cannot infer it from an exit code (a usage limit and a crash are
             # both rc 1).
             stop=str(meta.get("stop") or ""), resets=str(meta.get("resets") or ""),
+            cause=str(meta.get("cause") or ""),   # what a `brief` stop failed on
             # The session the chain is in RIGHT NOW, recorded before it starts so
             # the provider's transcript can be read while it is being written.
             sid=str(meta.get("sid") or ""),

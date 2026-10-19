@@ -100,6 +100,7 @@ WALK_STOP = {
     "interrupt": "interrupted",
     "overbudget": "a session went past the context ceiling; the budget is not holding",
     "overturns": "a session went past the turn ceiling with no context reading",
+    "brief": "a session could not be briefed",
     "failed": "a session failed; its console says whether the agent exited non-zero "
               "or a critic or reviewer changed code or gave no verdict",
 }
@@ -138,11 +139,12 @@ def chain_cause(rundir):
     return ": " + (failed or lines)[-1] if lines else ""
 
 
-def walk_decide(stop, moved, next_item):
+def walk_decide(stop, moved, next_item, cause=""):
     """What the walk does after a chain ends, as `(action, why)`.
 
     `run` carries the item, `hold`, `pend` and `stop` carry a reason to show a person.
     `pend` is nothing workable now: the walk stays on and waits for a task to appear.
+    `cause` is what the chain recorded beside its stop (`brief` has one), added to a stop's reason.
 
     `raise` carries the question to put to the author on the item; the walk then
     goes on to the next item, which the raise has just made the item stop being.
@@ -167,8 +169,8 @@ def walk_decide(stop, moved, next_item):
     if stop in WALK_RAISE:
         return ("raise", WALK_RAISE[stop])
     if stop not in WALK_CONTINUE:
-        return ("stop", WALK_STOP.get(stop) or stop
-                or "the chain ended without recording why")
+        why = WALK_STOP.get(stop) or stop or "the chain ended without recording why"
+        return ("stop", "%s: %s" % (why, cause) if cause else why)
     if not moved and stop != "done":
         return ("raise", "the chain moved nothing in the task tree")
     if next_item is None:
@@ -312,7 +314,7 @@ class WalkMixin:
             self.reload()
             moved = bool(set(self.data.get("content", ())) - self.walk_content)
             action, why = walk_decide(run["stop"], moved,
-                                      self.walk_target())
+                                      self.walk_target(), run.get("cause", ""))
             self.walk_spent += int(run["run"] or 0)
             self.walk_dir = None
             if action == "hold":

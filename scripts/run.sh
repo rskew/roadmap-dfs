@@ -205,8 +205,12 @@ build_prompt() {  # build_prompt work|critic|review
   local brief flag=--brief lead="$PROMPT_LEAD"
   if [ "$1" = critic ]; then flag=--critic-brief; lead="$CRITIC_LEAD"; fi
   if [ "$1" = review ]; then flag=--review-brief; lead="$REVIEW_LEAD"; fi
-  if ! brief="$(python3 "$HERE/state.py" "$flag" "$ITEM")"; then
+  if ! brief="$(python3 "$HERE/state.py" "$flag" "$ITEM" 2>"$RUNDIR/brief.err")"; then
+    cat "$RUNDIR/brief.err" >&2
     echo "dfs_run: state.py $flag $ITEM failed; a session cannot be briefed." >&2
+    # recorded, so the walk says why the chain ended rather than that it did not say
+    stop_is brief
+    meta_set cause="state.py $flag failed: $(tail -n 1 "$RUNDIR/brief.err")"
     return 1
   fi
   printf '%s\n\n%s\n' "$lead" "$brief"
@@ -459,6 +463,8 @@ META
 #   overbudget  a session went past the context ceiling
 #   overturns   no context reading, and past the turn ceiling
 #   interrupt   Ctrl-C
+#   brief       a session could not be briefed (`cause` says why): its task file is
+#               missing in the worktree, or `state.py` failed
 stop_is() {
   # ⚠️ Spelled out rather than `${2:+resets="$2"}`: that expansion word-splits a
   # reset time like "resets 3pm" into two argv entries.
