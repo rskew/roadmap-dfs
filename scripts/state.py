@@ -611,14 +611,15 @@ def brief(task: str) -> str:
                     "in the Evidence of the node you are on, so the author can find it, and "
                     "go on with the session as usual."]
         out += [""]
-    loose = dfs_tree.untracked_artefacts("\n".join(p.read_text() for p in dfs_tree.part_files(task)))
-    if loose:   # a name HEAD's text already carried is not refused (`check.py`), so not listed
-        items_dir = dfs_paths.items()
-        arc_dir = dfs_paths.state() / "archive" / "items"
-        held = "\n".join(_at_head(d / p.relative_to(items_dir))
-                         for p in dfs_tree.part_files(task) for d in (items_dir, arc_dir))
-        named = set(dfs_tree.ATTACHED_REF.findall(held))
-        loose = [n for n in loose if n not in named]
+    items_dir = dfs_paths.items()
+    arc_dir = dfs_paths.state() / "archive" / "items"
+    loose = []   # per part, as `check.py` judges it: a name that part's copy at HEAD already
+    for p in dfs_tree.part_files(task):   # carried is not refused, so is not listed
+        rel = p.relative_to(items_dir)
+        arc = arc_dir / rel
+        mine = p.read_text() + "\n" + (arc.read_text() if arc.is_file() else "")
+        held = set(dfs_tree.ATTACHED_REF.findall(_at_head(p) + "\n" + _at_head(arc)))
+        loose += [n for n in dfs_tree.untracked_artefacts(mine) if n not in held and n not in loose]
     if loose:
         out += ["### Attachments to commit", "",
                 "The task's text names these files in `.dfs/artefacts`, which git does not "

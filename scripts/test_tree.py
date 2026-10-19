@@ -741,6 +741,16 @@ class Check(InARepo):
         self.assertNotIn("adopts the roadmap", out)
         self.assertNotIn("grandfathered", out)
 
+    def test_a_copy_of_an_old_coordinate_is_warned_at_the_line_that_adds_it(self):
+        old = "### W1.1 · step 1\nParent: W1\nStatus: open\nApproach: see check.py:12 for it\n\n"
+        self.write(task(old))
+        self.git_commit(".dfs/items/W1.md")
+        self.write(task("Also check.py:12 above.\n\n" + old))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertIn("line 9 carries a coordinate, 'check.py:12'", out)
+        self.assertNotIn("line 14 ", out)
+
     def test_a_coordinate_head_already_held_is_not_warned_of_again(self):
         old = "### W1.1 · step 1\nParent: W1\nStatus: open\nApproach: see check.py:12 for it\n\n"
         self.write(task(old))
@@ -775,6 +785,15 @@ class Check(InARepo):
         brief = dfs_state.brief("W1")
         self.assertIn("    .dfs/artefacts/" + other, brief)
         self.assertNotIn("    .dfs/artefacts/" + name, brief)
+
+    def test_the_briefing_compares_each_part_with_its_own_copy_at_head(self):
+        name = self.attached_picture()
+        self.git_commit(".dfs/items/W1.md")   # the default part's copy at HEAD names it
+        part = self.root / ".dfs/items/W1/fx.md"
+        part.parent.mkdir()
+        part.write_text("- 2026-09-25T09:00:00Z · correct · W1.1 · refuted\n"
+                        "  again: ![b](.dfs/artefacts/%s)\n" % name)
+        self.assertIn("    .dfs/artefacts/" + name, dfs_state.brief("W1"))
 
     def test_a_task_file_new_to_a_tracked_roadmap_is_judged_in_full(self):
         (self.root / ".dfs/items/W2.md").write_text(task().replace("W1", "W2"))

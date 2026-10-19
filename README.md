@@ -24,8 +24,8 @@ only if you stage it. Without `DFS_ADOPT` the commit is judged in full, since gi
 new roadmap's state and its first node is a session's; a refusal there names the variable. Every later commit is
 judged only on what it changes, so an old rule finding never blocks one. The size budget is the exception: a file
 adopted over it is refused ("GREW it") by the next commit that adds to it, a session's log line included, until
-`tree.py shelve` brings it under. A task file added once git already holds others is new work and is judged in
-full.
+`tree.py shelve` brings it under. A task file added once git already holds others is new work and is
+judged in full.
 
 ## Where an item is worked
 

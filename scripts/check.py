@@ -83,6 +83,7 @@ Run:  python3 <scripts>/check.py [--warn] [--staged] [--merge]
 Exit: 0 clean, 1 violation (0 with --warn when only warnings).
 """
 import collections
+import difflib
 import os
 import re
 import subprocess
@@ -511,6 +512,20 @@ def coordinates(text):
     return found
 
 
+def old_coordinates(head, text):
+    """For each line number of `text`, the coordinates of the lines of `head` it is aligned
+    with: the line itself when unchanged, or the old lines of the block it replaces. A
+    coordinate on a line `text` adds, wherever it stands, is this commit's."""
+    old, new = head.splitlines(), text.splitlines()
+    held = {}
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, old, new, autojunk=False).get_opcodes():
+        if tag in ("equal", "replace"):
+            hits = {h for line in old[i1:i2] for h in COORD.findall(line)}
+            for j in range(j1, j2):
+                held[j + 1] = hits
+    return held
+
+
 def check_attachments(text, head=None):
     """One refusal per file in `.dfs/artefacts` that `text` names and that git's index
     does not hold. Nothing else stages the author's upload; see `dfs_tree.untracked_artefacts`.
@@ -683,10 +698,9 @@ def main() -> int:
                       f"{budget:,} budget. Not grown here.")
             for note in standalone_notes(task, text, head, arc):
                 print(f"dfs_check: note — {rel}: {note}")
-            old_hits = collections.Counter(h for _, h in coordinates(head)) if head is not None else None
+            held_hits = old_coordinates(head, text) if head is not None else {}
             for n, hit in coordinates(text) if text != head else ():
-                if old_hits is not None and old_hits[hit] > 0:   # a coordinate HEAD's copy held
-                    old_hits[hit] -= 1
+                if hit in held_hits.get(n, ()):   # on a line HEAD's copy held, or an edit of one
                     continue
                 bad.append(f"{rel} line {n} carries a coordinate, '{hit}'. Name a thing by "
                            "what makes it that thing; a line number rots with no sign.")
