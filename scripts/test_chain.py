@@ -829,7 +829,8 @@ class Chain(unittest.TestCase):
     def test_the_rebase_at_the_merge_does_not_call_the_shared_copy_a_clash_when_main_has_moved(self):
         self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
         self.enter()
-        (self.root / ".dfs" / "items" / "W1.md").open("a").write("and edited since\n")   # through the link
+        with (self.root / ".dfs" / "items" / "W1.md").open("a") as f:
+            f.write("and edited since\n")   # through the link
         (self.root / "other.txt").write_text("main's own file\n")
         self.git("add", "other.txt")
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moves")
