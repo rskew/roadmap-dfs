@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -1249,6 +1250,9 @@ class Chain(unittest.TestCase):
             self.assertEqual(dfs_tree.status_of(t)[0], "done", out)
             self.assertTrue(dfs_tree.accepted(t))
             self.assertTrue(dfs_tree.acceptable(t), "a second accept must be offered")
+            import state as dfs_state
+            self.assertEqual(dfs_state.state_for("W1")["standing"], ["tree"],
+                             "the list must point at the second accept")
         finally:
             dfs_tree.dfs_paths.work_root = old
         subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
@@ -1256,6 +1260,18 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
         self.assertFalse(self.wt.exists())
         self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+
+    def test_the_exit_merge_waits_for_a_backgrounded_agent_to_end(self):
+        # wait_agent as run.sh defines it, timed on a child that outlives the call
+        src = RUNNER.read_text()
+        fn = src[src.index("wait_agent() {"):]
+        fn = fn[:fn.index("\n}\n") + 3]
+        def waited(script):
+            t0 = time.monotonic()
+            subprocess.run(["bash", "-c", fn + "\n" + script], check=True, capture_output=True)
+            return time.monotonic() - t0
+        self.assertGreaterEqual(waited("sleep 1.5 & AGENT_PID=$!; wait_agent"), 1.4)
+        self.assertLess(waited("AGENT_PID=; wait_agent"), 1.0)
 
     def test_a_session_in_the_worktree_is_briefed_with_the_law_as_the_author_has_it_now(self):
         self.enter()

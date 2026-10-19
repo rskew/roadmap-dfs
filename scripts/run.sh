@@ -568,6 +568,8 @@ on_exit() {
 # ⚠️ FROM THE INT/TERM TRAP, `wait` RETURNS AT ONCE ON A BACKGROUNDED AGENT (codex, kiro,
 # opencode), so the merge would remove the worktree under an agent still exiting: wait for
 # it first, up to 30 s, then end it. Nothing to wait for when the session ended normally.
+# It ends only the agent's own pid, not that process's children, and it reads the pid's
+# state with `ps`: with no `ps` the state is empty, so it returns at once and skips the wait.
 wait_agent() {
   local pid="${AGENT_PID:-}" n=0 st
   [ -n "$pid" ] || return 0

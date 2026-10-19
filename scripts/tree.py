@@ -715,8 +715,8 @@ def append_log(task, kind, args=(), body=""):
         # or a raise saying why, so the task is not done (`run.sh` does the same).
         # ⚠️ Not while a chain is working the task: the accept is exactly when its review
         # session is running in the worktree, and the merge would remove the directory
-        # under it, losing the review's finding and verdict. The chain merges at its own
-        # `done` stop (`merge_item`), once that session has ended.
+        # under it, losing the review's finding and verdict. The chain merges as it stops
+        # (`merge_item` at its `done` stop, `settle_accept` at any other), once that session has ended.
         import runs as dfs_runs
         if dfs_runs.live_for(task):
             print("dfs_tree: %s is accepted; the running chain merges it as it stops (accept again if it is killed)" % task,
