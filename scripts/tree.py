@@ -713,6 +713,15 @@ def append_log(task, kind, args=(), body=""):
         # branch, if it has one, goes into the default branch. A merge that cannot go
         # through leaves the accept written and the branch where it is, with an open node
         # or a raise saying why, so the task is not done (`run.sh` does the same).
+        # ⚠️ Not while a chain is working the task: the accept is exactly when its review
+        # session is running in the worktree, and the merge would remove the directory
+        # under it, losing the review's finding and verdict. The chain merges at its own
+        # `done` stop (`merge_item`), once that session has ended.
+        import runs as dfs_runs
+        if dfs_runs.live_for(task):
+            print("dfs_tree: %s is accepted; the running chain merges it when its session ends" % task,
+                  file=sys.stderr)
+            return ts
         import branch as dfs_branch
         try:
             result = dfs_branch.merge(task)

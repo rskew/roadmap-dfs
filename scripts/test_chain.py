@@ -54,6 +54,8 @@ Evidence:
 #   fix        add and confirm W1.2 with a commit
 #   rnode      a review that adds an open node and gives an issues verdict
 #   fixn       confirm the open node and commit it under its id
+#   raccept    the author's accept from the main checkout ($MAIN_ROOT) while this review runs,
+#              then `rnode`: a finding and an issues verdict
 #   rminor     a review verdict of ok carrying a minor finding
 #   issue      a critic raise plus an issues verdict
 #   meddle     a critic that edits code and gives a verdict
@@ -101,6 +103,9 @@ case "$recipe" in
   resolvemain) git -c user.name=t -c user.email=t@t rebase -q --autostash -X theirs "$MAIN_BRANCH" > /dev/null 2>&1 || exit 3
            id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: rebased.")+t[m.end():]); print(m.group(1))')"
            git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: the item is up to date" ;;
+  raccept) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1)
+           python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); n=len(re.findall(r"^### W1\.",t,re.M))+1; open(p,"w").write(t.replace("## Log","### W1.%d · review finding %d\nStatus: open\nApproach: fix it.\n\n## Log" % (n,n),1))'
+           echo "a finding" | $T log W1 review issues > /dev/null ;;
   rminor)  echo "a comment reads oddly" | $T log W1 review ok > /dev/null ;;
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
            echo "W1.2 one issue" | $T log W1 critic issues > /dev/null ;;
@@ -1179,6 +1184,20 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
         self.assertTrue(self.log("accept"))
+
+    def test_the_authors_accept_while_a_chain_reviews_leaves_the_merge_to_the_chain(self):
+        rc, meta, out = self.run_chain("work,confirm,raccept,fixn,rok", MAIN_ROOT=str(self.root))
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        # the review kept its worktree: its finding and its verdict were written
+        self.assertEqual([e["args"][:2] for e in self.log("end")][-3:],
+                         [["review", "ok"], ["work", "ok"], ["review", "ok"]], out)
+        self.assertEqual([e["args"][:1] for e in self.log("review")], [["issues"], ["ok"]], out)
+        self.assertEqual([(n["id"], n["status"]) for n in self.tree()["nodes"]],
+                         [("W1.1", "confirmed"), ("W1.2", "confirmed")], out)
+        # and the branch was merged once, by the chain's own done stop
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertIn("W1.2: fixed", self.git("log", "--format=%s"))
+        self.assertFalse(self.wt.exists())
 
     def test_the_authors_accept_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
         self.run_chain("work,confirm", cap=2)
