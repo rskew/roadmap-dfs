@@ -9,11 +9,13 @@ Run:  python3 roadmap-dfs/scripts/test_tree.py
 """
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -686,13 +688,37 @@ class Check(InARepo):
         self.git_commit("code.txt")   # the project is in git; its roadmap is not
         self.write(self.old_roadmap_file())
         subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
-        code, out = self.run_check("--staged")
+        code, out = self.run_check("--staged")   # said to be no adoption: judged in full
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        self.assertIn("DFS_ADOPT=1", out)
+        with mock.patch.dict(os.environ, {"DFS_ADOPT": "1"}):
+            code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
         self.assertIn("grandfathered", out)
         for seen in ("names Parent W1,", "names no artefact", "on disk but not staged"):
             self.assertIn(seen, out)
         self.assertNotIn("GREW", out)
         self.assertNotIn("broke its own rules", out)
+
+    def first_node_is_refused(self):
+        self.write(task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+                        "Hypothesis: It holds. Wrong if not.\n"))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact"):
+            self.assertIn(seen, out)
+
+    def test_a_first_node_worked_in_place_off_main_is_judged_in_full(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")
+        subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.root, check=True)
+        self.first_node_is_refused()
+
+    def test_a_first_node_in_a_repo_with_no_commit_is_judged_in_full(self):
+        self.first_node_is_refused()
 
     def test_the_first_node_of_a_new_roadmaps_first_task_on_its_branch_is_judged_in_full(self):
         (self.root / "code.txt").write_text("a\n")

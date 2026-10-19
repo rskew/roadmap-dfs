@@ -60,11 +60,14 @@ after a task was written does not hold every later commit on it hostage; nor is 
 of an unstaged artefact that HEAD's text already carried.
 
 The commit that ADOPTS a committed roadmap, the first to bring its task files into git
-(HEAD holds none), is judged against nothing: every finding on its files is printed as
-grandfathered and none refuses, including the size budget and the artefacts its text
-names, which it need not stage. A task file new to a roadmap git already holds is new
-work and is judged in full, and so is every commit on an item branch `dfs/<task>`: a new
-roadmap's first task is branched while main holds no task file, and is no adoption.
+(HEAD holds none), is judged against nothing when the author says it is one, by
+committing with DFS_ADOPT=1 in the environment: every finding on its files is printed
+as grandfathered and none refuses, including the size budget and the artefacts its text
+names, which it need not stage. Without it that commit is judged in full, and says so
+when it refuses, since HEAD holding no task file is also a new roadmap's state: its first
+task's first node, committed on `dfs/<task>`, on a branch a session works in place or in
+a repo with no commit, is no adoption. A task file new to a roadmap git already holds is
+new work and is judged in full either way.
 
 ⚠️ A GITIGNORED `.dfs` (`dfs_paths.ignored`) holds nothing at HEAD, so every check
 AGAINST HEAD above has nothing to compare and passes, and the hook never calls this,
@@ -80,6 +83,7 @@ Run:  python3 <scripts>/check.py [--warn] [--staged] [--merge]
 Exit: 0 clean, 1 violation (0 with --warn when only warnings).
 """
 import collections
+import os
 import re
 import subprocess
 import sys
@@ -608,14 +612,16 @@ def main() -> int:
     # The commit that first brings a committed roadmap's task files into git has nothing
     # to be judged against: what they hold was written before the guard saw them, under
     # whatever rules stood then. Their findings are grandfathered, shown and not refused,
-    # and every later commit is judged on what it changes. A task file new to a roadmap
-    # git already holds is not: a task written from the screen is first committed with
-    # its first node (`branch.py` `carry_uncommitted`), and a branch's part with its own.
-    # So is every commit on an item branch `dfs/<task>`, where sessions commit: a new
-    # roadmap's first task is branched while main holds no task file, and its first node
-    # is the guard's to judge. An adoption is made on main, or on any branch that is not one.
-    adopting = (from_index and not dfs_paths.ignored() and not head_names("items")
-                and not dfs_paths.is_item_branch(dfs_paths.branch()))
+    # and every later commit is judged on what it changes. But HEAD holding no task file
+    # is also a new roadmap's state, when its first task's first node is committed: on an
+    # item branch `dfs/<task>`, on a branch a session works in place when the checkout is
+    # off main, or in a repo with no commit. Nothing in the commit tells the two apart, so
+    # the author says so: an adoption is committed with DFS_ADOPT=1 in the environment
+    # and no other commit is one. A task file new to a roadmap git already holds is judged
+    # in full either way: a task written from the screen is first committed with its
+    # first node (`branch.py` `carry_uncommitted`), and a branch's part with its own.
+    adoptable = from_index and not dfs_paths.ignored() and not head_names("items")
+    adopting = adoptable and bool(os.environ.get("DFS_ADOPT"))
     grand = []
     tasks = {}
     for rel in now_items:
@@ -703,6 +709,9 @@ def main() -> int:
     print("dfs_check: the roadmap broke its own rules.\n")
     for b in fatal + bad:
         print(f"  - {b}")
+    if adoptable and fatal:
+        print("\n  If this commit adopts a roadmap written before the guard, commit it again with\n"
+              "  DFS_ADOPT=1 in the environment, and its old findings are not refused.")
     if warn_only and not fatal:
         print("\n  (warning only — not blocking this commit)")
         return 0

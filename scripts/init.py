@@ -18,10 +18,11 @@ ignored, it is planning only, the hooks never fire, and git history is the recor
 of the walk, one commit per node.
 
 Adopting a `.dfs` that already holds tasks: commit its task files in one commit with
-the hooks on. While git holds no task file, the guard grandfathers what they hold
-(printed, not refused; `check.py`), and judges every later commit only on what it changes.
-Make that commit on main, not on a `dfs/<task>` branch: a commit there is a session's,
-a new roadmap's first node among them, and is judged in full.
+the hooks on and DFS_ADOPT=1 in the environment (`DFS_ADOPT=1 git commit`). While git
+holds no task file, the guard then grandfathers what they hold (printed, not refused;
+`check.py`), and judges every later commit only on what it changes. Without DFS_ADOPT a
+commit is judged in full: HEAD holding no task file is also a new roadmap's state, and
+its first node is a session's.
 
 A hook that already exists is left alone and the lines to add are printed instead,
 since it is the project's. Hooks in .git/hooks belong to this clone only, so run
@@ -190,10 +191,11 @@ Next:
         ".dfs/ is gitignored here, so there is nothing to commit: it stays planning,\n"
         "     and each node's commit carries its code alone." if dfs_paths.ignored() else
         "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).\n"
-        "     Tasks already in .dfs/items? Commit them all in that one commit: while git\n"
-        "     holds no task file the guard grandfathers what they hold, printing it\n"
-        "     without refusing, and stage only the artefacts you want kept. Commit on\n"
-        "     main: a commit on a dfs/<task> branch is a session's and is judged in full.",
+        "     Tasks already in .dfs/items? Commit them all in that one commit, with\n"
+        "     DFS_ADOPT=1 in the environment (DFS_ADOPT=1 git commit): while git holds no\n"
+        "     task file the guard then grandfathers what they hold, printing it without\n"
+        "     refusing, and you stage only the artefacts you want kept. Without it the\n"
+        "     commit is judged in full, as a new roadmap's first node is.",
         dfs_paths.command("run.sh", "--open"),
         dfs_paths.command("run.sh", "<task>", "[sessions]"),
         dfs_paths.command("tui.py"), os.environ.get("DFS_ARTEFACT_PORT") or 3016,
