@@ -907,7 +907,8 @@ try:
     dfs_paths.branch_tag()
 except dfs_paths.NoBranch as e:
     print("dfs_run: %s" % e, file=sys.stderr); raise SystemExit(2)
-if not dfs_tree.exists(sys.argv[1]):
+# a task file here that its worktree lacks is said after the worktree is entered, with why
+if not dfs_tree.exists(sys.argv[1]) and not (dfs_paths.items() / ("%s.md" % sys.argv[1])).is_file():
     print("dfs_run: no task %s under %s" % (sys.argv[1], dfs_paths.rel(dfs_paths.items())),
           file=sys.stderr); raise SystemExit(2)
 PY
@@ -954,6 +955,33 @@ meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
          started="$(date -Is)" pid="$$"
 trap on_exit EXIT
 trap on_interrupt INT TERM
+
+# ⚠️ THE TASK IS READ FROM THE WORKTREE NOW, and the preflight above read the main
+# checkout's. The branch has only what git carries: on 2026-10-19 a project whose `.*`
+# rule hid `.dfs` reached the worktree with only its force-added files, and the first
+# briefing failed with "no task file". Said here with its cause, and kept as the stop.
+if [ -n "$ITEM_TREE" ]; then
+  cause="$(python3 - "$ITEM" "$HERE" "$ITEM_MAIN" "$ITEM_TREE" <<'PY'
+import subprocess, sys
+sys.path.insert(0, sys.argv[2])
+import paths as dfs_paths, tree as dfs_tree
+task, main, wt = sys.argv[1], sys.argv[3], sys.argv[4]
+if not dfs_tree.exists(task):
+    rel = "%s/items/%s.md" % (dfs_paths.STATE_DIR_NAME, task)
+    rule = subprocess.run(["git", "check-ignore", "-v", "--no-index", rel], cwd=main,
+                          capture_output=True, text=True).stdout.split("\t")[0]
+    print("the worktree %s has no %s, which the main checkout has: the branch carries only "
+          "what git tracks%s" % (wt, rel,
+                                 ", and the ignore rule %s hides it" % rule if rule else ""))
+PY
+)"
+  if [ -n "$cause" ]; then
+    stop_is brief
+    meta_set cause="$cause"
+    echo "dfs_run: $ITEM cannot be briefed: $cause." >&2
+    exit 2
+  fi
+fi
 
 # ⚠️ SERIAL, SO THE DIRT HAS AN OWNER. Work in the tree that is not this task's is
 # committed or stashed by this chain's first session, whose briefing lists it.

@@ -551,6 +551,16 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.git("merge-base", sha, "dfs/W1"), sha)
         self.assertEqual(self.git("worktree", "list").count("\n"), 1)
 
+    def test_a_worktree_without_the_task_file_stops_the_chain_with_the_cause(self):
+        self.run_chain("work", cap=1)
+        (self.wt / ".dfs" / "items" / "W1.md").unlink()
+        before = self.count.read_text()
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertIn("has no .dfs/items/W1.md, which the main checkout has", meta.get("cause", ""))
+        self.assertIn("W1 cannot be briefed: the worktree", out)
+        self.assertEqual(self.count.read_text(), before)   # no session started
+
     def test_the_task_s_uncommitted_edits_move_to_the_branch_and_main_gets_them_back(self):
         item = self.root / ".dfs" / "items" / "W1.md"
         item.write_text(TASK + "- 2026-01-01T00:00:00Z · note\n")
