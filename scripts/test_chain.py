@@ -887,6 +887,36 @@ class Chain(unittest.TestCase):
             os.chdir(here)
         self.assertIn("edited since", task.read_text())
 
+    def test_a_merge_a_hook_refuses_keeps_the_open_node_it_writes_into_the_set_aside_task_file(self):
+        # a hook needs an exec-capable directory, so the refusal is driven in-process: git
+        # merges without committing, as when `pre-merge-commit` runs, and reports failure
+        import branch as dfs_branch
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        real = dfs_branch._git
+
+        def refused(*args, **kw):
+            if "--no-ff" in args:
+                r = real(*args[:-1], "--no-commit", args[-1], **kw)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                return subprocess.CompletedProcess(args, 1, "", "the guard refused the merge\n")
+            return real(*args, **kw)
+
+        here = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(dfs_branch, "_git", refused):
+                self.assertEqual(dfs_branch.merge("W1"), "guard")
+        finally:
+            os.chdir(here)
+        text = task.read_text()
+        self.assertIn("edited since", text)
+        self.assertIn("Fix what refused the merge of dfs/W1", text)
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
     def test_a_crlf_task_file_the_main_checkout_never_changed_is_not_taken_for_a_clash(self):
         self.force_tracked_worktree_with_a_branch_commit(TASK.replace("\n", "\r\n").encode())
         r = self.enter()
