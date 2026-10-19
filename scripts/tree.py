@@ -183,6 +183,16 @@ def part_tags(task, base=None):
     return tags
 
 
+def missing_in_worktree(task):
+    """The worktree `task` is worked in when it has no part of the task though this
+    checkout's `items/` has the task file, else None: everything reads the task from its
+    worktree, so it would look like a tree with no nodes yet."""
+    wt = dfs_paths.worktree(task)
+    if wt is None or part_tags(task) or not (dfs_paths.items() / ("%s.md" % task)).is_file():
+        return None
+    return wt
+
+
 def task_ids():
     """Every task with a part on disk: a top-level file, a directory of branch parts,
     or both."""
@@ -1230,6 +1240,10 @@ def status_of(t):
                         == "backtrack" else "the author corrected %s — carry it out first"
                         ) % todo[0]["node"]
     if not t["nodes"]:
+        wt = missing_in_worktree(t["task"])
+        if wt:
+            return "open", ("its task file is missing in its worktree %s, though this checkout "
+                            "has one — not an empty tree" % dfs_paths.rel(wt))
         return "open", "no nodes yet — plan the task"
     fr = frontier(t)
     if fr:

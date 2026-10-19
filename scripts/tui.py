@@ -3699,7 +3699,8 @@ class UI(WalkMixin):
                         curses.A_BOLD))
         out.append(("", 0))
         if not rows:
-            out.append(("no nodes yet", look("chrome")))
+            out.append(("no task file in its worktree" if dfs_tree.missing_in_worktree(it["id"])
+                        else "no nodes yet", look("chrome")))
             return out
         self._sel_row = self._sel_end = None
         red = curses.color_pair(1)

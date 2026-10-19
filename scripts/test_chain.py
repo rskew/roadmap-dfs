@@ -561,6 +561,18 @@ class Chain(unittest.TestCase):
         self.assertIn("W1 cannot be briefed: the worktree", out)
         self.assertEqual(self.count.read_text(), before)   # no session started
 
+    def test_a_task_file_missing_in_its_worktree_is_not_shown_as_an_empty_tree(self):
+        self.enter()
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            self.assertEqual(dfs_tree.status_of(dfs_tree.load("W1"))[1], "current node W1.1 · the step")
+            (self.wt / ".dfs" / "items" / "W1.md").unlink()
+            why = dfs_tree.status_of(dfs_tree.load("W1"))[1]
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+        self.assertIn("its task file is missing in its worktree .dfs/worktrees/W1", why)
+
     def test_the_task_s_uncommitted_edits_move_to_the_branch_and_main_gets_them_back(self):
         item = self.root / ".dfs" / "items" / "W1.md"
         item.write_text(TASK + "- 2026-01-01T00:00:00Z · note\n")
