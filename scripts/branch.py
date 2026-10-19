@@ -198,6 +198,45 @@ def rescue_ignored_state(wt):
     return moved
 
 
+def _hide_tracked(wt, rel, src):
+    """Clear the worktree's own copy of the `.dfs` entry `rel`, which git checked out because
+    it tracks part of it though the rules hide it, so a link to `src` can take its place:
+    its tracked paths are marked `--skip-worktree` (a link git cannot look beyond leaves them
+    unchanged, not deleted), unedited ones are deleted, and what is left (untracked files, an
+    edited copy) moves to `src` as `_move_into` does."""
+    dest = wt / rel
+    tracked = [p for p in _git("ls-files", "-z", "--", rel, cwd=wt).stdout.split("\0") if p]
+    edited = {p for p in _git("diff", "--name-only", "-z", "--", rel, cwd=wt).stdout.split("\0") if p}
+    if tracked:
+        _git("update-index", "--skip-worktree", "--", *tracked, cwd=wt)
+    for p in tracked:
+        if p not in edited and (wt / p).is_file():
+            (wt / p).unlink()
+    if dest.is_dir():
+        _move_into(dest, src)
+    elif dest.exists():
+        _move_file(dest, src)
+
+
+def put_back_tracked(wt):
+    """Undo `_hide_tracked` before git rewrites the worktree: a rebase refuses to update a
+    `--skip-worktree` path it finds through a link ("would be overwritten by checkout") when
+    the default branch changed it. The links over hidden paths go, and the paths are checked
+    out from HEAD again. Returns whether there were any; `share_ignored_state` hides them
+    again."""
+    s = dfs_paths.STATE_DIR_NAME
+    hidden = [e[2:] for e in _git("ls-files", "-v", "-z", "--", s, cwd=wt).stdout.split("\0")
+              if e.startswith("S ")]
+    if not hidden:
+        return False
+    for top in sorted({"/".join(p.split("/")[:2]) for p in hidden}):
+        if (wt / top).is_symlink():
+            (wt / top).unlink()
+    _git("update-index", "--no-skip-worktree", "--", *hidden, cwd=wt)
+    _git("checkout", "--", *hidden, cwd=wt)
+    return True
+
+
 def share_ignored_state(wt):
     """Give the worktree the planning files git does not carry. A gitignored roadmap is in
     no commit, so the branch's checkout has none of it: each entry of this checkout's
@@ -221,10 +260,14 @@ def share_ignored_state(wt):
     for entry in sorted(here.iterdir()):
         dest = there / entry.name
         rel = "%s/%s" % (s, entry.name)
-        if entry.name == "worktrees" or dest.exists() or dest.is_symlink():
+        if entry.name == "worktrees" or dest.is_symlink():
             continue
-        if _git("check-ignore", "-q", rel).returncode != 0:
+        # `--no-index`: an entry the rules hide is shared even when git tracks part of it
+        # (a blanket `.*` over files force-added once), or the branch's stale copy is read
+        if _git("check-ignore", "-q", "--no-index", rel).returncode != 0:
             continue
+        if dest.exists():
+            _hide_tracked(wt, rel, entry)
         os.symlink(os.path.relpath(entry, there), dest)
         if _git("check-ignore", "-q", rel, cwd=wt).returncode != 0:
             _exclude("/" + rel)   # `items/` matches a directory, and a link is not one
@@ -418,11 +461,16 @@ def _rebase(task, wt, name):
                          "is not yet on it." % (name, dfs_paths.rel(wt), default),
                          "a rebase was left unfinished in the worktree")
             return False
+    hidden = put_back_tracked(wt)
     r = _git(*_identity(), "rebase", default, cwd=wt)
+    files = []
+    if r.returncode != 0:
+        files = _git("diff", "--name-only", "--diff-filter=U", cwd=wt).stdout.split()
+        _git("rebase", "--abort", cwd=wt)
+    if hidden:
+        share_ignored_state(wt)
     if r.returncode == 0:
         return True
-    files = _git("diff", "--name-only", "--diff-filter=U", cwd=wt).stdout.split()
-    _git("rebase", "--abort", cwd=wt)
     _reopen(task, wt, name, files)
     return False
 

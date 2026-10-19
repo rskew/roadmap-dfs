@@ -662,6 +662,40 @@ class Chain(unittest.TestCase):
                 self.git("branch", "-D", "dfs/W1")
                 self.assertTrue((self.root / ".dfs" / "items" / "W1.md").is_file())   # the links, not the files, went
 
+    def test_a_roadmap_hidden_by_a_blanket_rule_with_some_files_force_added_shares_them_all(self):
+        # `.*` hides `.dfs`, and W1.md and order.md were force-added once: the branch carries
+        # only those, so the worktree must take the rest, and the current order, from here
+        (self.root / ".dfs" / "order.md").write_text("- W1\n")
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/order.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        (self.root / ".dfs" / "items" / "W2.md").write_text(TASK.replace("W1", "W2"))
+        (self.root / ".dfs" / "order.md").write_text("- W1\n- W2\n")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W2"],
+                           cwd=self.root, capture_output=True, text=True)
+        wt = self.root / ".dfs" / "worktrees" / "W2"
+        self.assertEqual(r.stdout.strip(), str(wt), r.stderr)
+        self.assertEqual((wt / ".dfs" / "items" / "W2.md").read_text(), TASK.replace("W1", "W2"))
+        self.assertEqual((wt / ".dfs" / "order.md").read_text(), "- W1\n- W2\n")
+        self.assertEqual(self.git("status", "--porcelain", cwd=wt), "")
+        # the author commits a force-tracked planning file while the item is worked: the
+        # rebase at the merge must not stop on the paths the worktree shares
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK + "\nedited\n")
+        self.git("add", "-f", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "the author's edit")
+        (wt / "app.txt").write_text("worked\n")
+        self.git("add", "app.txt", cwd=wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W2.1: the step", cwd=wt)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W2"], cwd=self.root,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(wt.exists())
+        self.assertEqual((self.root / "app.txt").read_text(), "worked\n")
+        self.assertTrue((self.root / ".dfs" / "items" / "W2.md").is_file())
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- W2\n")
+        self.assertIn("edited", (self.root / ".dfs" / "items" / "W1.md").read_text())
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no"), "M .dfs/order.md")
+
     def merge_by_hand(self):
         return subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
                               capture_output=True, text=True)
