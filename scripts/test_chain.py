@@ -56,6 +56,8 @@ Evidence:
 #   fixn       confirm the open node and commit it under its id
 #   raccept    the author's accept from the main checkout ($MAIN_ROOT) while this review runs,
 #              then `rnode`: a finding and an issues verdict
+#   racceptfail the author's accept as `raccept` logs it, then the session exits 1
+#   racceptsilent the author's accept as `raccept` logs it, then no verdict and no finding
 #   rminor     a review verdict of ok carrying a minor finding
 #   issue      a critic raise plus an issues verdict
 #   meddle     a critic that edits code and gives a verdict
@@ -106,6 +108,8 @@ case "$recipe" in
   raccept) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1)
            python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); n=len(re.findall(r"^### W1\.",t,re.M))+1; open(p,"w").write(t.replace("## Log","### W1.%d · review finding %d\nStatus: open\nApproach: fix it.\n\n## Log" % (n,n),1))'
            echo "a finding" | $T log W1 review issues > /dev/null ;;
+  racceptfail) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1); exit 1 ;;
+  racceptsilent) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1) ;;
   rminor)  echo "a comment reads oddly" | $T log W1 review ok > /dev/null ;;
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
            echo "W1.2 one issue" | $T log W1 critic issues > /dev/null ;;
@@ -1216,6 +1220,20 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
         self.assertIn("W1.2: fixed", self.git("log", "--format=%s"))
         self.assertFalse(self.wt.exists())
+
+    def test_an_accept_held_back_for_a_chain_is_merged_however_that_chain_stops(self):
+        for recipe in ("racceptfail", "racceptsilent"):
+            with self.subTest(recipe=recipe):
+                self.tearDown()
+                self.setUp()
+                rc, meta, out = self.run_chain("work,confirm," + recipe, MAIN_ROOT=str(self.root))
+                self.assertNotEqual(meta.get("stop"), "done", out)
+                self.assertTrue(self.log("accept"), out)
+                # the accept read done, so the chain's exit merged it: never done and unmerged
+                self.assertEqual(self.git("log", "--merges", "--format=%s"),
+                                 "W1: merge the item's branch dfs/W1", out)
+                self.assertFalse(self.wt.exists(), out)
+                self.assertEqual(self.git("branch", "--list", "dfs/W1"), "", out)
 
     def test_a_session_in_the_worktree_is_briefed_with_the_law_as_the_author_has_it_now(self):
         self.enter()

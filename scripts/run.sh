@@ -552,7 +552,25 @@ IN_SESSION=""
 # `$(date)` is the date's exit status, every time.
 on_exit() {
   rc=$?
+  settle_accept
   meta_set finished="$(date -Is)" rc="$rc"
+}
+
+# ⚠️ AN ACCEPT HELD BACK FOR THIS CHAIN IS MERGED HOWEVER IT STOPS. The author's accept
+# while a chain works the task is only logged (tree.append_log), leaving the merge to the
+# chain's `done` stop; a chain that stops any other way (a failed or silent session, the
+# cap, Ctrl-C) would leave the task reading done with `dfs/$ITEM` unmerged. So the exit
+# merges a task that reads done and still has its worktree. Neither the exit code nor
+# the stop is changed: a merge that cannot go through reopens the item or raises, as at
+# a `done` stop. (A chain killed outright runs no trap, and its accept is not held back
+# once it is gone.)
+settle_accept() {
+  [ -n "${ITEM_TREE:-}" ] && [ -d "$ITEM_TREE" ] || return 0
+  local status=""
+  eval "$(python3 "$HERE/state.py" --sh "$ITEM" 2>/dev/null)" || return 0
+  [ "$status" = done ] || return 0
+  echo "dfs_run: $ITEM was accepted while this chain ran; merging it as the chain stops."
+  merge_item || true
 }
 
 # Ctrl-C must end the CHAIN, not just the run. A claude that handles the interrupt
