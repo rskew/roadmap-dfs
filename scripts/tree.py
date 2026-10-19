@@ -719,7 +719,7 @@ def append_log(task, kind, args=(), body=""):
         # `done` stop (`merge_item`), once that session has ended.
         import runs as dfs_runs
         if dfs_runs.live_for(task):
-            print("dfs_tree: %s is accepted; the running chain merges it when its session ends" % task,
+            print("dfs_tree: %s is accepted; the running chain merges it as it stops (accept again if it is killed)" % task,
                   file=sys.stderr)
             return ts
         import branch as dfs_branch

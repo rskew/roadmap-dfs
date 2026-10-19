@@ -46,7 +46,9 @@ edited in your checkout through the link and left modified and uncommitted there
 merge, for you to commit. Gitignore it only by a rule naming it (`.dfs/`), with nothing in
 it tracked: a broader rule such as `.*` or `*.html`, or files force-added past one, leaves
 part of the roadmap out of git, and `init`, each chain's start and the screen's header
-(`git hides .dfs`, the rule under `h`) say so.
+(`git hides .dfs`, the rule under `h`) say so. An accept you make
+while a chain is still working the task is recorded and the chain merges it as it stops, so
+the worktree is never removed under a session; if that chain is killed outright, accept again.
 
 There is no branch when the checkout is off `main`/`master` or the repo has no commit yet:
 the item is worked in place, on whatever is checked out, and nothing is merged. A task that

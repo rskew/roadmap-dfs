@@ -562,13 +562,29 @@ on_exit() {
 # cap, Ctrl-C) would leave the task reading done with `dfs/$ITEM` unmerged. So the exit
 # merges a task that reads done and still has its worktree. Neither the exit code nor
 # the stop is changed: a merge that cannot go through reopens the item or raises, as at
-# a `done` stop. (A chain killed outright runs no trap, and its accept is not held back
-# once it is gone.)
+# a `done` stop. (A chain killed outright runs no trap; its accept is offered again,
+# and with no live chain that accept merges: tree.acceptable.)
+#
+# ⚠️ FROM THE INT/TERM TRAP, `wait` RETURNS AT ONCE ON A BACKGROUNDED AGENT (codex, kiro,
+# opencode), so the merge would remove the worktree under an agent still exiting: wait for
+# it first, up to 30 s, then end it. Nothing to wait for when the session ended normally.
+wait_agent() {
+  local pid="${AGENT_PID:-}" n=0 st
+  [ -n "$pid" ] || return 0
+  while [ "$n" -lt 150 ]; do
+    st="$(ps -o stat= -p "$pid" 2>/dev/null)"
+    case "$st" in ""|Z*) return 0 ;; esac
+    sleep 0.2; n=$((n + 1))
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
 settle_accept() {
   [ -n "${ITEM_TREE:-}" ] && [ -d "$ITEM_TREE" ] || return 0
   local status=""
   eval "$(python3 "$HERE/state.py" --sh "$ITEM" 2>/dev/null)" || return 0
   [ "$status" = done ] || return 0
+  wait_agent
   echo "dfs_run: $ITEM was accepted while this chain ran; merging it as the chain stops."
   merge_item || true
 }
@@ -757,9 +773,11 @@ run_session() {
       "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" \
       "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
+    AGENT_PID=$agent_pid
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
     session_rc=$?
+    AGENT_PID=
     SID="$(stream_sid "$log")"
     meta_set sid="$SID"
   elif [ "$AGENT" = kiro ]; then
@@ -777,9 +795,11 @@ run_session() {
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
       --agent dfs-inbox --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
+    AGENT_PID=$agent_pid
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
     session_rc=$?
+    AGENT_PID=
     SID="$(stream_sid "$log")"
     meta_set sid="$SID"
   elif [ "$AGENT" = codex ]; then
@@ -800,9 +820,11 @@ run_session() {
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
       > "$log" < /dev/null &
     agent_pid=$!
+    AGENT_PID=$agent_pid
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
     session_rc=$?
+    AGENT_PID=
     SID="$(codex_thread_id "$log")"
     meta_set sid="$SID"
   else
