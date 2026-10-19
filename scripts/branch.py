@@ -563,19 +563,25 @@ def _unmerged(task, wt, name, r):
     return "refused"
 
 
-def _set_aside_shared_edits(name):
-    """The `.dfs` files the branch `name` changed and that this checkout holds edited: a
-    shared copy of a tracked planning file (`share_ignored_state`) is edited here while the
-    branch, begun before it was shared, committed the file too, and the merge would refuse
-    to overwrite the edit. Each is saved and restored to HEAD; `_put_back_shared_edits` writes
-    them back, since they were made on top of the branch's version. Returns {path: bytes}."""
+def _set_aside_shared_edits(name, wt):
+    """The `.dfs` files the branch `name` changed and that this checkout holds edited, where
+    the edit was made on the branch's version: the worktree `wt` reaches the file through a
+    link to this checkout's copy (`share_ignored_state`), so the sessions edited it while the
+    branch, begun before it was shared, committed it too, and the merge would refuse to
+    overwrite the edit. Each is saved and restored to HEAD; `_put_back_shared_edits` writes
+    them back. Any other edit, the author's own, is left for git to refuse and `_unmerged` to
+    raise: putting it back would silently undo the branch's change in the working copy.
+    Returns {path: bytes}."""
     s = dfs_paths.STATE_DIR_NAME
+    root = dfs_paths.work_root()
     changed = [p for p in _git("diff", "--name-only", "-z", "HEAD", name, "--", s).stdout.split("\0") if p]
     aside = {}
     for st, p in (_dirty(changed) if changed else []):
         if st == "??" or "D" in st:
             continue
-        aside[p] = (dfs_paths.work_root() / p).read_bytes()
+        if not ((wt / p).exists() and (wt / p).samefile(root / p)):
+            continue
+        aside[p] = (root / p).read_bytes()
         _git("checkout", "HEAD", "--", p)
     return aside
 
@@ -643,7 +649,7 @@ def merge(task):
         return "dirty"
     if not _rebase(task, wt, name):
         return "conflict"
-    aside = _set_aside_shared_edits(name)
+    aside = _set_aside_shared_edits(name, wt)
     r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
     if r.returncode != 0:
         result = _unmerged(task, wt, name, r)

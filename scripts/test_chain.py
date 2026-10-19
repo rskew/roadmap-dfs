@@ -814,6 +814,40 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nhere\n")
         self.assertFalse((self.wt / ".dfs" / "items").is_symlink())
 
+    def test_a_merge_does_not_write_the_authors_edit_over_the_branchs_change_to_a_tracked_roadmap_file(self):
+        # `.dfs` is tracked whole: the worktree's `order.md` is its own, so an edit of the
+        # author's here was not made on the branch's version, and the merge is theirs to settle
+        (self.root / ".dfs" / "order.md").write_text("- W1\n")
+        self.git("add", ".dfs/order.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "order")
+        self.enter()
+        (self.wt / ".dfs" / "order.md").write_text("- W1\n- branch\n")
+        self.git("add", ".dfs/order.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: order", cwd=self.wt)
+        (self.root / ".dfs" / "order.md").write_text("- W1\n- author\n")
+        head = self.git("rev-parse", "HEAD")
+        r = self.merge_by_hand()
+        self.assertEqual(self.git("rev-parse", "HEAD"), head, r.stderr)
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- author\n")
+        self.assertTrue(self.wt.exists())
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_a_merge_does_not_write_a_clashing_edit_over_the_branchs_committed_force_tracked_file(self):
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        mine = self.wt / ".dfs" / "items" / "W1.md"
+        mine.write_text(TASK + "\nin the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK + "\nhere\n")
+        self.enter()   # both changed it: left unshared
+        r = self.merge_by_hand()
+        self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nhere\n", r.stderr)
+        self.assertEqual(self.git("show", "dfs/W1:.dfs/items/W1.md"), (TASK + "\nin the branch\n").strip())
+        self.assertTrue(self.wt.exists())
+
     def merge_by_hand(self):
         return subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
                               capture_output=True, text=True)
