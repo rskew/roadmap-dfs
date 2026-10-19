@@ -1109,7 +1109,7 @@ fi
 # puts an open node back in the tree (exit 3) and the chain goes on and works it, and
 # edits of the author's that overlap the merge are stashed and put back around it (a raise,
 # exit 4, only when they conflict with what the merge brought in). Both return non-zero here
-# and the chain steps back into the worktree.
+# and the chain steps back into the worktree, unless the merge went through and removed it.
 merge_item() {
   [ -n "$ITEM_TREE" ] || return 0
   local rc=0
@@ -1118,7 +1118,8 @@ merge_item() {
   # Anything but a merge (or nothing to merge) is not done: an exit this does not know
   # (a crash) blocks the chain rather than ending it `done` with the branch unmerged.
   [ "$rc" = 0 ] && return 0
-  cd "$ITEM_TREE"
+  # (a merge that went through but could not put the author's stash back has removed it)
+  [ -d "$ITEM_TREE" ] && cd "$ITEM_TREE"
   case "$rc" in 3|4) ;; *) rc=4; echo "dfs_run: the merge of $ITEM failed unexpectedly; see above." ;; esac
   return "$rc"
 }

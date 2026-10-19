@@ -771,12 +771,17 @@ def _stash_index(sha):
 
 
 def _set_aside(task, paths):
-    """Stash the author's edits to `paths` in the main checkout (untracked ones too, staged
-    state kept), so a merge git refused over them can go through. Returns the stash's sha,
-    None when nothing was set aside. The entry is found by its sha, never by position or a
-    bare `git stash`, since the stack is shared with every other checkout."""
+    """Stash the author's edits to the tracked `paths` in the main checkout (staged state
+    kept), so a merge git refused over them can go through. Returns the stash's sha, None
+    when nothing was set aside. An untracked path is left out: git refuses over one only when
+    the branch adds that path, so the stash could never be applied back over the file the
+    merge brings, and the author's copy stays where it is for `_unmerged` to raise for. The
+    entry is found by its sha, never by position or a bare `git stash`, since the stack is
+    shared with every other checkout."""
+    tracked = _git("ls-files", "-z", "--", *paths).stdout.split("\0")
+    paths = [p for p in paths if p in tracked]
     tag = "dfs-merge-%s" % task
-    if _git(*_identity(), "stash", "push", "--include-untracked", "-q", "-m", tag, "--", *paths).returncode != 0:
+    if not paths or _git(*_identity(), "stash", "push", "-q", "-m", tag, "--", *paths).returncode != 0:
         return None
     for line in _git("stash", "list", "--format=%H %gs").stdout.splitlines():
         sha, _, subject = line.partition(" ")

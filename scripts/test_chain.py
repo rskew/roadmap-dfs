@@ -71,6 +71,7 @@ Evidence:
 #   lower      `work`, then lower the chain's cap to this run, as the TUI's `w` does
 #   resolvemain confirm the open node, committing it, after rebasing the branch onto main
 #              the way the node asks (keeping the branch's side of a conflict)
+#   codenew    add new.txt in the worktree, uncommitted (`confirm` commits it)
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
 STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -89,6 +90,7 @@ T="python3 $TREE_PY"
 case "$recipe" in
   work)    python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n" ;;
   code)    echo "change $n" >> app.txt ;;
+  codenew) echo "the branch's" > new.txt ;;
   confirm) python3 -c 'import os; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Status: open","Status: confirmed\nDetermination: done.",1))'
            git add -A && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m "W1.1: the step is done" ;;
   raise)   echo "which way?" | $T log W1 raise W1.1 > /dev/null ;;
@@ -782,6 +784,29 @@ class Chain(unittest.TestCase):
         self.assertIn("dfs-merge-W1", self.stashes())
         self.assertIn("the author's edit", self.git("stash", "show", "-p", "stash@{0}"))
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+        # a blocked merge is a raise, not a crash: no traceback, and the chain leaves the removed worktree alone
+        self.assertNotIn("Traceback", out)
+        self.assertNotIn("failed unexpectedly", out)
+        self.assertNotIn("No such file", out)
+        self.assertIn("merged, but putting your edits back", out)
+        # the recovery the raise names brings the author's edit back
+        sha = re.search(r"git stash apply ([0-9a-f]{12})", raised[0]["body"]).group(1)
+        subprocess.run(["git", "stash", "apply", sha], cwd=self.root, capture_output=True)   # conflicts: markers
+        self.assertIn("the author's edit", (self.root / "app.txt").read_text())
+
+    def test_an_untracked_file_the_branch_adds_is_not_set_aside_and_is_raised_for(self):
+        (self.root / "new.txt").write_text("mine\n")
+        rc, meta, out = self.run_chain("codenew,confirm,rok")
+        self.assertEqual(meta.get("stop"), "blocked", out)
+        self.assertNotIn("Traceback", out)
+        raised = self.log("raise")
+        self.assertEqual(len(raised), 1, out)
+        self.assertIn("new.txt", raised[0]["body"])
+        # nothing merged, the author's file untouched and in no stash, the branch and worktree kept
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "")
+        self.assertEqual((self.root / "new.txt").read_text(), "mine\n")
+        self.assertEqual(self.stashes(), "")
+        self.assertTrue(self.wt.exists())
 
     def test_an_edit_that_stops_the_merge_without_overlapping_is_set_aside_and_stays_staged(self):
         (self.root / "other.txt").write_text("staged\n")
