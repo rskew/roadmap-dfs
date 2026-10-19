@@ -46,13 +46,18 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a task file or an archive HEAD holds, deleted (the limit case of the two
       rules above; a staged rename is followed, not refused). A task retired on
       purpose is the author's rewrite of history, committed with --no-verify
-    - a task file (or archive) naming a file in `.dfs/artefacts` that is on disk but not
-      in the index: the author's attached picture or document is uploaded by the web
+    - a task file (or archive) newly naming a file in `.dfs/artefacts` that is on disk but
+      not in the index: the author's attached picture or document is uploaded by the web
       server, which commits nothing, so the commit carrying the text must carry the
       file or a push, a clone or `git clean` loses it (`check_attachments`)
     - a task file over the size budget that this commit grew
   warned:
-    - a coordinate (`file.js:123`) in a task file: it rots with no sign
+    - a coordinate (`file.js:123`) in a task file this commit changes: it rots with no sign
+
+A commit is judged on what it CHANGES. A shape fault in the first group that HEAD's
+copy of the file already has is not this commit's and is not refused, so a rule added
+after a task was written does not hold every later commit on it hostage; nor is a name
+of an unstaged artefact that HEAD's text already carried.
 
 ⚠️ A GITIGNORED `.dfs` (`dfs_paths.ignored`) holds nothing at HEAD, so every check
 AGAINST HEAD above has nothing to compare and passes, and the hook never calls this,
@@ -481,12 +486,16 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
     return bad
 
 
-def check_attachments(text):
+def check_attachments(text, head=None):
     """One refusal per file in `.dfs/artefacts` that `text` names and that git's index
-    does not hold. Nothing else stages the author's upload; see `dfs_tree.untracked_artefacts`."""
+    does not hold. Nothing else stages the author's upload; see `dfs_tree.untracked_artefacts`.
+    A name `head` (HEAD's text) already carried is not this commit's to carry: the commit
+    that wrote it was judged, and refusing it again would hold every later commit hostage
+    to a file nobody is attaching now."""
+    had = set(dfs_tree.ATTACHED_REF.findall(head or ""))
     return ["names .dfs/artefacts/%s, which is on disk but not staged. Stage it with this "
             "file (`git add .dfs/artefacts/%s`): the author attached it, and nothing else "
-            "will commit it" % (n, n) for n in dfs_tree.untracked_artefacts(text)]
+            "will commit it" % (n, n) for n in dfs_tree.untracked_artefacts(text) if n not in had]
 
 
 def check_no_new_ask(task, text, head):
@@ -586,15 +595,20 @@ def main() -> int:
         for tag, (text, arc) in sorted(parts.items()):
             path = items_dir / tasks[task][tag]
             rel = dfs_paths.rel(path)
-            fatal += ["%s: %s" % (rel, b) for b in check_shape(task, text, arc, tag, whole)]
-            fatal += ["%s %s" % (rel, b) for b in check_attachments(text + "\n" + arc)]
             head = at_head(path)
+            head_arc = at_head(arc_dir / tasks[task][tag]) or ""
+            shape = check_shape(task, text, arc, tag, whole)
+            if head is not None:   # a fault HEAD already had is not this commit's
+                had = set(check_shape(task, head, head_arc, tag, whole))
+                shape = [b for b in shape if b not in had]
+            fatal += ["%s: %s" % (rel, b) for b in shape]
+            fatal += ["%s %s" % (rel, b) for b in check_attachments(
+                text + "\n" + arc, None if head is None else head + "\n" + head_arc)]
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]
             if judge_writer:   # a merge brings in nodes judged on their own branch
                 fatal += ["%s: %s" % (rel, b)
-                          for b in check_assumptions(task, text, head, read, arc,
-                                                     at_head(arc_dir / tasks[task][tag]) or "")]
+                          for b in check_assumptions(task, text, head, read, arc, head_arc)]
             if judge_writer:
                 fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, head)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
@@ -616,7 +630,7 @@ def main() -> int:
             for note in standalone_notes(task, text, head, arc):
                 print(f"dfs_check: note — {rel}: {note}")
             in_log = False
-            for n, line in enumerate(text.splitlines(), 1):
+            for n, line in enumerate(text.splitlines() if text != head else (), 1):
                 if line.startswith("## "):
                     in_log = line.strip() == "## Log"
                 if in_log or line.lstrip().startswith(("<", "#")):

@@ -628,6 +628,48 @@ class Check(InARepo):
         self.assertEqual(dfs_tree.untracked_artefacts(
             (self.root / ".dfs/items/W1.md").read_text()), [])
 
+    def git_commit(self, *paths):
+        subprocess.run(["git", "add", *paths], cwd=self.root, check=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+                       cwd=self.root, check=True)
+
+    def test_an_unstaged_attachment_head_already_named_does_not_refuse_a_later_commit(self):
+        name = self.attached_picture()
+        self.git_commit(".dfs/items/W1.md")   # past the guard, as an adopted roadmap was
+        dfs_tree.append_log("W1", "session", ["work"])
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        # naming it again in this commit is this commit's to carry
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"],
+                            "still cut off: ![bar](.dfs/artefacts/%s)" % name)
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)   # the name is the same file HEAD's text named
+        other = "1f1e2d3c-4b5a-4968-8776-655443322110.png"
+        (self.root / ".dfs/artefacts" / other).write_bytes(b"\x89PNG\r\n\x1a\n")
+        dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"], "![b](.dfs/artefacts/%s)" % other)
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn(other, out)
+        self.assertNotIn(name, out)
+
+    def test_a_shape_fault_head_already_had_refuses_only_the_commit_that_adds_one(self):
+        old = "### W1.1 · step 1\nParent: W1\nStatus: open\n\n"
+        self.write(task(old))
+        self.git_commit(".dfs/items/W1.md")   # written before the rule, or past the guard
+        self.write(task(old + node(2, parent=1)))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.write(task(old + node(2, parent=1) + node(3, parent=9)))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("W1.3 names Parent W1.9", out)
+        self.assertNotIn("W1.1 names Parent", out)
+
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()
         subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/artefacts/" + name],
