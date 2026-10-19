@@ -1510,6 +1510,18 @@ def accepted(t):
     return bool(last_acc) and last_acc >= last_work
 
 
+def acceptable(t):
+    """Whether the author may accept the tree now: it is done and not yet accepted, or
+    accepted but its item branch is still unmerged with no chain left to merge it. A chain
+    killed outright runs no exit trap, so an accept held back for it (`append_log`) would
+    otherwise sit done and unmerged with the screen and web page refusing a second accept;
+    accepting again finds no live chain and merges."""
+    import runs as dfs_runs
+    if status_of(t)[0] != "done":
+        return False
+    return not accepted(t) or bool(dfs_paths.worktree(t["task"]) and not dfs_runs.live_for(t["task"]))
+
+
 # The page a node's Hypothesis names as its artefact, by path inside the Hypothesis; the name has
 # no slash, so it cannot leave `.dfs/artefacts`. That page may confirm or refute the node
 # (web.py's `/artefact-state/<name>`).

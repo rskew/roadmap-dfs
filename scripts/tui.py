@@ -4559,7 +4559,7 @@ class UI(WalkMixin):
 
     def tree_acceptable(self, it):
         t, _, _ = self.tree_of(it["id"])
-        return dfs_tree.status_of(t)[0] == "done" and not dfs_tree.accepted(t)
+        return dfs_tree.acceptable(t)
 
     def tree_answer(self, item):
         row = self.tree_row()

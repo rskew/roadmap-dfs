@@ -58,6 +58,7 @@ Evidence:
 #              then `rnode`: a finding and an issues verdict
 #   racceptfail the author's accept as `raccept` logs it, then the session exits 1
 #   racceptsilent the author's accept as `raccept` logs it, then no verdict and no finding
+#   racceptkill the author's accept as `raccept` logs it, then the chain is killed outright (no trap)
 #   rminor     a review verdict of ok carrying a minor finding
 #   issue      a critic raise plus an issues verdict
 #   meddle     a critic that edits code and gives a verdict
@@ -110,6 +111,7 @@ case "$recipe" in
            echo "a finding" | $T log W1 review issues > /dev/null ;;
   racceptfail) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1); exit 1 ;;
   racceptsilent) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1) ;;
+  racceptkill) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1); kill -9 $PPID ;;
   rminor)  echo "a comment reads oddly" | $T log W1 review ok > /dev/null ;;
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
            echo "W1.2 one issue" | $T log W1 critic issues > /dev/null ;;
@@ -1234,6 +1236,26 @@ class Chain(unittest.TestCase):
                                  "W1: merge the item's branch dfs/W1", out)
                 self.assertFalse(self.wt.exists(), out)
                 self.assertEqual(self.git("branch", "--list", "dfs/W1"), "", out)
+
+    def test_an_accept_held_back_for_a_chain_killed_outright_is_acceptable_again_and_merges(self):
+        rc, meta, out = self.run_chain("work,confirm,racceptkill", MAIN_ROOT=str(self.root))
+        # no trap ran: the task reads done and accepted, unmerged, its worktree kept
+        self.assertTrue(self.wt.exists(), out)
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "", out)
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            t = dfs_tree.load("W1")
+            self.assertEqual(dfs_tree.status_of(t)[0], "done", out)
+            self.assertTrue(dfs_tree.accepted(t))
+            self.assertTrue(dfs_tree.acceptable(t), "a second accept must be offered")
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+        subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                       cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
 
     def test_a_session_in_the_worktree_is_briefed_with_the_law_as_the_author_has_it_now(self):
         self.enter()

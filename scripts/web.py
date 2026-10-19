@@ -858,7 +858,7 @@ def act(name, body):
             record_correction(task, nid, body.get("verdict"), need(body, "body", "a directive"),
                               body.get("park"))
         elif name == "accept":
-            if not (dfs_tree.status_of(t)[0] == "done" and not dfs_tree.accepted(t)):
+            if not dfs_tree.acceptable(t):
                 raise Refused("%s is not a finished tree waiting to be accepted" % task, 409)
             dfs_tree.append_log(task, "accept")
         elif name == "edit_task":
