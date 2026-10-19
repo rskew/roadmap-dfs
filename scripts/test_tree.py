@@ -670,6 +670,43 @@ class Check(InARepo):
         self.assertIn("W1.3 names Parent W1.9", out)
         self.assertNotIn("W1.1 names Parent", out)
 
+    def old_roadmap_file(self):
+        """A task written before the guard saw it: a Parent naming the task, a Hypothesis
+        naming no page, an artefact on disk it never committed, and over the budget."""
+        (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
+        (self.root / ".dfs/artefacts/0f1e2d3c-4b5a-4968-8776-655443322110.png").write_bytes(b"x")
+        bulk = "Evidence:\n" + "- for: it ran\n" * (dfs_state.HANDOFF_BUDGET // 2)
+        return task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+                    "Hypothesis: It holds. Wrong if not.\n" + bulk + "\n",
+                    "- 2026-09-25T09:00:00Z · session · work\n"
+                    "  ![x](.dfs/artefacts/0f1e2d3c-4b5a-4968-8776-655443322110.png)\n")
+
+    def test_the_commit_that_adopts_a_roadmap_grandfathers_what_its_files_hold(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")   # the project is in git; its roadmap is not
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.assertIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged"):
+            self.assertIn(seen, out)
+        self.assertNotIn("GREW", out)
+        self.assertNotIn("broke its own rules", out)
+
+    def test_a_task_file_new_to_a_tracked_roadmap_is_judged_in_full(self):
+        (self.root / ".dfs/items/W2.md").write_text(task().replace("W1", "W2"))
+        self.git_commit(".dfs/items/W2.md")
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged",
+                     "this commit\n    ADDS it."):
+            self.assertIn(seen, out)
+        self.assertNotIn("GREW", out)
+
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()
         subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/artefacts/" + name],

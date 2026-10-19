@@ -59,6 +59,12 @@ copy of the file already has is not this commit's and is not refused, so a rule 
 after a task was written does not hold every later commit on it hostage; nor is a name
 of an unstaged artefact that HEAD's text already carried.
 
+The commit that ADOPTS a committed roadmap, the first to bring its task files into git
+(HEAD holds none), is judged against nothing: every finding on its files is printed as
+grandfathered and none refuses, including the size budget and the artefacts its text
+names, which it need not stage. A task file new to a roadmap git already holds is new
+work and is judged in full.
+
 ⚠️ A GITIGNORED `.dfs` (`dfs_paths.ignored`) holds nothing at HEAD, so every check
 AGAINST HEAD above has nothing to compare and passes, and the hook never calls this,
 since no commit stages `.dfs`. What still runs is the rest, on the working tree: `run.sh`
@@ -584,6 +590,14 @@ def main() -> int:
         if dfs_paths.branch() is not None:   # two branches with one tag, not detached
             fatal.append(str(e))
     judge_writer = not merging()   # also: the other parent's commits were judged there
+    # The commit that first brings a committed roadmap's task files into git has nothing
+    # to be judged against: what they hold was written before the guard saw them, under
+    # whatever rules stood then. Their findings are grandfathered, shown and not refused,
+    # and every later commit is judged on what it changes. A task file new to a roadmap
+    # git already holds is not: a task written from the screen is first committed with
+    # its first node (`branch.py` `carry_uncommitted`), and a branch's part with its own.
+    adopting = not dfs_paths.ignored() and not head_names("items")
+    grand = []
     tasks = {}
     for rel in now_items:
         task, tag = dfs_tree.part_of(rel)
@@ -593,6 +607,7 @@ def main() -> int:
                  for tag, rel in tasks[task].items()}
         whole = dfs_tree.combine(task, [(g, x, a) for g, (x, a) in parts.items()])
         for tag, (text, arc) in sorted(parts.items()):
+            held = len(fatal), len(bad)
             path = items_dir / tasks[task][tag]
             rel = dfs_paths.rel(path)
             head = at_head(path)
@@ -617,10 +632,14 @@ def main() -> int:
             was_tok = (len(head) // 4) if head is not None else 0
             budget = dfs_state.HANDOFF_BUDGET
             verdict = handoff_verdict(now_tok, was_tok, budget)
+            if verdict == "refuse" and adopting:
+                verdict = "note"
             if verdict == "refuse":
+                grew = ("ADDS it" if head is None
+                        else f"GREW it (~{was_tok:,} before)")
                 fatal.append(
                     f"{rel} is ~{now_tok:,} tokens, over the {budget:,} budget, and this commit\n"
-                    f"    GREW it (~{was_tok:,} before). A task file is re-read whole by every\n"
+                    f"    {grew}. A task file is re-read whole by every\n"
                     "    session on the task. Prune its Background, or move settled history to\n"
                     "    .dfs/archive/ (`tree.py shelve %s` moves determined nodes'\n"
                     "    Approaches and Hypotheses there)." % task)
@@ -638,7 +657,18 @@ def main() -> int:
                 for hit in COORD.findall(line):
                     bad.append(f"{rel} line {n} carries a coordinate, '{hit}'. Name a thing by "
                                "what makes it that thing; a line number rots with no sign.")
+            if adopting:
+                grand += fatal[held[0]:] + bad[held[1]:]
+                del fatal[held[0]:], bad[held[1]:]
     tasks = now_items
+
+    if grand:
+        print("dfs_check: note — no task file is in git yet, so this commit adopts the roadmap\n"
+              "  and what its files already hold is grandfathered: the %d finding%s below %s\n"
+              "  not refused, and every later commit is judged only on what it changes."
+              % (len(grand), "" if len(grand) == 1 else "s", "is" if len(grand) == 1 else "are"))
+        for g in grand:
+            print(f"    - {g}")
 
     if not bad and not fatal:
         print("dfs_check: clean (%d task file%s)" % (len(tasks), "" if len(tasks) == 1 else "s"))
