@@ -424,6 +424,18 @@ def roadmap_dirty():
     return len(lines), staged
 
 
+def header_warn(dirty, hidden):
+    """The header's warnings: roadmap parts git will not add (`dfs_paths.hidden`), which
+    the rules under `h` name, then the uncommitted or staged count."""
+    changed, staged = dirty
+    warn = "git hides .dfs " if hidden else ""
+    if staged:
+        warn += "%d staged " % staged
+    elif changed:
+        warn += "%d uncommitted " % changed
+    return warn
+
+
 def epic_todo():
     """The epic's own unchecked todos — the outer program this roadmap serves."""
     if not EPIC.exists():
@@ -1830,6 +1842,7 @@ class UI(WalkMixin):
         self.agent_update = None    # the process start_agent_update began, from main
         self.data = load()
         self.dirty = roadmap_dirty()
+        self.hidden = dfs_paths.hidden()
         self.runs = discover_runs()
         self.chains = dfs_runs.run_dirs()
         self.sig = watch_signature()
@@ -2128,6 +2141,7 @@ class UI(WalkMixin):
         was_walk = self.walk_view()
         self.data = load()
         self.dirty = roadmap_dirty()
+        self.hidden = dfs_paths.hidden()
         self.chains = dfs_runs.run_dirs()
         self.runs = discover_runs()
         self.sig = watch_signature()
@@ -2239,6 +2253,13 @@ class UI(WalkMixin):
 
     def lines_activity(self, width):
         out, para = self.wrapper(width)
+        if getattr(self, "hidden", None):
+            # Said where the header's `git hides .dfs` sends the reader: the rule by
+            # file, line and pattern, so the fix is one edit away.
+            out.append(("hidden from git", curses.A_BOLD))
+            for line in dfs_paths.hidden_message(self.hidden).splitlines():
+                para(line.strip(), look("amber"))
+            out.append(("", 0))
         m = self.data.get("metrics") or {}
         if m:
             out.append(("counts, over every tree", curses.A_BOLD))
@@ -2419,12 +2440,7 @@ class UI(WalkMixin):
         # unattended right now" is a state, and one nobody should have to remember
         # they left on.
         walk = self.walk_badge()
-        dirty, staged = self.dirty
-        warn = ""
-        if staged:
-            warn = "%d staged " % staged
-        elif dirty:
-            warn = "%d uncommitted " % dirty
+        warn = header_warn(self.dirty, getattr(self, "hidden", []))
         # The page this screen serves, as its port: enough to find it (the full address
         # is the first line of `h`), short enough that it is the first thing to yield.
         web = ("web :%s  " % self.web.url.rsplit(":", 1)[1].strip("/")) if self.web else ""

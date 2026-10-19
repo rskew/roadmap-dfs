@@ -194,6 +194,7 @@ class Chain(unittest.TestCase):
         rc, meta, out = self.run_chain("work,confirm", cap=2)
         self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
         self.assertIn("W1 is worked on branch dfs/W1", out)
+        self.assertNotIn("git will not add", out)
         self.assertEqual(self.git("rev-parse", "HEAD"), main)
         self.assertEqual(self.git("symbolic-ref", "--short", "HEAD"), branch)
         self.assertEqual(self.git("symbolic-ref", "--short", "HEAD", cwd=self.wt), "dfs/W1")
@@ -202,6 +203,15 @@ class Chain(unittest.TestCase):
         # the chain's own directory stays where the screen reads it
         self.assertTrue(list((self.root / ".dfs" / "runs").glob("*/meta.json")))
         self.assertFalse((self.wt / ".dfs" / "runs").exists())
+
+    def test_a_rule_that_hides_a_roadmap_part_is_named_when_the_chain_starts(self):
+        (self.root / ".gitignore").write_text(".dfs/runs/\n*.html\n")
+        (self.root / ".dfs" / "artefacts").mkdir()
+        (self.root / ".dfs" / "artefacts" / "a.html").write_text("<p>a\n")
+        rc, meta, out = self.run_chain("work,confirm", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
+        self.assertIn("dfs_run: git will not add 1 roadmap path", out)
+        self.assertIn(".gitignore:2  *.html   hides .dfs/artefacts/a.html", out)
 
     def test_a_passing_review_merges_the_branch_and_drops_the_worktree(self):
         (self.root / "app.txt").write_text("the author's edit\n")

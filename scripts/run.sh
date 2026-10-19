@@ -918,6 +918,11 @@ except dfs_paths.NoBranch as e:
 if not dfs_tree.exists(sys.argv[1]) and not (dfs_paths.items() / ("%s.md" % sys.argv[1])).is_file():
     print("dfs_run: no task %s under %s" % (sys.argv[1], dfs_paths.rel(dfs_paths.items())),
           file=sys.stderr); raise SystemExit(2)
+# Said, not refused: a roadmap part git will not add never reaches the item's worktree,
+# which is cut from git, and this names the rule before a session finds it missing.
+hidden = dfs_paths.hidden()
+if hidden:
+    print("dfs_run: " + dfs_paths.hidden_message(hidden), file=sys.stderr)
 PY
 
 # ⚠️ AN ITEM IS WORKED ON ITS OWN BRANCH, IN ITS OWN WORKTREE. From the default branch,
