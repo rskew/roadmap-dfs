@@ -202,11 +202,12 @@ briefing: the roadmap's law verbatim, then what to review and how to record it."
 TREE_PY="$HERE/tree.py"
 
 build_prompt() {  # build_prompt work|critic|review
-  local brief flag=--brief lead="$PROMPT_LEAD"
+  local brief ok flag=--brief lead="$PROMPT_LEAD"
   if [ "$1" = critic ]; then flag=--critic-brief; lead="$CRITIC_LEAD"; fi
   if [ "$1" = review ]; then flag=--review-brief; lead="$REVIEW_LEAD"; fi
-  if ! brief="$(python3 "$HERE/state.py" "$flag" "$ITEM" 2>"$RUNDIR/brief.err")"; then
-    cat "$RUNDIR/brief.err" >&2
+  brief="$(python3 "$HERE/state.py" "$flag" "$ITEM" 2>"$RUNDIR/brief.err")" && ok=1 || ok=0
+  cat "$RUNDIR/brief.err" >&2   # a notice the briefing prints is shown whether or not it succeeds
+  if [ "$ok" = 0 ]; then
     echo "dfs_run: state.py $flag $ITEM failed; a session cannot be briefed." >&2
     # recorded, so the walk says why the chain ended rather than that it did not say
     stop_is brief

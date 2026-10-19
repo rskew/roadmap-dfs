@@ -561,6 +561,48 @@ class Chain(unittest.TestCase):
         self.assertIn("W1 cannot be briefed: the worktree", out)
         self.assertEqual(self.count.read_text(), before)   # no session started
 
+    def chain_with_briefing(self, mode):
+        """Run the chain from a copy of the scripts whose `state.py --brief` first prints a
+        notice, then (mode "fail") fails. Returns (rc, meta, output)."""
+        copy = self.aside / "scripts-copy"
+        shutil.copytree(HERE.parent, copy, ignore=shutil.ignore_patterns("__pycache__", ".git", ".dfs"))
+        state = copy / "scripts" / "state.py"
+        lines = state.read_text().split("\n")
+        lines.insert(1, "import sys as _s\nif '--brief' in _s.argv:\n"
+                        "    print('dfs_tree: a notice', file=_s.stderr)\n"
+                        "    if %r == 'fail':\n        print('dfs_state: boom', file=_s.stderr); _s.exit(1)" % mode)
+        state.write_text("\n".join(lines))
+        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE="work", COUNT_FILE=str(self.count),
+                 KINDS_FILE=str(self.kinds), TREE_PY=str(HERE / "tree.py"), HOME=str(self.aside))
+        e.pop("RUNDIR", None)
+        p = subprocess.run(["bash", str(copy / "scripts" / "run.sh"), "W1", "1"], cwd=self.root, env=e,
+                           capture_output=True, text=True, timeout=300)
+        metas = sorted((self.root / ".dfs" / "runs").glob("*/meta.json"), key=lambda f: f.stat().st_mtime)
+        return p.returncode, json.loads(metas[-1].read_text()) if metas else {}, p.stdout + p.stderr
+
+    def test_a_briefing_that_fails_is_recorded_with_its_cause_and_its_notice_is_shown(self):
+        rc, meta, out = self.chain_with_briefing("fail")
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertEqual(meta.get("cause"), "state.py --brief failed: dfs_state: boom")
+        self.assertIn("dfs_tree: a notice", out)
+
+    def test_a_notice_the_briefing_prints_on_success_is_shown(self):
+        rc, meta, out = self.chain_with_briefing("ok")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("dfs_tree: a notice", out)
+
+    def test_a_worktree_without_the_task_file_names_the_ignore_rule_that_hides_it(self):
+        self.ignore_roadmap(".dfs/items/\n")
+        self.enter()
+        empty = self.aside / "empty-items"
+        empty.mkdir()
+        link = self.wt / ".dfs" / "items"
+        link.unlink()
+        link.symlink_to(empty)   # a link `enter` leaves alone, to a directory without the task file
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertIn("and the ignore rule .gitignore:1:.dfs/items/ hides it", meta.get("cause", ""))
+
     def test_a_task_file_missing_in_its_worktree_is_not_shown_as_an_empty_tree(self):
         self.enter()
         old = dfs_tree.dfs_paths.work_root
