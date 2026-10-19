@@ -162,7 +162,8 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 A chain runs every session of an item (work, critic and review) in a git worktree,
 `.dfs/worktrees/<task>`, on the branch `dfs/<task>`, which the first run cuts from the
 default branch (`main` or `master`). Your CWD is that worktree: edit and commit there,
-and the author's checkout stays on the default branch. The branch writes plain ids
+and the author's checkout stays on the default branch. The law in your briefing is the
+main checkout's current `.dfs/ROADMAP.md`, not this branch's older copy. The branch writes plain ids
 (`W13.4`, no `@<tag>`), so its nodes merge into the default branch's task file as
 written. You never merge, switch branch or remove the worktree yourself: when the
 review passes (or the author accepts), the runner rebases `dfs/<task>` onto the default

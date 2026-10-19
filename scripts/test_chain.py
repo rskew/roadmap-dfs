@@ -1199,6 +1199,21 @@ class Chain(unittest.TestCase):
         self.assertIn("W1.2: fixed", self.git("log", "--format=%s"))
         self.assertFalse(self.wt.exists())
 
+    def test_a_session_in_the_worktree_is_briefed_with_the_law_as_the_author_has_it_now(self):
+        self.enter()
+        law = self.root / ".dfs" / "ROADMAP.md"
+        law.write_text(ROADMAP + "\nL2 · committed after the branch was cut.\n")
+        self.git("add", ".dfs/ROADMAP.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "L2")
+        law.write_text(law.read_text() + "\nL3 · still uncommitted in the author's checkout.\n")
+        for flag in ("--brief", "--critic-brief", "--review-brief"):
+            out = subprocess.run([sys.executable, str(HERE / "state.py"), flag, "W1"], cwd=self.wt,
+                                 capture_output=True, text=True).stdout
+            self.assertIn("L2 · committed after the branch was cut.", out, flag)
+            self.assertIn("L3 · still uncommitted in the author's checkout.", out, flag)
+        # the branch's own copy is untouched: the law is read from main, not merged in
+        self.assertNotIn("L2", (self.wt / ".dfs" / "ROADMAP.md").read_text())
+
     def test_the_authors_accept_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
         self.run_chain("work,confirm", cap=2)
         self.git("checkout", "-q", "-b", "elsewhere")

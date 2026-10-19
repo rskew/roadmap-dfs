@@ -65,6 +65,35 @@ def roadmap() -> Path:
     return state() / "ROADMAP.md"
 
 
+def main_root() -> Path:
+    """The main checkout when this work root is one of its item worktrees
+    (`.dfs/worktrees/<task>`), else this work root. Asked of git, by the common git
+    directory the worktree shares with the main checkout."""
+    here = work_root()
+    r = _git("rev-parse", "--git-common-dir")
+    if r.returncode != 0 or not r.stdout.strip():
+        return here
+    main = (here / r.stdout.strip()).resolve().parent
+    try:
+        inside = here.resolve().parent == (main / STATE_DIR_NAME / "worktrees").resolve()
+    except OSError:
+        return here
+    return main if inside else here
+
+
+def law() -> Path:
+    """The ROADMAP.md a session is briefed with: the main checkout's own when this is an
+    item worktree, so a rule the author settles after the branch was cut (committed or
+    not) binds a running item, not this branch's copy of it, which only catches up at the
+    merge's rebase. This work root's own when it is not a worktree or main has none."""
+    main = main_root()
+    if main != work_root():
+        theirs = main / STATE_DIR_NAME / "ROADMAP.md"
+        if theirs.is_file():
+            return theirs
+    return roadmap()
+
+
 def items() -> Path:
     return state() / "items"
 

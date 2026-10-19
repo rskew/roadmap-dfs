@@ -40,7 +40,7 @@ HANDOFF_BUDGET = 10_000
 
 
 def read_roadmap() -> str:
-    p = dfs_paths.roadmap()
+    p = dfs_paths.law()
     return p.read_text() if p.exists() else ""
 
 
