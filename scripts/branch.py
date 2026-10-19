@@ -156,9 +156,12 @@ def _dirty(paths):
     by one."""
     r = _git("status", "--porcelain", "-z", "--untracked-files=all", "--", *paths)
     out = []
-    for entry in r.stdout.split("\0"):
+    fields = iter(r.stdout.split("\0"))
+    for entry in fields:
         if len(entry) > 3:
             out.append((entry[:2], entry[3:]))
+            if "R" in entry[:2] or "C" in entry[:2]:
+                next(fields, None)   # a rename or copy is followed by its old path, a field of its own
     return out
 
 
@@ -522,10 +525,11 @@ def _add_worktree(task, wt, name, fresh):
 def enter(task):
     """The worktree `task` is worked in, cut on the first call; None to work where we are:
     the checkout is off the default branch, or no commit exists yet for a branch to start
-    from. A task that already has a worktree is worked in it wherever the checkout is, since
-    the task's files are read from there; the merge then raises off the default branch
-    (`merge`) rather than the task ending done unmerged. A gitignored roadmap is worked in a
-    worktree too, with its planning files shared (`share_ignored_state`)."""
+    from. A task that already has a worktree, or a branch whose worktree was removed by
+    hand (checked out again), is worked in it wherever the checkout is, since the task's
+    files are read from there; the merge then raises off the default branch (`merge`) rather
+    than the task ending done unmerged. A gitignored roadmap is worked in a worktree too,
+    with its planning files shared (`share_ignored_state`)."""
     wt = dfs_paths.worktrees() / task
     name = dfs_paths.item_branch(task)
     ignored = dfs_paths.ignored()
@@ -537,6 +541,10 @@ def enter(task):
         carry_named_attachments(task, wt)
         return wt
     if not dfs_paths.gets_worktree(task):
+        back = _restore(task)   # off the default branch, a branch whose worktree was removed by hand
+        if back and ignored:
+            share_ignored_state(back)
+        return back
         return None
     fresh = not _has_branch(name)
     _git("worktree", "prune")   # a worktree deleted by hand stays registered, and blocks the add

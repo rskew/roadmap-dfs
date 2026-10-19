@@ -35,7 +35,7 @@ Each item is worked on its own branch, `dfs/<task>`, in its own git worktree und
 `.dfs/worktrees/<task>`, so a walk never switches the checkout you have open (the screen
 and the web page read the task through its worktree). The first run cuts the branch from
 `main` (or `master`). When the review passes, or you accept the tree, the branch is
-merged into the default branch with `--no-ff` (local, never pushed) and the worktree and
+rebased onto the default branch and merged into it with `--no-ff` (local, never pushed) and the worktree and
 branch are removed. A rebase that conflicts reopens the item with a node to resolve it;
 uncommitted edits of yours that the merge would overwrite, or a merge, cherry-pick, revert
 or rebase of yours left unfinished in the checkout, raise instead and are left alone. A

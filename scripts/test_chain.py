@@ -1166,6 +1166,24 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
         self.assertFalse(self.wt.exists())
 
+    def test_a_branch_whose_worktree_was_removed_by_hand_off_main_is_a_raise_not_a_pass(self):
+        self.run_chain("work,confirm", cap=2)
+        shutil.rmtree(self.wt)
+        self.git("checkout", "-q", "-b", "elsewhere")
+        rc, meta, out = self.run_chain("work,confirm,rok", cap=2)
+        self.assertEqual(meta.get("stop"), "blocked", out)
+        self.assertEqual(len(self.log("raise")), 1, out)
+        self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))
+        self.assertTrue(self.wt.exists())
+
+    def test_a_staged_rename_is_one_dirty_path_not_two(self):
+        self.git("mv", "app.txt", "moved.txt")
+        code = ("import sys; sys.path.insert(0, %r); import branch; "
+                "print(branch._dirty(['app.txt', 'moved.txt']))" % str(HERE))
+        out = subprocess.run([sys.executable, "-c", code], cwd=self.root, capture_output=True,
+                             text=True, check=True).stdout
+        self.assertEqual(out.strip(), "[('R ', 'moved.txt')]")
+
     def test_a_worktree_git_will_not_remove_is_said_so_not_claimed_removed(self):
         self.run_chain("work,confirm", cap=2)
         self.git("worktree", "lock", str(self.wt))
