@@ -17,6 +17,10 @@ directory, `paths.py`). It creates only what is missing and never overwrites:
 ignored, it is planning only, the hooks never fire, and git history is the record
 of the walk, one commit per node.
 
+Adopting a `.dfs` that already holds tasks: commit its task files in one commit with
+the hooks on. While git holds no task file, the guard grandfathers what they hold
+(printed, not refused; `check.py`), and judges every later commit only on what it changes.
+
 A hook that already exists is left alone and the lines to add are printed instead,
 since it is the project's. Hooks in .git/hooks belong to this clone only, so run
 this again in every clone; it is idempotent.
@@ -183,7 +187,10 @@ Next:
      python3 -m http.server %s --directory .dfs/artefacts""" % (
         ".dfs/ is gitignored here, so there is nothing to commit: it stays planning,\n"
         "     and each node's commit carries its code alone." if dfs_paths.ignored() else
-        "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).",
+        "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).\n"
+        "     Tasks already in .dfs/items? Commit them all in that one commit: while git\n"
+        "     holds no task file the guard grandfathers what they hold, printing it\n"
+        "     without refusing, and stage only the artefacts you want kept.",
         dfs_paths.command("run.sh", "--open"),
         dfs_paths.command("run.sh", "<task>", "[sessions]"),
         dfs_paths.command("tui.py"), os.environ.get("DFS_ARTEFACT_PORT") or 3016,

@@ -13,6 +13,15 @@ nix run github:rskew/roadmap-dfs                         # the tui
 nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 ```
 
+## Adopting an existing roadmap
+
+A `.dfs` that already holds tasks, written before the guard (the pre-commit hook `init` installs) saw them, is
+adopted by committing its task files in one commit with the hook on. While git holds no task file, the guard judges
+that commit against nothing: every finding on what the files already hold (a rule added after a task was written,
+a file over the size budget) is printed as grandfathered and none refuses the commit, and an artefact page a task
+names is committed only if you stage it. Every later commit is judged only on what it changes, so an old finding
+never blocks one. A task file added once git already holds others is new work and is judged in full.
+
 ## Where an item is worked
 
 Each item is worked on its own branch, `dfs/<task>`, in its own git worktree under
