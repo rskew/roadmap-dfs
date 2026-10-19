@@ -216,17 +216,39 @@ def task_ids():
     return sorted(out)
 
 
+def _ids_in(names):
+    return {(part_of(n) or (n,))[0] for n in names if part_of(n) or re.fullmatch(TASK_RE, n)}
+
+
 def worktree_task_ids():
     """Every task id with a file in some item worktree's `.dfs/items`, its own or one a
-    session created there. Only for keeping ids apart: a worktree's copy of a task this
-    checkout has deleted is stale, so these are not listed as tasks."""
+    session created there. Inside an item worktree, also every id the main checkout holds
+    (committed or not, retired ones too) and every sibling worktree: a session there
+    creates tasks, and none of these are in its own `.dfs`. Only for keeping ids apart: a
+    worktree's copy of a task this checkout has deleted is stale, so these are not listed
+    as tasks."""
     out = set()
-    for st in dfs_paths.worktree_states():
+    states = list(dfs_paths.worktree_states())
+    main = dfs_paths.main_root()
+    if main != dfs_paths.work_root():
+        mstate = main / dfs_paths.STATE_DIR_NAME
+        states.append(mstate)
         try:
-            names = [p.name for p in (st / "items").iterdir()]
+            states += sorted(d / dfs_paths.STATE_DIR_NAME for d in (mstate / "worktrees").iterdir()
+                             if (d / ".git").exists())
+        except OSError:
+            pass
+        for base in ("deleted", "archived"):
+            d = mstate / "archive" / base / "items"
+            try:
+                out |= _ids_in(p.name for p in d.iterdir())
+            except OSError:
+                pass
+    for st in states:
+        try:
+            out |= _ids_in(p.name for p in (st / "items").iterdir())
         except OSError:
             continue
-        out.update(got[0] for got in (part_of(n) for n in names) if got)
     return out
 
 

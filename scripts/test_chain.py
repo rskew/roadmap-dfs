@@ -802,6 +802,8 @@ class Chain(unittest.TestCase):
         raised = self.log("raise")
         self.assertEqual(len(raised), 1, out)
         self.assertIn("new.txt", raised[0]["body"])
+        self.assertIn("move or delete new.txt", raised[0]["body"])
+        self.assertNotIn("commit or stash", raised[0]["body"])
         # nothing merged, the author's file untouched and in no stash, the branch and worktree kept
         self.assertEqual(self.git("log", "--merges", "--format=%s"), "")
         self.assertEqual((self.root / "new.txt").read_text(), "mine\n")

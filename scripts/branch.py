@@ -785,8 +785,10 @@ def _set_aside(task, paths):
     if not paths or _git(*_identity(), "stash", "push", "-q", "-m", tag, "--", *paths).returncode != 0:
         return None
     # `stash push` exits 0 when it saved nothing, and an older kept entry of ours must not be taken for it
+    # (another session's push between ours and this read must not be taken for it: the subject says whose)
     after = _git("rev-parse", "-q", "--verify", "refs/stash").stdout.strip()
-    return after if after != before else None
+    subject = _git("log", "-1", "--format=%s", "refs/stash").stdout.strip() if after else ""
+    return after if after != before and subject.endswith(tag) else None
 
 
 def _put_back(sha, paths):
@@ -829,14 +831,21 @@ def _unmerged(task, wt, name, r, aside=None):
     _put_back_shared_edits(aside or {})
     out = r.stderr + r.stdout
     paths = _refused_paths(r)
+    tracked = _git("ls-files", "-z", "--", *paths).stdout.split("\0") if paths else []
+    untracked = [p for p in paths if p not in tracked]
+    if untracked:   # committing one turns the merge into an add/add conflict; plain `git stash` leaves it
+        how = ("Options: move or delete %s (or `git stash -u` it) and answer this, after which the chain "
+               "works the item again and merges it when the next review passes, or tell me to leave the "
+               "branch unmerged. I would move it." % ", ".join(untracked))
+    else:
+        how = ("Options: commit or stash those edits and answer this, after which the chain works the "
+               "item again and merges it when the next review passes, or tell me to leave the branch "
+               "unmerged. I would commit them.")
     _raise_blocked(task, (
         "%s is finished and reviewed, but git would not merge %s into %s: %s\n"
-        "Your uncommitted edits in %s stop the merge: %s.\n"
-        "Options: commit or stash those edits and answer this, after which the chain works the item "
-        "again and merges it when the next review passes, or tell me to leave the branch unmerged. "
-        "I would commit them.") % (
+        "Your uncommitted edits in %s stop the merge: %s.\n%s") % (
             task, name, default, " ".join(out.split())[:200], dfs_paths.work_root(),
-            ", ".join(paths) or "see the message above"))
+            ", ".join(paths) or "see the message above", how))
     return "refused"
 
 

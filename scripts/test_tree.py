@@ -1737,6 +1737,24 @@ class Branches(InARepo):
             dfs_tree.create_task("again", task="W7")
         self.assertEqual(dfs_tree.task_ids(), ["W1"])   # a worktree's other files are not listed
 
+    def test_a_task_created_inside_a_worktree_gets_an_id_past_the_main_checkouts_and_the_other_worktrees(self):
+        wt = self.worktree()
+        other = self.worktree("W5")
+        (other / ".dfs/items/W7.md").write_text(task(node(1), "").replace("W1", "W7"))   # a task made in a sibling
+        (self.root / ".dfs/items/W9.md").write_text(task(node(1), "").replace("W1", "W9"))   # the author's, untracked
+        retired = self.root / ".dfs/archive/deleted/items"
+        retired.mkdir(parents=True)
+        (retired / "W11.md").write_text(task(node(1), "").replace("W1", "W11"))
+        self.addCleanup(setattr, dfs_paths, "work_root", dfs_paths.work_root)
+        dfs_paths.work_root = lambda: wt
+        self.assertEqual(dfs_paths.main_root(), self.root)
+        self.assertEqual(dfs_tree.next_task_id(), "W12")
+        for taken in ("W7", "W9", "W11"):
+            with self.assertRaises(ValueError):
+                dfs_tree.create_task("again", task=taken)
+        self.assertEqual(dfs_tree.create_task("fresh"), "W12")
+        self.assertEqual(dfs_tree.task_ids(), ["W1", "W12"])   # the others are not listed from here
+
     def test_the_marks_count_a_worked_tasks_edits_and_commits_in_its_worktree(self):
         wt = self.worktree()
         self.git("update-ref refs/remotes/origin/master HEAD")
