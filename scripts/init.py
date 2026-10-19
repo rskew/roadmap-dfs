@@ -20,6 +20,8 @@ of the walk, one commit per node.
 Adopting a `.dfs` that already holds tasks: commit its task files in one commit with
 the hooks on. While git holds no task file, the guard grandfathers what they hold
 (printed, not refused; `check.py`), and judges every later commit only on what it changes.
+Make that commit on main, not on a `dfs/<task>` branch: a commit there is a session's,
+a new roadmap's first node among them, and is judged in full.
 
 A hook that already exists is left alone and the lines to add are printed instead,
 since it is the project's. Hooks in .git/hooks belong to this clone only, so run
@@ -190,7 +192,8 @@ Next:
         "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).\n"
         "     Tasks already in .dfs/items? Commit them all in that one commit: while git\n"
         "     holds no task file the guard grandfathers what they hold, printing it\n"
-        "     without refusing, and stage only the artefacts you want kept.",
+        "     without refusing, and stage only the artefacts you want kept. Commit on\n"
+        "     main: a commit on a dfs/<task> branch is a session's and is judged in full.",
         dfs_paths.command("run.sh", "--open"),
         dfs_paths.command("run.sh", "<task>", "[sessions]"),
         dfs_paths.command("tui.py"), os.environ.get("DFS_ARTEFACT_PORT") or 3016,

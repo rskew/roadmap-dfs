@@ -694,6 +694,19 @@ class Check(InARepo):
         self.assertNotIn("GREW", out)
         self.assertNotIn("broke its own rules", out)
 
+    def test_the_first_node_of_a_new_roadmaps_first_task_on_its_branch_is_judged_in_full(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")   # a fresh roadmap: main holds no task file
+        subprocess.run(["git", "checkout", "-qb", "dfs/W1"], cwd=self.root, check=True)
+        self.write(task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+                        "Hypothesis: It holds. Wrong if not.\n"))
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertNotIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact"):
+            self.assertIn(seen, out)
+
     def test_a_task_file_new_to_a_tracked_roadmap_is_judged_in_full(self):
         (self.root / ".dfs/items/W2.md").write_text(task().replace("W1", "W2"))
         self.git_commit(".dfs/items/W2.md")

@@ -63,7 +63,8 @@ The commit that ADOPTS a committed roadmap, the first to bring its task files in
 (HEAD holds none), is judged against nothing: every finding on its files is printed as
 grandfathered and none refuses, including the size budget and the artefacts its text
 names, which it need not stage. A task file new to a roadmap git already holds is new
-work and is judged in full.
+work and is judged in full, and so is every commit on an item branch `dfs/<task>`: a new
+roadmap's first task is branched while main holds no task file, and is no adoption.
 
 ⚠️ A GITIGNORED `.dfs` (`dfs_paths.ignored`) holds nothing at HEAD, so every check
 AGAINST HEAD above has nothing to compare and passes, and the hook never calls this,
@@ -596,7 +597,11 @@ def main() -> int:
     # and every later commit is judged on what it changes. A task file new to a roadmap
     # git already holds is not: a task written from the screen is first committed with
     # its first node (`branch.py` `carry_uncommitted`), and a branch's part with its own.
-    adopting = not dfs_paths.ignored() and not head_names("items")
+    # So is every commit on an item branch `dfs/<task>`, where sessions commit: a new
+    # roadmap's first task is branched while main holds no task file, and its first node
+    # is the guard's to judge. An adoption is made on main, or on any branch that is not one.
+    adopting = (not dfs_paths.ignored() and not head_names("items")
+                and not dfs_paths.is_item_branch(dfs_paths.branch()))
     grand = []
     tasks = {}
     for rel in now_items:
