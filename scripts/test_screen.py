@@ -1037,6 +1037,14 @@ class ArtefactsOfAWorkedTask(unittest.TestCase):
                          ["On main", "On the branch"])
 
 
+def setUpModule():
+    global _color_pair
+    _color_pair, curses.color_pair = curses.color_pair, (lambda n: 0)   # no initscr here; attrs are opaque
+
+
+def tearDownModule():
+    curses.color_pair = _color_pair
+
+
 if __name__ == "__main__":
-    curses.color_pair = lambda n: 0       # no initscr here; attrs are opaque
     unittest.main()
