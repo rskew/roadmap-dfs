@@ -240,6 +240,37 @@ def next_item(items):
                  if it["reachable"] and it["status"] == "open" and not it.get("draft")), None)
 
 
+def next_items(walked, n, busy=(), first=None):
+    """Up to `n` tasks for a walk running chains side by side, in the order it takes them:
+    `first` (the walk's own continuation, `continue_last`) and then the order's answers,
+    skipping every task in `busy` (one a chain is already on).
+
+    ⚠️ **A CHILD WAITS FOR ITS PARENT.** One chain at a time never works a child before
+    its parent is done: it keeps on the parent while it can (`continue_last`), and a
+    parent's raise holds the child too. Several at once would take the child beside its
+    unfinished parent, so a task under an open ancestor is passed over here; a draft
+    ancestor holds nothing, as it holds no fence. Separate branches share nothing and are
+    what runs together. With `n` 1 and nothing busy this is `[first or next_item]`."""
+    by = {i["id"]: i for i in walked}
+
+    def held(it):
+        up = by.get(it.get("parent"))
+        while up is not None:
+            if up["status"] == "open" and not up.get("draft"):
+                return True
+            up = by.get(up.get("parent"))
+        return False
+
+    out = [first] if first is not None and first not in busy else []
+    for it in walked:
+        if len(out) >= n:
+            break
+        if (it["reachable"] and it["status"] == "open" and not it.get("draft")
+                and it["id"] not in busy and it["id"] not in out and not held(it)):
+            out.append(it["id"])
+    return out[:n]
+
+
 def metrics(trees):
     """The counts the system is judged by, over every task. On the screen, not in a
     script somebody remembers to run."""

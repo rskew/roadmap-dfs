@@ -337,6 +337,26 @@ class Walking(unittest.TestCase):
         t = self.tree(("A", 0, "done"), ("B", 0, "blocked"), ("C", 1, "open"))
         self.assertIsNone(dfs_state.next_item(t))
 
+    def test_parallel_slots_take_separate_branches_and_a_child_waits_for_its_parent(self):
+        t = self.tree(("A", 0, "open"), ("B", 1, "open"), ("C", 0, "open"),
+                      ("D", 0, "open"))
+        self.assertEqual(dfs_state.next_items(t, 3), ["A", "C", "D"])
+        self.assertEqual(dfs_state.next_items(t, 1), [dfs_state.next_item(t)])
+        self.assertEqual(dfs_state.next_items(t, 2, busy={"A"}), ["C", "D"])
+
+    def test_a_done_or_draft_parent_lets_its_child_run_beside_the_rest(self):
+        t = self.tree(("A", 0, "done"), ("B", 1, "open"), ("C", 0, "open"))
+        self.assertEqual(dfs_state.next_items(t, 2), ["B", "C"])
+        t = dfs_state.walk([dict(id="A", depth=0, status="open", draft=True),
+                            dict(id="B", depth=1, status="open")])
+        self.assertEqual(dfs_state.next_items(t, 2), ["B"])
+
+    def test_the_walks_continuation_goes_first_unless_a_chain_is_on_it(self):
+        t = self.tree(("A", 0, "open"), ("B", 0, "open"), ("C", 0, "open"))
+        self.assertEqual(dfs_state.next_items(t, 2, first="C"), ["C", "A"])
+        self.assertEqual(dfs_state.next_items(t, 2, busy={"C"}, first="C"), ["A", "B"])
+        self.assertEqual(dfs_state.next_items(t, 5, busy={"A", "B", "C"}), [])
+
     def test_a_fence_holds_every_branch_after_it(self):
         t = self.fenced(("A", 0, "open", 0), ("B", 0, "open", 1), ("C", 1, "open", 1))
         by = {i["id"]: i for i in t}
