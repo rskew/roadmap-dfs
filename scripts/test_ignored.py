@@ -133,6 +133,18 @@ class Hidden(unittest.TestCase):
             self.ignore(rule)
             self.assertEqual(self.rules(), [], rule)
 
+    def test_a_broader_rule_that_wins_does_not_undo_the_roadmap_rule(self):
+        self.ignore(".dfs/\n.*\n")
+        self.assertEqual(self.rules(), [])
+        self.ignore(".*\n")
+        (self.root / ".git" / "info").mkdir(exist_ok=True)
+        (self.root / ".git" / "info" / "exclude").write_text(".dfs/\n")
+        self.assertEqual(self.rules(), [])
+
+    def test_a_broader_rule_alone_still_hides_it(self):
+        self.ignore(".*\n")
+        self.assertEqual([p for p, *_ in self.rules()], [".dfs/"])
+
     def test_files_forced_past_the_rule_are_half_a_roadmap(self):
         self.ignore(".dfs/\n")
         subprocess.run(["git", "add", "-f", ".dfs/ROADMAP.md"], cwd=self.root, check=True)

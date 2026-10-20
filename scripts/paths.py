@@ -609,10 +609,34 @@ def hidden() -> list:
     f = r.stdout.split("\0")
     found = [dict(source=f[i], line=f[i + 1], pattern=f[i + 2], path=f[i + 3])
              for i in range(0, len(f) - 3, 4)]
-    if (all(_names_state_dir(h["pattern"]) for h in found)
-            and not _git("ls-files", "--", STATE_DIR_NAME).stdout.strip()):
+    if (not _git("ls-files", "--", STATE_DIR_NAME).stdout.strip()
+            and (all(_names_state_dir(h["pattern"]) for h in found)
+                 or any(_names_state_dir(p) for p in _ignore_patterns()))):
         return []
     return found
+
+
+def ignore_files() -> list:
+    """The ignore files that apply to the whole repo: the root `.gitignore`, `info/exclude`
+    (asked of git, since `.git` is a file in a linked worktree) and `core.excludesFile`."""
+    paths = [work_root() / ".gitignore"]
+    for args in (("rev-parse", "--git-path", "info/exclude"),
+                 ("config", "--get", "core.excludesFile")):
+        out = _git(*args).stdout.strip()
+        if out:
+            paths.append(work_root() / os.path.expanduser(out))
+    return paths
+
+
+def _ignore_patterns():
+    """Every pattern in `ignore_files()`. `check-ignore` names only the rule that wins,
+    so a broader `.*` after a `.dfs/` rule, or in a `.gitignore` over a `.dfs/` kept in
+    `info/exclude`, would hide that the roadmap is kept as planning on purpose."""
+    for path in ignore_files():
+        try:
+            yield from (ln.strip() for ln in path.read_text().splitlines())
+        except OSError:
+            pass
 
 
 def _names_state_dir(pattern: str) -> bool:
