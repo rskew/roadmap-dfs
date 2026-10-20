@@ -340,6 +340,28 @@ class Chain(unittest.TestCase):
         self.assertNotIn("--warn", gist)
         self.assertEqual(dfs_branch._gist("a\nb"), "a b")
 
+    def test_a_merge_waits_for_another_chains_merge_to_finish(self):
+        # Two chains of a parallel walk finishing at once: the second merge waits on the
+        # lock the first holds, and goes through after it, rather than failing on git's
+        # index.lock and being raised as the author's edits in the way.
+        import fcntl
+        import time
+        import branch as dfs_branch
+        self.run_chain("work,confirm", cap=2)
+        with open(self.root / ".git" / dfs_branch.LOCK_NAME, "a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            p = subprocess.Popen([sys.executable, str(HERE / "branch.py"), "merge", "W1"],
+                                 cwd=self.root, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 stdin=subprocess.DEVNULL, text=True)
+            time.sleep(1.5)
+            self.assertIsNone(p.poll(), "the merge ran while another held the lock")
+            self.assertTrue(self.wt.exists())
+            fcntl.flock(held, fcntl.LOCK_UN)
+        out, err = p.communicate(timeout=60)
+        self.assertEqual(p.returncode, 0, err)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("merge the item's branch dfs/W1", self.git("log", "-1", "--format=%s"))
+
     def test_a_merge_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
         self.run_chain("work,confirm", cap=2)
         self.git("checkout", "-q", "-b", "elsewhere")

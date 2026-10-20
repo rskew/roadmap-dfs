@@ -20,6 +20,8 @@ leaves the chain where it is, printing nothing, when the checkout is not on the 
 branch (a tagged branch writes its own part; an item branch is already the place), when no
 commit exists yet, and outside git.
 """
+import fcntl
+import functools
 import os
 import shutil
 import subprocess
@@ -49,6 +51,36 @@ def _git_bytes(*args, cwd=None):
     """`git`'s stdout as the bytes it wrote, for comparing a file's content exactly."""
     return subprocess.run(["git", *args], cwd=cwd or dfs_paths.work_root(),
                           capture_output=True).stdout
+
+
+# ⚠️ ONE CHAIN AT A TIME ON THE MAIN CHECKOUT. A walk may run several chains at once
+# (`walk.py`, `parallel`), each in its own worktree, but cutting a worktree, merging a
+# finished branch and removing it all write the ONE main checkout and repository: two
+# merges at once meet on `index.lock`, and the loser's failed `git merge` reads in
+# `_unmerged` as the author's edits being in the way, a raise for nothing. So each runs
+# under an exclusive lock in the git common dir, which every worktree shares, and a second
+# chain waits for the first to finish there. Its rebase is inside the lock too, so it is
+# made onto the default branch as the first chain's merge left it.
+LOCK_NAME = "dfs-branch.lock"
+
+
+def one_at_a_time(fn):
+    """Run `fn` holding `LOCK_NAME`, waiting for any other holder; outside git, unlocked."""
+    @functools.wraps(fn)
+    def locked(*args, **kwargs):
+        r = _git("rev-parse", "--git-common-dir")
+        if r.returncode != 0:
+            return fn(*args, **kwargs)
+        path = Path(r.stdout.strip())
+        if not path.is_absolute():
+            path = dfs_paths.work_root() / path
+        with open(path / LOCK_NAME, "a") as fh:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                fcntl.flock(fh, fcntl.LOCK_UN)
+    return locked
 
 
 def _has_branch(name):
@@ -352,6 +384,7 @@ def catch_up(name, wt):
     return moved
 
 
+@one_at_a_time
 def enter(task):
     """The worktree `task` is worked in, cut on the first call; None to work where we are:
     the checkout is off the default branch, or no commit exists yet for a branch to start
@@ -621,6 +654,7 @@ def _put_back_shared_edits(aside):
         (dfs_paths.work_root() / p).write_bytes(data)
 
 
+@one_at_a_time
 def merge(task):
     """Merge `dfs/<task>` into the default branch, from the main checkout, and remove the
     worktree and the branch. Local only: nothing is pushed.
@@ -726,6 +760,7 @@ def keep_leftover_work(task, verb="deleted"):
                               (task, dfs_paths.item_branch(task), out_of(r).strip()))
 
 
+@one_at_a_time
 def release(task, verb="deleted"):
     """Let go of the worktree and branch of a task that was `verb` ("deleted" or "archived"):
     remove the worktree (its task files have been moved out and `keep_leftover_work` has
