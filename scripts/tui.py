@@ -449,10 +449,11 @@ def epic_todo():
 def watch_signature():
     """What the screen is watching, as one comparable value.
 
-    Mtimes rather than a filesystem-watch API: three globs cost microseconds at a
-    one-second poll, and a watcher would need a thread whose failure mode is a
-    screen that has quietly stopped updating — the same silent-staleness shape the
-    app's own live path is written against.
+    Mtimes rather than a filesystem-watch API: a few globs and `stat`s, plus the two
+    `git` calls that locate the ignore files (`dfs_paths.ignore_files`), cost
+    milliseconds at a one-second poll, and a watcher would need a thread whose failure
+    mode is a screen that has quietly stopped updating — the same silent-staleness
+    shape the app's own live path is written against.
     """
     paths = [dfs_paths.roadmap(), dfs_paths.order()]
     # the ignore files too: the header's "git hides .dfs" follows the rules
