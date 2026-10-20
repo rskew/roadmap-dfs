@@ -764,6 +764,16 @@ class Parallel(Ticks, unittest.TestCase):
         ui.walk_tick()
         self.assertEqual([i for i, _ in ui.started], ["W9"])
 
+    def test_the_continuation_does_not_start_a_child_of_a_done_parent_still_merging(self):
+        ui = self.ui(walk_parallel=2)
+        self.tasks(ui, "W7", "W8", "W9", parent={"W8": "W7"}, W7="done")
+        ui.data["next_item"] = "W8"       # what full() gives: continue_last fell back to next_item
+        ui.walk_chains = [dict(dir="/runs/mine", item="W7", started=0.0, content=set(),
+                               pin=False, cap=5)]
+        self.live(ui, [self.chain(live=True)])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9"])
+
     def test_without_worktrees_the_walk_runs_one_chain_in_the_checkout_at_a_time(self):
         ui = self.two(walk_budget=10)
         ui.walk_cuts = lambda item: item == "W9"      # only W9 has a worktree of its own

@@ -488,7 +488,9 @@ class WalkMixin:
         ⚠️ A carried task is asked again what the order would ask: it may have been made a
         draft (`walk_draft_marked` ends its chain on the cap, which is how it got here),
         or an ancestor's raise or a fence may hold it now. Only a draft the author pinned
-        is carried on."""
+        is carried on. The continuation is asked the same of a parent in `busy`: it falls
+        back to `next_item`, which names the child of a parent whose review has just
+        landed and whose chain is still merging it."""
         by = {i["id"]: i for i in self.items}
         pin = self.walk_pinned()    # drops a pin that cannot be worked, and says so
         lead = [pin] if pin else []
@@ -498,7 +500,10 @@ class WalkMixin:
                     and (not it.get("draft") or c in self.walk_carry_pinned)
                     and not dfs_state.held_by_parent(by, it, busy)):
                 lead.append(c)
-        lead.append(self.data.get("next_item"))
+        nxt = self.data.get("next_item")
+        it = by.get(nxt)
+        if it is None or not dfs_state.held_by_parent(by, it, busy):
+            lead.append(nxt)
         return lead
 
     def walk_target(self):
