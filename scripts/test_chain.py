@@ -1231,16 +1231,32 @@ class Chain(unittest.TestCase):
         self.assertIn("dfs: set aside", stashes)
 
     def test_foreign_dirt_goes_to_a_work_session_before_a_due_critic(self):
-        # A critic may not change code, and after it the dirt would read as W1's.
+        # A critic may not change code, and after it the dirt would read as W1's. In place,
+        # where tasks take turns in the one checkout: off main, no worktree is cut.
+        self.git("checkout", "-q", "-b", "elsewhere")
         rc, meta, out = self.run_chain("work,work,work,work,work", cap=5)
         self.assertEqual(meta.get("stop"), "cap", out)
         # The last session anywhere was another task's, so the edit is not W1's. Its
         # ts is written out: W1's are bumped past the clock to stay unique.
-        (self.wt / ".dfs" / "items" / "W2.md").write_text(
+        (self.root / ".dfs" / "items" / "W2.md").write_text(
             TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
-        (self.wt / "app.txt").write_text("W2's half-done edit\n")
+        (self.root / "app.txt").write_text("W2's half-done edit\n")
         rc, meta, out = self.run_chain("work,work,work,work,work,stash,ok", cap=2)
         self.assertEqual(self.kinds_run(), ["work"] * 6 + ["critic"], out)
+
+    def test_another_tasks_later_session_does_not_make_a_worktrees_dirt_foreign(self):
+        # Parallel chains each work in a worktree of their own, and with the roadmap
+        # gitignored they share `items`, so W2's session is seen from W1's worktree. W1's
+        # own capped session left the edit, and it is still W1's.
+        self.run_chain("work", cap=1)
+        (self.wt / ".dfs" / "items" / "W2.md").write_text(
+            TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
+        (self.wt / "app.txt").write_text("W1's half-done edit\n")
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertNotIn("are not W1's", out)
+        r = subprocess.run([sys.executable, str(HERE / "state.py"), "--foreign-dirt", "W1"],
+                           cwd=self.wt, capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "", r.stderr)
 
     def test_the_chain_s_directory_is_not_handed_to_its_agent(self):
         # ⚠️ 2026-09-27: a session working on this tooling ran a test that started its

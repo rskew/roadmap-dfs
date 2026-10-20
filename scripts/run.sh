@@ -1002,8 +1002,9 @@ PY
   fi
 fi
 
-# ⚠️ SERIAL, SO THE DIRT HAS AN OWNER. Work in the tree that is not this task's is
-# committed or stashed by this chain's first session, whose briefing lists it.
+# ⚠️ THE DIRT HAS AN OWNER: the task whose chain works this checkout (its worktree's own
+# task, else the task with the last session, chains taking turns). Work in the tree that is
+# not this task's is committed or stashed by this chain's first session, whose briefing lists it.
 foreign="$(python3 "$HERE/state.py" --foreign-dirt "$ITEM")"
 if [ -n "$foreign" ]; then
   echo "dfs_run: $(printf '%s\n' "$foreign" | wc -l) uncommitted path(s) are not $ITEM's; the first session commits or stashes them."

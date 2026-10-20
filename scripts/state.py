@@ -463,10 +463,16 @@ def latest_session():
 
 def foreign_dirt(task):
     """(paths, owner): the uncommitted paths outside `.dfs/` that are NOT `task`'s
-    own unfinished node, and whose they are. Agents work serially, so uncommitted
-    work belongs to whichever task had the last session — and to nobody's node when
-    that was another task, or when no session has run at all (the dirt is the
+    own unfinished node, and whose they are. In a checkout that tasks take turns in,
+    uncommitted work belongs to whichever task had the last session — and to nobody's
+    node when that was another task, or when no session has run at all (the dirt is the
     author's). Empty when the tree is clean or the dirt is this task's.
+
+    ⚠️ IN `task`'S OWN WORKTREE only its own chain works, so only its own sessions say
+    whose the dirt is. Parallel walks run other tasks' chains at the same time, and with a
+    gitignored roadmap every worktree reads the same `items`, so their sessions were seen
+    there too: the dirt of a chain's own capped session was briefed as "NOT this task's:
+    the last session was" another's.
 
     ⚠️ A chain STARTS over foreign dirt rather than refusing: its first session
     commits or stashes it before touching its node (`brief`), and the runner makes
@@ -474,7 +480,10 @@ def foreign_dirt(task):
     not change code, and once one of those had run on this task the dirt would read
     as this task's own."""
     dirty = dirty_paths()
-    owner, _ = latest_session()
+    if dfs_paths.branch() == dfs_paths.item_branch(task):
+        owner = task if dfs_tree.last_session(dfs_tree.load(task)) else None
+    else:
+        owner, _ = latest_session()
     if not dirty or owner == task:
         return [], owner
     return dirty, owner
