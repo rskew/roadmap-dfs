@@ -6,11 +6,13 @@ Run:  python3 <scripts>/test_ignored.py
 """
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -88,6 +90,114 @@ class Ignored(unittest.TestCase):
         finally:
             sys.argv = old
         self.assertEqual(rc, 0, out.getvalue())
+
+
+class Hidden(unittest.TestCase):
+    """`dfs_paths.hidden()`: the roadmap files git will not add, by the rule that hides
+    them, except a roadmap kept as planning by a rule naming it."""
+
+    tearDown = Ignored.tearDown
+
+    def setUp(self):
+        Ignored.setUp(self)
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK)
+        (self.root / ".dfs" / "artefacts").mkdir()
+        (self.root / ".dfs" / "artefacts" / "a.html").write_text("<p>a\n")
+        (self.root / ".dfs" / ".gitignore").write_text("runs/\n")
+        (self.root / ".dfs" / "runs").mkdir()
+        (self.root / ".dfs" / "runs" / "log.json").write_text("{}")
+
+    def ignore(self, rules):
+        (self.root / ".gitignore").write_text(rules)
+
+    def rules(self):
+        return sorted((h["path"], h["source"], h["line"], h["pattern"])
+                      for h in dfs_paths.hidden())
+
+    def test_nothing_when_git_can_add_it_all(self):
+        self.ignore("__pycache__\n")
+        (self.root / ".dfs" / "__pycache__").mkdir()
+        (self.root / ".dfs" / "__pycache__" / "x.pyc").write_text("")
+        # runs/ is the roadmap's own rule, and a cache is not the roadmap
+        self.assertEqual(self.rules(), [])
+
+    def test_a_blanket_dot_rule_hides_the_directory(self):
+        self.ignore(".*\n!/.gitignore\n")
+        self.assertEqual(self.rules(), [(".dfs/", ".gitignore", "1", ".*")])
+
+    def test_a_pattern_hides_the_files_it_matches(self):
+        self.ignore("*.html\n")
+        self.assertEqual(self.rules(), [(".dfs/artefacts/a.html", ".gitignore", "1", "*.html")])
+
+    def test_a_rule_naming_the_roadmap_keeps_it_as_planning(self):
+        for rule in (".dfs/\n", "/.dfs\n", ".dfs\n", ".dfs/*\n", "/.dfs/*\n",
+                     ".dfs/**\n", "**/.dfs/\n", ".dfs/**/*\n"):
+            self.ignore(rule)
+            self.assertEqual(self.rules(), [], rule)
+
+    def test_a_broader_rule_that_wins_does_not_undo_the_roadmap_rule(self):
+        self.ignore(".dfs/\n.*\n")
+        self.assertEqual(self.rules(), [])
+        self.ignore(".*\n")
+        (self.root / ".git" / "info").mkdir(exist_ok=True)
+        (self.root / ".git" / "info" / "exclude").write_text(".dfs/\n")
+        self.assertEqual(self.rules(), [])
+
+    def test_a_planning_rule_that_a_negation_undoes_does_not_silence_it(self):
+        self.ignore("!.dfs/\n*.html\n")
+        (self.root / ".git" / "info").mkdir(exist_ok=True)
+        (self.root / ".git" / "info" / "exclude").write_text(".dfs/\n")
+        self.assertEqual(self.rules(), [(".dfs/artefacts/a.html", ".gitignore", "2", "*.html")])
+
+    def test_a_roadmap_git_half_adds_is_reported_by_the_rule_that_hides_it(self):
+        self.ignore(".dfs/*\n!.dfs/items/\n")
+        self.assertFalse(dfs_paths.ignored())
+        self.assertEqual(self.rules(), [
+            (".dfs/ROADMAP.md", ".gitignore", "1", ".dfs/*"),
+            (".dfs/artefacts/", ".gitignore", "1", ".dfs/*")])
+
+    def test_the_default_global_ignore_file_counts(self):
+        home = self.root / "home"
+        (home / ".config" / "git").mkdir(parents=True)
+        (home / ".config" / "git" / "ignore").write_text(".dfs/\n")
+        self.ignore(".*\n")
+        env = {"HOME": str(home), "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("XDG_CONFIG_HOME", None)
+            self.assertEqual(self.rules(), [])
+
+    def test_the_default_global_file_is_not_read_beside_a_configured_one(self):
+        home = self.root / "home"
+        (home / ".config" / "git").mkdir(parents=True)
+        (home / ".config" / "git" / "ignore").write_text(".dfs/\n")
+        (self.root / "mine").write_text("# nothing\n")
+        subprocess.run(["git", "config", "core.excludesFile", str(self.root / "mine")],
+                       cwd=self.root, check=True)
+        self.ignore(".*\n")
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            os.environ.pop("XDG_CONFIG_HOME", None)
+            self.assertNotIn(home / ".config" / "git" / "ignore", dfs_paths.ignore_files())
+            self.assertEqual([p for p, *_ in self.rules()], [".dfs/"])
+
+    def test_a_broader_rule_alone_still_hides_it(self):
+        self.ignore(".*\n")
+        self.assertEqual([p for p, *_ in self.rules()], [".dfs/"])
+
+    def test_files_forced_past_the_rule_are_half_a_roadmap(self):
+        self.ignore(".dfs/\n")
+        subprocess.run(["git", "add", "-f", ".dfs/ROADMAP.md"], cwd=self.root, check=True)
+        self.assertEqual([p for p, *_ in self.rules()],
+                         [".dfs/artefacts/", ".dfs/items/"])
+
+    def test_the_message_names_the_rule(self):
+        self.ignore(".*\n")
+        said = dfs_paths.hidden_message(dfs_paths.hidden())
+        self.assertIn(".gitignore:1  .*   hides .dfs/", said)
+        self.assertIn("1 roadmap path,", said)
+
+    def test_outside_git_nothing(self):
+        shutil.rmtree(self.root / ".git")
+        self.assertEqual(dfs_paths.hidden(), [])
 
 
 if __name__ == "__main__":

@@ -367,6 +367,26 @@ class Undoing(unittest.TestCase):
         self.assertIn("not undone", ui.msg)
 
 
+class HiddenFromGit(unittest.TestCase):
+    """Roadmap parts git will not add show in the header, and their rules under `h`."""
+    FOUND = [dict(path=".dfs/", source=".gitignore", line="1", pattern=".*")]
+
+    def test_the_header_says_git_hides_the_roadmap(self):
+        self.assertEqual(TUI.header_warn((2, 0), self.FOUND), "git hides .dfs 2 uncommitted ")
+        self.assertEqual(TUI.header_warn((2, 1), []), "1 staged ")
+
+    def test_the_activity_pane_names_the_rule(self):
+        look = TUI.look
+        TUI.look = lambda name: 0
+        try:
+            ui = a_screen([], hidden=self.FOUND, events=[])
+            text = "\n".join(t for t, _ in ui.lines_activity(80))
+        finally:
+            TUI.look = look
+        self.assertIn("hidden from git", text)
+        self.assertIn(".gitignore:1  .*   hides .dfs/", text)
+
+
 class TheActivityLog(unittest.TestCase):
     def test_a_started_chain_and_a_stopped_walk_are_recorded(self):
         ui = a_screen([item("W1")], walk_on=True, walk_dir=None, walk_until=0.0,

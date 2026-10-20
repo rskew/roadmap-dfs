@@ -575,6 +575,104 @@ def ignored() -> bool:
     return _git("check-ignore", "-q", probe).returncode == 0
 
 
+def roadmap_parts():
+    """What the roadmap is made of, as git should hold it when `.dfs` is committed."""
+    return (roadmap(), order(), items(), state() / "archive", artefacts(), title_file(),
+            theme_file())
+
+
+def hidden() -> list:
+    """The roadmap files git will not add, each with the rule that hides it:
+    `{"path", "source", "line", "pattern"}`, a directory git hides whole as one path
+    ending in `/`. Empty when every roadmap file can be added, and outside git.
+
+    An ignored roadmap is supported (`ignored()`), but only as a rule naming the roadmap
+    directory itself with nothing in it tracked, so that is the one way to be hidden that
+    is not reported. A broader rule (a blanket `.*`, a `*.html`) or files force-added past
+    a `.dfs/` rule leave the roadmap half in git: the tasks nobody force-added stay
+    untracked, and an item's worktree, cut from git, goes without them. Only the parts
+    that make the roadmap are asked about (`roadmap_parts`): what else sits in `.dfs` is
+    local (`runs/` and the rest of `.dfs/.gitignore`) or the project's own, which a
+    `__pycache__` rule may hide as it does anywhere.
+    An untracked file git would add is not hidden: it is a commit not yet made.
+    """
+    if state().is_symlink() or (state() / "items").is_symlink():
+        return []   # an item worktree of an ignored roadmap: the main checkout answers
+    listed = _git("ls-files", "-z", "--others", "--ignored", "--exclude-standard",
+                  "--directory", "--", *(rel(p) for p in roadmap_parts()))
+    paths = [p for p in listed.stdout.split("\0") if p]
+    if listed.returncode != 0 or not paths:
+        return []
+    r = subprocess.run(["git", "check-ignore", "-v", "-z", "--no-index", "--stdin"],
+                       cwd=work_root(), input="\0".join(paths) + "\0",
+                       capture_output=True, text=True)
+    f = r.stdout.split("\0")
+    found = [dict(source=f[i], line=f[i + 1], pattern=f[i + 2], path=f[i + 3])
+             for i in range(0, len(f) - 3, 4)]
+    if (not _git("ls-files", "--", STATE_DIR_NAME).stdout.strip() and ignored()
+            and (all(_names_state_dir(h["pattern"]) for h in found)
+                 or any(_names_state_dir(p) for p in _ignore_patterns()))):
+        return []
+    return found
+
+
+def ignore_files() -> list:
+    """The ignore files that apply to the whole repo: the root `.gitignore`, `info/exclude`
+    (asked of git, since `.git` is a file in a linked worktree) and the global excludes
+    file: `core.excludesFile`, or where that is unset the default git reads instead,
+    `$XDG_CONFIG_HOME/git/ignore` (`~/.config/git/ignore`)."""
+    paths = [work_root() / ".gitignore"]
+    exclude = _git("rev-parse", "--git-path", "info/exclude").stdout.strip()
+    if exclude:
+        paths.append(work_root() / exclude)
+    configured = _git("config", "--get", "core.excludesFile").stdout.strip()
+    if configured:
+        paths.append(work_root() / os.path.expanduser(configured))
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join("~", ".config")
+        paths.append(work_root() / os.path.expanduser(os.path.join(xdg, "git", "ignore")))
+    return paths
+
+
+def _ignore_patterns():
+    """Every pattern in `ignore_files()`. `check-ignore` names only the rule that wins,
+    so a broader `.*` after a `.dfs/` rule, or in a `.gitignore` over a `.dfs/` kept in
+    `info/exclude`, would hide that the roadmap is kept as planning on purpose."""
+    for path in ignore_files():
+        try:
+            yield from (ln.strip() for ln in path.read_text().splitlines())
+        except OSError:
+            pass
+
+
+def _names_state_dir(pattern: str) -> bool:
+    """Whether an ignore pattern names the roadmap directory itself: `.dfs`, `/.dfs`,
+    `**/.dfs`, with a trailing `/`, `/*`, `/**` or `/**/*` (the last three hide what is
+    in it and leave the directory itself unlisted)."""
+    pattern = (pattern.rstrip("/").removesuffix("/**/*").removesuffix("/**")
+               .removesuffix("/*").rstrip("/"))
+    return pattern.removeprefix("/").removeprefix("**/") == STATE_DIR_NAME
+
+
+def hidden_message(found) -> str:
+    """What `hidden()` found, a line per rule, for the author: the rule by file, line and
+    pattern, so the fix is one edit away, then the two ways out."""
+    rules = {}
+    for h in found:
+        rules.setdefault((h["source"], h["line"], h["pattern"]), []).append(h["path"])
+    lines = ["git will not add %d roadmap path%s, so %s stay%s out of every commit and "
+             "every item's worktree:" % (len(found), "" if len(found) == 1 else "s",
+                                         "it" if len(found) == 1 else "they",
+                                         "s" if len(found) == 1 else "")]
+    for (source, line, pattern), paths in rules.items():
+        shown = ", ".join(paths[:6]) + (", …" if len(paths) > 6 else "")
+        lines.append("    %s:%s  %s   hides %s" % (source, line, pattern, shown))
+    lines.append("Track the roadmap with a `!` rule after that line, or keep "
+                 "%s/ as planning: a rule naming it, `%s/`, and nothing in it tracked."
+                 % (STATE_DIR_NAME, STATE_DIR_NAME))
+    return "\n".join(lines)
+
+
 def has_roadmap() -> bool:
     """Whether this directory HAS a roadmap. The check every entry point owes the
     caller: with the work root being the CWD, running from the wrong place is the
