@@ -351,6 +351,12 @@ class Walking(unittest.TestCase):
                             dict(id="B", depth=1, status="open")])
         self.assertEqual(dfs_state.next_items(t, 2), ["B"])
 
+    def test_a_done_parent_whose_chain_is_still_merging_holds_its_child(self):
+        t = self.tree(("A", 0, "done"), ("B", 1, "open"), ("C", 0, "open"))
+        self.assertEqual(dfs_state.next_items(t, 2, busy={"A"}), ["C"])
+        t = self.tree(("A", 0, "done"), ("B", 1, "done"), ("C", 2, "open"))
+        self.assertEqual(dfs_state.next_items(t, 2, busy={"A"}), [])
+
     def test_the_walks_continuation_goes_first_unless_a_chain_is_on_it(self):
         t = self.tree(("A", 0, "open"), ("B", 0, "open"), ("C", 0, "open"))
         self.assertEqual(dfs_state.next_items(t, 2, first="C"), ["C", "A"])

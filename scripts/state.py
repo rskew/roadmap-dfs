@@ -250,14 +250,17 @@ def next_items(walked, n, busy=(), first=None):
     its parent is done: it keeps on the parent while it can (`continue_last`), and a
     parent's raise holds the child too. Several at once would take the child beside its
     unfinished parent, so a task under an open ancestor is passed over here; a draft
-    ancestor holds nothing, as it holds no fence. Separate branches share nothing and are
-    what runs together. With `n` 1 and nothing busy this is `[first or next_item]`."""
+    ancestor holds nothing, as it holds no fence. ⚠️ A parent in `busy` holds its subtree
+    even when it is done: its status turns `done` at the review's `ok`, but its chain is
+    still merging it, and a child cut before that merge lands starts from a default
+    branch without the parent's work (and runs beside an open parent should the merge
+    fail and reopen it). Separate branches share nothing and are what runs together. With `n` 1 and nothing busy this is `[first or next_item]`."""
     by = {i["id"]: i for i in walked}
 
     def held(it):
         up = by.get(it.get("parent"))
         while up is not None:
-            if up["status"] == "open" and not up.get("draft"):
+            if up["id"] in busy or (up["status"] == "open" and not up.get("draft")):
                 return True
             up = by.get(up.get("parent"))
         return False

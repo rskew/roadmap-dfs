@@ -703,6 +703,15 @@ class Parallel(Ticks, unittest.TestCase):
         ui.walk_tick()
         self.assertEqual([i for i, _ in ui.started], ["W7", "W9"])
 
+    def test_a_task_under_a_done_parent_whose_chain_is_still_live_is_not_started(self):
+        ui = self.ui(walk_parallel=2)
+        self.tasks(ui, "W7", "W8", "W9", parent={"W8": "W7"}, W7="done")
+        ui.walk_chains = [dict(dir="/runs/mine", item="W7", started=0.0, content=set(),
+                               pin=False, cap=5)]
+        self.live(ui, [self.chain(live=True)])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9"])
+
     def test_a_chain_that_ends_has_its_slot_refilled_from_what_is_left_of_the_budget(self):
         ui = self.two(walk_budget=10, walk_chains=[
             self.rec(dir="/runs/a", item="W7", content={"a", "b"}, cap=5),
