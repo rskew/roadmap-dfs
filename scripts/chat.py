@@ -118,6 +118,23 @@ def authors(messages):
     return sum(m["role"] == "you" for m in messages)
 
 
+def recorded_apart(waiting, texts):
+    """The (message, need, base) entries of `waiting`, all those sent and not yet cleared, that the author's
+    messages `texts` do not hold by text. A recorded message holds a waiting one whose text is in it, each
+    stretch of it once and in order: "no" is not held by a "Can you look at it now" that is an earlier
+    message's own, and one "yes" does not hold two."""
+    base = min((b for _, _, b in waiting), default=0)
+    left = list(waiting)
+    for t in texts[base:]:
+        at = 0
+        for entry in list(left):
+            i = t.find(entry[0], at)
+            if i >= 0:
+                at = i + len(entry[0])
+                left.remove(entry)
+    return left
+
+
 def turns(sid, agent):
     """(role, text, message key) for each piece of a session's transcript, as its agent's
     reader finds them: a line at a time from the transcript file, or from a store."""
@@ -489,8 +506,7 @@ class Chats:
             # Not by its text alone: an agent may record it merged with one typed before it that was never
             # submitted; then its text is within a message recorded since.
             held, texts = authors(messages), [m["text"] for m in messages if m["role"] == "you"]
-            unrecorded = [(text, need, base) for text, need, base in self.pending.get(scope, [])
-                          if held < need and not any(text in t for t in texts[base:])]
+            unrecorded = [e for e in recorded_apart(self.pending.get(scope, []), texts) if held < e[1]]
             if unrecorded:
                 self.pending[scope] = unrecorded
                 messages += [dict(role="you", text=text) for text, _, _ in unrecorded]

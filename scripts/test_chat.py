@@ -985,6 +985,31 @@ class Chat(unittest.TestCase):
         st = chats.state("W1")
         self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "first", "second", "Both."])
 
+    def test_a_short_message_inside_an_earlier_ones_text_stays_shown_until_it_is_recorded(self):
+        chats, record = self.screens_live_chat([("you", "hi"), ("agent", "Hello.")])
+        chats.send("W1", "Can you look at it now")
+        chats.send("W1", "no")
+        record(("you", "Can you look at it now"), ("agent", "Working on it."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "Can you look at it now", "Working on it.", "no"])
+        record(("you", "no"), ("agent", "Stopping."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]][-2:], ["no", "Stopping."])
+        self.assertNotIn("W1", chats.pending)
+
+    def test_the_same_message_sent_twice_shows_twice_until_both_are_recorded(self):
+        chats, record = self.screens_live_chat([("you", "hi"), ("agent", "Hello.")])
+        chats.send("W1", "yes")
+        chats.send("W1", "yes")
+        record(("you", "yes"), ("agent", "Doing it."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "yes", "Doing it.", "yes"])
+        record(("you", "yes"), ("agent", "Again."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]].count("yes"), 2)
+        self.assertEqual(st["messages"][-1], dict(role="agent", text="Again."))
+        self.assertNotIn("W1", chats.pending)
+
     def test_the_chats_section_lists_every_conversation_newest_first(self):
         class Screen:
             has_screen = True
