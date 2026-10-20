@@ -609,9 +609,9 @@ def hidden() -> list:
     f = r.stdout.split("\0")
     found = [dict(source=f[i], line=f[i + 1], pattern=f[i + 2], path=f[i + 3])
              for i in range(0, len(f) - 3, 4)]
-    if (not _git("ls-files", "--", STATE_DIR_NAME).stdout.strip()
+    if (not _git("ls-files", "--", STATE_DIR_NAME).stdout.strip() and ignored()
             and (all(_names_state_dir(h["pattern"]) for h in found)
-                 or (ignored() and any(_names_state_dir(p) for p in _ignore_patterns())))):
+                 or any(_names_state_dir(p) for p in _ignore_patterns()))):
         return []
     return found
 
@@ -622,12 +622,13 @@ def ignore_files() -> list:
     file: `core.excludesFile`, or where that is unset the default git reads instead,
     `$XDG_CONFIG_HOME/git/ignore` (`~/.config/git/ignore`)."""
     paths = [work_root() / ".gitignore"]
-    for args in (("rev-parse", "--git-path", "info/exclude"),
-                 ("config", "--get", "core.excludesFile")):
-        out = _git(*args).stdout.strip()
-        if out:
-            paths.append(work_root() / os.path.expanduser(out))
-    if len(paths) < 3:
+    exclude = _git("rev-parse", "--git-path", "info/exclude").stdout.strip()
+    if exclude:
+        paths.append(work_root() / exclude)
+    configured = _git("config", "--get", "core.excludesFile").stdout.strip()
+    if configured:
+        paths.append(work_root() / os.path.expanduser(configured))
+    else:
         xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join("~", ".config")
         paths.append(work_root() / os.path.expanduser(os.path.join(xdg, "git", "ignore")))
     return paths

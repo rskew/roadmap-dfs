@@ -149,6 +149,13 @@ class Hidden(unittest.TestCase):
         (self.root / ".git" / "info" / "exclude").write_text(".dfs/\n")
         self.assertEqual(self.rules(), [(".dfs/artefacts/a.html", ".gitignore", "2", "*.html")])
 
+    def test_a_roadmap_git_half_adds_is_reported_by_the_rule_that_hides_it(self):
+        self.ignore(".dfs/*\n!.dfs/items/\n")
+        self.assertFalse(dfs_paths.ignored())
+        self.assertEqual(self.rules(), [
+            (".dfs/ROADMAP.md", ".gitignore", "1", ".dfs/*"),
+            (".dfs/artefacts/", ".gitignore", "1", ".dfs/*")])
+
     def test_the_default_global_ignore_file_counts(self):
         home = self.root / "home"
         (home / ".config" / "git").mkdir(parents=True)
@@ -158,6 +165,19 @@ class Hidden(unittest.TestCase):
         with mock.patch.dict(os.environ, env):
             os.environ.pop("XDG_CONFIG_HOME", None)
             self.assertEqual(self.rules(), [])
+
+    def test_the_default_global_file_is_not_read_beside_a_configured_one(self):
+        home = self.root / "home"
+        (home / ".config" / "git").mkdir(parents=True)
+        (home / ".config" / "git" / "ignore").write_text(".dfs/\n")
+        (self.root / "mine").write_text("# nothing\n")
+        subprocess.run(["git", "config", "core.excludesFile", str(self.root / "mine")],
+                       cwd=self.root, check=True)
+        self.ignore(".*\n")
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            os.environ.pop("XDG_CONFIG_HOME", None)
+            self.assertNotIn(home / ".config" / "git" / "ignore", dfs_paths.ignore_files())
+            self.assertEqual([p for p, *_ in self.rules()], [".dfs/"])
 
     def test_a_broader_rule_alone_still_hides_it(self):
         self.ignore(".*\n")
