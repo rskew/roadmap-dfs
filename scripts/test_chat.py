@@ -962,6 +962,29 @@ class Chat(unittest.TestCase):
         st = chats.state("W1")
         self.assertEqual([m["text"] for m in st["messages"]], ["yes", "Done.", "yes", "Done again."])
 
+    def test_a_message_sent_before_an_earlier_one_is_recorded_stays_shown_until_it_is_recorded(self):
+        # sent while the screen's chat is starting: claude records the first and starts on it, and takes
+        # the second only when it is done
+        chats, record = self.screens_live_chat([("you", "hi"), ("agent", "Hello.")])
+        chats.send("W1", "first")
+        chats.send("W1", "second")
+        record(("you", "first"), ("agent", "Working on the first."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "first", "Working on the first.", "second"])
+        record(("agent", "The first is done."), ("you", "second"), ("agent", "Working on the second."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]],
+                         ["hi", "Hello.", "first", "Working on the first.", "The first is done.", "second", "Working on the second."])
+        self.assertNotIn("W1", chats.pending)
+
+    def test_two_messages_sent_in_a_row_both_clear_when_claude_recorded_them_apart(self):
+        chats, record = self.screens_live_chat([("you", "hi"), ("agent", "Hello.")])
+        chats.send("W1", "first")
+        chats.send("W1", "second")
+        record(("you", "first"), ("you", "second"), ("agent", "Both."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "first", "second", "Both."])
+
     def test_the_chats_section_lists_every_conversation_newest_first(self):
         class Screen:
             has_screen = True
