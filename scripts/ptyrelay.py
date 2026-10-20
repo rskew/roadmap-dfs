@@ -26,7 +26,9 @@ import chatlog
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
-HANDOVER_TIMEOUT = 90.0     # after run.sh's opening turn: a real kiro-cli drew nothing for 12s to 25s (test_kiro_chat)
+SUBMIT_WAIT = 2.0           # seconds a first message may draw nothing after its Enter before Enter is pressed again
+RESUBMIT = ("claude",)      # the agents that get it; a real claude 2.1.301 did nothing on an Enter at an empty prompt, idle or mid-turn (test_claude_chat)
+HANDOVER_TIMEOUT = 90.0     # after run.sh's opening line, for the agent's own first output: a real kiro-cli drew nothing for 12s to 25s (test_kiro_chat)
 # A fresh agent is quiet for more than QUIET while it starts and while it asks its first-launch
 # questions, so quiet alone types a message into the wrong place (found against the real TUIs):
 # opencode is quiet for seconds before its prompt is drawn, and kiro draws its warning and question
@@ -39,7 +41,12 @@ FIRST_LAUNCH = {"codex": ("Trust and continue", (b"\r",)), "kiro": ("Yes, I acce
 # A new codex, opencode or kiro chat runs its opening turn headless (run.sh) before it execs the
 # interactive agent, saying so on either side. Nothing reads the terminal during that turn, which
 # takes as long as the summary does, so a message waits for the line that opens the interactive
-# session and for the agent to draw itself after it, however long that is.
+# session and for the agent to draw itself after it, however long that is. The line is printed
+# before every chat's agent starts, opening turn or not, and `nix run` is silent for a second or
+# more after it, clearing its progress line as it goes: a claude resumed through run.sh was typed to
+# 1.2s after the start, before it had drawn anything, and kept the message unsubmitted in its input
+# (scripts/probe_claude_start.py --runsh). So claude's first output is taken to be the bracketed
+# paste mode it turns on when it starts, and a stand-in claude that never does is typed to after HANDOVER_TIMEOUT.
 OPENING = b"running its opening turn first"
 OPENED = b"opening an interactive"
 MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004)      # private modes the terminal is brought in step with
@@ -94,7 +101,8 @@ class Relay:
         self.attached = False
         self.closing = False
         self.started = self.first_out = self.last_out = 0.0
-        self.handed = 0.0           # when run.sh handed over from its opening turn to the interactive agent
+        self.handed = 0.0           # when run.sh said it was starting the interactive agent (after its opening turn, if it ran one)
+        self.awaiting = False       # claude is being started by run.sh and has not yet turned on bracketed paste, which is its first output
         self.opening = False        # run.sh is running the chat's headless opening turn: no agent to type into yet
         self._seam = b""            # the end of the last read, for a marker that straddles two
         self.outbox = queue.Queue()
@@ -202,18 +210,24 @@ class Relay:
         return None
 
     def _follow_opening(self, data):
-        """Note when run.sh starts its headless opening turn and when it hands over to the
-        interactive agent. That agent has not drawn anything yet, so what run.sh printed does not
+        """Note when run.sh starts its headless opening turn and when it says it is starting the
+        interactive agent (it does, for every chat). That agent has not drawn anything yet, so what run.sh printed does not
         count as it being up: `first_out` waits for the agent's own first output."""
         seen = self._seam + data
         self._seam = seen[-len(OPENING):]
         if OPENING in seen:
             self.opening = True
         at = seen.rfind(OPENED)
-        if self.opening and at >= 0:
+        if at >= 0 and (self.opening or not self.handed):
             self.opening = False
             self.handed = time.time()
+            self.awaiting = self.agent == "claude"
             if b"\x1b" not in seen[at:]:
+                self.first_out = 0.0
+        if self.awaiting:               # `nix run` clears its progress line (escape codes) while claude loads
+            if 2004 in self.modes:
+                self.awaiting = False
+            else:
                 self.first_out = 0.0
 
     def _watch(self):
@@ -329,6 +343,7 @@ class Relay:
             except queue.Empty:
                 continue
             waited, stops = time.time(), self.stops
+            first = not self.typed
             end = waited + READY_TIMEOUT      # not before the agent has drawn itself and settled
             while self.live and time.time() < end and not self._ready():
                 if self.opening:
@@ -353,8 +368,29 @@ class Relay:
                 else "the agent had not settled in %ds, typed anyway" % READY_TIMEOUT))
             time.sleep(0.15)
             with self.lock:
-                if self.fd is not None:
-                    _try(os.write, self.fd, b"\r")
+                if self.fd is None:
+                    continue
+                _try(os.write, self.fd, b"\r")
+                entered = self.total_out
+            if first and self.agent in RESUBMIT:
+                self._resubmit(entered, stops)
+
+    def _resubmit(self, entered, stops):
+        """A claude chat's first message was once typed 1.3s after the start (the log at 2026-10-19T00:17:26) and
+        stayed in claude's input, its Enter not acted on; the others, typed later, were submitted. That could not
+        be repeated against a real claude 2.1.301: it took the paste and Enter at every delay from 0.5s to 8s,
+        resumed or not, and when both came in one write, so the cause is not known. A submitted message makes
+        claude draw at once, so if it writes nothing for SUBMIT_WAIT after the Enter, Enter is pressed again; an
+        Enter at an empty prompt did nothing, idle or while claude was answering (test_claude_chat)."""
+        end = time.time() + SUBMIT_WAIT
+        while self.live and time.time() < end:
+            if self.total_out != entered or self.stops != stops:
+                return
+            time.sleep(0.1)
+        with self.lock:
+            if self.fd is not None and self.total_out == entered and self.stops == stops:
+                _try(os.write, self.fd, b"\r")
+                self.log("no response %ds after the Enter: pressed Enter again" % SUBMIT_WAIT)
 
     # ── looking at it ──────────────────────────────────────────────────────────────────
     def attach(self):

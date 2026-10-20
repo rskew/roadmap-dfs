@@ -113,6 +113,28 @@ def transcript_messages(sid, agent="claude"):
     return out
 
 
+def authors(messages):
+    """How many of a conversation's messages are the author's."""
+    return sum(m["role"] == "you" for m in messages)
+
+
+def recorded_apart(waiting, texts):
+    """The (message, need, base) entries of `waiting`, all those sent and not yet cleared, that the author's
+    messages `texts` do not hold by text. A recorded message holds a waiting one whose text is in it, each
+    stretch of it once and in order: "no" is not held by a "Can you look at it now" that is an earlier
+    message's own, and one "yes" does not hold two."""
+    base = min((b for _, _, b in waiting), default=0)
+    left = list(waiting)
+    for t in texts[base:]:
+        at = 0
+        for entry in list(left):
+            i = t.find(entry[0], at)
+            if i >= 0:
+                at = i + len(entry[0])
+                left.remove(entry)
+    return left
+
+
 def turns(sid, agent):
     """(role, text, message key) for each piece of a session's transcript, as its agent's
     reader finds them: a line at a time from the transcript file, or from a store."""
@@ -427,7 +449,7 @@ class Chats:
         self.lock = threading.RLock()
         self.on_change = on_change or (lambda: None)
         self.busy = {}      # scope -> when its turn started
-        self.pending = {}   # scope -> what was sent and has not reached the transcript yet
+        self.pending = {}   # scope -> [(a message sent, kept until every one of the scope's is in the transcript, how many of the author's messages the transcript holds once it is, how many it held when the first of them was sent)]
         self.notes = {}     # scope -> [errors], until the conversation moves on
         self.procs = {}     # scope -> the process of its headless turn, while it runs
         self.stopped = set()    # scopes whose running turn the author has just stopped
@@ -480,10 +502,15 @@ class Chats:
                 chatlog.log(scope, "the screen's chat ended: %s" % failed)
                 self.notes[scope] = [failed]
                 self.pending.pop(scope, None)
-            pending = self.pending.get(scope)
-            if pending and not any(m["role"] == "you" and m["text"] == pending for m in messages[-3:]):
-                messages.append(dict(role="you", text=pending))
-            elif pending:
+            # A message is in once the transcript holds the author's messages it was sent after, and one more.
+            # Not by its text alone: an agent may record it merged with one typed before it that was never
+            # submitted; then its text is within a message recorded since.
+            held, texts = authors(messages), [m["text"] for m in messages if m["role"] == "you"]
+            waiting = self.pending.get(scope, [])
+            unrecorded = [e for e in recorded_apart(waiting, texts) if held < e[1]]
+            if unrecorded:      # the recorded ones stay in the list, so the message that held them is not matched again by the rest
+                messages += [dict(role="you", text=text) for text, _, _ in unrecorded]
+            else:
                 self.pending.pop(scope, None)
             messages += [dict(role="error", text=t) for t in self.notes.get(scope, [])]
             if scope in self.stops:
@@ -496,6 +523,14 @@ class Chats:
                         screen=bool(w and w.has_screen), live=live,
                         elsewhere=bool(sid) and not started and not live and running_elsewhere(sid, agent=agent),
                         agent=agent)
+
+    def expect(self, scope, message, agent, sid=None):
+        """Show `message` until the transcript records it. One sent before an earlier one is recorded
+        waits for the author's message after that one."""
+        held = authors(transcript_messages(sid or self.sid(scope), agent))
+        waiting = self.pending.get(scope, [])
+        self.pending[scope] = waiting + [(message, max(held, waiting[-1][1] if waiting else 0) + 1,
+                                          waiting[0][2] if waiting else held)]
 
     # ── a turn ────────────────────────────────────────────────────────────────────────
     def send(self, scope, message):
@@ -513,7 +548,7 @@ class Chats:
             # A chat running on this screen has the session: type into it, as the keyboard does.
             if scope not in self.busy and w and w.chat_send(scope, message):
                 chatlog.log(scope, "page: message of %d characters handed to the screen's chat" % len(message))
-                self.pending[scope] = message
+                self.expect(scope, message, agent)
                 self.notes.pop(scope, None)
                 self.stops.pop(scope, None)
                 self.on_change()
@@ -527,7 +562,7 @@ class Chats:
                 chatlog.log(scope, "page: message refused, another terminal has session %s open" % sid)
                 raise ValueError("another terminal has this conversation open: type there, or "
                                  "close it and send from here")
-            self.pending[scope] = message
+            self.expect(scope, message, agent, sid)
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
             self.busy[scope] = time.time()
@@ -554,7 +589,11 @@ class Chats:
                 chatlog.log(scope, "page: stop, interrupt sent to the screen's chat")
                 if dropped:     # the message was stopped before it was typed: it is not sent, and not shown as sent
                     chatlog.log(scope, "page: stop, %d message(s) were never typed" % dropped)
-                    self.pending.pop(scope, None)
+                    kept = self.pending.get(scope, [])[:-dropped]      # the last ones sent: an earlier one was typed
+                    if kept:
+                        self.pending[scope] = kept
+                    else:
+                        self.pending.pop(scope, None)
                     self.stops[scope] = True
             else:
                 chatlog.log(scope, "page: stop, nothing was answering")
