@@ -51,6 +51,20 @@ the item is worked in place, on whatever is checked out, and nothing is merged. 
 already has a worktree stays in it off `main`/`master`, and its merge raises until you are
 back on the default branch.
 
+## Parallel walks
+
+A walk takes a budget of sessions and, optionally, a number of chains to run at once: `w` on the
+screen reads `20` or `20 3` (⏎ takes the last walk's numbers), `:walk 20 3` does the same, and the
+web page's Start form has a "Chains at once" field. The default is 1, one chain at a time as
+before. With more, each free slot takes a task of its own, the walk's continuation first and then
+the order, so separate branches run together, each in its own worktree. A task nested under
+another in `order.md` still waits until its parent (any open, non-draft ancestor) is done, and a
+task that already has a chain, started by hand included, is never given a second. The chains share
+the one budget: each starts with a cap that, summed over the live chains, never exceeds the sessions
+left, and the walk's header names every live chain. A stop, or turning the walk off, ends every
+chain after the run it is in. Merges and worktree cuts run one at a time under a lock in the git
+common directory, so two chains finishing together merge in turn.
+
 ## Running the sandbox as a daemon
 
 `sandbox daemon [command args]` runs the command (default: the repo's `CONTAINER_APP_CMD`, from `.container.env`)
