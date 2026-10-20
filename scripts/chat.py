@@ -449,7 +449,7 @@ class Chats:
         self.lock = threading.RLock()
         self.on_change = on_change or (lambda: None)
         self.busy = {}      # scope -> when its turn started
-        self.pending = {}   # scope -> [(a message sent and not in the transcript yet, how many of the author's messages the transcript holds once it is, how many it held when the first of them was sent)]
+        self.pending = {}   # scope -> [(a message sent, kept until every one of the scope's is in the transcript, how many of the author's messages the transcript holds once it is, how many it held when the first of them was sent)]
         self.notes = {}     # scope -> [errors], until the conversation moves on
         self.procs = {}     # scope -> the process of its headless turn, while it runs
         self.stopped = set()    # scopes whose running turn the author has just stopped
@@ -506,9 +506,9 @@ class Chats:
             # Not by its text alone: an agent may record it merged with one typed before it that was never
             # submitted; then its text is within a message recorded since.
             held, texts = authors(messages), [m["text"] for m in messages if m["role"] == "you"]
-            unrecorded = [e for e in recorded_apart(self.pending.get(scope, []), texts) if held < e[1]]
-            if unrecorded:
-                self.pending[scope] = unrecorded
+            waiting = self.pending.get(scope, [])
+            unrecorded = [e for e in recorded_apart(waiting, texts) if held < e[1]]
+            if unrecorded:      # the recorded ones stay in the list, so the message that held them is not matched again by the rest
                 messages += [dict(role="you", text=text) for text, _, _ in unrecorded]
             else:
                 self.pending.pop(scope, None)

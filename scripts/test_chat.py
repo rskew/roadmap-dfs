@@ -992,6 +992,8 @@ class Chat(unittest.TestCase):
         record(("you", "Can you look at it now"), ("agent", "Working on it."))
         st = chats.state("W1")
         self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "Can you look at it now", "Working on it.", "no"])
+        st = chats.state("W1")      # the page polls again before claude takes the second
+        self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "Can you look at it now", "Working on it.", "no"])
         record(("you", "no"), ("agent", "Stopping."))
         st = chats.state("W1")
         self.assertEqual([m["text"] for m in st["messages"]][-2:], ["no", "Stopping."])
@@ -1003,6 +1005,8 @@ class Chat(unittest.TestCase):
         chats.send("W1", "yes")
         record(("you", "yes"), ("agent", "Doing it."))
         st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "yes", "Doing it.", "yes"])
+        st = chats.state("W1")      # the page polls again before claude takes the second
         self.assertEqual([m["text"] for m in st["messages"]], ["hi", "Hello.", "yes", "Doing it.", "yes"])
         record(("you", "yes"), ("agent", "Again."))
         st = chats.state("W1")
