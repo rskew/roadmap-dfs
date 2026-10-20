@@ -38,7 +38,10 @@ branch are removed. A rebase that conflicts reopens the item with a node to reso
 uncommitted edits of yours that the merge would overwrite, or a merge, cherry-pick, revert
 or rebase of yours left unfinished in the checkout, raise instead and are left alone. A
 gitignored `.dfs/` is worked the same way: the worktree links to your checkout's ignored
-planning files, so the screen and the sessions read and write one copy.
+planning files, so the screen and the sessions read and write one copy. That includes task
+files and `order.md` that a blanket rule such as `.*` hides but you force-added: they are
+edited in your checkout through the link and left modified and uncommitted there after the
+merge, for you to commit.
 
 There is no branch when the checkout is off `main`/`master` or the repo has no commit yet:
 the item is worked in place, on whatever is checked out, and nothing is merged. A task that

@@ -465,7 +465,7 @@ META
 #   overturns   no context reading, and past the turn ceiling
 #   interrupt   Ctrl-C
 #   brief       a session could not be briefed (`cause` says why): its task file is
-#               missing in the worktree, or `state.py` failed
+#               missing in the worktree, `state.py` failed, or `branch.py enter` failed
 stop_is() {
   # ⚠️ Spelled out rather than `${2:+resets="$2"}`: that expansion word-splits a
   # reset time like "resets 3pm" into two argv entries.
@@ -930,7 +930,19 @@ PY
 # the main checkout and is done with it.
 RUNDIR="$(cd "$RUNDIR" && pwd)"
 ITEM_MAIN="$(pwd)"
-ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM")" || exit 2
+meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
+         started="$(date -Is)" pid="$$"
+trap on_exit EXIT
+trap on_interrupt INT TERM
+# An `enter` that fails (a BranchError, a traceback) is recorded as the stop, with its cause,
+# so the walk does not say the chain ended without recording why.
+if ! ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM" 2>"$RUNDIR/enter.err")"; then
+  cat "$RUNDIR/enter.err" >&2
+  stop_is brief
+  meta_set cause="branch.py enter failed: $(tail -n 1 "$RUNDIR/enter.err")"
+  exit 2
+fi
+cat "$RUNDIR/enter.err" >&2   # the notices it prints (a reused branch, a clash) are shown
 if [ -n "$ITEM_TREE" ]; then
   cd "$ITEM_TREE"
   eval "$(python3 "$HERE/paths.py" --sh)"
@@ -957,11 +969,6 @@ merge_item() {
   case "$rc" in 3|4) ;; *) rc=4; echo "dfs_run: the merge of $ITEM failed unexpectedly; see above." ;; esac
   return "$rc"
 }
-
-meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
-         started="$(date -Is)" pid="$$"
-trap on_exit EXIT
-trap on_interrupt INT TERM
 
 # ⚠️ THE TASK IS READ FROM THE WORKTREE NOW, and the preflight above read the main
 # checkout's. The branch has only what git carries: on 2026-10-19 a project whose `.*`

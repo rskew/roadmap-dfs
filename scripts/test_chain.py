@@ -562,17 +562,15 @@ class Chain(unittest.TestCase):
         self.assertIn("W1 cannot be briefed: the worktree", out)
         self.assertEqual(self.count.read_text(), before)   # no session started
 
-    def chain_with_briefing(self, mode):
-        """Run the chain from a copy of the scripts whose `state.py --brief` first prints a
-        notice, then (mode "fail") fails. Returns (rc, meta, output)."""
+    def chain_from_copy(self, script, code):
+        """Run the chain from a copy of the scripts whose `script` starts with `code`.
+        Returns (rc, meta, output)."""
         copy = self.aside / "scripts-copy"
         shutil.copytree(HERE.parent, copy, ignore=shutil.ignore_patterns("__pycache__", ".git", ".dfs"))
-        state = copy / "scripts" / "state.py"
-        lines = state.read_text().split("\n")
-        lines.insert(1, "import sys as _s\nif '--brief' in _s.argv:\n"
-                        "    print('dfs_tree: a notice', file=_s.stderr)\n"
-                        "    if %r == 'fail':\n        print('dfs_state: boom', file=_s.stderr); _s.exit(1)" % mode)
-        state.write_text("\n".join(lines))
+        path = copy / "scripts" / script
+        lines = path.read_text().split("\n")
+        lines.insert(1, code)
+        path.write_text("\n".join(lines))
         e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE="work", COUNT_FILE=str(self.count),
                  KINDS_FILE=str(self.kinds), TREE_PY=str(HERE / "tree.py"), HOME=str(self.aside))
         e.pop("RUNDIR", None)
@@ -580,6 +578,21 @@ class Chain(unittest.TestCase):
                            capture_output=True, text=True, timeout=300)
         metas = sorted((self.root / ".dfs" / "runs").glob("*/meta.json"), key=lambda f: f.stat().st_mtime)
         return p.returncode, json.loads(metas[-1].read_text()) if metas else {}, p.stdout + p.stderr
+
+    def chain_with_briefing(self, mode):
+        """Run the chain from a copy of the scripts whose `state.py --brief` first prints a
+        notice, then (mode "fail") fails."""
+        return self.chain_from_copy("state.py", "import sys as _s\nif '--brief' in _s.argv:\n"
+                                    "    print('dfs_tree: a notice', file=_s.stderr)\n"
+                                    "    if %r == 'fail':\n        print('dfs_state: boom', file=_s.stderr); _s.exit(1)" % mode)
+
+    def test_an_enter_that_fails_is_recorded_as_the_stop_with_its_cause(self):
+        rc, meta, out = self.chain_from_copy("branch.py", "import sys as _s\nif _s.argv[1:2] == ['enter']:\n"
+                                             "    print('dfs_branch: no room for a worktree', file=_s.stderr); _s.exit(1)")
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertEqual(meta.get("cause"), "branch.py enter failed: dfs_branch: no room for a worktree")
+        self.assertIn("no room for a worktree", out)
+        self.assertEqual(meta.get("rc"), "2")
 
     def test_a_briefing_that_fails_is_recorded_with_its_cause_and_its_notice_is_shown(self):
         rc, meta, out = self.chain_with_briefing("fail")
@@ -919,6 +932,33 @@ class Chain(unittest.TestCase):
             if "--no-ff" in args:
                 raise KeyboardInterrupt
             return real(*args, **kw)
+
+        here = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(dfs_branch, "_git", interrupted):
+                with self.assertRaises(KeyboardInterrupt):
+                    dfs_branch.merge("W1")
+        finally:
+            os.chdir(here)
+        self.assertIn("edited since", task.read_text())
+
+    def test_an_interrupt_during_the_reset_of_a_set_aside_edit_puts_it_back(self):
+        # the interrupt lands after `git checkout HEAD -- <path>` reset the file the dict
+        # (not yet returned to `merge`) holds the only copy of
+        import branch as dfs_branch
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        real = dfs_branch._git
+
+        def interrupted(*args, **kw):
+            r = real(*args, **kw)
+            if args[:2] == ("checkout", "HEAD"):
+                raise KeyboardInterrupt
+            return r
 
         here = os.getcwd()
         os.chdir(self.root)

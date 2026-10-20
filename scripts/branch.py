@@ -588,7 +588,7 @@ def _unmerged(task, wt, name, r, aside=None):
     return "refused"
 
 
-def _set_aside_shared_edits(name, wt):
+def _set_aside_shared_edits(name, wt, aside=None):
     """The `.dfs` files the branch `name` changed and that this checkout holds edited, where
     the edit was made on the branch's version: the worktree `wt` reaches the file through a
     link to this checkout's copy (`share_ignored_state`), so the sessions edited it while the
@@ -596,11 +596,12 @@ def _set_aside_shared_edits(name, wt):
     overwrite the edit. Each is saved and restored to HEAD; `_put_back_shared_edits` writes
     them back. Any other edit, the author's own, is left for git to refuse and `_unmerged` to
     raise: putting it back would silently undo the branch's change in the working copy.
-    Returns {path: bytes}."""
+    Fills and returns {path: bytes}: the caller passes `aside` in so that its `finally` holds
+    each edit from the moment it is read, before the reset that follows."""
     s = dfs_paths.STATE_DIR_NAME
     root = dfs_paths.work_root()
     changed = [p for p in _git("diff", "--name-only", "-z", "HEAD", name, "--", s).stdout.split("\0") if p]
-    aside = {}
+    aside = {} if aside is None else aside
     for st, p in (_dirty(changed) if changed else []):
         if st == "??" or "D" in st:
             continue
@@ -678,8 +679,9 @@ def merge(task):
         return "dirty"
     if not _rebase(task, wt, name):
         return "conflict"
-    aside = _set_aside_shared_edits(name, wt)
+    aside = {}
     try:
+        _set_aside_shared_edits(name, wt, aside)
         r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
         if r.returncode != 0:
             return _unmerged(task, wt, name, r, aside)
