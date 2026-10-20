@@ -385,27 +385,26 @@ class WhichSessionIsThis(unittest.TestCase):
                         % (n, self.proc.stdout))
         return p.read_text().strip()
 
-    def test_the_chain_served_both_runs(self):
-        self.assertEqual(int(self.count.read_text()), 2, self.proc.stdout)
-        self.assertEqual(self.meta.get("stop"), "cap", self.proc.stdout)
-        self.assertIn("W1.1 [confirmed]", self.proc.stdout)
-
-    def test_a_running_session_has_named_itself(self):
-        # ⚠️ Read from INSIDE run 1, which is the point: the id was correct after
-        # `wait` all along, and a pane watching the run is what it was wrong for.
-        self.assertEqual(self.observation(1), "01a0b000-0000-7000-8000-000000000001",
-                         self.proc.stdout)
-
-    def test_the_previous_runs_id_is_not_still_standing(self):
-        # The failure this replaced: `meta.json` holds ONE sid, so run 1's left
-        # there through run 2 pointed the live pane at a finished transcript.
-        # Falsified against the unfixed runner, which observed run 1's id here.
-        self.assertEqual(self.observation(2), "01a0b000-0000-7000-8000-000000000002",
-                         self.proc.stdout)
-
-    def test_the_id_is_still_right_once_the_run_ends(self):
-        self.assertEqual(self.meta.get("sid"),
-                         "01a0b000-0000-7000-8000-000000000002", self.proc.stdout)
+    def test_a_two_run_chain_has_each_runs_session_named_while_it_is_in_it_and_after(self):
+        # one chain serves all four checks (a run is 6s of sleeping and a dozen processes)
+        with self.subTest("the chain served both runs"):
+            self.assertEqual(int(self.count.read_text()), 2, self.proc.stdout)
+            self.assertEqual(self.meta.get("stop"), "cap", self.proc.stdout)
+            self.assertIn("W1.1 [confirmed]", self.proc.stdout)
+        with self.subTest("a running session has named itself"):
+            # ⚠️ Read from INSIDE run 1, which is the point: the id was correct after
+            # `wait` all along, and a pane watching the run is what it was wrong for.
+            self.assertEqual(self.observation(1), "01a0b000-0000-7000-8000-000000000001",
+                             self.proc.stdout)
+        with self.subTest("the previous run's id is not still standing"):
+            # The failure this replaced: `meta.json` holds ONE sid, so run 1's left
+            # there through run 2 pointed the live pane at a finished transcript.
+            # Falsified against the unfixed runner, which observed run 1's id here.
+            self.assertEqual(self.observation(2), "01a0b000-0000-7000-8000-000000000002",
+                             self.proc.stdout)
+        with self.subTest("the id is still right once the run ends"):
+            self.assertEqual(self.meta.get("sid"),
+                             "01a0b000-0000-7000-8000-000000000002", self.proc.stdout)
 
 
 if __name__ == "__main__":

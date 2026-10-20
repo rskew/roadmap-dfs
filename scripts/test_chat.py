@@ -4,7 +4,6 @@ permissions. The agent is a stub that records how it was called and answers in c
 
 Run:  python3 roadmap-dfs/scripts/test_chat.py
 """
-import glob
 import json
 import os
 import shutil
@@ -19,11 +18,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 FIXTURES = HERE / "fixtures" / "kiro"          # output a real kiro-cli 2.27.1 wrote
-REAL_KIRO = next(iter(sorted(glob.glob("/nix/store/*-kiro-cli-unwrapped-*/bin/kiro-cli-chat"))[::-1]), None)    # kiro-cli itself, if this machine has it
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
-from test_kiro_model import FakeKiroModel   # noqa: E402
 
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
@@ -126,7 +123,7 @@ PY
 KIRO_STUB = r"""#!/usr/bin/env bash
 # a kiro-cli that records its arguments, keeps a session under ~/.kiro/sessions and prints
 # `--output-format stream-json` events, all in the shapes a real kiro-cli 2.27.1 wrote
-# (fixtures/kiro, and test_kiro_real.py runs the real one). Without `--output-format` it is the
+# (fixtures/kiro; test_kiro_chat and test_kiro run the real one). Without `--output-format` it is the
 # interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
 case "$*" in *--output-format*) ;; *) exit 0 ;; esac
@@ -144,6 +141,16 @@ for a in "$@"; do
 done
 echo "prompt: $prompt" >> "$CHAT_STUB_LOG"
 [ -n "$sid" ] || sid="sess_$(python3 -c 'import uuid; print(uuid.uuid4())')"
+if [ -n "${CHAT_STUB_NO_MODEL:-}" ]; then
+  # kiro names its session and keeps the message in it, then cannot reach its model
+  # (fixtures/kiro/model-unavailable.stream.jsonl)
+  d="$HOME/.kiro/sessions/bucket-1/$sid"; mkdir -p "$d"
+  echo '{"schemaVersion": "1.0.0", "id": "'"$sid"'"}' > "$d/session.json"
+  python3 -c 'import json, sys; print(json.dumps({"id": "u1", "timestamp": "2026-10-16T15:04:17.292Z", "payload": {"type": "user", "content": sys.argv[1], "documents": [], "images": []}}))' "$prompt" >> "$d/messages.jsonl"
+  echo '{"type":"runStarted","data":{"payloadSchema":"acp","acpProtocolVersion":1,"engine":"v3"}}'
+  echo '{"type":"runError","data":{"sessionId":"'"$sid"'","stage":"prompt","message":"Kiro could not load the available models. Please try again. (code -32000): {\"errorType\":\"ModelRegistryUnavailableError\",\"retryErrorType\":\"SERVER_ERROR\"}"}}'
+  exit 0
+fi
 python3 - "$sid" "$prompt" "${CHAT_STUB_SAY:-Fine.}" <<'PY'
 import json, os, sys, uuid
 sid, prompt, say = sys.argv[1:4]
@@ -627,40 +634,12 @@ class Chat(unittest.TestCase):
         self.assertEqual(read({"id": "m", "payload": {"type": "user", "content": "n", "_meta": {"kiro": {"syntheticUserMessageReason": "r"}}}}), [])
         self.assertEqual(read({"id": "m", "payload": {"type": "user", "content": "h", "source": "hook"}}), [])
 
-    @unittest.skipUnless(REAL_KIRO, "no kiro-cli here")
-    def test_a_real_kiro_answers_the_page_and_its_session_is_read_back_and_resumed(self):
-        # The real kiro-cli, its model a stand-in server (test_kiro_model): the events and session
-        # files are kiro's own, the answers are not a model's.
+    def test_a_kiro_that_cannot_reach_its_model_says_so_and_keeps_the_session_it_made(self):
         self.use_kiro()
-        os.environ.update(KIRO_CMD="kiro-cli", PATH=os.path.dirname(REAL_KIRO) + os.pathsep + os.environ["PATH"])
-        with FakeKiroModel(say="It has one file.") as model:
-            os.environ.update(model.env())
-            try:
-                self.chats.send("W1", "please use a tool to list the folder")
-                st = self.settle("W1", timeout=90)
-                self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
-                                 [("you", "please use a tool to list the folder"), ("agent", "Let me look."), ("agent", "It has one file.")])
-                sid = json.loads(self.chats.path("W1").read_text())["sid"]
-                self.assertTrue(sid.startswith("sess_"))
-                self.chats.send("W1", "-and then?")
-                st = self.settle("W1", timeout=90)
-                self.assertEqual([(m["role"], m["text"]) for m in st["messages"]][3:], [("you", "-and then?"), ("agent", "It has one file.")])
-                self.assertEqual(json.loads(self.chats.path("W1").read_text())["sid"], sid, "the second turn resumed the first's session")
-            finally:
-                for k in model.env():
-                    os.environ.pop(k, None)
-
-    @unittest.skipUnless(REAL_KIRO, "no kiro-cli here")
-    def test_a_real_kiro_that_cannot_reach_its_model_says_so_and_keeps_the_session_it_made(self):
-        self.use_kiro()
-        os.environ.update(KIRO_CMD="kiro-cli", PATH=os.path.dirname(REAL_KIRO) + os.pathsep + os.environ["PATH"],
-                          KIRO_API_KEY="any", KIRO_KAS_ENDPOINT="http://127.0.0.1:1", KIRO_KAS_CONTROL_PLANE_ENDPOINT="http://127.0.0.1:1")
-        try:
-            self.chats.send("W1", "hi")
-            st = self.settle("W1", timeout=90)
-        finally:
-            for k in ("KIRO_API_KEY", "KIRO_KAS_ENDPOINT", "KIRO_KAS_CONTROL_PLANE_ENDPOINT"):
-                os.environ.pop(k, None)
+        os.environ["CHAT_STUB_NO_MODEL"] = "1"
+        self.addCleanup(os.environ.pop, "CHAT_STUB_NO_MODEL", None)
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
         self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
         self.assertIn("could not load the available models", st["messages"][1]["text"])
         self.assertTrue(self.chats.sid("W1").startswith("sess_"), "kiro named its session before it failed: the message is in it, so it is kept")
