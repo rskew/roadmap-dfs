@@ -153,6 +153,29 @@ while True:
 '''
 
 
+# run.sh's line before `nix run` starts claude, then 3s of nix's progress-line clears in which the terminal is not yet read;
+# what was typed meanwhile is lost, and once drawn the agent takes a message and submits it on Enter
+STARTING = r'''
+import os, sys, time, tty
+sys.stdout.write("dfs_run: opening an interactive claude session for the project\r\n"); sys.stdout.flush()
+for gap in (0.2, 1.2, 1.6):         # nix run clearing its progress line while it loads claude
+    time.sleep(gap)
+    sys.stdout.write("\r\x1b[K"); sys.stdout.flush()
+tty.setraw(0)
+sys.stdout.write("\x1b[?2004hready\r\n"); sys.stdout.flush()
+buf = ""
+while True:
+    d = os.read(0, 4096).decode()
+    for ch in d.replace("\x1b[200~", "").replace("\x1b[201~", ""):
+        if ch == "\r":
+            if buf:
+                open(os.environ["LOG"], "a").write(buf + "\n")
+                buf = ""
+        else:
+            buf += ch
+'''
+
+
 class Resubmitting(unittest.TestCase):
     def setUp(self):
         self.log = Path(tempfile.mkdtemp()) / "log"
@@ -169,6 +192,12 @@ class Resubmitting(unittest.TestCase):
         self.assertTrue(until(lambda: self.lines() == ["Continue"], 15), self.lines())
         relay.send("again")
         self.assertTrue(until(lambda: self.lines() == ["Continue", "again"], 8), self.lines())
+
+    def test_a_first_message_waits_for_the_agent_run_sh_says_it_is_starting_to_draw_itself(self):
+        relay = ptyrelay.Relay(agent="claude").start([sys.executable, "-c", STARTING], env=self.env)
+        self.addCleanup(relay.close)
+        relay.send("Continue")
+        self.assertTrue(until(lambda: self.lines() == ["Continue"], 15), self.lines())
 
     def test_a_message_that_was_submitted_gets_no_second_enter(self):
         relay = ptyrelay.Relay(agent="claude").start(["bash", "-c", AGENT], env=self.env)
