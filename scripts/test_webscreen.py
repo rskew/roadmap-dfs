@@ -40,7 +40,7 @@ def a_screen(items):
     ui.events = collections.deque(maxlen=50)
     ui.agent = "claude"
     ui.walk_on, ui.walk_budget, ui.walk_spent, ui.walk_until = False, 20, 0, 0.0
-    ui.walk_dir, ui.walk_started, ui.walk_content, ui.walk_note = None, 0.0, set(), ""
+    ui.walk_note = ""
     ui.walk_next, ui.walk_pending = None, False
     ui.chains = []
     ui.data = dict(next_item=items[0]["id"] if items else None)
@@ -199,6 +199,11 @@ class OverHttp(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/walk/stop", {})[0], 200)
         self.assertFalse(self.ui.walk_on)
         self.assertEqual(self.call("GET", "/api/walk")[1]["note"], "stopped by hand")
+
+    def test_the_page_starts_the_screens_walk_with_parallel_chains(self):
+        self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=6, parallel=2))[0], 200)
+        self.assertEqual(self.ui.walk_parallel, 2)
+        self.assertEqual(self.call("GET", "/api/walk")[1]["parallel"], 2)
 
     def test_what_the_screen_does_shows_on_the_page(self):
         self.ui.walk_begin(6)                                   # the `w` key's path

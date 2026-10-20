@@ -1224,6 +1224,19 @@ class Web(unittest.TestCase):
         self.assertEqual((status, snap["on"], snap["budget"]), (200, True, 6))
         self.assertEqual(self.fake.started_chains, [("W1", "6")])
 
+    def test_the_walk_starts_with_the_chains_at_once_and_lists_them(self):
+        status, snap, _ = self.call("POST", "/api/walk/start", dict(budget=6, parallel=2))
+        self.assertEqual((status, snap["parallel"]), (200, 2))
+        self.assertEqual(self.fake.started_chains, [("W1", "3"), ("W2", "3")])
+        self.fake.run_dirs = [test_walker.run("d1", "W1", live=True), test_walker.run("d2", "W2", live=True)]
+        snap = self.call("GET", "/api/walk")[1]
+        self.assertEqual([(c["item"], c["live"]) for c in snap["chains"]], [("W1", True), ("W2", True)])
+
+    def test_a_number_of_chains_that_is_not_a_walk_is_refused(self):
+        for bad in (0, "two", None, -1, 17):
+            self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=6, parallel=bad))[0], 409, bad)
+        self.assertFalse(self.fake.walk_on)
+
     def test_a_budget_that_is_not_a_number_of_sessions_is_refused(self):
         for bad in (0, "many", None, -1):
             self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=bad))[0], 409)

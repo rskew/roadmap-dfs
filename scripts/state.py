@@ -240,6 +240,52 @@ def next_item(items):
                  if it["reachable"] and it["status"] == "open" and not it.get("draft")), None)
 
 
+def held_by_parent(by, it, busy=()):
+    """Whether `it` waits for an ancestor in `by` (id -> row): one that is open and not a
+    draft, or one in `busy`, a chain still on it (see `next_items`)."""
+    up = by.get(it.get("parent"))
+    while up is not None:
+        if up["id"] in busy or (up["status"] == "open" and not up.get("draft")):
+            return True
+        up = by.get(up.get("parent"))
+    return False
+
+
+def next_items(walked, n, busy=(), first=None):
+    """Up to `n` tasks for a walk running chains side by side, in the order it takes them:
+    `first` (a task id or a list of them: the walk's pin, the tasks its chains left on a
+    cap, its continuation `continue_last`) and then the order's answers, skipping every
+    task in `busy` (one a chain is already on).
+
+    ⚠️ **A CHILD WAITS FOR ITS PARENT.** One chain at a time never works a child before
+    its parent is done: it keeps on the parent while it can (`continue_last`), and a
+    parent's raise holds the child too. Several at once would take the child beside its
+    unfinished parent, so a task under an open ancestor is passed over here; a draft
+    ancestor holds nothing, as it holds no fence. ⚠️ A parent in `busy` holds its subtree
+    even when it is done: its status turns `done` at the review's `ok`, but its chain is
+    still merging it, and a child cut before that merge lands starts from a default
+    branch without the parent's work (and runs beside an open parent should the merge
+    fail and reopen it). Separate branches share nothing and are what runs together.
+    With `n` 1, nothing busy and no `first` this is `[next_item]`."""
+    by = {i["id"]: i for i in walked}
+
+    def held(it):
+        return held_by_parent(by, it, busy)
+
+    lead = [first] if isinstance(first, str) else list(first or ())
+    out = []
+    for f in lead:
+        if f is not None and f not in busy and f not in out:
+            out.append(f)
+    for it in walked:
+        if len(out) >= n:
+            break
+        if (it["reachable"] and it["status"] == "open" and not it.get("draft")
+                and it["id"] not in busy and it["id"] not in out and not held(it)):
+            out.append(it["id"])
+    return out[:n]
+
+
 def metrics(trees):
     """The counts the system is judged by, over every task. On the screen, not in a
     script somebody remembers to run."""
@@ -294,12 +340,9 @@ def full():
             entries.append(dict(id=nd["id"], type="NODE", target=t["task"],
                                 disp=nd["status"], body="\n".join(nd["raw"][1:])))
     walked = walk([dict(i, **state_for(i["id"])) for i in its])
-    moved = set()
-    for t in trees:
-        moved |= content(t)
     return dict(items=walked, next_item=continue_last(walked), open_raises=raises,
                 open_proposals=[], entries=entries, metrics=metrics(trees),
-                content=sorted(moved))
+                contents={t["task"]: sorted(content(t)) for t in trees})
 
 
 def continue_last(walked):
@@ -409,10 +452,12 @@ def fingerprint(outside_dfs=False, exclude_runs=True):
     return h.hexdigest()
 
 
-def latest_session():
-    """(task, entry) of the most recent session over every task, or (None, None)."""
+def latest_session(skip=()):
+    """(task, entry) of the most recent session over every task but `skip`, or (None, None)."""
     best = (None, None)
     for task in task_ids():
+        if task in skip:
+            continue
         s = dfs_tree.last_session(dfs_tree.load(task))
         if s and (best[1] is None or s["ts"] > best[1]["ts"]):
             best = (task, s)
@@ -421,10 +466,19 @@ def latest_session():
 
 def foreign_dirt(task):
     """(paths, owner): the uncommitted paths outside `.dfs/` that are NOT `task`'s
-    own unfinished node, and whose they are. Agents work serially, so uncommitted
-    work belongs to whichever task had the last session — and to nobody's node when
-    that was another task, or when no session has run at all (the dirt is the
+    own unfinished node, and whose they are. In a checkout that tasks take turns in,
+    uncommitted work belongs to whichever task had the last session — and to nobody's
+    node when that was another task, or when no session has run at all (the dirt is the
     author's). Empty when the tree is clean or the dirt is this task's.
+
+    ⚠️ IN `task`'S OWN WORKTREE only its own chain works, so only its own sessions say
+    whose the dirt is. Parallel walks run other tasks' chains at the same time, and with a
+    gitignored roadmap every worktree reads the same `items`, so their sessions were seen
+    there too: the dirt of a chain's own capped session was briefed as "NOT this task's:
+    the last session was" another's. Likewise in the checkout itself, the tasks that have
+    a worktree are worked there, so their sessions never touch this tree and are left out:
+    off `main` an in-place task's own capped session ran beside a worktree chain, and the
+    dirt was briefed as the worktree task's.
 
     ⚠️ A chain STARTS over foreign dirt rather than refusing: its first session
     commits or stashes it before touching its node (`brief`), and the runner makes
@@ -432,7 +486,11 @@ def foreign_dirt(task):
     not change code, and once one of those had run on this task the dirt would read
     as this task's own."""
     dirty = dirty_paths()
-    owner, _ = latest_session()
+    if dfs_paths.in_worktree_of(task):
+        owner = task if dfs_tree.last_session(dfs_tree.load(task)) else None
+    else:
+        owner, _ = latest_session(skip=[t for t in task_ids()
+                                        if t != task and dfs_paths.worktree(t)])
     if not dirty or owner == task:
         return [], owner
     return dirty, owner

@@ -340,6 +340,28 @@ class Chain(unittest.TestCase):
         self.assertNotIn("--warn", gist)
         self.assertEqual(dfs_branch._gist("a\nb"), "a b")
 
+    def test_a_merge_waits_for_another_chains_merge_to_finish(self):
+        # Two chains of a parallel walk finishing at once: the second merge waits on the
+        # lock the first holds, and goes through after it, rather than failing on git's
+        # index.lock and being raised as the author's edits in the way.
+        import fcntl
+        import time
+        import branch as dfs_branch
+        self.run_chain("work,confirm", cap=2)
+        with open(self.root / ".git" / dfs_branch.LOCK_NAME, "a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            p = subprocess.Popen([sys.executable, str(HERE / "branch.py"), "merge", "W1"],
+                                 cwd=self.root, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 stdin=subprocess.DEVNULL, text=True)
+            time.sleep(1.5)
+            self.assertIsNone(p.poll(), "the merge ran while another held the lock")
+            self.assertTrue(self.wt.exists())
+            fcntl.flock(held, fcntl.LOCK_UN)
+        out, err = p.communicate(timeout=60)
+        self.assertEqual(p.returncode, 0, err)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("merge the item's branch dfs/W1", self.git("log", "-1", "--format=%s"))
+
     def test_a_merge_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
         self.run_chain("work,confirm", cap=2)
         self.git("checkout", "-q", "-b", "elsewhere")
@@ -1209,16 +1231,65 @@ class Chain(unittest.TestCase):
         self.assertIn("dfs: set aside", stashes)
 
     def test_foreign_dirt_goes_to_a_work_session_before_a_due_critic(self):
-        # A critic may not change code, and after it the dirt would read as W1's.
+        # A critic may not change code, and after it the dirt would read as W1's. In place,
+        # where tasks take turns in the one checkout: off main, no worktree is cut.
+        self.git("checkout", "-q", "-b", "elsewhere")
         rc, meta, out = self.run_chain("work,work,work,work,work", cap=5)
         self.assertEqual(meta.get("stop"), "cap", out)
         # The last session anywhere was another task's, so the edit is not W1's. Its
         # ts is written out: W1's are bumped past the clock to stay unique.
-        (self.wt / ".dfs" / "items" / "W2.md").write_text(
+        (self.root / ".dfs" / "items" / "W2.md").write_text(
             TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
-        (self.wt / "app.txt").write_text("W2's half-done edit\n")
+        (self.root / "app.txt").write_text("W2's half-done edit\n")
         rc, meta, out = self.run_chain("work,work,work,work,work,stash,ok", cap=2)
         self.assertEqual(self.kinds_run(), ["work"] * 6 + ["critic"], out)
+
+    def test_another_tasks_later_session_does_not_make_a_worktrees_dirt_foreign(self):
+        # Parallel chains each work in a worktree of their own, and with the roadmap
+        # gitignored they share `items`, so W2's session is seen from W1's worktree. W1's
+        # own capped session left the edit, and it is still W1's.
+        self.run_chain("work", cap=1)
+        (self.wt / ".dfs" / "items" / "W2.md").write_text(
+            TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
+        (self.wt / "app.txt").write_text("W1's half-done edit\n")
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertNotIn("are not W1's", out)
+        r = subprocess.run([sys.executable, str(HERE / "state.py"), "--foreign-dirt", "W1"],
+                           cwd=self.wt, capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "", r.stderr)
+
+    def test_a_worktree_tasks_later_session_does_not_make_an_in_place_tasks_dirt_foreign(self):
+        # Off main, a walk works W1 in place beside W2, which already has a worktree. W2's
+        # sessions are in its worktree, never in this tree, so W1's own capped session
+        # left the edit and it is still W1's.
+        w2 = self.root / ".dfs" / "items" / "W2.md"
+        w2.write_text(TASK.replace("W1", "W2"))
+        self.git("add", "-f", ".dfs/items/W2.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W2")
+        subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W2"],
+                       cwd=self.root, capture_output=True, text=True, check=True)
+        self.git("checkout", "-q", "-b", "elsewhere")
+        w1 = self.root / ".dfs" / "items" / "W1.md"
+        w1.write_text(w1.read_text() + "\n- 2000-01-01T00:00:00Z · session · work\n")
+        wt2 = self.root / ".dfs" / "worktrees" / "W2" / ".dfs" / "items" / "W2.md"
+        wt2.write_text(wt2.read_text() + "\n- 2099-01-01T00:00:00Z · session · work\n")
+        (self.root / "app.txt").write_text("W1's half-done edit\n")
+        r = subprocess.run([sys.executable, str(HERE / "state.py"), "--foreign-dirt", "W1"],
+                           cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "", r.stderr)
+
+    def test_dirt_left_by_another_task_is_foreign_even_with_the_item_branch_checked_out_in_place(self):
+        # The author has dfs/W1 checked out in the main checkout: that is not W1's own
+        # worktree, so an off-main walk's other tasks leave dirt there that is not W1's.
+        self.git("checkout", "-q", "-b", "dfs/W1")
+        w1 = self.root / ".dfs" / "items" / "W1.md"
+        w1.write_text(w1.read_text() + "\n- 2000-01-01T00:00:00Z · session · work\n")
+        (self.root / ".dfs" / "items" / "W2.md").write_text(
+            TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
+        (self.root / "app.txt").write_text("W2's half-done edit\n")
+        r = subprocess.run([sys.executable, str(HERE / "state.py"), "--foreign-dirt", "W1"],
+                           cwd=self.root, capture_output=True, text=True)
+        self.assertIn("app.txt", r.stdout, r.stderr)
 
     def test_the_chain_s_directory_is_not_handed_to_its_agent(self):
         # ⚠️ 2026-09-27: a session working on this tooling ran a test that started its

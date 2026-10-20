@@ -26,10 +26,14 @@ def run(d, item, live=False, stop="", run_no="1", cap="5", resets=""):
 class FakeWalker(dfs_walk.HeadlessWalk):
     """The world, in memory: items, chains, and what was asked of them."""
 
+    def walk_cuts(self, item):
+        return True     # a worktree each; the real answer is about the checkout the tests run in
+
     def __init__(self):
         super().__init__()
-        self.world_items = [dict(id="W1", goal="one", status="open"), dict(id="W2", goal="two", status="open"),
-                            dict(id="W3", goal="three", status="done")]
+        self.world_items = [dict(id="W1", goal="one", status="open", reachable=True),
+                            dict(id="W2", goal="two", status="open", reachable=True),
+                            dict(id="W3", goal="three", status="done", reachable=True)]
         self.next_item = "W1"
         self.world_content = set()
         self.run_dirs = []
@@ -58,7 +62,7 @@ class FakeWalker(dfs_walk.HeadlessWalk):
 
     def reload(self):
         self.data = dict(items=self.world_items, next_item=self.next_item,
-                         content=sorted(self.world_content))
+                         contents={"W1": sorted(self.world_content)})
 
     def refresh_chains(self):
         self.chains = list(self.run_dirs)
@@ -82,13 +86,22 @@ class Interface(unittest.TestCase):
         self.assertEqual(self.w.started_chains, [("W1", "7")])
         self.assertTrue(self.w.walk_on)
 
+    def test_a_walk_of_two_chains_at_a_time_starts_two_tasks_that_share_the_budget(self):
+        self.w.start(7, 2)
+        self.assertEqual(self.w.started_chains, [("W1", "3"), ("W2", "4")])
+        self.assertEqual(self.w.snapshot()["parallel"], 2)
+        self.w.stop()
+        self.assertEqual(self.w.walk_chains, [])
+
     def test_a_walk_with_nothing_workable_pends_and_takes_the_task_that_appears(self):
         self.w.next_item = None
+        self.w.world_items = [dict(id="W1", goal="one", status="done", reachable=True)]
         self.w.start(4)
         self.assertTrue(self.w.walk_on)
         self.assertTrue(self.w.snapshot()["pending"])
         self.assertEqual(self.w.started_chains, [])
         self.w.next_item = "W2"             # a task is created; the loop re-reads the trees
+        self.w.world_items.append(dict(id="W2", goal="two", status="open", reachable=True))
         self.w.reload()
         self.w.walk_tick()
         self.assertEqual(self.w.started_chains, [("W2", "4")])
@@ -135,7 +148,6 @@ class Interface(unittest.TestCase):
         self.w.start(10)
         self.w.run_dirs = [run("d1", "W1", live=True, run_no="4")]
         self.w.refresh_chains()
-        self.w.walk_dir = "d1"
         self.w.stop()
         self.assertFalse(self.w.walk_on)
         self.assertEqual(self.w.walk_note, "stopped by hand")
@@ -152,10 +164,9 @@ class Interface(unittest.TestCase):
         self.w.start(5)
         self.w.run_dirs = [run("d1", "W2", live=True, run_no="2", cap="5")]
         self.w.refresh_chains()
-        self.w.walk_dir = "d1"
         snap = self.w.snapshot()
         self.assertEqual((snap["on"], snap["budget"], snap["used"]), (True, 5, 2))
-        self.assertEqual(snap["chain"]["item"], "W2")
+        self.assertEqual(snap["chains"][0]["item"], "W2")
         self.assertEqual([c["id"] for c in snap["candidates"]], ["W1", "W2"])
         self.assertEqual(snap["auto"], "W1")
         self.assertTrue(snap["events"])

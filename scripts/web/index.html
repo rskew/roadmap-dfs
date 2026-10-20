@@ -636,23 +636,26 @@ function chrome(r) {
 function walkHtml() {
   const w = S.walk;
   if (!w || !w.enabled) return "";
-  const chain = w.chain && w.chain.live ? w.chain : null;
+  const mine = (w.chains || []).filter(c => c.live);
+  const chain = mine[0];
+  const names = mine.map(c => esc(c.item)).join(", ");
+  const at = w.parallel > 1 ? `, ${w.parallel} at a time` : "";
   const state = w.on
     ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : w.pending ? `<span class="hold">Waiting for a task</span>` : `<span class="on">Walking</span>`)
     : "Walk is off";
   const line2 = w.on
-    ? `${w.used} of ${w.budget} sessions used${chain ? `. Now ${esc(chain.item)}, ${esc(chain.progress)}.` : w.pending ? ". Nothing is workable; it takes the next task that appears." : "."}`
+    ? `${w.used} of ${w.budget} sessions used${at}${mine.length > 1 ? `. Now ${names}.` : chain ? `. Now ${esc(chain.item)}, ${esc(chain.progress)}.` : w.pending ? ". Nothing is workable; it takes the next task that appears." : "."}`
     : (w.note ? `Stopped: ${esc(w.note)}.` : `A walk works the tasks depth-first, under a budget of sessions.`);
   const auto = w.auto ? `Automatic: ${esc(w.auto)}` : "Automatic: nothing is workable";
   const options = [`<option value="">${auto}</option>`].concat(w.candidates.map(c =>
     `<option value="${esc(c.id)}" ${w.pinned === c.id ? "selected" : ""}>${esc(c.id)}  ${esc(c.goal)}</option>`)).join("");
   const agents = (w.agents || []).map(a => `<option value="${esc(a)}" ${w.agent === a ? "selected" : ""}>${esc(a)}</option>`).join("");
-  const others = w.live.filter(c => !(chain && c.item === chain.item));
-  const chains = (chain ? [{ item: chain.item, progress: chain.progress }] : []).concat(others).map(c =>
+  const others = w.live.filter(c => !mine.some(m => m.item === c.item));
+  const chains = mine.map(c => ({ item: c.item, progress: c.progress })).concat(others).map(c =>
     `<div class="chain"><span><b>${esc(c.item)}</b> ${esc(c.progress)}</span><button class="btn danger" data-act="chainstop" data-item="${esc(c.item)}">Stop chain</button></div>`).join("");
   const events = w.events.length ? `<details><summary class="cap">Activity</summary><ul class="ev">${w.events.slice(0, 6).map(e =>
     `<li><time>${esc(e.age)}</time><span>${esc(e.text)}</span></li>`).join("")}</ul></details>` : "";
-  const brief = w.on ? `${w.used}/${w.budget} sessions${chain ? ", " + esc(chain.item) : ""}` : `next ${esc(w.pinned || w.auto || "none")} · ${esc(w.agent)}`;
+  const brief = w.on ? `${w.used}/${w.budget} sessions${names ? ", " + names : ""}` : `next ${esc(w.pinned || w.auto || "none")} · ${esc(w.agent)}`;
   const open = S.walkOpen === true;
   return `<details class="walk" id="walkbox" ${open ? "open" : ""}><summary><span class="cap">Walk</span><span class="state">${state}</span><span class="brief">${brief}</span><span class="chev" aria-hidden="true"></span></summary>
     <p class="line2">${line2}</p>
@@ -671,13 +674,15 @@ async function setNext(item) {
 }
 function walkStartForm() {
   form(`<h3>Start the walk?</h3>
-    <p class="muted" style="margin:0">It starts agent sessions on this machine, one chain at a time, depth-first, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>
-    <div><label for="bud">Budget, in sessions</label><input type="number" id="bud" name="budget" min="1" max="500" value="${esc(S.walk.budget)}" required></div>${buttons("Start walk")}`,
-    async fd => { S.walk = await api("/api/walk/start", { budget: parseInt(fd.get("budget"), 10) }); toast("Walking."); drawTasks(); });
+    <p class="muted" style="margin:0">It starts agent sessions on this machine, depth-first, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>
+    <div><label for="bud">Budget, in sessions</label><input type="number" id="bud" name="budget" min="1" max="500" value="${esc(S.walk.budget)}" required></div>
+    <div><label for="par">Chains at once</label><input type="number" id="par" name="parallel" min="1" max="16" value="${esc(S.walk.parallel || 1)}" required>
+      <p class="muted" style="margin:4px 0 0">Separate branches run together and share the budget; a task under another waits until its parent is done. 1 works one chain at a time.</p></div>${buttons("Start walk")}`,
+    async fd => { S.walk = await api("/api/walk/start", { budget: parseInt(fd.get("budget"), 10), parallel: parseInt(fd.get("parallel"), 10) }); toast("Walking."); drawTasks(); });
 }
 function chainStopForm(item) {
   form(`<h3>Stop ${esc(item)}'s chain?</h3>
-    <p class="muted" style="margin:0">It stops after the run it is in. The next session picks up the node's uncommitted work.</p>${buttons("Stop chain", true)}`,
+    <p class="muted" style="margin:0">It stops after the run it is in, and if a walk is running it turns off too, so every other chain of the walk ends after its run. The next session picks up the node's uncommitted work.</p>${buttons("Stop chain", true)}`,
     async () => { S.walk = await api("/api/chain/stop", { item }); toast("Told it to stop."); drawTasks(); });
 }
 

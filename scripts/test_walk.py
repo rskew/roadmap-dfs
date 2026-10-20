@@ -26,6 +26,13 @@ TUI = importlib.util.module_from_spec(TUI_SPEC)
 TUI_SPEC.loader.exec_module(TUI)
 
 
+def rec(**kw):
+    """A chain the walk started and has not yet judged, as `walk_chains` holds it."""
+    row = dict(dir="/runs/mine", item="W7", started=0.0, content=set(), pin=False, cap=20)
+    row.update(kw)
+    return row
+
+
 class Deciding(unittest.TestCase):
     """`walk_decide(stop, moved, next_item)` — the whole policy, as a value."""
 
@@ -112,7 +119,7 @@ class Placing(unittest.TestCase):
         ui.walk_on = True
         ui.walk_budget = 100
         ui.walk_spent = 3
-        ui.walk_dir = "/runs/walk"
+        ui.walk_chains = [rec(dir="/runs/walk")]
         ui.chains = []
         ui.__dict__.update(kw)
         return ui
@@ -149,8 +156,8 @@ class Placing(unittest.TestCase):
         self.assertEqual(ui.chain_progress(c), "run 1/97")
 
 
-class Ticking(unittest.TestCase):
-    """The tick around that policy: what it waits for, and whose chain it judges."""
+class Ticks:
+    """The fake screen the tick tests drive: its world is a few attributes and stubs."""
 
     def ui(self, **kw):
         ui = object.__new__(TUI.UI)
@@ -159,12 +166,11 @@ class Ticking(unittest.TestCase):
         ui.walk_budget = 20
         ui.walk_spent = 0
         ui.walk_until = 0.0
-        ui.walk_dir = None
-        ui.walk_started = 0.0
-        ui.walk_content = set()
+        ui.walk_parallel = 1
+        ui.walk_chains = []
+        ui.walk_carry = []
         ui.walk_note = ""
         ui.walk_next = None
-        ui.walk_chain_pin = None
         ui.walk_pending = False
         ui.chains = []
         # The seam the tick re-asks through. Stubbed to a no-op so a test says which
@@ -182,7 +188,7 @@ class Ticking(unittest.TestCase):
         def reload():
             ui.reloaded += 1
         ui.reload = reload
-        ui.data = {"content": ["a", "b", "new"], "next_item": "W7"}
+        ui.data = {"contents": {"W7": ["a", "b", "new"]}, "next_item": "W7"}
         # A raise is a write to a real task file; the tests record it instead.
         ui.raised = []
         real = TUI.dfs_tree.append_log
@@ -192,8 +198,14 @@ class Ticking(unittest.TestCase):
         ui.started = []
         ui.start_chain = lambda item, cap: (ui.started.append((item, cap))
                                             or "/runs/new")
+        # Whether a task gets a worktree: yes, unless a test says otherwise (the real answer
+        # is about the checkout the tests run in).
+        ui.walk_cuts = lambda item: True
         ui.__dict__.update(kw)
+        ui.data.setdefault("items", [])
         return ui
+
+    rec = staticmethod(rec)
 
     def live(self, ui, rows):
         ui.chains = rows
@@ -205,6 +217,20 @@ class Ticking(unittest.TestCase):
         row.update(kw)
         return row
 
+    def lowering(self):
+        lowered = []
+        real = TUI.dfs_runs.lower_cap
+        TUI.dfs_runs.lower_cap = lambda d, cap: lowered.append((d, cap))
+        self.addCleanup(setattr, TUI.dfs_runs, "lower_cap", real)
+        return lowered
+
+    def items(self, ui, **status):
+        ui.data["items"] = [dict(id=k, status=v) for k, v in status.items()]
+
+
+class Ticking(Ticks, unittest.TestCase):
+    """The tick around that policy: what it waits for, and whose chain it judges."""
+
     def test_it_waits_while_ANY_chain_is_live(self):
         # ⚠️ Not only its own. Two agents appending to §3 at once is how this
         # roadmap's ids collided in the first place.
@@ -214,7 +240,7 @@ class Ticking(unittest.TestCase):
         self.assertEqual(ui.started, [], "started work beside a live chain")
 
     def test_with_nothing_workable_it_waits_and_stays_on(self):
-        ui = self.ui(data={"content": ["a"], "next_item": None})
+        ui = self.ui(data={"contents": {"W7": ["a"]}, "next_item": None})
         events = []
         ui.event = lambda kind, text: events.append(text) or text
         self.live(ui, [])
@@ -226,20 +252,20 @@ class Ticking(unittest.TestCase):
         self.assertEqual(len(events), 1, "the wait is said once, not on every tick")
 
     def test_a_chain_that_leaves_nothing_workable_ends_in_a_wait_not_a_stop(self):
-        ui = self.ui(walk_dir="/runs/mine", data={"content": ["a", "b", "new"],
-                                                    "next_item": None})
+        ui = self.ui(data={"contents": {"W7": ["a", "b", "new"]},
+                                                    "next_item": None}, walk_chains=[self.rec(dir="/runs/mine")])
         self.live(ui, [self.chain()])
         ui.walk_tick()
         self.assertTrue(ui.walk_on)
         self.assertTrue(ui.walk_pending)
-        self.assertIsNone(ui.walk_dir)
+        self.assertEqual(ui.walk_chains, [])
 
     def test_a_task_that_appears_while_it_waits_is_taken(self):
-        ui = self.ui(data={"content": ["a"], "next_item": None})
+        ui = self.ui(data={"contents": {"W7": ["a"]}, "next_item": None})
         ui.event = lambda kind, text: text
         self.live(ui, [])
         ui.walk_tick()
-        ui.data = {"content": ["a", "b"], "next_item": "W9"}
+        ui.data = {"contents": {"W7": ["a", "b"]}, "next_item": "W9", "items": []}
         ui.walk_tick()
         self.assertFalse(ui.walk_pending)
         self.assertEqual(ui.started, [("W9", "20")])
@@ -250,9 +276,9 @@ class Ticking(unittest.TestCase):
         ui.walk_tick()
         self.assertEqual(ui.started, [("W7", "20")],
                          "the chain's cap is the walk's remaining budget")
-        self.assertEqual(ui.walk_dir, "/runs/new")
-        self.assertEqual(ui.walk_content, {"a", "b", "new"},
-                         "records what the trees say, to compare against")
+        self.assertEqual([(c["dir"], c["item"], c["content"]) for c in ui.walk_chains],
+                         [("/runs/new", "W7", {"a", "b", "new"})],
+                         "records what the task's tree says, to compare against")
 
     def test_a_chain_that_died_before_its_meta_says_why(self):
         # run.sh exits 2 when `agent.py --rev` cannot fetch nixpkgs, before any
@@ -265,27 +291,28 @@ class Ticking(unittest.TestCase):
                  "': HTTP error 404 \u2014 404: Not Found")
         Path(d, "console.log").write_text(
             "$ run.sh W7\n\ndfs_agent: " + cause + "\ndfs_agent: set AGENT_NIXPKGS_REV=<rev>\n")
-        ui = self.ui(walk_dir=d, walk_started=time.time() - 60)
+        ui = self.ui(walk_chains=[self.rec(dir=d, started=time.time() - 60)])
         self.live(ui, [])
         ui.walk_tick()
         self.assertFalse(ui.walk_on)
         self.assertIn(cause, ui.walk_note)
         self.assertIn(cause, ui.msg)
         # No console, or none of ours: the old reason, unchanged.
-        ui = self.ui(walk_dir=d + "/nope", walk_started=time.time() - 60)
+        ui = self.ui(walk_chains=[self.rec(dir=d + "/nope", started=time.time() - 60)])
         self.live(ui, [])
         ui.walk_tick()
         self.assertEqual(ui.walk_note, "the chain it started is no longer on the box")
 
     def test_it_holds_without_starting_anything(self):
-        ui = self.ui(walk_until=time.time() + 600, walk_dir="/runs/mine")
+        ui = self.ui(walk_until=time.time() + 600,
+                     walk_chains=[self.rec(dir="/runs/mine", started=time.time())])
         self.live(ui, [])
         ui.walk_tick()
         self.assertEqual(ui.started, [])
         self.assertTrue(ui.walk_on, "a hold is not a stop")
 
     def test_a_usage_limit_holds_and_says_when_it_resets(self):
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
         self.live(ui, [self.chain(stop="limit", resets="resets 3pm")])
         ui.walk_tick()
         self.assertEqual(ui.started, [])
@@ -300,7 +327,7 @@ class Ticking(unittest.TestCase):
         stamp = "resets %s %d, %d:%02d%s (UTC)" % (
             time.strftime("%b", later), later.tm_mday,
             later.tm_hour % 12 or 12, later.tm_min, "pm" if later.tm_hour >= 12 else "am")
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
         self.live(ui, [self.chain(stop="limit", resets=stamp)])
         ui.walk_tick()
         want = calendar.timegm(later[:5] + (0,)) + TUI.dfs_limit.RESET_MARGIN
@@ -308,7 +335,7 @@ class Ticking(unittest.TestCase):
         self.assertRegex(ui.msg, r"holding \d+m")
 
     def test_a_finished_chain_leads_to_the_next_one(self):
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
         self.live(ui, [self.chain(stop="done", run="3")])
         ui.data["next_item"] = "W8"
         ui.walk_tick()
@@ -321,10 +348,10 @@ class Ticking(unittest.TestCase):
         # must be asked of §3 as it is NOW: `poll` reloads only after this tick, and
         # a chain whose RAISE and whose exit land inside one second would otherwise
         # be read as having appended nothing — stopping the walk and blaming it.
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
         self.live(ui, [self.chain(stop="blocked", run="1")])
-        ui.data["content"] = ["a", "b"]              # the tick before its last append
-        ui.reload = lambda: ui.data.__setitem__("content", ["a", "b", "raise"])
+        ui.data["contents"] = {"W7": ["a", "b"]}     # the tick before its last append
+        ui.reload = lambda: ui.data.__setitem__("contents", {"W7": ["a", "b", "raise"]})
         ui.data["next_item"] = "W8"
         ui.walk_tick()
         self.assertEqual(ui.started, [("W8", "19")], "stopped on a stale §3")
@@ -332,9 +359,9 @@ class Ticking(unittest.TestCase):
     def test_a_chain_that_moved_nothing_raises_and_the_walk_moves_on(self):
         # A suspect item is put to the author and the walk takes the next branch;
         # it used to turn the whole walk off, holding every other item hostage.
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
         self.live(ui, [self.chain(item="W7", stop="cap", run="2")])
-        ui.data["content"] = ["a", "b"]
+        ui.data["contents"] = {"W7": ["a", "b"]}
         # The raise blocks W7, so the re-read after it names the next branch.
         ui.reload = lambda: (ui.data.__setitem__("next_item", "W8")
                              if ui.raised else None)
@@ -348,9 +375,9 @@ class Ticking(unittest.TestCase):
         # ⚠️ The case that turned the walk off, 2026-09-27: a W13 session did real
         # work and obeyed dfs_check's budget by moving determined nodes' Plans to
         # the archive. The COUNT fell 148 -> 143; the SET gained what the work wrote.
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"plan1", "plan2", "ev1"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"plan1", "plan2", "ev1"})])
         self.live(ui, [self.chain(item="W13", stop="done", run="1")])
-        ui.data.update(content=["ev1", "ev2"], next_item="W14")
+        ui.data.update(contents={"W13": ["ev1", "ev2"]}, next_item="W14")
         ui.walk_tick()
         self.assertEqual(ui.raised, [])
         self.assertEqual(ui.started, [("W14", "19")])
@@ -358,9 +385,9 @@ class Ticking(unittest.TestCase):
     def test_a_raise_that_does_not_block_the_item_stops_the_walk(self):
         # The raise is what moves the walk on, so it is checked: an item still next
         # after it would be started again, which is the loop this guards against.
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"a"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"a"})])
         self.live(ui, [self.chain(item="W7", stop="cap", run="1")])
-        ui.data.update(content=["a"], next_item="W7")
+        ui.data.update(contents={"W7": ["a"]}, next_item="W7")
         ui.walk_tick()
         self.assertEqual(len(ui.raised), 1)
         self.assertFalse(ui.walk_on)
@@ -370,7 +397,7 @@ class Ticking(unittest.TestCase):
     def test_a_chain_that_vanished_stops_the_walk(self):
         # Its directory is the only handle there is; without it nothing can say how
         # it ended, and guessing is the one thing this must not do.
-        ui = self.ui(walk_dir="/runs/gone", walk_started=time.time() - 600)
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/gone", started=time.time() - 600)])
         self.live(ui, [])
         ui.walk_tick()
         self.assertFalse(ui.walk_on)
@@ -384,7 +411,7 @@ class Ticking(unittest.TestCase):
         # about 55 ms — so the walk's own chain is missing from the list the walk is
         # then handed, and the walk turned itself off ONE SECOND after starting its
         # first chain. Every walk. The chain itself ran on, unwatched.
-        ui = self.ui(walk_dir="/runs/mine", walk_started=time.time())
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", started=time.time())])
         self.live(ui, [])
         ui.walk_tick()
         self.assertTrue(ui.walk_on, "a chain that has not spoken yet is not a dead one")
@@ -393,7 +420,7 @@ class Ticking(unittest.TestCase):
     def test_it_judges_the_chain_once_the_list_catches_up(self):
         # The other half: the wait is for the chain to IDENTIFY itself, not a timer
         # that eventually gives up. As soon as re-asking finds it, it is judged.
-        ui = self.ui(walk_dir="/runs/mine", walk_started=time.time(), walk_content={"a", "b"})
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"}, started=time.time())])
         self.live(ui, [])
         ui.refresh_chains = lambda: (setattr(ui, "re_asked", ui.re_asked + 1),
                                      self.live(ui, [self.chain(stop="done", run="1")]))
@@ -406,7 +433,7 @@ class Ticking(unittest.TestCase):
         # While it waits, it must not start anything else — the budget is spent by
         # chains, and a walk that started one and then started another because it
         # could not see the first is the overnight loop this file is written against.
-        ui = self.ui(walk_dir="/runs/mine", walk_started=time.time())
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", started=time.time())])
         self.live(ui, [])
         for _ in range(5):
             ui.walk_tick()
@@ -417,8 +444,7 @@ class Ticking(unittest.TestCase):
         # ⚠️ The mistake this replaced: a per-item cap bounded nothing, because a
         # chain that used one up left the item open, so the walk started another on
         # the same item. Spending has to be counted across chains or not at all.
-        ui = self.ui(walk_budget=4, walk_spent=1, walk_dir="/runs/mine",
-                     walk_content={"a", "b"})
+        ui = self.ui(walk_budget=4, walk_spent=1, walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
         self.live(ui, [self.chain(stop="cap", run="3")])
         ui.walk_tick()
         self.assertEqual(ui.walk_spent, 4)
@@ -435,15 +461,15 @@ class Ticking(unittest.TestCase):
     def test_the_live_chain_counts_against_the_budget_as_it_goes(self):
         # Sessions that have BEGUN are charged: a session that started has already
         # cost its context, whatever it goes on to do.
-        ui = self.ui(walk_spent=5, walk_dir="/runs/mine")
+        ui = self.ui(walk_spent=5, walk_chains=[self.rec(dir="/runs/mine")])
         self.live(ui, [self.chain(live=True, run="4")])
         self.assertEqual(ui.walk_used(), 9)
 
     def test_turning_it_off_forgets_the_chain_and_the_hold(self):
-        ui = self.ui(walk_dir="/runs/mine", walk_until=time.time() + 600)
+        ui = self.ui(walk_until=time.time() + 600, walk_chains=[self.rec(dir="/runs/mine")])
         ui.walk_off("by hand")
         self.assertFalse(ui.walk_on)
-        self.assertIsNone(ui.walk_dir)
+        self.assertEqual(ui.walk_chains, [])
         self.assertEqual(ui.walk_until, 0.0)
 
     def test_turning_it_off_by_hand_ends_its_chain_after_the_run_in_flight(self):
@@ -453,7 +479,7 @@ class Ticking(unittest.TestCase):
         real = TUI.dfs_runs.lower_cap
         TUI.dfs_runs.lower_cap = lambda d, cap: lowered.append((d, cap))
         self.addCleanup(setattr, TUI.dfs_runs, "lower_cap", real)
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         self.live(ui, [self.chain(live=True, run="3")])
         ui.walk_toggle()
         self.assertFalse(ui.walk_on)
@@ -465,17 +491,18 @@ class Ticking(unittest.TestCase):
         real = TUI.dfs_runs.lower_cap
         TUI.dfs_runs.lower_cap = lambda d, cap: lowered.append((d, cap))
         self.addCleanup(setattr, TUI.dfs_runs, "lower_cap", real)
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         self.live(ui, [self.chain(dir="/runs/by-hand", live=True, run="3")])
         ui.walk_toggle()
         self.assertEqual(lowered, [])
 
-    def typed(self, line, budget=12):
+    def typed(self, line, budget=12, parallel=1):
         """`w` on an off walk, with `line` read off the footer: "" is ⏎, None is Esc."""
         ui = self.ui(walk_on=False, walk_budget=budget)
         ui.pane, ui.scroll, ui.answers, ui.labels, ui.begun = "items", 0, [], [], []
         ui.read_line = lambda label: ui.labels.append(label) or line
-        ui.walk_begin = ui.begun.append
+        ui.walk_parallel = parallel
+        ui.walk_begin = lambda budget, par=1: ui.begun.append(budget if par == 1 else (budget, par))
         ui.walk_toggle()
         return ui
 
@@ -483,7 +510,7 @@ class Ticking(unittest.TestCase):
         # W82: ⏎ on a number the screen is showing took nothing and said
         # "walk: not started"; it is the previous walk's budget again.
         ui = self.typed("")
-        self.assertEqual(ui.labels, ["walk: how many sessions? [12], esc cancels:"])
+        self.assertEqual(ui.labels, ["walk: how many sessions, and at once? [12], esc cancels:"])
         self.assertEqual(ui.begun, [12])
 
     def test_esc_at_the_walk_prompt_leaves_the_walk_off(self):
@@ -495,12 +522,42 @@ class Ticking(unittest.TestCase):
         self.assertEqual(self.typed("7").begun, [7])
         self.assertEqual(self.typed("seven").begun, [])
 
+    def test_a_second_number_at_the_walk_prompt_is_the_chains_at_once(self):
+        self.assertEqual(self.typed("20 3").begun, [(20, 3)])
+        self.assertEqual(self.typed("20 1").begun, [20])
+        self.assertEqual(self.typed("20 three").begun, [])
+        self.assertEqual(self.typed("20 3 1").begun, [])
+
+    def test_the_walk_command_s_arguments_are_the_prompts_two_numbers(self):
+        # `:walk 20 3` answers the one prompt with "20" and leaves "3" for it.
+        ui = self.ui(walk_on=False)
+        ui.pane, ui.scroll, ui.labels, ui.begun = "items", 0, [], []
+        ui.answers = ["20", "3"]
+        ui.walk_begin = lambda budget, par=1: ui.begun.append((budget, par))
+        ui.walk_toggle()
+        self.assertEqual(ui.begun, [(20, 3)])
+        self.assertEqual(ui.answers, [])
+        ui.answers = ["20"]
+        ui.walk_toggle()
+        self.assertEqual(ui.begun, [(20, 3), (20, 1)])
+
+    def test_enter_at_the_walk_prompt_walks_the_last_walks_parallel_too(self):
+        ui = self.typed("", parallel=3)
+        self.assertEqual(ui.labels, ["walk: how many sessions, and at once? [12 3], esc cancels:"])
+        self.assertEqual(ui.begun, [(12, 3)])
+
+    def test_the_badge_names_every_live_chain_of_the_walk(self):
+        ui = self.ui(walk_chains=[rec(dir="/runs/a", item="W7"), rec(dir="/runs/b", item="W8")])
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", live=True),
+                       self.chain(dir="/runs/b", item="W8", live=True)])
+        self.assertIn("W7 W8", ui.walk_badge())
+
     def test_why_it_stopped_outlives_the_message_line(self):
         # ⚠️ `walk_off` writes `self.msg`, and `poll` overwrites it with "refreshed"
         # in the same tick — so the reason was gone before the screen was drawn and
         # the author saw a badge disappear. The badge is what carries it now, until
         # the next walk starts.
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         ui.walk_off("W7: the chain appended nothing to §3")
         badge = ui.walk_badge()
         self.assertIn("W7", badge)
@@ -509,16 +566,6 @@ class Ticking(unittest.TestCase):
         self.assertEqual(ui.walk_badge(), "", "an off walk with nothing to say is silent")
 
     # ── `n`: the author pins the item the walk's next chain goes to ────────────
-
-    def lowering(self):
-        lowered = []
-        real = TUI.dfs_runs.lower_cap
-        TUI.dfs_runs.lower_cap = lambda d, cap: lowered.append((d, cap))
-        self.addCleanup(setattr, TUI.dfs_runs, "lower_cap", real)
-        return lowered
-
-    def items(self, ui, **status):
-        ui.data["items"] = [dict(id=k, status=v) for k, v in status.items()]
 
     def test_a_pinned_item_is_where_the_next_chain_starts(self):
         ui = self.ui(walk_next="W9")
@@ -552,12 +599,12 @@ class Ticking(unittest.TestCase):
         self.assertEqual(len(ui.started), 1)
         ui.walk_until = 0.0                 # the hold is over
         self.live(ui, [])
-        ui.walk_dir = None
+        ui.walk_chains = []
         ui.walk_tick()
         self.assertEqual(ui.started[-1][0], "W9", "resumed the draft, not next_item")
 
     def test_a_limit_hold_does_not_override_a_newer_pin(self):
-        ui = self.ui(walk_next="W9", walk_chain_pin="W9", walk_dir="/runs/mine")
+        ui = self.ui(walk_next="W9", walk_chains=[self.rec(dir="/runs/mine", pin=True)])
         ui.walk_next = "W8"
         self.items(ui, W7="open", W8="open", W9="open")
         ui.event = lambda kind, text: text
@@ -566,7 +613,7 @@ class Ticking(unittest.TestCase):
         self.assertEqual(ui.walk_next, "W8")
 
     def test_a_pin_overrides_what_the_ended_chain_would_have_led_to(self):
-        ui = self.ui(walk_dir="/runs/mine", walk_content={"a", "b"}, walk_next="W9")
+        ui = self.ui(walk_next="W9", walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
         self.items(ui, W7="open", W9="open")
         self.live(ui, [self.chain(stop="cap", run="2")])
         ui.walk_tick()
@@ -584,7 +631,7 @@ class Ticking(unittest.TestCase):
 
     def test_pinning_ends_the_walk_s_chain_on_another_item_after_its_run(self):
         lowered = self.lowering()
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         self.live(ui, [self.chain(live=True, run="3")])
         ui.walk_pin(dict(id="W9", status="open"))
         self.assertEqual(ui.walk_next, "W9")
@@ -594,35 +641,71 @@ class Ticking(unittest.TestCase):
 
     def test_marking_the_item_the_walk_s_chain_is_on_a_draft_ends_that_chain_after_its_run(self):
         lowered = self.lowering()
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         ui.event = lambda kind, text: text
         self.live(ui, [self.chain(live=True, run="3")])
         ui.walk_draft_marked("W7")
         self.assertEqual(lowered, [("/runs/mine", 3)])
         self.assertTrue(ui.walk_on, "ending a chain is not a stop")
 
+    def test_a_task_made_a_draft_while_its_chain_ran_is_not_carried_on(self):
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")], walk_budget=20)
+        ui.event = lambda kind, text: text
+        ui.data["items"] = [dict(id="W7", status="open", draft=1, reachable=True),
+                            dict(id="W8", status="open", reachable=True)]
+        ui.data["next_item"] = "W8"
+        ui.data["contents"] = {"W7": ["moved"]}
+        self.live(ui, [self.chain(dir="/runs/mine", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W8"])
+
+    def test_a_carried_task_that_an_open_ancestor_now_holds_is_not_started(self):
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", item="W8")])
+        ui.event = lambda kind, text: text
+        ui.data["items"] = [dict(id="W7", status="open", reachable=True),
+                            dict(id="W8", status="open", reachable=True, parent="W7")]
+        ui.data["next_item"] = "W7"
+        ui.data["contents"] = {"W8": ["moved"]}
+        self.live(ui, [self.chain(dir="/runs/mine", item="W8", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7"])
+
+    def test_a_pinned_draft_that_ends_on_its_cap_twice_is_still_carried_on(self):
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", item="W9", pin=True)])
+        ui.event = lambda kind, text: text
+        ui.data["items"] = [dict(id="W7", status="open", reachable=True),
+                            dict(id="W9", status="open", draft=1, reachable=True)]
+        ui.data["contents"] = {"W9": ["moved"]}
+        self.live(ui, [self.chain(dir="/runs/mine", item="W9", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9"])
+        ui.walk_chains = [self.rec(dir="/runs/new", item="W9")]
+        self.live(ui, [self.chain(dir="/runs/new", item="W9", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9", "W9"])
+
     def test_marking_a_draft_leaves_a_pinned_chain_and_other_items_alone(self):
         lowered = self.lowering()
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         ui.event = lambda kind, text: text
         self.live(ui, [self.chain(live=True, run="3")])
         ui.walk_draft_marked("W9")                  # a chain on another item
-        ui.walk_chain_pin = "W7"
+        ui.walk_chains[0]["pin"] = True
         ui.walk_draft_marked("W7")                  # the author asked for this chain
-        ui.walk_chain_pin, ui.walk_on = None, False
+        ui.walk_chains[0]["pin"], ui.walk_on = False, False
         ui.walk_draft_marked("W7")                  # no walk
         self.assertEqual(lowered, [])
 
     def test_pinning_the_item_the_chain_is_on_leaves_it_running(self):
         lowered = self.lowering()
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         self.live(ui, [self.chain(live=True, run="3")])
         ui.walk_pin(dict(id="W7", status="open"))
         self.assertEqual(lowered, [])
 
     def test_pinning_leaves_somebody_else_s_chain_alone(self):
         lowered = self.lowering()
-        ui = self.ui(walk_dir="/runs/mine")
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])
         self.live(ui, [self.chain(dir="/runs/by-hand", live=True, run="3")])
         ui.walk_pin(dict(id="W9", status="open"))
         self.assertEqual(lowered, [])
@@ -635,6 +718,198 @@ class Ticking(unittest.TestCase):
         ui.walk_pin(dict(id="W8", status="blocked"))
         self.assertIsNone(ui.walk_next)
         self.assertIn("blocked", ui.msg)
+
+
+class Parallel(Ticks, unittest.TestCase):
+    """`parallel` chains at once: each on a task of its own, sharing one budget."""
+
+    def tasks(self, ui, *ids, parent=None, **status):
+        ui.data["items"] = [dict(id=i, status=status.get(i, "open"), parent=(parent or {}).get(i), reachable=True)
+                            for i in ids]
+        return ui
+
+    def two(self, **kw):
+        ui = self.ui(walk_parallel=2, **kw)
+        self.tasks(ui, "W7", "W8", "W9")
+        ui.event = lambda kind, text: text
+        return ui
+
+    def test_two_slots_fill_with_two_tasks_whose_caps_sum_to_the_budget(self):
+        ui = self.two(walk_budget=5)
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [("W7", "2"), ("W8", "3")])
+        self.assertEqual([c["item"] for c in ui.walk_chains], ["W7", "W8"])
+
+    def test_one_slot_is_filled_once_and_the_other_task_waits_for_it(self):
+        ui = self.two(walk_budget=10)
+        self.live(ui, [])
+        ui.walk_tick()
+        ui.walk_tick()                         # the same tick again: both slots are taken
+        self.assertEqual(len(ui.started), 2)
+
+    def test_a_task_under_an_open_parent_is_not_started_beside_it(self):
+        ui = self.ui(walk_parallel=2)
+        self.tasks(ui, "W7", "W8", "W9", parent={"W8": "W7"})
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7", "W9"])
+
+    def test_a_task_under_a_done_parent_whose_chain_is_still_live_is_not_started(self):
+        ui = self.ui(walk_parallel=2)
+        self.tasks(ui, "W7", "W8", "W9", parent={"W8": "W7"}, W7="done")
+        ui.walk_chains = [dict(dir="/runs/mine", item="W7", started=0.0, content=set(),
+                               pin=False, cap=5)]
+        self.live(ui, [self.chain(live=True)])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9"])
+
+    def test_the_continuation_does_not_start_a_child_of_a_done_parent_still_merging(self):
+        ui = self.ui(walk_parallel=2)
+        self.tasks(ui, "W7", "W8", "W9", parent={"W8": "W7"}, W7="done")
+        ui.data["next_item"] = "W8"       # what full() gives: continue_last fell back to next_item
+        ui.walk_chains = [dict(dir="/runs/mine", item="W7", started=0.0, content=set(),
+                               pin=False, cap=5)]
+        self.live(ui, [self.chain(live=True)])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9"])
+
+    def test_without_worktrees_the_walk_runs_one_chain_in_the_checkout_at_a_time(self):
+        ui = self.two(walk_budget=10)
+        ui.walk_cuts = lambda item: item == "W9"      # only W9 has a worktree of its own
+        ui.walk_parallel = 3
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7", "W9"], "W9 runs beside W7")
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7", "W9"], "W8 would share W7's checkout")
+
+    def test_a_later_task_with_a_worktree_takes_the_slot_a_second_in_place_task_cannot(self):
+        ui = self.ui(walk_parallel=2)
+        self.tasks(ui, "W7", "W8", "W9")
+        ui.walk_cuts = lambda item: item == "W9"      # W7 and W8 would share the checkout
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7", "W9"])
+
+    def test_the_prompt_says_when_no_worktree_is_cut_for_a_parallel_walk(self):
+        ui = self.ui(walk_on=False)
+        ui.walk_cuts_new = lambda: False
+        ui.event = lambda kind, text: text
+        ui.walk_begin(10, 3)
+        self.assertIn("one at a time", ui.msg)
+        ui.walk_off("x")
+        ui.walk_cuts_new = lambda: True
+        ui.walk_begin(10, 3)
+        self.assertNotIn("one at a time", ui.msg)
+
+    def test_a_chain_that_ends_has_its_slot_refilled_from_what_is_left_of_the_budget(self):
+        ui = self.two(walk_budget=10, walk_chains=[
+            self.rec(dir="/runs/a", item="W7", content={"a", "b"}, cap=5),
+            self.rec(dir="/runs/b", item="W8", cap=5)])
+        ui.data.update(next_item="W9", contents={"W7": ["a", "b", "new"], "W8": []})
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", stop="done", run="2"),
+                       self.chain(dir="/runs/b", item="W8", live=True, run="1")])
+        ui.walk_tick()
+        self.assertEqual(ui.walk_spent, 2)
+        self.assertEqual(ui.started, [("W9", "3")], "10 - 2 spent - 5 held by W8's chain")
+        self.assertEqual([c["item"] for c in ui.walk_chains], ["W8", "W9"])
+
+    def test_nothing_is_started_while_the_live_chains_hold_the_whole_budget(self):
+        ui = self.two(walk_budget=6, walk_chains=[
+            self.rec(dir="/runs/a", item="W7", cap=3), self.rec(dir="/runs/b", item="W8", cap=3)])
+        self.live(ui, [self.chain(dir="/runs/a", live=True), self.chain(dir="/runs/b", item="W8", live=True)])
+        ui.walk_parallel = 3
+        ui.walk_tick()
+        self.assertEqual(ui.started, [])
+        self.assertTrue(ui.walk_on, "reserved is not spent: it waits for a chain to end")
+
+    def test_a_chain_judged_by_its_own_task_s_tree_not_by_its_neighbour_s(self):
+        # ⚠️ The guard against a broken task looping needs the TASK's content: with two
+        # chains, W8's good work must not clear W7's chain that appended nothing.
+        ui = self.two(walk_chains=[self.rec(dir="/runs/a", item="W7", content={"a"}),
+                                   self.rec(dir="/runs/b", item="W8", content={"x"}, cap=5)])
+        ui.data.update(contents={"W7": ["a"], "W8": ["x", "y"]})
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", stop="cap", run="1"),
+                       self.chain(dir="/runs/b", item="W8", live=True)])
+        ui.reload = lambda: (ui.data.__setitem__("next_item", "W9") if ui.raised else None)
+        ui.walk_tick()
+        self.assertEqual([(i, k) for i, k, _ in ui.raised], [("W7", "raise")])
+        self.assertEqual(ui.started, [("W9", "14")], "20 - 1 spent - 5 held by W8")
+
+    def test_a_task_that_ended_on_its_cap_goes_before_the_order(self):
+        ui = self.two(walk_chains=[self.rec(dir="/runs/a", item="W7", content={"a"}, cap=4),
+                                   self.rec(dir="/runs/b", item="W8", content={"x"}, cap=4)])
+        ui.data.update(contents={"W7": ["a", "n"], "W8": ["x"]}, next_item="W9")
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", stop="cap", run="4"),
+                       self.chain(dir="/runs/b", item="W8", live=True)])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7"], "carried on, not left for W9")
+
+    def test_a_limit_holds_new_starts_while_the_other_chain_runs_on(self):
+        ui = self.two(walk_chains=[self.rec(dir="/runs/a", item="W7", content={"a"}),
+                                   self.rec(dir="/runs/b", item="W8")])
+        ui.data.update(contents={"W7": ["a", "n"]})
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", stop="limit", run="2"),
+                       self.chain(dir="/runs/b", item="W8", live=True)])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [])
+        self.assertTrue(ui.walk_on)
+        self.assertGreater(ui.walk_until, time.time())
+        self.assertEqual([c["item"] for c in ui.walk_chains], ["W8"])
+        self.assertEqual(ui.walk_carry, ["W7"], "W7 goes first when the hold is over")
+
+    def test_a_chain_started_by_hand_fills_a_slot_and_its_task_is_busy(self):
+        ui = self.two()
+        self.live(ui, [self.chain(dir="/runs/by-hand", item="W7", live=True)])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W8"])
+
+    def test_a_stop_ends_the_chains_still_running(self):
+        lowered = self.lowering()
+        ui = self.two(walk_chains=[self.rec(dir="/runs/a", item="W7", content={"a"}),
+                                   self.rec(dir="/runs/b", item="W8")])
+        ui.data.update(contents={"W7": ["a", "n"]})
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", stop="failed", run="2"),
+                       self.chain(dir="/runs/b", item="W8", live=True, run="3")])
+        ui.walk_tick()
+        self.assertFalse(ui.walk_on)
+        self.assertEqual(lowered, [("/runs/b", 3)])
+
+    def test_stopping_by_hand_ends_every_chain_after_its_run(self):
+        lowered = self.lowering()
+        ui = self.two(walk_chains=[self.rec(dir="/runs/a", item="W7"), self.rec(dir="/runs/b", item="W8")])
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", live=True, run="2"),
+                       self.chain(dir="/runs/b", item="W8", live=True, run="1")])
+        ui.walk_end_chain()
+        self.assertFalse(ui.walk_on)
+        self.assertEqual(lowered, [("/runs/a", 2), ("/runs/b", 1)])
+        self.assertIn("2 chains end", ui.msg)
+
+    def test_pinning_with_a_free_slot_ends_nothing_and_with_none_ends_the_newest_chain(self):
+        lowered = self.lowering()
+        ui = self.two(walk_chains=[self.rec(dir="/runs/a", item="W7", started=1.0)])
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", live=True, run="2")])
+        ui.walk_pin(dict(id="W9", status="open"))
+        self.assertEqual(lowered, [])
+        ui.walk_chains = [self.rec(dir="/runs/a", item="W7", started=1.0),
+                          self.rec(dir="/runs/b", item="W8", started=2.0)]
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", live=True, run="2"),
+                       self.chain(dir="/runs/b", item="W8", live=True, run="1")])
+        ui.walk_next = None
+        ui.walk_pin(dict(id="W9", status="open"))
+        self.assertEqual(lowered, [("/runs/b", 1)])
+
+    def test_a_walk_is_begun_with_a_number_of_chains_and_refuses_none(self):
+        ui = self.ui(walk_on=False)
+        ui.event = lambda kind, text: text
+        ui.walk_tick = lambda: None
+        ui.walk_begin(8, 3)
+        self.assertEqual((ui.walk_budget, ui.walk_parallel), (8, 3))
+        with self.assertRaises(ValueError):
+            ui.walk_begin(8, 0)
+        with self.assertRaises(ValueError):
+            ui.walk_start(8, TUI.MAX_PARALLEL + 1)
 
 
 if __name__ == "__main__":
