@@ -3692,7 +3692,7 @@ class UI(WalkMixin):
                         curses.color_pair(1)))
         out.append(("", 0))
         para("%d finished. The budget is sessions over the whole walk; each chain is "
-             "given what is left, so it cannot overshoot. A second number runs that many "
+             "given a share of what is left, so they cannot overshoot. A second number runs that many "
              "chains at once, on separate branches, sharing the budget: a task under "
              "another waits until its parent is done." % done, grey)
         return out

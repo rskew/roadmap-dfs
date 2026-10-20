@@ -36,7 +36,8 @@
 # ⚠️ A SESSION MAY END MID-NODE, and the next one picks the work up. A node ends with
 # a commit, not a session: a usage limit or the context checkpoint leaves the node's
 # uncommitted work in the tree, and the briefing tells the next session it is its
-# own. That is only true because sessions run serially. Uncommitted work that is NOT
+# own. That is only true per checkout: a task's own worktree, or the one in-place chain,
+# since a parallel walk runs other chains beside it elsewhere. Uncommitted work that is NOT
 # this task's (another task's last session, or the author's) does not stop a chain:
 # its first session is told to commit or stash it before touching its node, and that
 # first session is always a work session (see `foreign`, below).
@@ -503,7 +504,7 @@ on_interrupt() {
 }
 
 # ⚠️ THE CAP CAN BE LOWERED FROM OUTSIDE, BETWEEN RUNS. A walk-started chain is given
-# the walk's whole remaining budget as its cap, so turning the walk off used to leave
+# its share of the budget the walk's live chains have not reserved as its cap, so turning the walk off used to leave
 # a chain that could run thirty more sessions with nothing watching it (W19,
 # 2026-09-28: the walk went off at run 3 and the chain carried on to run 5 of 33).
 # The TUI writes the run it is on into `$RUNDIR/cap` (`dfs_runs.lower_cap`), and this

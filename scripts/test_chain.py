@@ -1258,6 +1258,26 @@ class Chain(unittest.TestCase):
                            cwd=self.wt, capture_output=True, text=True)
         self.assertEqual(r.stdout.strip(), "", r.stderr)
 
+    def test_a_worktree_tasks_later_session_does_not_make_an_in_place_tasks_dirt_foreign(self):
+        # Off main, a walk works W1 in place beside W2, which already has a worktree. W2's
+        # sessions are in its worktree, never in this tree, so W1's own capped session
+        # left the edit and it is still W1's.
+        w2 = self.root / ".dfs" / "items" / "W2.md"
+        w2.write_text(TASK.replace("W1", "W2"))
+        self.git("add", "-f", ".dfs/items/W2.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W2")
+        subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W2"],
+                       cwd=self.root, capture_output=True, text=True, check=True)
+        self.git("checkout", "-q", "-b", "elsewhere")
+        w1 = self.root / ".dfs" / "items" / "W1.md"
+        w1.write_text(w1.read_text() + "\n- 2000-01-01T00:00:00Z · session · work\n")
+        wt2 = self.root / ".dfs" / "worktrees" / "W2" / ".dfs" / "items" / "W2.md"
+        wt2.write_text(wt2.read_text() + "\n- 2099-01-01T00:00:00Z · session · work\n")
+        (self.root / "app.txt").write_text("W1's half-done edit\n")
+        r = subprocess.run([sys.executable, str(HERE / "state.py"), "--foreign-dirt", "W1"],
+                           cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "", r.stderr)
+
     def test_dirt_left_by_another_task_is_foreign_even_with_the_item_branch_checked_out_in_place(self):
         # The author has dfs/W1 checked out in the main checkout: that is not W1's own
         # worktree, so an off-main walk's other tasks leave dirt there that is not W1's.

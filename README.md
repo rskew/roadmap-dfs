@@ -64,8 +64,8 @@ task that already has a worktree still runs beside it. A task nested under anoth
 still waits until its parent (any open, non-draft ancestor) is done and the parent's chain has
 merged it, and a task that already has a chain, started by hand included, is never given a
 second. The chains share the one budget: each starts with a cap that, summed over the live chains,
-never exceeds the sessions left, and the walk's header names every live chain. A stop, or turning
-the walk off, ends every chain after the run it is in. Merges and worktree cuts run one at a time
+never exceeds the sessions left, and the walk's header names every live chain. A stop (of the walk, or of any one
+of its chains), or turning the walk off, ends every chain after the run it is in. Merges and worktree cuts run one at a time
 under a lock in the git common directory, so two chains finishing together merge in turn.
 
 ## Running the sandbox as a daemon

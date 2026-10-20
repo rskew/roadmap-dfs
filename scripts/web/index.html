@@ -682,7 +682,7 @@ function walkStartForm() {
 }
 function chainStopForm(item) {
   form(`<h3>Stop ${esc(item)}'s chain?</h3>
-    <p class="muted" style="margin:0">It stops after the run it is in. The next session picks up the node's uncommitted work.</p>${buttons("Stop chain", true)}`,
+    <p class="muted" style="margin:0">It stops after the run it is in, and if a walk is running it turns off too, so every other chain of the walk ends after its run. The next session picks up the node's uncommitted work.</p>${buttons("Stop chain", true)}`,
     async () => { S.walk = await api("/api/chain/stop", { item }); toast("Told it to stop."); drawTasks(); });
 }
 

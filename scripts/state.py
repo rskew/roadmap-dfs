@@ -452,10 +452,12 @@ def fingerprint(outside_dfs=False, exclude_runs=True):
     return h.hexdigest()
 
 
-def latest_session():
-    """(task, entry) of the most recent session over every task, or (None, None)."""
+def latest_session(skip=()):
+    """(task, entry) of the most recent session over every task but `skip`, or (None, None)."""
     best = (None, None)
     for task in task_ids():
+        if task in skip:
+            continue
         s = dfs_tree.last_session(dfs_tree.load(task))
         if s and (best[1] is None or s["ts"] > best[1]["ts"]):
             best = (task, s)
@@ -473,7 +475,10 @@ def foreign_dirt(task):
     whose the dirt is. Parallel walks run other tasks' chains at the same time, and with a
     gitignored roadmap every worktree reads the same `items`, so their sessions were seen
     there too: the dirt of a chain's own capped session was briefed as "NOT this task's:
-    the last session was" another's.
+    the last session was" another's. Likewise in the checkout itself, the tasks that have
+    a worktree are worked there, so their sessions never touch this tree and are left out:
+    off `main` an in-place task's own capped session ran beside a worktree chain, and the
+    dirt was briefed as the worktree task's.
 
     ⚠️ A chain STARTS over foreign dirt rather than refusing: its first session
     commits or stashes it before touching its node (`brief`), and the runner makes
@@ -484,7 +489,8 @@ def foreign_dirt(task):
     if dfs_paths.in_worktree_of(task):
         owner = task if dfs_tree.last_session(dfs_tree.load(task)) else None
     else:
-        owner, _ = latest_session()
+        owner, _ = latest_session(skip=[t for t in task_ids()
+                                        if t != task and dfs_paths.worktree(t)])
     if not dirty or owner == task:
         return [], owner
     return dirty, owner
