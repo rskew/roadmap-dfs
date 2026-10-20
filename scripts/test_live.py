@@ -176,10 +176,8 @@ class TheLogPaneKeepsUp(unittest.TestCase):
         ui.sel = ui.run_sel = ui.art_sel = ui.scroll = ui.list_scroll = 0
         ui.follow, ui.msg, ui.body_h, ui.agent = False, "", 1, "claude"
         ui._sel_row = None
-        ui.walk_on, ui.walk_dir, ui.walk_note, ui.walk_next = False, None, "", None
+        ui.walk_on, ui.walk_note, ui.walk_next = False, "", None
         ui.walk_until = ui.walk_budget = ui.walk_spent = 0
-        ui.walk_started = 0
-        ui.walk_content = set()
         ui.sig = ()
         self.rescan(ui)
         return ui

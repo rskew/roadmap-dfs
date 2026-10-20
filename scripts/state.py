@@ -242,8 +242,9 @@ def next_item(items):
 
 def next_items(walked, n, busy=(), first=None):
     """Up to `n` tasks for a walk running chains side by side, in the order it takes them:
-    `first` (the walk's own continuation, `continue_last`) and then the order's answers,
-    skipping every task in `busy` (one a chain is already on).
+    `first` (a task id or a list of them: the walk's pin, the tasks its chains left on a
+    cap, its continuation `continue_last`) and then the order's answers, skipping every
+    task in `busy` (one a chain is already on).
 
     ⚠️ **A CHILD WAITS FOR ITS PARENT.** One chain at a time never works a child before
     its parent is done: it keeps on the parent while it can (`continue_last`), and a
@@ -261,7 +262,11 @@ def next_items(walked, n, busy=(), first=None):
             up = by.get(up.get("parent"))
         return False
 
-    out = [first] if first is not None and first not in busy else []
+    lead = [first] if isinstance(first, str) else list(first or ())
+    out = []
+    for f in lead:
+        if f is not None and f not in busy and f not in out:
+            out.append(f)
     for it in walked:
         if len(out) >= n:
             break
@@ -325,12 +330,9 @@ def full():
             entries.append(dict(id=nd["id"], type="NODE", target=t["task"],
                                 disp=nd["status"], body="\n".join(nd["raw"][1:])))
     walked = walk([dict(i, **state_for(i["id"])) for i in its])
-    moved = set()
-    for t in trees:
-        moved |= content(t)
     return dict(items=walked, next_item=continue_last(walked), open_raises=raises,
                 open_proposals=[], entries=entries, metrics=metrics(trees),
-                content=sorted(moved))
+                contents={t["task"]: sorted(content(t)) for t in trees})
 
 
 def continue_last(walked):

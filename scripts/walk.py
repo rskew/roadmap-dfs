@@ -40,6 +40,7 @@ import tree as dfs_tree      # noqa: E402
 RUNNER = dfs_paths.rel(dfs_paths.SCRIPTS / "run.sh")
 AGENTS = ("claude", "codex", "kiro", "opencode")
 TICK = 2.0           # seconds between a headless walk's steps
+MAX_PARALLEL = 16    # chains at once, as far as a page may ask
 EVENTS_KEEP = 400    # activity lines held (the screen reads them back from the file)
 
 
@@ -187,38 +188,65 @@ class WalkMixin:
     """The walk's state and steps. See the module docstring for the world it asks of
     `self`. Everything the walk does it also says through `event`."""
 
+    # Defaults for a screen built without `walk_init` (the tests do): never changed in
+    # place, only rebound, so one value serves every instance.
+    walk_parallel = 1
+    walk_chains = ()
+    walk_carry = ()
+
     def walk_init(self):
         self.walk_on = False
         self.walk_budget = 20       # SESSIONS, over the whole walk — see walk_toggle
         self.walk_spent = 0         # sessions run by chains this walk has finished
         self.walk_until = 0.0       # epoch; a usage-limit hold
-        self.walk_dir = None        # the run directory of the chain THIS started
-        self.walk_started = 0.0     # epoch; when it was started — see walk_tick
-        self.walk_content = set()   # what the trees said when that chain started
+        self.walk_parallel = 1      # chains at once, each on a task of its own
+        # One record per chain THIS walk started and has not yet judged: `dir` (its run
+        # directory), `item`, `started` (epoch — see walk_tick), `content` (what that
+        # task's tree said when it started), `pin` (the author pinned it) and `cap`
+        # (the sessions it may run: its share of the budget, lowered when it is told to end).
+        self.walk_chains = []
+        self.walk_carry = []        # tasks whose chain ended on its cap or a limit, still open: they go first
         self.walk_note = ""         # why the last walk stopped, until the next one
         self.walk_next = None       # an item the author pinned for the next chain — walk_pin
-        self.walk_chain_pin = None  # the item the chain in flight was pinned to, kept through a hold
         self.walk_pending = False   # on, but nothing is workable: waiting for a task to appear
 
-    def walk_begin(self, budget):
-        """Turn the walk on with `budget` sessions: what `w` does once the number is in,
-        and what the web page's Start does. A ValueError says why not."""
+    def walk_begin(self, budget, parallel=1):
+        """Turn the walk on with `budget` sessions, run `parallel` chains at a time: what `w`
+        does once the numbers are in, and what the web page's Start does. A ValueError says
+        why not."""
         if budget < 1:
             raise ValueError("a budget of %d sessions is not a walk" % budget)
+        if parallel < 1:
+            raise ValueError("a walk runs at least one chain at a time, not %d" % parallel)
         self.walk_budget = budget
+        self.walk_parallel = parallel
         self.walk_spent = 0
         self.walk_on = True
         self.walk_until = 0.0
-        self.walk_dir = None
+        self.walk_chains = []
+        self.walk_carry = []
         self.walk_note = ""
         self.walk_pending = False
-        self.msg = "walk: on, %d sessions — w to stop" % budget
-        self.event("walk", "walk on, %d sessions" % budget)
+        both = "%d sessions" % budget + (", %d at a time" % parallel if parallel > 1 else "")
+        self.msg = "walk: on, %s — w to stop" % both
+        self.event("walk", "walk on, %s" % both)
         self.walk_tick()
 
     def walk_off(self, why):
+        """Turn the walk off, and end every chain of it still running after the run it is
+        in. Returns `(lowered, failed)`: the `(item, run)` pairs told to end and the
+        `(item, error)` pairs that could not be.
+
+        ⚠️ A walk's chain carries a share of the walk's budget as its cap, so a walk turned
+        off with chains left alone let them run every session they had, unwatched — W19
+        went from run 3 to run 5 of 33 after the walk was off. Each cap is lowered to the
+        run its chain is on (`dfs_runs.lower_cap`), which is a chain of one from here: the
+        session in flight finishes its node's work, and no further one starts. `K` is
+        still the key for stopping the run in flight as well."""
+        chains = self.walk_chains
         self.walk_on = False
-        self.walk_dir = None
+        self.walk_chains = []
+        self.walk_carry = []
         self.walk_until = 0.0
         self.walk_pending = False
         self.walk_note = why
@@ -226,54 +254,80 @@ class WalkMixin:
         self.event("stop", "walk off — %s" % why)
         if why != "stopped by hand":
             self.notify("walk stopped: %s" % why)
+        return self.walk_lower(chains)
+
+    def walk_lower(self, chains):
+        """End the live ones of `chains` (records) after the run each is in; see `walk_off`."""
+        lowered, failed = [], []
+        for rec in chains:
+            run = self.walk_run_of(rec)
+            if not (run and run["live"]):
+                continue
+            n = int(run["run"] or 0)
+            try:
+                self.lower_cap(run["dir"], n)
+            except OSError as e:
+                failed.append((rec["item"], e))
+                continue
+            rec["cap"] = n
+            lowered.append((rec["item"], n))
+            self.event("stop", "%s's chain told to end after run %d" % (rec["item"], n))
+        return lowered, failed
 
     def walk_end_chain(self):
-        """Turn the walk off by hand, and end its chain after the run it is in.
-
-        ⚠️ The walk's chain carries the walk's whole remaining budget as its cap
-        (`walk_tick`), so turning the walk off and leaving that chain alone left it
-        free to run every session the walk had left, with nothing watching it — W19
-        went from run 3 to run 5 of 33 after the walk was off. The cap is lowered to
-        the run it is on (`dfs_runs.lower_cap`), which is a chain of one from here:
-        the session in flight finishes its node's work, and no further one starts.
-        `K` is still the key for stopping the run in flight as well."""
-        run = self.walk_run()
-        self.walk_off("stopped by hand")
-        if not (run and run["live"]):
-            return
-        n = int(run["run"] or 0)
-        try:
-            self.lower_cap(run["dir"], n)
-        except OSError as e:
+        """Turn the walk off by hand, and end its chains after the run each is in."""
+        lowered, failed = self.walk_off("stopped by hand")
+        if failed:
             self.msg = ("walk: stopped, but %s's chain could not be told to end (%s) — "
-                        "K stops it" % (run["item"], e))
-            return
-        self.event("stop", "%s's chain told to end after run %d" % (run["item"], n))
-        self.msg = ("walk: stopped — %s's chain ends after run %d; K stops that run too"
-                    % (run["item"], n) if n else
-                    "walk: stopped — %s's chain ends before its first run" % run["item"])
+                        "K stops it" % failed[0])
+        elif len(lowered) > 1:
+            self.msg = ("walk: stopped — %d chains end after their current runs; K stops "
+                        "those runs too" % len(lowered))
+        elif lowered:
+            item, n = lowered[0]
+            self.msg = ("walk: stopped — %s's chain ends after run %d; K stops that run too"
+                        % (item, n) if n else
+                        "walk: stopped — %s's chain ends before its first run" % item)
+
+    def walk_run_of(self, rec):
+        """The run directory behind a chain record, as `dfs_runs` currently sees it."""
+        return next((r for r in self.chains if r["dir"] == rec["dir"]), None)
+
+    def walk_runs(self):
+        """The runs of the chains this walk started that `dfs_runs` can see, oldest first."""
+        return [r for r in (self.walk_run_of(c) for c in self.walk_chains) if r]
 
     def walk_run(self):
-        """The run directory this walk started, as `dfs_runs` currently sees it."""
-        return next((r for r in self.chains if r["dir"] == self.walk_dir), None)
+        """The first run this walk started, as `dfs_runs` currently sees it (None with none)."""
+        return next(iter(self.walk_runs()), None)
+
+    def walk_dirs(self):
+        """The run directories of the chains this walk started: how a chain is told to be its."""
+        return {c["dir"] for c in self.walk_chains}
+
+    def walk_foreign(self):
+        """The live work chains this walk did not start: each fills a slot and its task is busy."""
+        own = self.walk_dirs()
+        return [r for r in self.live() if r["dir"] not in own]
 
     def walk_used(self):
-        """Sessions spent so far: the finished chains, plus the live one's own count.
+        """Sessions spent so far: the finished chains, plus each live chain's own count.
 
         ⚠️ Read off the chain rather than counted here. `run.sh` records the run
         it is ON before starting it, so this is the number of sessions that have
         BEGUN — which is the one that should be charged against a budget, since a
         session that started has already cost its context.
         """
-        run = self.walk_run()
-        return self.walk_spent + (int(run["run"] or 0) if run else 0)
+        return self.walk_spent + sum(int(r["run"] or 0) for r in self.walk_runs())
 
     def walk_tick(self):
         """One step of the walk, on the poll this screen already runs.
 
-        ⚠️ It waits on ANY live work chain, not only its own: two agents in one tree
-        append to §3 at the same time, which is how this roadmap's ids collided in
-        the first place. The walk is a second pair of hands, not a second author.
+        ⚠️ It counts ANY live work chain against its slots, not only its own: a chain
+        started by hand fills one and its task is busy. The walk is a second pair of
+        hands, not a second author, and two chains on one task would append to its tree
+        at the same time, which is how this roadmap's ids collided in the first place.
+        Chains on different tasks share nothing (each has its own worktree).
         """
         if not self.walk_on:
             return
@@ -288,89 +342,120 @@ class WalkMixin:
         # the same `poll` overwrote it with "refreshed" before the screen was drawn,
         # which is why a stop is now in the HEADER too (`walk_badge`).
         self.refresh_chains()
-        if self.live():
-            return
-        if time.time() < self.walk_until:
-            return
-
-        if self.walk_dir is not None:
-            run = self.walk_run()
+        ended = []
+        for rec in self.walk_chains:
+            run = self.walk_run_of(rec)
             if run is None:
                 # Made, but not yet named by the chain itself. That is a start in
                 # progress, not a death — and the difference is how long it has had.
-                if time.time() - self.walk_started < WALK_START_GRACE:
-                    return
+                if time.time() - rec["started"] < WALK_START_GRACE:
+                    continue
                 self.walk_off("the chain it started is no longer on the box"
-                              + chain_cause(self.walk_dir))
+                              + chain_cause(rec["dir"]))
                 return
-            if run["live"]:
-                return
-            # ⚠️ And the ROADMAP is read after the chain ended, for the same reason
+            if not run["live"]:
+                ended.append((rec, run))
+        if ended:
+            # ⚠️ And the ROADMAP is read after the chains ended, for the same reason
             # the chain list is. `poll` reloads only once this tick has returned, so
             # a chain whose last append and whose exit landed inside the same second
             # would be judged against a §3 that predates its own entry — and an
             # entry the walk cannot see is `moved` false, which STOPS the walk and
             # blames the item for appending nothing.
             self.reload()
-            moved = bool(set(self.data.get("content", ())) - self.walk_content)
-            action, why = walk_decide(run["stop"], moved,
-                                      self.walk_target(), run.get("cause", ""))
-            self.walk_spent += int(run["run"] or 0)
-            self.walk_dir = None
-            if action == "hold":
-                # Until the stated reset when there is one; the flat hour only when
-                # the provider said nothing we can parse (dfs_limit.reset_at).
-                now = time.time()
-                at = dfs_limit.reset_at(run["resets"], now)
-                self.walk_until = at if at is not None else now + WALK_HOLD
-                tail = (" (%s)" % run["resets"]) if run["resets"] else ""
-                self.msg = self.event("hold", "walk: %s hit %s — holding %s%s" % (
-                    run["item"], why, walk_held_for(self.walk_until - now), tail))
-                # ⚠️ A limit means "try the same thing again", and for a chain the
-                # author PINNED that is the pinned item: the pin was spent when the
-                # chain started, and without it `next_item` leaves a draft (which
-                # `continue_last` refuses) half-done. A newer pin is the author's
-                # later word and stays.
-                if self.walk_chain_pin == run["item"] and self.walk_next is None:
-                    self.walk_next = run["item"]
-                return
-            if action == "stop":
-                self.walk_off("%s: %s" % (run["item"], why))
-                return
-            if action == "raise":
-                if not self.walk_raise(run["item"], why):
+            for rec, run in ended:
+                if not self.walk_judge(rec, run):
                     return
-            # "pend" falls through: the target is asked again below, and None there
-            # is what makes the walk wait.
+        if time.time() < self.walk_until:
+            return
 
+        foreign = self.walk_foreign()
+        free = self.walk_parallel - len(self.walk_chains) - len(foreign)
         left = self.walk_budget - self.walk_spent
-        if left < 1:
+        if left < 1 and not self.walk_chains:
             self.walk_off("%d sessions spent" % self.walk_spent)
             return
-        self.walk_pinned()          # drops a pin that cannot be worked, and says so
-        item = self.walk_target()
-        if item is None:
+        if free < 1:
+            return
+        busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in foreign}
+        picks = dfs_state.next_items(self.items, free, busy, first=self.walk_lead())
+        if not picks:
             # ⚠️ NOTHING TO TAKE IS A WAIT, NOT AN END. The walk stays on and asks
             # again on every tick (`reload` re-reads the trees), so a task created
             # later, or one a raise's answer unblocks, is taken without the walk
-            # being started again. Nothing is spent while it waits.
-            if not self.walk_pending:
+            # being started again. Nothing is spent while it waits. Free slots beside
+            # a running chain are not a wait: that chain is the walk's work.
+            if not (self.walk_chains or foreign or self.walk_pending):
                 self.walk_pending = True
                 self.msg = self.event("walk", "walk: nothing workable — waiting for a task")
             return
-        if self.walk_pending:
-            self.walk_pending = False
-            self.event("walk", "walk: %s is workable — resuming" % item)
-        self.walk_chain_pin = item if self.walk_next == item else None
-        self.walk_next = None
-        self.walk_content = set(self.data.get("content", ()))
-        self.walk_started = time.time()
-        # ⚠️ The chain's cap IS the remaining budget, which is what makes the budget
-        # a real bound rather than a thing checked between chains: a chain cannot
-        # overshoot it by running one more session than the walk has left to spend.
-        self.walk_dir = self.start_chain(item, str(left))
-        if self.walk_dir is None:
-            self.walk_off("could not start a chain on %s" % item)
+        for item in picks:
+            # ⚠️ A chain's cap is its share of the budget the live chains have not
+            # already reserved, which is what makes the budget a real bound rather
+            # than a thing checked between chains: the caps of the chains running at
+            # once never add up to more than the walk has left to spend.
+            avail = left - sum(c["cap"] for c in self.walk_chains)
+            if avail < 1:
+                return
+            if self.walk_pending:
+                self.walk_pending = False
+                self.event("walk", "walk: %s is workable — resuming" % item)
+            cap = max(1, avail // (free - picks.index(item)))
+            pin = self.walk_next == item
+            self.walk_next = None if pin else self.walk_next
+            self.walk_carry = [c for c in self.walk_carry if c != item]
+            content = set(self.data.get("contents", {}).get(item, ()))
+            started = time.time()
+            rundir = self.start_chain(item, str(cap))
+            if rundir is None:
+                self.walk_off("could not start a chain on %s" % item)
+                return
+            self.walk_chains = self.walk_chains + [dict(
+                dir=rundir, item=item, started=started, content=content, pin=pin, cap=cap)]
+
+    def walk_judge(self, rec, run):
+        """Judge one chain that ended: charge its sessions, then what `walk_decide` says.
+        False when the walk is off now (and the tick ends)."""
+        item = run["item"]
+        moved = bool(set(self.data.get("contents", {}).get(item, ())) - rec["content"])
+        action, why = walk_decide(run["stop"], moved, self.walk_target(),
+                                  run.get("cause", ""))
+        self.walk_spent += int(run["run"] or 0)
+        self.walk_chains = [c for c in self.walk_chains if c is not rec]
+        if action == "hold":
+            # Until the stated reset when there is one; the flat hour only when
+            # the provider said nothing we can parse (dfs_limit.reset_at).
+            now = time.time()
+            at = dfs_limit.reset_at(run["resets"], now)
+            self.walk_until = max(self.walk_until, at if at is not None else now + WALK_HOLD)
+            tail = (" (%s)" % run["resets"]) if run["resets"] else ""
+            self.msg = self.event("hold", "walk: %s hit %s — holding %s%s" % (
+                item, why, walk_held_for(self.walk_until - now), tail))
+            # ⚠️ A limit means "try the same thing again": the task goes first when the
+            # hold is over, a draft the author pinned included (`next_item` never offers
+            # one). A newer pin is the author's later word and still goes before it.
+            self.walk_carry = self.walk_carry + [item]
+            return True
+        if action == "stop":
+            self.walk_off("%s: %s" % (item, why))
+            return False
+        if action == "raise":
+            return self.walk_raise(item, why)
+        # "run" and "pend" carry on to fill the slots; a chain that used its share of the
+        # budget with the task still open has more to do there, and goes first.
+        if run["stop"] == "cap":
+            self.walk_carry = self.walk_carry + [item]
+        return True
+
+    def walk_lead(self):
+        """The tasks the walk takes before the order: the pin, the tasks its chains left
+        on a cap or a limit while still open, then the walk's continuation."""
+        open_ = {i["id"] for i in self.items if i["status"] == "open"}
+        pin = self.walk_pinned()    # drops a pin that cannot be worked, and says so
+        lead = [pin] if pin else []
+        lead += [c for c in self.walk_carry if c in open_]
+        lead.append(self.data.get("next_item"))
+        return lead
 
     def walk_target(self):
         """The one answer to "which task does the walk take next": the pin while that
@@ -404,13 +489,14 @@ class WalkMixin:
     def walk_pin(self, it):
         """`n`: the walk's next chain goes to the selected item, not `next_item`.
 
-        The walk's chain carries the walk's whole remaining budget, so "next" would
-        otherwise mean "whenever this item stops being workable". A chain on another
-        item is ended after the run in flight (`dfs_runs.lower_cap`, as `w` does), so
-        the switch happens at the next session. After that one chain, `next_item`
-        decides as usual — and since a walk finishes what it started
-        (`dfs_state.continue_last`), that keeps it on the pinned item while it is
-        open and nothing holds it. `n` on the pinned item takes the pin away."""
+        A chain's cap is a share of the walk's budget, so "next" would otherwise mean
+        "whenever a slot is free". With every slot taken, the walk's most recently
+        started chain on another item is ended after the run in flight
+        (`dfs_runs.lower_cap`, as `w` does), so the switch happens at the next
+        session. After that one chain, the order decides as usual — and since a walk
+        finishes what it started (`dfs_state.continue_last`), that keeps it on the
+        pinned item while it is open and nothing holds it. `n` on the pinned item takes
+        the pin away."""
         if it is None:
             return
         if self.walk_next == it["id"]:
@@ -422,12 +508,15 @@ class WalkMixin:
                 it["id"], it["status"])
             return
         self.walk_next = it["id"]
-        run = self.walk_run()
-        if not (self.walk_on and run and run["live"]) or run["item"] == it["id"]:
+        live = [c for c in self.walk_chains if (self.walk_run_of(c) or {}).get("live")]
+        full = len(self.walk_chains) + len(self.walk_foreign()) >= self.walk_parallel
+        if not (self.walk_on and live and full) or any(c["item"] == it["id"] for c in live):
             self.msg = self.event("walk", "walk: its next chain goes to %s" % it["id"]
                                   if self.walk_on else
                                   "walk: %s goes first when w starts it" % it["id"])
             return
+        rec = max(live, key=lambda c: c["started"])
+        run = self.walk_run_of(rec)
         n = int(run["run"] or 0)
         try:
             self.lower_cap(run["dir"], n)
@@ -435,16 +524,18 @@ class WalkMixin:
             self.msg = ("walk: %s pinned, but %s's chain could not be told to end (%s)"
                         % (it["id"], run["item"], e))
             return
+        rec["cap"] = n
         self.msg = self.event("walk", "walk: pinned %s — %s's chain ends after run %d" % (
             it["id"], run["item"], n))
 
     def walk_draft_marked(self, item):
         """`item` was just marked a draft: end the walk's own chain on it after the run in
-        flight, as `walk_pin` does for a chain on another item. The chain carries the
-        walk's whole budget and `run.sh` has no draft stop, so it would otherwise work
+        flight, as `walk_pin` does for a chain on another item. A chain carries a share
+        of the walk's budget and `run.sh` has no draft stop, so it would otherwise work
         the draft to the end. A chain the author pinned stays: pinning was asking for it."""
-        run = self.walk_on and self.walk_run()
-        if not (run and run["live"]) or run["item"] != item or self.walk_chain_pin == item:
+        rec = next((c for c in self.walk_chains if c["item"] == item), None)
+        run = self.walk_on and rec and self.walk_run_of(rec)
+        if not (run and run["live"]) or rec["pin"]:
             return
         n = int(run["run"] or 0)
         try:
@@ -452,6 +543,7 @@ class WalkMixin:
         except OSError as e:
             self.msg = "walk: %s is a draft, but its chain could not be told to end (%s)" % (item, e)
             return
+        rec["cap"] = n
         self.msg = self.event("walk", "walk: %s is a draft — its chain ends after run %d" % (item, n))
 
     def walk_raise(self, item, why):
@@ -568,16 +660,21 @@ class WalkMixin:
         self.msg = "agent: " + name
         self.event("walk", "agent: " + name)
 
-    def walk_start(self, budget):
+    def walk_start(self, budget, parallel=1):
         """Start a walk from outside the prompt: the page's Start, validated as `w`'s
-        number is (and bounded, since a web page is further from the person than a key)."""
+        numbers are (and bounded, since a web page is further from the person than a key)."""
         if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
             raise ValueError("a walk needs a budget of at least one session")
         if budget > 500:
             raise ValueError("a budget of %d sessions is not a walk, it is a month" % budget)
+        if not isinstance(parallel, int) or isinstance(parallel, bool) or parallel < 1:
+            raise ValueError("a walk runs at least one chain at a time")
+        if parallel > MAX_PARALLEL:
+            raise ValueError("%d chains at once is more than a machine runs: at most %d"
+                             % (parallel, MAX_PARALLEL))
         if self.walk_on:
             raise ValueError("the walk is already on")
-        self.walk_begin(budget)
+        self.walk_begin(budget, parallel)
 
     def walk_pin_id(self, item):
         """The page's `n`: pin an item by id, or with None (or the pinned one again) take
@@ -604,7 +701,7 @@ class WalkMixin:
         return dict(
             next=self.walk_target(),
             on=self.walk_on, pending=self.walk_pending,
-            budget=self.walk_budget, used=self.walk_used(),
+            budget=self.walk_budget, used=self.walk_used(), parallel=self.walk_parallel,
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS),
             pinned=self.walk_next, auto=auto, auto_goal=goal,
@@ -706,10 +803,10 @@ class HeadlessWalk(WalkMixin):
         pass                # nobody at a terminal to ring
 
     # the interface the page calls, each under the lock
-    def start(self, budget):
+    def start(self, budget, parallel=1):
         with self.lock:
             self.reload()
-            self.walk_start(budget)
+            self.walk_start(budget, parallel)
 
     def stop(self):
         with self.lock:

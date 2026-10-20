@@ -74,7 +74,7 @@ import runs as dfs_runs               # noqa: E402  (needs HERE on the path firs
 import order as dfs_order              # noqa: E402  (the same)
 import paths as dfs_paths              # noqa: E402  (the same)
 import limit as dfs_limit              # noqa: E402  (the same)
-from walk import (AGENTS, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
+from walk import (AGENTS, MAX_PARALLEL, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
                   WALK_STOP, WalkMixin, agent_file, read_agent, walk_decide, walk_held_for)
 import tree as dfs_tree               # noqa: E402  (the same)
 
@@ -4112,7 +4112,7 @@ class UI(WalkMixin):
             self.put(y, x0, "│", look("chrome"))
         x = x0 + 2
         width = w - x - 1
-        live = sorted(self.live(), key=lambda r: r["dir"] != self.walk_dir)
+        live = sorted(self.live(), key=lambda r: r["dir"] not in self.walk_dirs())
         y = top
         if live:
             r = live[0]
@@ -4333,7 +4333,7 @@ class UI(WalkMixin):
         header; a chain started by hand off `s` keeps `run/cap`, where the cap IS
         the bound that was typed.
         """
-        if self.walk_on and chain["dir"] == self.walk_dir:
+        if self.walk_on and chain["dir"] in self.walk_dirs():
             return "run %d/%d" % (self.walk_used(), self.walk_budget)
         return dfs_runs.progress(chain)
 

@@ -389,7 +389,7 @@ class HiddenFromGit(unittest.TestCase):
 
 class TheActivityLog(unittest.TestCase):
     def test_a_started_chain_and_a_stopped_walk_are_recorded(self):
-        ui = a_screen([item("W1")], walk_on=True, walk_dir=None, walk_until=0.0,
+        ui = a_screen([item("W1")], walk_on=True, walk_until=0.0,
                       walk_note="")
         ui.walk_off("W1: failed")
         kinds = [(k, t) for _, k, t in ui.events]
@@ -470,7 +470,7 @@ class Ringing(unittest.TestCase):
             os.environ["DFS_NOTIFY"] = notify
 
     def screen(self):
-        return a_screen([item("W1")], real=True, walk_on=True, walk_dir=None,
+        return a_screen([item("W1")], real=True, walk_on=True,
                         walk_until=0.0, walk_note="")
 
     def test_a_walk_that_stopped_itself_rings_and_is_written_down(self):
