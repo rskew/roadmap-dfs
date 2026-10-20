@@ -641,9 +641,10 @@ def _ignore_patterns():
 
 def _names_state_dir(pattern: str) -> bool:
     """Whether an ignore pattern names the roadmap directory itself: `.dfs`, `/.dfs`,
-    `**/.dfs`, with a trailing `/`, `/*` or `/**` (the last two hide what is in it and
-    leave the directory itself unlisted)."""
-    pattern = pattern.rstrip("/").removesuffix("/**").removesuffix("/*").rstrip("/")
+    `**/.dfs`, with a trailing `/`, `/*`, `/**` or `/**/*` (the last three hide what is
+    in it and leave the directory itself unlisted)."""
+    pattern = (pattern.rstrip("/").removesuffix("/**/*").removesuffix("/**")
+               .removesuffix("/*").rstrip("/"))
     return pattern.removeprefix("/").removeprefix("**/") == STATE_DIR_NAME
 
 

@@ -456,9 +456,7 @@ def watch_signature():
     """
     paths = [dfs_paths.roadmap(), dfs_paths.order()]
     # the ignore files too: the header's "git hides .dfs" follows the rules
-    root = dfs_paths.work_root()
-    paths += [root / ".gitignore", dfs_paths.state() / ".gitignore",
-              root / ".git" / "info" / "exclude"]
+    paths += dfs_paths.ignore_files() + [dfs_paths.state() / ".gitignore"]
     for items in [dfs_paths.items()] + [s / "items" for s in dfs_paths.worktree_states()]:
         paths += sorted(items.glob("*.md")) + sorted(items.glob("*/*.md"))
     sig = []

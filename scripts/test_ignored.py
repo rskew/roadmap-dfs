@@ -129,7 +129,7 @@ class Hidden(unittest.TestCase):
 
     def test_a_rule_naming_the_roadmap_keeps_it_as_planning(self):
         for rule in (".dfs/\n", "/.dfs\n", ".dfs\n", ".dfs/*\n", "/.dfs/*\n",
-                     ".dfs/**\n", "**/.dfs/\n"):
+                     ".dfs/**\n", "**/.dfs/\n", ".dfs/**/*\n"):
             self.ignore(rule)
             self.assertEqual(self.rules(), [], rule)
 
