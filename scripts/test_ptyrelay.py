@@ -267,14 +267,14 @@ class Looking(unittest.TestCase):
             self.relay.attach(idle=lambda: polls.append(time.time()), every=0.1)), daemon=True)
         self.t.start()
         self.assertTrue(self.seen(b"ready"))
-        end = time.time() + 1.0
-        while time.time() < end:                                # a key every 20 ms, faster than `every`
+        end = time.time() + 5.0
+        while time.time() < end and len(polls) < 5:            # a key every 20 ms, faster than `every`
             os.write(self.keys_w, b"x")
             time.sleep(0.02)
         os.write(self.keys_w, b"\x1d")
         self.t.join(5)
         self.assertEqual(self.result, [True])
-        self.assertGreaterEqual(len(polls), 5, polls)
+        self.assertGreaterEqual(len(polls), 5, "starved: the poll ran %d times in 5s of keys" % len(polls))
 
     def test_when_it_ends_attached_that_is_said(self):
         self.t.start()

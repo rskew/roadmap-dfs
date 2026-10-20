@@ -152,6 +152,8 @@ class OpencodeCrossing(unittest.TestCase):
         self.page_says("PAGE-TWO")
         last = self.heard("PAGE-TWO")[-1].decode()
         self.assertIn("SCREEN-ONE", last)
+        # opencode may write the message to its database after the turn ends, more so on a loaded machine
+        until(lambda: [t for r, t in self.texts() if r == "you"][-2:] == ["SCREEN-ONE", "PAGE-TWO"], 10)
         self.assertEqual([t for r, t in self.texts() if r == "you"][-2:], ["SCREEN-ONE", "PAGE-TWO"])
         self.assertEqual(json.loads(self.chats.path("project").read_text())["sid"], rec["sid"], "still the one session")
         self.assertEqual(self.sessions(), 1)
