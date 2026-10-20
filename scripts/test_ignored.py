@@ -6,11 +6,13 @@ Run:  python3 <scripts>/test_ignored.py
 """
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -140,6 +142,22 @@ class Hidden(unittest.TestCase):
         (self.root / ".git" / "info").mkdir(exist_ok=True)
         (self.root / ".git" / "info" / "exclude").write_text(".dfs/\n")
         self.assertEqual(self.rules(), [])
+
+    def test_a_planning_rule_that_a_negation_undoes_does_not_silence_it(self):
+        self.ignore("!.dfs/\n*.html\n")
+        (self.root / ".git" / "info").mkdir(exist_ok=True)
+        (self.root / ".git" / "info" / "exclude").write_text(".dfs/\n")
+        self.assertEqual(self.rules(), [(".dfs/artefacts/a.html", ".gitignore", "2", "*.html")])
+
+    def test_the_default_global_ignore_file_counts(self):
+        home = self.root / "home"
+        (home / ".config" / "git").mkdir(parents=True)
+        (home / ".config" / "git" / "ignore").write_text(".dfs/\n")
+        self.ignore(".*\n")
+        env = {"HOME": str(home), "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        with mock.patch.dict(os.environ, env):
+            os.environ.pop("XDG_CONFIG_HOME", None)
+            self.assertEqual(self.rules(), [])
 
     def test_a_broader_rule_alone_still_hides_it(self):
         self.ignore(".*\n")

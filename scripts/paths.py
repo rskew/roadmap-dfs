@@ -611,20 +611,25 @@ def hidden() -> list:
              for i in range(0, len(f) - 3, 4)]
     if (not _git("ls-files", "--", STATE_DIR_NAME).stdout.strip()
             and (all(_names_state_dir(h["pattern"]) for h in found)
-                 or any(_names_state_dir(p) for p in _ignore_patterns()))):
+                 or (ignored() and any(_names_state_dir(p) for p in _ignore_patterns())))):
         return []
     return found
 
 
 def ignore_files() -> list:
     """The ignore files that apply to the whole repo: the root `.gitignore`, `info/exclude`
-    (asked of git, since `.git` is a file in a linked worktree) and `core.excludesFile`."""
+    (asked of git, since `.git` is a file in a linked worktree) and the global excludes
+    file: `core.excludesFile`, or where that is unset the default git reads instead,
+    `$XDG_CONFIG_HOME/git/ignore` (`~/.config/git/ignore`)."""
     paths = [work_root() / ".gitignore"]
     for args in (("rev-parse", "--git-path", "info/exclude"),
                  ("config", "--get", "core.excludesFile")):
         out = _git(*args).stdout.strip()
         if out:
             paths.append(work_root() / os.path.expanduser(out))
+    if len(paths) < 3:
+        xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join("~", ".config")
+        paths.append(work_root() / os.path.expanduser(os.path.join(xdg, "git", "ignore")))
     return paths
 
 
