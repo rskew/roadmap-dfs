@@ -128,7 +128,8 @@ class Hidden(unittest.TestCase):
         self.assertEqual(self.rules(), [(".dfs/artefacts/a.html", ".gitignore", "1", "*.html")])
 
     def test_a_rule_naming_the_roadmap_keeps_it_as_planning(self):
-        for rule in (".dfs/\n", "/.dfs\n", ".dfs\n"):
+        for rule in (".dfs/\n", "/.dfs\n", ".dfs\n", ".dfs/*\n", "/.dfs/*\n",
+                     ".dfs/**\n", "**/.dfs/\n"):
             self.ignore(rule)
             self.assertEqual(self.rules(), [], rule)
 

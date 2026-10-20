@@ -590,9 +590,10 @@ def hidden() -> list:
     directory itself with nothing in it tracked, so that is the one way to be hidden that
     is not reported. A broader rule (a blanket `.*`, a `*.html`) or files force-added past
     a `.dfs/` rule leave the roadmap half in git: the tasks nobody force-added stay
-    untracked, and an item's worktree, cut from git, goes without them. Only the parts that make the roadmap are asked about (`roadmap_parts`): what else
-    sits in `.dfs` is local (`runs/` and the rest of `.dfs/.gitignore`) or the project's
-    own, which a `__pycache__` rule may hide as it does anywhere.
+    untracked, and an item's worktree, cut from git, goes without them. Only the parts
+    that make the roadmap are asked about (`roadmap_parts`): what else sits in `.dfs` is
+    local (`runs/` and the rest of `.dfs/.gitignore`) or the project's own, which a
+    `__pycache__` rule may hide as it does anywhere.
     An untracked file git would add is not hidden: it is a commit not yet made.
     """
     if state().is_symlink() or (state() / "items").is_symlink():
@@ -608,12 +609,18 @@ def hidden() -> list:
     f = r.stdout.split("\0")
     found = [dict(source=f[i], line=f[i + 1], pattern=f[i + 2], path=f[i + 3])
              for i in range(0, len(f) - 3, 4)]
-    if (len(found) == 1 and found[0]["path"].rstrip("/") == STATE_DIR_NAME
-            and found[0]["pattern"].strip("/").removesuffix("/*").removesuffix("/**")
-            == STATE_DIR_NAME
+    if (all(_names_state_dir(h["pattern"]) for h in found)
             and not _git("ls-files", "--", STATE_DIR_NAME).stdout.strip()):
         return []
     return found
+
+
+def _names_state_dir(pattern: str) -> bool:
+    """Whether an ignore pattern names the roadmap directory itself: `.dfs`, `/.dfs`,
+    `**/.dfs`, with a trailing `/`, `/*` or `/**` (the last two hide what is in it and
+    leave the directory itself unlisted)."""
+    pattern = pattern.rstrip("/").removesuffix("/**").removesuffix("/*").rstrip("/")
+    return pattern.removeprefix("/").removeprefix("**/") == STATE_DIR_NAME
 
 
 def hidden_message(found) -> str:
