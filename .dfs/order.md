@@ -103,6 +103,7 @@ Prose goes above the list; the list is the last thing in the file.
 - W83
 - W84
 - W85
+- W101
 - W86
 - W87
 - W88
@@ -112,3 +113,9 @@ Prose goes above the list; the list is the last thing in the file.
 - W92
 - W94
 - W93
+- W95
+- W96
+- W97
+- W98
+- W99
+- W100

@@ -605,6 +605,29 @@ class Chain(unittest.TestCase):
         self.assertIn("existed", r.stderr)
         self.assertIn("· note", item.read_text())
 
+    def test_a_branch_cut_before_the_task_file_was_committed_is_moved_up_to_main(self):
+        self.git("branch", "dfs/W1")
+        (self.root / ".dfs" / "items" / "W9.md").write_text(TASK.replace("W1", "W9"))
+        self.git("add", ".dfs")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "later task")
+        r = self.enter()
+        self.assertIn("moved up", r.stderr)
+        self.assertTrue((self.wt / ".dfs" / "items" / "W9.md").is_file())
+        r = self.enter()   # reused worktree, nothing to move
+        self.assertNotIn("moved up", r.stderr)
+
+    def test_a_branch_with_commits_of_its_own_is_not_moved(self):
+        self.enter()
+        (self.wt / "mine.txt").write_text("x\n")
+        self.git("add", "mine.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "mine", cwd=self.wt)
+        sha = self.git("rev-parse", "dfs/W1")
+        (self.root / "other.txt").write_text("y\n")
+        self.git("add", "other.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moves")
+        self.enter()
+        self.assertEqual(self.git("rev-parse", "dfs/W1"), sha)
+
     def test_an_older_roadmap_that_does_not_ignore_worktrees_does_not_show_them_as_new(self):
         self.assertEqual(self.git("status", "--porcelain"), "")
         self.enter()

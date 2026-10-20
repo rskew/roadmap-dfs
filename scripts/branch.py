@@ -232,6 +232,22 @@ def share_ignored_state(wt):
     return linked
 
 
+def catch_up(name, wt):
+    """Bring a branch with no commits of its own up to the default branch. A branch cut
+    before the task's file was committed (a first attempt that died after the cut) is
+    reused as it was, and a session in it finds no task file. Only a fast-forward, only
+    from the default branch, and a refusal (edits in the way) leaves it as it was.
+    Returns whether it moved."""
+    if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
+        return False
+    if _git("merge-base", "--is-ancestor", name, "HEAD").returncode != 0:
+        return False
+    head = _git("rev-parse", "HEAD").stdout.strip()   # not "HEAD" in `wt`: that is the branch
+    if _git("rev-parse", name).stdout.strip() == head:
+        return False
+    return _git("merge", "--ff-only", "-q", head, cwd=wt).returncode == 0
+
+
 def enter(task):
     """The worktree `task` is worked in, cut on the first call; None to work where we are:
     the checkout is off the default branch, or no commit exists yet for a branch to start
@@ -245,6 +261,7 @@ def enter(task):
     if dfs_paths.worktree(task):
         if ignored:
             share_ignored_state(wt)
+        catch_up(name, wt)
         return wt
     if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
         return None
@@ -268,6 +285,9 @@ def enter(task):
     else:
         print("dfs_branch: %s existed; reused, and %s's uncommitted edits here are left as they are" %
               (name, task), file=sys.stderr)
+        if catch_up(name, wt):
+            print("dfs_branch: %s had no commits of its own; moved up to %s" %
+                  (name, dfs_paths.branch()), file=sys.stderr)
     carry_named_attachments(task, wt)
     return wt
 
