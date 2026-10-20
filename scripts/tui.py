@@ -4317,6 +4317,9 @@ class UI(WalkMixin):
         if not raw:
             self.msg = "walk: not started"
             return
+        # ⚠️ `:walk 20 3` hands the prompt one answer per question, and this is ONE
+        # question with two numbers: what the `:` line has left over is the rest of it.
+        raw, self.answers = " ".join([raw] + self.answers), []
         words = raw.split()
         try:
             if len(words) > 2:

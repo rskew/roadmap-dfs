@@ -525,6 +525,19 @@ class Ticking(Ticks, unittest.TestCase):
         self.assertEqual(self.typed("20 three").begun, [])
         self.assertEqual(self.typed("20 3 1").begun, [])
 
+    def test_the_walk_command_s_arguments_are_the_prompts_two_numbers(self):
+        # `:walk 20 3` answers the one prompt with "20" and leaves "3" for it.
+        ui = self.ui(walk_on=False)
+        ui.pane, ui.scroll, ui.labels, ui.begun = "items", 0, [], []
+        ui.answers = ["20", "3"]
+        ui.walk_begin = lambda budget, par=1: ui.begun.append((budget, par))
+        ui.walk_toggle()
+        self.assertEqual(ui.begun, [(20, 3)])
+        self.assertEqual(ui.answers, [])
+        ui.answers = ["20"]
+        ui.walk_toggle()
+        self.assertEqual(ui.begun, [(20, 3), (20, 1)])
+
     def test_enter_at_the_walk_prompt_walks_the_last_walks_parallel_too(self):
         ui = self.typed("", parallel=3)
         self.assertEqual(ui.labels, ["walk: how many sessions, and at once? [12 3], esc cancels:"])
