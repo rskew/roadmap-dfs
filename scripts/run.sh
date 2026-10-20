@@ -19,10 +19,10 @@
 # complete, an IMPLEMENTATION REVIEW judges the code against the goal. What either
 # finds is work, put in the tree: the reviewer adds open nodes, the critic adds them
 # or backtracks to where the reasoning stopped holding. Only a decision that needs
-# the author is a raise. And after SESSION_LIMIT work sessions since the author last
-# spoke on the task, the runner raises for their review. That limit is also the
-# backstop for a review loop: rounds of implementation review have none of their
-# own, since some tasks need extensive review. An answer reopens the task
+# the author is a raise. Neither work sessions without the author nor rounds of
+# implementation review have a limit of their own, since some tasks need extensive
+# review: the cap below (the walk's budget, for a walk-started chain) is the backstop
+# for a loop. An answer reopens the task
 # until a work session has acted on it. All of it is counted from the
 # task's own Log, where the runner records every session it starts and how it ended;
 # none of it is left to a session's judgement.
@@ -454,7 +454,7 @@ META
 # to do next — the TUI's walk — never greps for a sentence.
 #
 #   limit       a usage limit; the only reason a caller should WAIT and retry
-#   blocked     an open raise — the agent's, the critic's, the reviewer's, or the session limit's
+#   blocked     an open raise — the agent's, the critic's or the reviewer's
 #   done        every live node confirmed, and the implementation reviewed or accepted
 #   cap         the chain ran its full cap with the task still open
 #   idle        the repo did not move: the session changed nothing (a critic or
@@ -1040,12 +1040,6 @@ for i in $(seq 1 "$CAP"); do
     kind=critic
   elif [ "$review_due" = 1 ]; then
     kind=review
-  elif [ "$limit" = 1 ]; then
-    printf '%s\n' "$sessions work sessions on $ITEM since you last spoke on it. Review the tree ($DFS_SCRIPTS_REL/run.sh --review $ITEM): answer this to let it carry on, or correct the node where it went wrong." \
-      | python3 "$TREE_PY" log "$ITEM" raise > /dev/null
-    stop_is blocked
-    echo "dfs_run: BLOCKED before run $i — $sessions work sessions since the author last spoke; raised for review."
-    exit 0
   fi
   # ⚠️ Foreign dirt goes to a WORK session first: a critic or reviewer may not change
   # code, and once either had run on this task the dirt would read as its own. The

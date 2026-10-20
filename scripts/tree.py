@@ -108,11 +108,11 @@ FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determinati
 # Old names still read, as the field they became: determined nodes are history, so
 # trees written before a rename keep them.
 RENAMED = {"Plan": "Approach"}
-# The two cadences. The environment overrides exist for trial runs, where waiting
-# five sessions to see the critic once is most of the cost of trying it. Review rounds
-# have no limit of their own: some tasks need extensive review, and SESSION_LIMIT, which
-# every fix to a review's findings counts toward, is the backstop for a review loop.
-SESSION_LIMIT = int(os.environ.get("DFS_SESSION_LIMIT", 10))  # work sessions before a raise for review
+# The critic's cadence. The environment override exists for trial runs, where waiting
+# five sessions to see the critic once is most of the cost of trying it. Neither review
+# rounds nor work sessions without the author have a limit of their own: some tasks
+# need extensive review, and the sessions a chain or walk is given (its cap) are the
+# backstop for a loop, since every fix to a review's findings is a session.
 CRITIC_EVERY = int(os.environ.get("DFS_CRITIC_EVERY", 5))     # work sessions between critic reviews
 
 TS_RE = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
@@ -1189,8 +1189,8 @@ def author_marks(t):
 
 
 def sessions_since_author(t):
-    """Work sessions since the author last spoke on this task — the session limit's
-    count, so an answer to its raise is what resets it."""
+    """Work sessions since the author last spoke on this task: an answer, a correction
+    or an accept resets it. A count to show, not a limit."""
     last = max((e["ts"] for e in author_marks(t)), default="")
     return sum(1 for e in t["log"] if e["kind"] == "session" and e["args"][:1] == ["work"]
                and e["ts"] > last)
@@ -1310,7 +1310,7 @@ def review_rounds_unsettled(t):
 
     The count only names the round in the review's brief. It limits nothing: a review's
     issues become nodes, the nodes' fixes complete the tree, and a complete tree is due
-    another review, so a loop that never settles is stopped by SESSION_LIMIT counting
+    another review, so a loop that never settles is stopped by the chain's cap counting
     the fixes, not by a number of rounds."""
     last = max([e["ts"] for e in author_marks(t)] +
                [e["ts"] for e in t["log"] if e["kind"] == "review"
