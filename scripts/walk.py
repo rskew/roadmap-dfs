@@ -738,7 +738,6 @@ class WalkMixin:
     def walk_snapshot(self):
         """Where the walk stands, for the page: read, never written."""
         now = time.time()
-        run = self.walk_run()
         items = list(self.items)
         auto = self.data.get("next_item")
         goal = next((i["goal"] for i in items if i["id"] == auto), "")
@@ -749,8 +748,6 @@ class WalkMixin:
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS),
             pinned=self.walk_next, auto=auto, auto_goal=goal,
-            chain=(dict(item=run["item"], run=run["run"], cap=run["cap"],
-                        progress=dfs_runs.progress(run), live=run["live"]) if run else None),
             chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],
                          progress=dfs_runs.progress(r), live=r["live"])
                     for r in self.walk_runs()],

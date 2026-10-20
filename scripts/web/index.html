@@ -637,8 +637,8 @@ function walkHtml() {
   const w = S.walk;
   if (!w || !w.enabled) return "";
   const mine = (w.chains || []).filter(c => c.live);
-  const chain = mine[0] || (w.chain && w.chain.live ? w.chain : null);
-  const names = mine.length ? mine.map(c => esc(c.item)).join(", ") : chain ? esc(chain.item) : "";
+  const chain = mine[0];
+  const names = mine.map(c => esc(c.item)).join(", ");
   const at = w.parallel > 1 ? `, ${w.parallel} at a time` : "";
   const state = w.on
     ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : w.pending ? `<span class="hold">Waiting for a task</span>` : `<span class="on">Walking</span>`)
@@ -650,8 +650,8 @@ function walkHtml() {
   const options = [`<option value="">${auto}</option>`].concat(w.candidates.map(c =>
     `<option value="${esc(c.id)}" ${w.pinned === c.id ? "selected" : ""}>${esc(c.id)}  ${esc(c.goal)}</option>`)).join("");
   const agents = (w.agents || []).map(a => `<option value="${esc(a)}" ${w.agent === a ? "selected" : ""}>${esc(a)}</option>`).join("");
-  const others = w.live.filter(c => !(mine.length ? mine : chain ? [chain] : []).some(m => m.item === c.item));
-  const chains = (mine.length ? mine : chain ? [chain] : []).map(c => ({ item: c.item, progress: c.progress })).concat(others).map(c =>
+  const others = w.live.filter(c => !mine.some(m => m.item === c.item));
+  const chains = mine.map(c => ({ item: c.item, progress: c.progress })).concat(others).map(c =>
     `<div class="chain"><span><b>${esc(c.item)}</b> ${esc(c.progress)}</span><button class="btn danger" data-act="chainstop" data-item="${esc(c.item)}">Stop chain</button></div>`).join("");
   const events = w.events.length ? `<details><summary class="cap">Activity</summary><ul class="ev">${w.events.slice(0, 6).map(e =>
     `<li><time>${esc(e.age)}</time><span>${esc(e.text)}</span></li>`).join("")}</ul></details>` : "";

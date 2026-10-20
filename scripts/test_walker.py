@@ -166,7 +166,7 @@ class Interface(unittest.TestCase):
         self.w.refresh_chains()
         snap = self.w.snapshot()
         self.assertEqual((snap["on"], snap["budget"], snap["used"]), (True, 5, 2))
-        self.assertEqual(snap["chain"]["item"], "W2")
+        self.assertEqual(snap["chains"][0]["item"], "W2")
         self.assertEqual([c["id"] for c in snap["candidates"]], ["W1", "W2"])
         self.assertEqual(snap["auto"], "W1")
         self.assertTrue(snap["events"])
