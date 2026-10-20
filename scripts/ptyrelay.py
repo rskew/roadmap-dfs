@@ -393,9 +393,10 @@ class Relay:
                 self.log("no response %ds after the Enter: pressed Enter again" % SUBMIT_WAIT)
 
     # ── looking at it ──────────────────────────────────────────────────────────────────
-    def attach(self):
+    def attach(self, idle=None, every=0.3):
         """Wire the real terminal to it until it ends or ctrl-] is pressed. Returns True if it
-        was detached (still running), False if it ended."""
+        was detached (still running), False if it ended. `idle()` runs about every `every` seconds
+        meanwhile, typing or not, on this thread: the screen's poll, which a chat would block."""
         if not self.live:                       # it ended before anyone looked: `fit` has no pty to size
             return False
         stdin, stdout = sys.stdin.fileno(), sys.stdout.fileno()
@@ -432,10 +433,14 @@ class Relay:
         self.attached = True
         fit(redraw=True)
         detached = False
+        polled = time.time()
         try:
             while self.live:
+                if idle is not None and time.time() - polled >= every:
+                    polled = time.time()
+                    idle()
                 try:
-                    ready, _, _ = select.select([stdin], [], [], 0.3)
+                    ready, _, _ = select.select([stdin], [], [], every)
                 except InterruptedError:
                     continue
                 except OSError:

@@ -4178,13 +4178,14 @@ class UI(WalkMixin):
 
     def open_chat(self, scope):
         """What `c` and `C` do: look at this scope's chat, running it first if it is not.
-        ctrl-] comes back to the roadmap and leaves it running."""
+        ctrl-] comes back to the roadmap and leaves it running. The screen goes on polling
+        meanwhile (it draws nothing), so the page's walk Start is run and a walk goes on ticking."""
         relay = self.start_chat(scope)
         self.event("run", "chat %s" % scope)
         curses.def_prog_mode()
         curses.endwin()
         try:
-            kept = relay.attach()
+            kept = relay.attach(idle=self.poll)
         except KeyboardInterrupt:
             kept = True
         if not kept:
