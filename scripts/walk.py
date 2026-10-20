@@ -193,6 +193,7 @@ class WalkMixin:
     walk_parallel = 1
     walk_chains = ()
     walk_carry = ()
+    walk_carry_pinned = ()
 
     def walk_init(self):
         self.walk_on = False
@@ -206,6 +207,7 @@ class WalkMixin:
         # (the sessions it may run: its share of the budget, lowered when it is told to end).
         self.walk_chains = []
         self.walk_carry = []        # tasks whose chain ended on its cap or a limit, still open: they go first
+        self.walk_carry_pinned = set()  # of those, the ones the author pinned: a draft among them stays workable
         self.walk_note = ""         # why the last walk stopped, until the next one
         self.walk_next = None       # an item the author pinned for the next chain — walk_pin
         self.walk_pending = False   # on, but nothing is workable: waiting for a task to appear
@@ -228,6 +230,7 @@ class WalkMixin:
         self.walk_until = 0.0
         self.walk_chains = []
         self.walk_carry = []
+        self.walk_carry_pinned = set()
         self.walk_note = ""
         self.walk_pending = False
         both = "%d sessions" % budget + (", %d at a time" % parallel if parallel > 1 else "")
@@ -250,6 +253,7 @@ class WalkMixin:
         self.walk_on = False
         self.walk_chains = []
         self.walk_carry = []
+        self.walk_carry_pinned = set()
         self.walk_until = 0.0
         self.walk_pending = False
         self.walk_note = why
@@ -381,7 +385,7 @@ class WalkMixin:
         if free < 1:
             return
         busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in foreign}
-        picks = dfs_state.next_items(self.items, free, busy, first=self.walk_lead())
+        picks = dfs_state.next_items(self.items, free, busy, first=self.walk_lead(busy))
         if not picks:
             # ⚠️ NOTHING TO TAKE IS A WAIT, NOT AN END. The walk stays on and asks
             # again on every tick (`reload` re-reads the trees), so a task created
@@ -437,7 +441,7 @@ class WalkMixin:
             # ⚠️ A limit means "try the same thing again": the task goes first when the
             # hold is over, a draft the author pinned included (`next_item` never offers
             # one). A newer pin is the author's later word and still goes before it.
-            self.walk_carry = self.walk_carry + [item]
+            self.walk_carry_add(item, rec)
             return True
         if action == "stop":
             self.walk_off("%s: %s" % (item, why))
@@ -447,16 +451,33 @@ class WalkMixin:
         # "run" and "pend" carry on to fill the slots; a chain that used its share of the
         # budget with the task still open has more to do there, and goes first.
         if run["stop"] == "cap":
-            self.walk_carry = self.walk_carry + [item]
+            self.walk_carry_add(item, rec)
         return True
 
-    def walk_lead(self):
+    def walk_carry_add(self, item, rec):
+        """Carry `item` to go first next time. Whether the author pinned it is remembered,
+        since a pinned draft is workable here and no other draft is."""
+        self.walk_carry = self.walk_carry + [item]
+        if rec["pin"] or item in self.walk_carry_pinned:
+            self.walk_carry_pinned = set(self.walk_carry_pinned) | {item}
+
+    def walk_lead(self, busy=()):
         """The tasks the walk takes before the order: the pin, the tasks its chains left
-        on a cap or a limit while still open, then the walk's continuation."""
-        open_ = {i["id"] for i in self.items if i["status"] == "open"}
+        on a cap or a limit while still workable, then the walk's continuation.
+
+        ⚠️ A carried task is asked again what the order would ask: it may have been made a
+        draft (`walk_draft_marked` ends its chain on the cap, which is how it got here),
+        or an ancestor's raise or a fence may hold it now. Only a draft the author pinned
+        is carried on."""
+        by = {i["id"]: i for i in self.items}
         pin = self.walk_pinned()    # drops a pin that cannot be worked, and says so
         lead = [pin] if pin else []
-        lead += [c for c in self.walk_carry if c in open_]
+        for c in self.walk_carry:
+            it = by.get(c)
+            if (it and it["status"] == "open" and it.get("reachable", True)
+                    and (not it.get("draft") or c in self.walk_carry_pinned)
+                    and not dfs_state.held_by_parent(by, it, busy)):
+                lead.append(c)
         lead.append(self.data.get("next_item"))
         return lead
 

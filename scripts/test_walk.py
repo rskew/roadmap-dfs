@@ -632,6 +632,42 @@ class Ticking(Ticks, unittest.TestCase):
         self.assertEqual(lowered, [("/runs/mine", 3)])
         self.assertTrue(ui.walk_on, "ending a chain is not a stop")
 
+    def test_a_task_made_a_draft_while_its_chain_ran_is_not_carried_on(self):
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")], walk_budget=20)
+        ui.event = lambda kind, text: text
+        ui.data["items"] = [dict(id="W7", status="open", draft=1, reachable=True),
+                            dict(id="W8", status="open", reachable=True)]
+        ui.data["next_item"] = "W8"
+        ui.data["contents"] = {"W7": ["moved"]}
+        self.live(ui, [self.chain(dir="/runs/mine", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W8"])
+
+    def test_a_carried_task_that_an_open_ancestor_now_holds_is_not_started(self):
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", item="W8")])
+        ui.event = lambda kind, text: text
+        ui.data["items"] = [dict(id="W7", status="open", reachable=True),
+                            dict(id="W8", status="open", reachable=True, parent="W7")]
+        ui.data["next_item"] = "W7"
+        ui.data["contents"] = {"W8": ["moved"]}
+        self.live(ui, [self.chain(dir="/runs/mine", item="W8", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7"])
+
+    def test_a_pinned_draft_that_ends_on_its_cap_twice_is_still_carried_on(self):
+        ui = self.ui(walk_chains=[self.rec(dir="/runs/mine", item="W9", pin=True)])
+        ui.event = lambda kind, text: text
+        ui.data["items"] = [dict(id="W7", status="open", reachable=True),
+                            dict(id="W9", status="open", draft=1, reachable=True)]
+        ui.data["contents"] = {"W9": ["moved"]}
+        self.live(ui, [self.chain(dir="/runs/mine", item="W9", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9"])
+        ui.walk_chains = [self.rec(dir="/runs/new", item="W9")]
+        self.live(ui, [self.chain(dir="/runs/new", item="W9", stop="cap", run="3")])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W9", "W9"])
+
     def test_marking_a_draft_leaves_a_pinned_chain_and_other_items_alone(self):
         lowered = self.lowering()
         ui = self.ui(walk_chains=[self.rec(dir="/runs/mine")])

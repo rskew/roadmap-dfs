@@ -240,6 +240,17 @@ def next_item(items):
                  if it["reachable"] and it["status"] == "open" and not it.get("draft")), None)
 
 
+def held_by_parent(by, it, busy=()):
+    """Whether `it` waits for an ancestor in `by` (id -> row): one that is open and not a
+    draft, or one in `busy`, a chain still on it (see `next_items`)."""
+    up = by.get(it.get("parent"))
+    while up is not None:
+        if up["id"] in busy or (up["status"] == "open" and not up.get("draft")):
+            return True
+        up = by.get(up.get("parent"))
+    return False
+
+
 def next_items(walked, n, busy=(), first=None):
     """Up to `n` tasks for a walk running chains side by side, in the order it takes them:
     `first` (a task id or a list of them: the walk's pin, the tasks its chains left on a
@@ -258,12 +269,7 @@ def next_items(walked, n, busy=(), first=None):
     by = {i["id"]: i for i in walked}
 
     def held(it):
-        up = by.get(it.get("parent"))
-        while up is not None:
-            if up["id"] in busy or (up["status"] == "open" and not up.get("draft")):
-                return True
-            up = by.get(up.get("parent"))
-        return False
+        return held_by_parent(by, it, busy)
 
     lead = [first] if isinstance(first, str) else list(first or ())
     out = []
