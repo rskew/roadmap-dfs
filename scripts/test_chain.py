@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -551,6 +552,83 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.git("merge-base", sha, "dfs/W1"), sha)
         self.assertEqual(self.git("worktree", "list").count("\n"), 1)
 
+    def test_a_worktree_without_the_task_file_stops_the_chain_with_the_cause(self):
+        self.run_chain("work", cap=1)
+        (self.wt / ".dfs" / "items" / "W1.md").unlink()
+        before = self.count.read_text()
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertIn("has no .dfs/items/W1.md, which the main checkout has", meta.get("cause", ""))
+        self.assertIn("W1 cannot be briefed: the worktree", out)
+        self.assertEqual(self.count.read_text(), before)   # no session started
+
+    def chain_from_copy(self, script, code):
+        """Run the chain from a copy of the scripts whose `script` starts with `code`.
+        Returns (rc, meta, output)."""
+        copy = self.aside / "scripts-copy"
+        shutil.copytree(HERE.parent, copy, ignore=shutil.ignore_patterns("__pycache__", ".git", ".dfs"))
+        path = copy / "scripts" / script
+        lines = path.read_text().split("\n")
+        lines.insert(1, code)
+        path.write_text("\n".join(lines))
+        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE="work", COUNT_FILE=str(self.count),
+                 KINDS_FILE=str(self.kinds), TREE_PY=str(HERE / "tree.py"), HOME=str(self.aside))
+        e.pop("RUNDIR", None)
+        p = subprocess.run(["bash", str(copy / "scripts" / "run.sh"), "W1", "1"], cwd=self.root, env=e,
+                           capture_output=True, text=True, timeout=300)
+        metas = sorted((self.root / ".dfs" / "runs").glob("*/meta.json"), key=lambda f: f.stat().st_mtime)
+        return p.returncode, json.loads(metas[-1].read_text()) if metas else {}, p.stdout + p.stderr
+
+    def chain_with_briefing(self, mode):
+        """Run the chain from a copy of the scripts whose `state.py --brief` first prints a
+        notice, then (mode "fail") fails."""
+        return self.chain_from_copy("state.py", "import sys as _s\nif '--brief' in _s.argv:\n"
+                                    "    print('dfs_tree: a notice', file=_s.stderr)\n"
+                                    "    if %r == 'fail':\n        print('dfs_state: boom', file=_s.stderr); _s.exit(1)" % mode)
+
+    def test_an_enter_that_fails_is_recorded_as_the_stop_with_its_cause(self):
+        rc, meta, out = self.chain_from_copy("branch.py", "import sys as _s\nif _s.argv[1:2] == ['enter']:\n"
+                                             "    print('dfs_branch: no room for a worktree', file=_s.stderr); _s.exit(1)")
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertEqual(meta.get("cause"), "branch.py enter failed: dfs_branch: no room for a worktree")
+        self.assertIn("no room for a worktree", out)
+        self.assertEqual(meta.get("rc"), "2")
+
+    def test_a_briefing_that_fails_is_recorded_with_its_cause_and_its_notice_is_shown(self):
+        rc, meta, out = self.chain_with_briefing("fail")
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertEqual(meta.get("cause"), "state.py --brief failed: dfs_state: boom")
+        self.assertIn("dfs_tree: a notice", out)
+
+    def test_a_notice_the_briefing_prints_on_success_is_shown(self):
+        rc, meta, out = self.chain_with_briefing("ok")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("dfs_tree: a notice", out)
+
+    def test_a_worktree_without_the_task_file_names_the_ignore_rule_that_hides_it(self):
+        self.ignore_roadmap(".dfs/items/\n")
+        self.enter()
+        empty = self.aside / "empty-items"
+        empty.mkdir()
+        link = self.wt / ".dfs" / "items"
+        link.unlink()
+        link.symlink_to(empty)   # a link `enter` leaves alone, to a directory without the task file
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertIn("and the ignore rule .gitignore:1:.dfs/items/ hides it", meta.get("cause", ""))
+
+    def test_a_task_file_missing_in_its_worktree_is_not_shown_as_an_empty_tree(self):
+        self.enter()
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            self.assertEqual(dfs_tree.status_of(dfs_tree.load("W1"))[1], "current node W1.1 · the step")
+            (self.wt / ".dfs" / "items" / "W1.md").unlink()
+            why = dfs_tree.status_of(dfs_tree.load("W1"))[1]
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+        self.assertIn("its task file is missing in its worktree .dfs/worktrees/W1", why)
+
     def test_the_task_s_uncommitted_edits_move_to_the_branch_and_main_gets_them_back(self):
         item = self.root / ".dfs" / "items" / "W1.md"
         item.write_text(TASK + "- 2026-01-01T00:00:00Z · note\n")
@@ -661,6 +739,307 @@ class Chain(unittest.TestCase):
                                check=True, capture_output=True)
                 self.git("branch", "-D", "dfs/W1")
                 self.assertTrue((self.root / ".dfs" / "items" / "W1.md").is_file())   # the links, not the files, went
+
+    def test_a_roadmap_hidden_by_a_blanket_rule_with_some_files_force_added_shares_them_all(self):
+        # `.*` hides `.dfs`, and W1.md and order.md were force-added once: the branch carries
+        # only those, so the worktree must take the rest, and the current order, from here
+        (self.root / ".dfs" / "order.md").write_text("- W1\n")
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/order.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        (self.root / ".dfs" / "items" / "W2.md").write_text(TASK.replace("W1", "W2"))
+        (self.root / ".dfs" / "order.md").write_text("- W1\n- W2\n")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W2"],
+                           cwd=self.root, capture_output=True, text=True)
+        wt = self.root / ".dfs" / "worktrees" / "W2"
+        self.assertEqual(r.stdout.strip(), str(wt), r.stderr)
+        self.assertEqual((wt / ".dfs" / "items" / "W2.md").read_text(), TASK.replace("W1", "W2"))
+        self.assertEqual((wt / ".dfs" / "order.md").read_text(), "- W1\n- W2\n")
+        self.assertEqual(self.git("status", "--porcelain", cwd=wt), "")
+        # the author commits a force-tracked planning file while the item is worked: the
+        # rebase at the merge must not stop on the paths the worktree shares
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK + "\nedited\n")
+        self.git("add", "-f", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "the author's edit")
+        (wt / "app.txt").write_text("worked\n")
+        self.git("add", "app.txt", cwd=wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W2.1: the step", cwd=wt)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W2"], cwd=self.root,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(wt.exists())
+        self.assertEqual((self.root / "app.txt").read_text(), "worked\n")
+        self.assertTrue((self.root / ".dfs" / "items" / "W2.md").is_file())
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- W2\n")
+        self.assertIn("edited", (self.root / ".dfs" / "items" / "W1.md").read_text())
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no"), "M .dfs/order.md")
+
+    def test_entering_a_task_whose_force_tracked_file_has_uncommitted_edits_keeps_the_edits(self):
+        # the blanket rule links `items` into the worktree, so the task's own edited file is
+        # reached through the link: carrying it over would copy a file onto itself
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        task = self.root / ".dfs" / "items" / "W1.md"
+        task.write_text(TASK + "\nanswered\n")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W1"],
+                           cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.strip(), str(self.wt))
+        self.assertEqual((self.wt / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nanswered\n")
+        self.assertEqual(task.read_text(), TASK + "\nanswered\n")
+
+    def _blanket_rule_with_w1_tracked(self):
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+
+    def test_the_catch_up_to_main_keeps_the_items_link_when_main_force_commits_a_new_task_file(self):
+        # the fast-forward would swap the link for a real `items` holding only the committed file
+        self._blanket_rule_with_w1_tracked()
+        task = self.root / ".dfs" / "items" / "W2.md"
+        task.write_text(TASK.replace("W1", "W2"))
+        def enter():
+            return subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W2"],
+                                  cwd=self.root, capture_output=True, text=True, check=True)
+        enter()
+        wt = self.root / ".dfs" / "worktrees" / "W2"
+        with task.open("a") as f:
+            f.write("seen by the branch\n")
+        self.git("add", "-f", ".dfs/items/W2.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W2 committed")
+        with task.open("a") as f:
+            f.write("edited since\n")
+        r = enter()
+        self.assertTrue((wt / ".dfs" / "items").is_symlink(), r.stderr)
+        self.assertEqual((wt / ".dfs" / "items" / "W2.md").read_text(), task.read_text())
+        self.assertIn("edited since", (wt / ".dfs" / "items" / "W2.md").read_text())
+        self.assertTrue((wt / ".dfs" / "items" / "W1.md").is_file())
+        self.assertEqual(self.git("rev-parse", "dfs/W2"), self.git("rev-parse", "HEAD"))
+        self.assertEqual(self.git("status", "--porcelain", cwd=wt), "")
+
+    def test_the_catch_up_to_main_moves_a_branch_when_main_changed_an_already_hidden_file(self):
+        self._blanket_rule_with_w1_tracked()
+        self.enter()
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        w1 = self.root / ".dfs" / "items" / "W1.md"
+        w1.write_text(TASK + "\nmain's change\n")
+        self.git("add", "-f", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main changes W1")
+        w1.write_text(TASK + "\nmain's change\nand a live edit\n")
+        r = self.enter()
+        self.assertEqual(self.git("rev-parse", "dfs/W1"), self.git("rev-parse", "HEAD"), r.stderr)
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        self.assertIn("a live edit", (self.wt / ".dfs" / "items" / "W1.md").read_text())
+
+    def test_a_reused_worktree_that_worked_a_force_tracked_task_file_for_real_keeps_the_branchs_version(self):
+        # begun before the entry was shared: the worktree holds a real tracked W1.md and the
+        # branch committed a step in it, so the main checkout's copy is the stale one
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        mine = self.wt / ".dfs" / "items" / "W1.md"
+        mine.write_text(TASK + "\nconfirmed in the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+        mine.write_text(TASK + "\nconfirmed in the branch\nand edited since\n")
+        r = self.enter()
+        self.assertEqual(mine.read_text(), TASK + "\nconfirmed in the branch\nand edited since\n")
+        self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), mine.read_text())
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        self.assertNotIn("from-worktree", "".join(p.name for p in (self.root / ".dfs" / "items").iterdir()))
+        # the merge meets the branch's commit of the file the shared copy now holds
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("and edited since", (self.root / ".dfs" / "items" / "W1.md").read_text())
+
+    def test_a_reused_worktree_and_the_main_checkout_that_both_changed_a_force_tracked_file_are_left_unshared(self):
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        mine = self.wt / ".dfs" / "items" / "W1.md"
+        mine.write_text(TASK + "\nin the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK + "\nhere\n")
+        r = self.enter()
+        self.assertIn("changed both", r.stderr)
+        self.assertEqual(mine.read_text(), TASK + "\nin the branch\n")
+        self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nhere\n")
+        self.assertFalse((self.wt / ".dfs" / "items").is_symlink())
+
+    def force_tracked_worktree_with_a_branch_commit(self, base):
+        """The pre-sharing state: a blanket rule, W1.md force-tracked with the text `base`, and a
+        worktree that committed `base + "in the branch"` to it for real."""
+        (self.root / ".dfs" / "items" / "W1.md").write_bytes(base)
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        (self.wt / ".dfs" / "items" / "W1.md").write_bytes(base + b"in the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+
+    def test_the_rebase_at_the_merge_does_not_call_the_shared_copy_a_clash_when_main_has_moved(self):
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        with (self.root / ".dfs" / "items" / "W1.md").open("a") as f:
+            f.write("and edited since\n")   # through the link
+        (self.root / "other.txt").write_text("main's own file\n")
+        self.git("add", "other.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moves")
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("changed both", r.stderr)
+        self.assertFalse(self.wt.exists())
+        self.assertIn("and edited since", (self.root / ".dfs" / "items" / "W1.md").read_text())
+
+    def test_a_refused_merge_keeps_the_raise_it_writes_into_the_set_aside_task_file(self):
+        # the shared task file is set aside around the merge and written back after it: the
+        # raise for the refused merge is written into it, so it must be put back first
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        (self.wt / "app.txt").write_text("worked\n")
+        self.git("add", "app.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.2: app", cwd=self.wt)
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        (self.root / "app.txt").write_text("the author's edit\n")
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("raised for the author", r.stderr + r.stdout)
+        text = task.read_text()
+        self.assertIn("edited since", text)
+        self.assertIn("raise", text)
+        self.assertIn("app.txt", text)
+
+    def test_an_interrupted_merge_puts_back_the_shared_task_file_edit_it_set_aside(self):
+        # Stop chain's SIGINT reaches `branch.py merge` while git merges: the edit made through
+        # the link has no other copy, so it must be back in the checkout when the interrupt leaves
+        import branch as dfs_branch
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        real = dfs_branch._git
+
+        def interrupted(*args, **kw):
+            if "--no-ff" in args:
+                raise KeyboardInterrupt
+            return real(*args, **kw)
+
+        here = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(dfs_branch, "_git", interrupted):
+                with self.assertRaises(KeyboardInterrupt):
+                    dfs_branch.merge("W1")
+        finally:
+            os.chdir(here)
+        self.assertIn("edited since", task.read_text())
+
+    def test_an_interrupt_during_the_reset_of_a_set_aside_edit_puts_it_back(self):
+        # the interrupt lands after `git checkout HEAD -- <path>` reset the file the dict
+        # (not yet returned to `merge`) holds the only copy of
+        import branch as dfs_branch
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        real = dfs_branch._git
+
+        def interrupted(*args, **kw):
+            r = real(*args, **kw)
+            if args[:2] == ("checkout", "HEAD"):
+                raise KeyboardInterrupt
+            return r
+
+        here = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(dfs_branch, "_git", interrupted):
+                with self.assertRaises(KeyboardInterrupt):
+                    dfs_branch.merge("W1")
+        finally:
+            os.chdir(here)
+        self.assertIn("edited since", task.read_text())
+
+    def test_a_merge_a_hook_refuses_keeps_the_open_node_it_writes_into_the_set_aside_task_file(self):
+        # a hook needs an exec-capable directory, so the refusal is driven in-process: git
+        # merges without committing, as when `pre-merge-commit` runs, and reports failure
+        import branch as dfs_branch
+        self.force_tracked_worktree_with_a_branch_commit(TASK.encode())
+        self.enter()
+        task = self.root / ".dfs" / "items" / "W1.md"
+        with task.open("a") as f:
+            f.write("- 2026-10-19T09:00:00Z · session · work · edited since\n")   # through the link
+        real = dfs_branch._git
+
+        def refused(*args, **kw):
+            if "--no-ff" in args:
+                r = real(*args[:-1], "--no-commit", args[-1], **kw)
+                self.assertEqual(r.returncode, 0, r.stderr)
+                return subprocess.CompletedProcess(args, 1, "", "the guard refused the merge\n")
+            return real(*args, **kw)
+
+        here = os.getcwd()
+        os.chdir(self.root)
+        try:
+            with mock.patch.object(dfs_branch, "_git", refused):
+                self.assertEqual(dfs_branch.merge("W1"), "guard")
+        finally:
+            os.chdir(here)
+        text = task.read_text()
+        self.assertIn("edited since", text)
+        self.assertIn("Fix what refused the merge of dfs/W1", text)
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_a_crlf_task_file_the_main_checkout_never_changed_is_not_taken_for_a_clash(self):
+        self.force_tracked_worktree_with_a_branch_commit(TASK.replace("\n", "\r\n").encode())
+        r = self.enter()
+        self.assertNotIn("changed both", r.stderr)
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        self.assertIn(b"in the branch", (self.root / ".dfs" / "items" / "W1.md").read_bytes())
+
+    def test_a_merge_does_not_write_the_authors_edit_over_the_branchs_change_to_a_tracked_roadmap_file(self):
+        # `.dfs` is tracked whole: the worktree's `order.md` is its own, so an edit of the
+        # author's here was not made on the branch's version, and the merge is theirs to settle
+        (self.root / ".dfs" / "order.md").write_text("- W1\n")
+        self.git("add", ".dfs/order.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "order")
+        self.enter()
+        (self.wt / ".dfs" / "order.md").write_text("- W1\n- branch\n")
+        self.git("add", ".dfs/order.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: order", cwd=self.wt)
+        (self.root / ".dfs" / "order.md").write_text("- W1\n- author\n")
+        head = self.git("rev-parse", "HEAD")
+        r = self.merge_by_hand()
+        self.assertEqual(self.git("rev-parse", "HEAD"), head, r.stderr)
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- author\n")
+        self.assertTrue(self.wt.exists())
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_a_merge_does_not_write_a_clashing_edit_over_the_branchs_committed_force_tracked_file(self):
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt), "HEAD")
+        mine = self.wt / ".dfs" / "items" / "W1.md"
+        mine.write_text(TASK + "\nin the branch\n")
+        self.git("add", "-f", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: the step", cwd=self.wt)
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK + "\nhere\n")
+        self.enter()   # both changed it: left unshared
+        r = self.merge_by_hand()
+        self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nhere\n", r.stderr)
+        self.assertEqual(self.git("show", "dfs/W1:.dfs/items/W1.md"), (TASK + "\nin the branch\n").strip())
+        self.assertTrue(self.wt.exists())
 
     def merge_by_hand(self):
         return subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,

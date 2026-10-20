@@ -186,7 +186,9 @@ by a hash that would dangle once the branch is merged and deleted.
 When `.dfs/` is gitignored the worktree is cut all the same. The ignored planning files are in
 no commit, so the worktree's `.dfs/items`, `.dfs/artefacts` and the rest are links to the
 author's checkout, and the task file you write there is the one copy: it is never staged, and
-your node commits carry the code alone (below).
+your node commits carry the code alone (below). A blanket rule such as `.*` that hides force-added
+task files and `order.md` is the same: they are linked too, so you edit them in the author's
+checkout, and they are left modified and uncommitted there after the merge.
 
 Two cases have no branch: a first run while the checkout is off `main`/`master`, and a repo
 with no commit yet. Then the item is worked in place, on whatever is checked out, and

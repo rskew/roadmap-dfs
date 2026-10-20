@@ -54,6 +54,12 @@ class Deciding(unittest.TestCase):
         for stop in ("idle",):
             self.assertEqual(TUI.walk_decide(stop, True, "W7")[0], "raise", stop)
 
+    def test_a_chain_that_could_not_brief_a_session_says_why_it_stopped(self):
+        action, why = TUI.walk_decide("brief", False, "W7", "the worktree has no W7.md")
+        self.assertEqual(action, "stop")
+        self.assertEqual(why, "a session could not be briefed: the worktree has no W7.md")
+        self.assertEqual(TUI.walk_decide("", False, "W7")[1], "the chain ended without recording why")
+
     def test_what_no_other_item_would_survive_stops_the_walk(self):
         for stop in ("interrupt", "died", "something-new",
                      "failed", "overbudget", "overturns"):

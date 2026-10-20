@@ -202,11 +202,16 @@ briefing: the roadmap's law verbatim, then what to review and how to record it."
 TREE_PY="$HERE/tree.py"
 
 build_prompt() {  # build_prompt work|critic|review
-  local brief flag=--brief lead="$PROMPT_LEAD"
+  local brief ok flag=--brief lead="$PROMPT_LEAD"
   if [ "$1" = critic ]; then flag=--critic-brief; lead="$CRITIC_LEAD"; fi
   if [ "$1" = review ]; then flag=--review-brief; lead="$REVIEW_LEAD"; fi
-  if ! brief="$(python3 "$HERE/state.py" "$flag" "$ITEM")"; then
+  brief="$(python3 "$HERE/state.py" "$flag" "$ITEM" 2>"$RUNDIR/brief.err")" && ok=1 || ok=0
+  cat "$RUNDIR/brief.err" >&2   # a notice the briefing prints is shown whether or not it succeeds
+  if [ "$ok" = 0 ]; then
     echo "dfs_run: state.py $flag $ITEM failed; a session cannot be briefed." >&2
+    # recorded, so the walk says why the chain ended rather than that it did not say
+    stop_is brief
+    meta_set cause="state.py $flag failed: $(tail -n 1 "$RUNDIR/brief.err")"
     return 1
   fi
   printf '%s\n\n%s\n' "$lead" "$brief"
@@ -459,6 +464,8 @@ META
 #   overbudget  a session went past the context ceiling
 #   overturns   no context reading, and past the turn ceiling
 #   interrupt   Ctrl-C
+#   brief       a session could not be briefed (`cause` says why): its task file is
+#               missing in the worktree, `state.py` failed, or `branch.py enter` failed
 stop_is() {
   # ⚠️ Spelled out rather than `${2:+resets="$2"}`: that expansion word-splits a
   # reset time like "resets 3pm" into two argv entries.
@@ -907,7 +914,8 @@ try:
     dfs_paths.branch_tag()
 except dfs_paths.NoBranch as e:
     print("dfs_run: %s" % e, file=sys.stderr); raise SystemExit(2)
-if not dfs_tree.exists(sys.argv[1]):
+# a task file here that its worktree lacks is said after the worktree is entered, with why
+if not dfs_tree.exists(sys.argv[1]) and not (dfs_paths.items() / ("%s.md" % sys.argv[1])).is_file():
     print("dfs_run: no task %s under %s" % (sys.argv[1], dfs_paths.rel(dfs_paths.items())),
           file=sys.stderr); raise SystemExit(2)
 PY
@@ -922,7 +930,19 @@ PY
 # the main checkout and is done with it.
 RUNDIR="$(cd "$RUNDIR" && pwd)"
 ITEM_MAIN="$(pwd)"
-ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM")" || exit 2
+meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
+         started="$(date -Is)" pid="$$"
+trap on_exit EXIT
+trap on_interrupt INT TERM
+# An `enter` that fails (a BranchError, a traceback) is recorded as the stop, with its cause,
+# so the walk does not say the chain ended without recording why.
+if ! ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM" 2>"$RUNDIR/enter.err")"; then
+  cat "$RUNDIR/enter.err" >&2
+  stop_is brief
+  meta_set cause="branch.py enter failed: $(tail -n 1 "$RUNDIR/enter.err")"
+  exit 2
+fi
+cat "$RUNDIR/enter.err" >&2   # the notices it prints (a reused branch, a clash) are shown
 if [ -n "$ITEM_TREE" ]; then
   cd "$ITEM_TREE"
   eval "$(python3 "$HERE/paths.py" --sh)"
@@ -950,10 +970,32 @@ merge_item() {
   return "$rc"
 }
 
-meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
-         started="$(date -Is)" pid="$$"
-trap on_exit EXIT
-trap on_interrupt INT TERM
+# ⚠️ THE TASK IS READ FROM THE WORKTREE NOW, and the preflight above read the main
+# checkout's. The branch has only what git carries: on 2026-10-19 a project whose `.*`
+# rule hid `.dfs` reached the worktree with only its force-added files, and the first
+# briefing failed with "no task file". Said here with its cause, and kept as the stop.
+if [ -n "$ITEM_TREE" ]; then
+  cause="$(python3 - "$ITEM" "$HERE" "$ITEM_MAIN" "$ITEM_TREE" <<'PY'
+import subprocess, sys
+sys.path.insert(0, sys.argv[2])
+import paths as dfs_paths, tree as dfs_tree
+task, main, wt = sys.argv[1], sys.argv[3], sys.argv[4]
+if not dfs_tree.exists(task):
+    rel = "%s/items/%s.md" % (dfs_paths.STATE_DIR_NAME, task)
+    rule = subprocess.run(["git", "check-ignore", "-v", "--no-index", rel], cwd=main,
+                          capture_output=True, text=True).stdout.split("\t")[0]
+    print("the worktree %s has no %s, which the main checkout has: the branch carries only "
+          "what git tracks%s" % (wt, rel,
+                                 ", and the ignore rule %s hides it" % rule if rule else ""))
+PY
+)"
+  if [ -n "$cause" ]; then
+    stop_is brief
+    meta_set cause="$cause"
+    echo "dfs_run: $ITEM cannot be briefed: $cause." >&2
+    exit 2
+  fi
+fi
 
 # ⚠️ SERIAL, SO THE DIRT HAS AN OWNER. Work in the tree that is not this task's is
 # committed or stashed by this chain's first session, whose briefing lists it.
