@@ -776,6 +776,49 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.wt / ".dfs" / "items" / "W1.md").read_text(), TASK + "\nanswered\n")
         self.assertEqual(task.read_text(), TASK + "\nanswered\n")
 
+    def _blanket_rule_with_w1_tracked(self):
+        (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
+        self.git("add", "-f", ".gitignore", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "ignore dot files")
+
+    def test_the_catch_up_to_main_keeps_the_items_link_when_main_force_commits_a_new_task_file(self):
+        # the fast-forward would swap the link for a real `items` holding only the committed file
+        self._blanket_rule_with_w1_tracked()
+        task = self.root / ".dfs" / "items" / "W2.md"
+        task.write_text(TASK.replace("W1", "W2"))
+        def enter():
+            return subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W2"],
+                                  cwd=self.root, capture_output=True, text=True, check=True)
+        enter()
+        wt = self.root / ".dfs" / "worktrees" / "W2"
+        with task.open("a") as f:
+            f.write("seen by the branch\n")
+        self.git("add", "-f", ".dfs/items/W2.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W2 committed")
+        with task.open("a") as f:
+            f.write("edited since\n")
+        r = enter()
+        self.assertTrue((wt / ".dfs" / "items").is_symlink(), r.stderr)
+        self.assertEqual((wt / ".dfs" / "items" / "W2.md").read_text(), task.read_text())
+        self.assertIn("edited since", (wt / ".dfs" / "items" / "W2.md").read_text())
+        self.assertTrue((wt / ".dfs" / "items" / "W1.md").is_file())
+        self.assertEqual(self.git("rev-parse", "dfs/W2"), self.git("rev-parse", "HEAD"))
+        self.assertEqual(self.git("status", "--porcelain", cwd=wt), "")
+
+    def test_the_catch_up_to_main_moves_a_branch_when_main_changed_an_already_hidden_file(self):
+        self._blanket_rule_with_w1_tracked()
+        self.enter()
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        w1 = self.root / ".dfs" / "items" / "W1.md"
+        w1.write_text(TASK + "\nmain's change\n")
+        self.git("add", "-f", ".dfs/items/W1.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main changes W1")
+        w1.write_text(TASK + "\nmain's change\nand a live edit\n")
+        r = self.enter()
+        self.assertEqual(self.git("rev-parse", "dfs/W1"), self.git("rev-parse", "HEAD"), r.stderr)
+        self.assertTrue((self.wt / ".dfs" / "items").is_symlink())
+        self.assertIn("a live edit", (self.wt / ".dfs" / "items" / "W1.md").read_text())
+
     def test_a_reused_worktree_that_worked_a_force_tracked_task_file_for_real_keeps_the_branchs_version(self):
         # begun before the entry was shared: the worktree holds a real tracked W1.md and the
         # branch committed a step in it, so the main checkout's copy is the stale one

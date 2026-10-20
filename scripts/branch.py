@@ -340,7 +340,16 @@ def catch_up(name, wt):
     head = _git("rev-parse", "HEAD").stdout.strip()   # not "HEAD" in `wt`: that is the branch
     if _git("rev-parse", name).stdout.strip() == head:
         return False
-    return _git("merge", "--ff-only", "-q", head, cwd=wt).returncode == 0
+    # Like `_rebase`: git refuses to update a `--skip-worktree` path it finds through a link,
+    # and replaces a link with a real directory when the default branch added a file under it
+    hidden = put_back_tracked(wt)
+    state = wt / dfs_paths.STATE_DIR_NAME
+    links = [e.name for e in state.iterdir() if e.is_symlink()] if state.is_dir() else []
+    moved = _git("merge", "--ff-only", "-q", head, cwd=wt).returncode == 0
+    again = hidden + [n for n in links if n not in hidden and not (state / n).is_symlink()]
+    if again:
+        share_ignored_state(wt, again=again)
+    return moved
 
 
 def enter(task):
