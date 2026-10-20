@@ -907,6 +907,61 @@ class Chat(unittest.TestCase):
             proc.kill()
             proc.wait()
 
+    def screens_live_chat(self, said=()):
+        """A conversation the screen's chat has open, with `said` already in its claude transcript;
+        what the page sends is typed in, and the test writes what claude records."""
+        class Screen:
+            has_screen = True
+            def chat_live(s, scope): return True
+            def chat_active(s, scope): return False
+            def chat_send(s, scope, text): return True
+        chats = dfs_chat.Chats(walker=lambda: Screen())
+        sid = "5e55a0b1-0000-4000-8000-000000000001"
+        chats.save_sid("W1", sid, "claude")
+        path = self.root / "home" / ".claude" / "projects" / "p" / (sid + ".jsonl")
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        def record(*turns):
+            with open(path, "a") as f:
+                for role, text in turns:
+                    f.write(json.dumps({"type": "user", "message": {"role": "user", "content": text}} if role == "you" else
+                                       {"type": "assistant", "message": {"id": "msg_%d" % f.tell(), "role": "assistant",
+                                                                         "content": [{"type": "text", "text": text}]}}) + "\n")
+        record(*said)
+        return chats, record
+
+    def test_a_reply_shows_when_claude_recorded_the_message_merged_with_one_it_never_submitted(self):
+        # as on 2026-10-19: "Continue" was typed into a fresh claude and not submitted, so the next
+        # message went in with it, and the page showed the next one unanswered below the reply
+        chats, record = self.screens_live_chat([("you", "hi"), ("agent", "Hello.")])
+        chats.send("W1", "Continue")
+        st = chats.send("W1", "Do all three as separate tasks")
+        self.assertEqual(st["messages"][-1], dict(role="you", text="Do all three as separate tasks"))   # shown at once
+        record(("you", "ContinueDo all three as separate tasks"), ("agent", "I created the three tasks."))
+        st = chats.state("W1")
+        self.assertEqual(st["messages"][-2:], [dict(role="you", text="ContinueDo all three as separate tasks"),
+                                               dict(role="agent", text="I created the three tasks.")])
+        self.assertEqual(len(st["messages"]), 4)
+
+    def test_a_reply_of_several_messages_read_only_after_it_ended_shows(self):
+        # the page was closed while it answered: the message is further back than the last three
+        chats, record = self.screens_live_chat([("you", "hi"), ("agent", "Hello.")])
+        chats.send("W1", "look into it")
+        record(("you", "look into it"), ("agent", "Reading."), ("agent", "Running the tests."),
+               ("agent", "Two fail."), ("agent", "Both are fixed."))
+        st = chats.state("W1")
+        self.assertEqual(st["messages"][-1], dict(role="agent", text="Both are fixed."))
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["hi", "look into it"])
+
+    def test_the_same_message_sent_again_shows_until_it_is_recorded_again(self):
+        chats, record = self.screens_live_chat([("you", "yes"), ("agent", "Done.")])
+        st = chats.send("W1", "yes")
+        self.assertEqual(st["messages"][-1], dict(role="you", text="yes"))
+        self.assertEqual(len(st["messages"]), 3)
+        record(("you", "yes"), ("agent", "Done again."))
+        st = chats.state("W1")
+        self.assertEqual([m["text"] for m in st["messages"]], ["yes", "Done.", "yes", "Done again."])
+
     def test_the_chats_section_lists_every_conversation_newest_first(self):
         class Screen:
             has_screen = True

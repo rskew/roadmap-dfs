@@ -113,6 +113,11 @@ def transcript_messages(sid, agent="claude"):
     return out
 
 
+def authors(messages):
+    """How many of a conversation's messages are the author's."""
+    return sum(m["role"] == "you" for m in messages)
+
+
 def turns(sid, agent):
     """(role, text, message key) for each piece of a session's transcript, as its agent's
     reader finds them: a line at a time from the transcript file, or from a store."""
@@ -427,7 +432,7 @@ class Chats:
         self.lock = threading.RLock()
         self.on_change = on_change or (lambda: None)
         self.busy = {}      # scope -> when its turn started
-        self.pending = {}   # scope -> what was sent and has not reached the transcript yet
+        self.pending = {}   # scope -> (what was sent and has not reached the transcript yet, how many of the author's messages it held then)
         self.notes = {}     # scope -> [errors], until the conversation moves on
         self.procs = {}     # scope -> the process of its headless turn, while it runs
         self.stopped = set()    # scopes whose running turn the author has just stopped
@@ -480,8 +485,10 @@ class Chats:
                 chatlog.log(scope, "the screen's chat ended: %s" % failed)
                 self.notes[scope] = [failed]
                 self.pending.pop(scope, None)
-            pending = self.pending.get(scope)
-            if pending and not any(m["role"] == "you" and m["text"] == pending for m in messages[-3:]):
+            # The message is in once the transcript holds one more of the author's than when it was sent. Not
+            # by its text: an agent may record it merged with one typed before it that was never submitted.
+            pending, before = self.pending.get(scope) or ("", 0)
+            if pending and authors(messages) <= before:
                 messages.append(dict(role="you", text=pending))
             elif pending:
                 self.pending.pop(scope, None)
@@ -513,7 +520,7 @@ class Chats:
             # A chat running on this screen has the session: type into it, as the keyboard does.
             if scope not in self.busy and w and w.chat_send(scope, message):
                 chatlog.log(scope, "page: message of %d characters handed to the screen's chat" % len(message))
-                self.pending[scope] = message
+                self.pending[scope] = (message, authors(transcript_messages(self.sid(scope), agent)))
                 self.notes.pop(scope, None)
                 self.stops.pop(scope, None)
                 self.on_change()
@@ -527,7 +534,7 @@ class Chats:
                 chatlog.log(scope, "page: message refused, another terminal has session %s open" % sid)
                 raise ValueError("another terminal has this conversation open: type there, or "
                                  "close it and send from here")
-            self.pending[scope] = message
+            self.pending[scope] = (message, authors(transcript_messages(sid, agent)))
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
             self.busy[scope] = time.time()
