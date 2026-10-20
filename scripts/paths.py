@@ -500,14 +500,26 @@ def branch():
     return None
 
 
-def gets_worktree(task):
-    """Whether `task` is worked in a worktree of its own: it has one, or the checkout is on
-    the default branch with a commit to cut one from (what `branch.enter` does). When not,
-    the task is worked in place, in this checkout."""
-    if worktree(task):
-        return True
+def cuts_worktrees():
+    """Whether this checkout can cut a worktree for a task that has none: it is on the
+    default branch and has a commit to cut one from (what `branch.enter` needs)."""
     return (branch() in DEFAULT_BRANCHES
             and _git("rev-parse", "--verify", "--quiet", "HEAD").returncode == 0)
+
+
+def gets_worktree(task):
+    """Whether `task` is worked in a worktree of its own: it has one, or the checkout
+    cuts one (`cuts_worktrees`). When not, the task is worked in place, in this checkout."""
+    return bool(worktree(task)) or cuts_worktrees()
+
+
+def in_worktree_of(task):
+    """Whether this work root is `task`'s own worktree, `<checkout>/.dfs/worktrees/<task>`.
+    Not the same as being on `dfs/<task>`: the author may have that branch checked out in
+    the main checkout, where other tasks take their turns."""
+    root = work_root()
+    return (root.name == task and root.parent.name == "worktrees"
+            and root.parent.parent.name == STATE_DIR_NAME)
 
 
 _TAG_CACHE = {}

@@ -481,7 +481,7 @@ def foreign_dirt(task):
     not change code, and once one of those had run on this task the dirt would read
     as this task's own."""
     dirty = dirty_paths()
-    if dfs_paths.branch() == dfs_paths.item_branch(task):
+    if dfs_paths.in_worktree_of(task):
         owner = task if dfs_tree.last_session(dfs_tree.load(task)) else None
     else:
         owner, _ = latest_session()

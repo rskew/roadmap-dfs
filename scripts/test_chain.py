@@ -1258,6 +1258,19 @@ class Chain(unittest.TestCase):
                            cwd=self.wt, capture_output=True, text=True)
         self.assertEqual(r.stdout.strip(), "", r.stderr)
 
+    def test_dirt_left_by_another_task_is_foreign_even_with_the_item_branch_checked_out_in_place(self):
+        # The author has dfs/W1 checked out in the main checkout: that is not W1's own
+        # worktree, so an off-main walk's other tasks leave dirt there that is not W1's.
+        self.git("checkout", "-q", "-b", "dfs/W1")
+        w1 = self.root / ".dfs" / "items" / "W1.md"
+        w1.write_text(w1.read_text() + "\n- 2000-01-01T00:00:00Z · session · work\n")
+        (self.root / ".dfs" / "items" / "W2.md").write_text(
+            TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
+        (self.root / "app.txt").write_text("W2's half-done edit\n")
+        r = subprocess.run([sys.executable, str(HERE / "state.py"), "--foreign-dirt", "W1"],
+                           cwd=self.root, capture_output=True, text=True)
+        self.assertIn("app.txt", r.stdout, r.stderr)
+
     def test_the_chain_s_directory_is_not_handed_to_its_agent(self):
         # ⚠️ 2026-09-27: a session working on this tooling ran a test that started its
         # own chain, which inherited RUNDIR and wrote its meta INTO the live chain's

@@ -235,10 +235,12 @@ class WalkMixin:
         self.walk_pending = False
         both = "%d sessions" % budget + (", %d at a time" % parallel if parallel > 1 else "")
         self.msg = "walk: on, %s — w to stop" % both
-        if parallel > 1 and not self.walk_cuts(""):
+        if parallel > 1 and not self.walk_cuts_new():
             # No worktree is cut here (the checkout is off main/master, has no commit, or is
-            # no repo), so a chain would work in the one checkout; see `walk_tick`.
-            self.msg += "; no worktrees here, so chains run in this checkout one at a time"
+            # no repo), so a task without one would be worked in the one checkout; see
+            # `walk_tick`.
+            self.msg += ("; no worktree is cut here, so tasks without one run in this "
+                         "checkout one at a time")
         self.event("walk", "walk on, %s" % both)
         self.walk_tick()
 
@@ -389,19 +391,28 @@ class WalkMixin:
         if free < 1:
             return
         busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in foreign}
-        picks = dfs_state.next_items(self.items, free, busy, first=self.walk_lead(busy))
         # ⚠️ A CHAIN WITH NO WORKTREE WORKS IN THE ONE CHECKOUT. Two of them there find each
         # other's half-done work as foreign dirt and interleave commits on one branch, so at
         # most one chain without a worktree runs at a time; those with one run beside it.
         in_place = any(not self.walk_cuts(i) for i in busy)
-        placed = []
-        for item in picks:
-            if not self.walk_cuts(item):
-                if in_place:
-                    continue
-                in_place = True
-            placed.append(item)
-        picks = placed
+        lead = self.walk_lead(busy)
+        picks, skipped = [], set()
+        while True:
+            # A task that would share the checkout with a chain already there is passed
+            # over, and the slot goes to the next task, which may have a worktree of its own.
+            asked = dfs_state.next_items(self.items, free - len(picks), busy | skipped | set(picks),
+                                         first=[x for x in lead if x not in picks])
+            if not asked:
+                break
+            for item in asked:
+                if not self.walk_cuts(item):
+                    if in_place:
+                        skipped.add(item)
+                        continue
+                    in_place = True
+                picks.append(item)
+            if len(picks) >= free or not skipped & set(asked):
+                break
         if not picks:
             # ⚠️ NOTHING TO TAKE IS A WAIT, NOT AN END. The walk stays on and asks
             # again on every tick (`reload` re-reads the trees), so a task created
@@ -435,6 +446,10 @@ class WalkMixin:
                 return
             self.walk_chains = self.walk_chains + [dict(
                 dir=rundir, item=item, started=started, content=content, pin=pin, cap=cap)]
+
+    def walk_cuts_new(self):
+        """Whether a task with no worktree yet gets one cut (`paths.cuts_worktrees`)."""
+        return dfs_paths.cuts_worktrees()
 
     def walk_cuts(self, item):
         """Whether `item`'s chain is worked in a worktree of its own (`paths.gets_worktree`)."""
