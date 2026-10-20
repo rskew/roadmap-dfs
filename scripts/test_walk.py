@@ -493,12 +493,13 @@ class Ticking(Ticks, unittest.TestCase):
         ui.walk_toggle()
         self.assertEqual(lowered, [])
 
-    def typed(self, line, budget=12):
+    def typed(self, line, budget=12, parallel=1):
         """`w` on an off walk, with `line` read off the footer: "" is ⏎, None is Esc."""
         ui = self.ui(walk_on=False, walk_budget=budget)
         ui.pane, ui.scroll, ui.answers, ui.labels, ui.begun = "items", 0, [], [], []
         ui.read_line = lambda label: ui.labels.append(label) or line
-        ui.walk_begin = ui.begun.append
+        ui.walk_parallel = parallel
+        ui.walk_begin = lambda budget, par=1: ui.begun.append(budget if par == 1 else (budget, par))
         ui.walk_toggle()
         return ui
 
@@ -506,7 +507,7 @@ class Ticking(Ticks, unittest.TestCase):
         # W82: ⏎ on a number the screen is showing took nothing and said
         # "walk: not started"; it is the previous walk's budget again.
         ui = self.typed("")
-        self.assertEqual(ui.labels, ["walk: how many sessions? [12], esc cancels:"])
+        self.assertEqual(ui.labels, ["walk: how many sessions, and at once? [12], esc cancels:"])
         self.assertEqual(ui.begun, [12])
 
     def test_esc_at_the_walk_prompt_leaves_the_walk_off(self):
@@ -517,6 +518,23 @@ class Ticking(Ticks, unittest.TestCase):
     def test_a_number_typed_at_the_walk_prompt_is_the_budget(self):
         self.assertEqual(self.typed("7").begun, [7])
         self.assertEqual(self.typed("seven").begun, [])
+
+    def test_a_second_number_at_the_walk_prompt_is_the_chains_at_once(self):
+        self.assertEqual(self.typed("20 3").begun, [(20, 3)])
+        self.assertEqual(self.typed("20 1").begun, [20])
+        self.assertEqual(self.typed("20 three").begun, [])
+        self.assertEqual(self.typed("20 3 1").begun, [])
+
+    def test_enter_at_the_walk_prompt_walks_the_last_walks_parallel_too(self):
+        ui = self.typed("", parallel=3)
+        self.assertEqual(ui.labels, ["walk: how many sessions, and at once? [12 3], esc cancels:"])
+        self.assertEqual(ui.begun, [(12, 3)])
+
+    def test_the_badge_names_every_live_chain_of_the_walk(self):
+        ui = self.ui(walk_chains=[rec(dir="/runs/a", item="W7"), rec(dir="/runs/b", item="W8")])
+        self.live(ui, [self.chain(dir="/runs/a", item="W7", live=True),
+                       self.chain(dir="/runs/b", item="W8", live=True)])
+        self.assertIn("W7 W8", ui.walk_badge())
 
     def test_why_it_stopped_outlives_the_message_line(self):
         # ⚠️ `walk_off` writes `self.msg`, and `poll` overwrites it with "refreshed"

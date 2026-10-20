@@ -3692,7 +3692,9 @@ class UI(WalkMixin):
                         curses.color_pair(1)))
         out.append(("", 0))
         para("%d finished. The budget is sessions over the whole walk; each chain is "
-             "given what is left, so it cannot overshoot." % done, grey)
+             "given what is left, so it cannot overshoot. A second number runs that many "
+             "chains at once, on separate branches, sharing the budget: a task under "
+             "another waits until its parent is done." % done, grey)
         return out
 
     def lines_tree(self, width):
@@ -4295,6 +4297,9 @@ class UI(WalkMixin):
         it is the other prompt's convention: `[n]` is what ⏎ takes, the last walk's
         budget being what you would usually type again (W82), and the decision is
         still two keys, `w` then ⏎, with Esc between them leaving the walk off.
+
+        The line may carry a second number, the chains to run at once (`20 3`), which is
+        1 when it is left out and the last walk's when ⏎ takes the line shown.
         """
         if self.walk_on:
             self.walk_end_chain()
@@ -4302,20 +4307,28 @@ class UI(WalkMixin):
         was = (self.pane, self.scroll)
         self.pane, self.scroll = "plan", 0
         try:
-            raw = self.prompt("walk: how many sessions? [%d], esc cancels:"
-                              % self.walk_budget, str(self.walk_budget))
+            # sessions, then optionally how many chains at once: `20` or `20 3`
+            shown = str(self.walk_budget) + (" %d" % self.walk_parallel
+                                             if self.walk_parallel > 1 else "")
+            raw = self.prompt("walk: how many sessions, and at once? [%s], esc cancels:"
+                              % shown, shown)
         finally:
             self.pane, self.scroll = was
         if not raw:
             self.msg = "walk: not started"
             return
+        words = raw.split()
         try:
-            budget = int(raw)
+            if len(words) > 2:
+                raise ValueError
+            budget = int(words[0])
+            parallel = int(words[1]) if len(words) > 1 else 1
         except ValueError:
-            self.msg = "walk: %r is not a number of sessions" % raw
+            self.msg = ("walk: %r is not a number of sessions, then the number of chains "
+                        "at once" % raw)
             return
         try:
-            self.walk_begin(budget)
+            self.walk_begin(budget, parallel)
         except ValueError as e:
             self.msg = "walk: %s" % e
 
@@ -4364,9 +4377,9 @@ class UI(WalkMixin):
         held = self.walk_until - time.time()
         if held > 0:
             return "● walk held %s%s %s" % (walk_held_for(held), pin, spent)
-        run = self.walk_run()
-        if run and run["live"]:
-            return "● walk %s%s %s" % (run["item"], pin, spent)
+        runs = [r for r in self.walk_runs() if r["live"]]
+        if runs:
+            return "● walk %s%s %s" % (" ".join(r["item"] for r in runs), pin, spent)
         if self.walk_pending:
             return "● walk waiting for a task%s %s" % (pin, spent)
         return "● walk%s %s" % (pin, spent)
@@ -5020,8 +5033,8 @@ class UiWalker:
     def __init__(self, ui):
         self.ui = ui
 
-    def start(self, budget):
-        self.ui.call_soon(lambda: self.ui.walk_start(budget))
+    def start(self, budget, parallel=1):
+        self.ui.call_soon(lambda: self.ui.walk_start(budget, parallel))
 
     def stop(self):
         self.ui.call_soon(lambda: self.ui.walk_end_chain() if self.ui.walk_on else None)

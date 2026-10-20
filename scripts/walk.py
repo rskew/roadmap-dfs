@@ -218,6 +218,9 @@ class WalkMixin:
             raise ValueError("a budget of %d sessions is not a walk" % budget)
         if parallel < 1:
             raise ValueError("a walk runs at least one chain at a time, not %d" % parallel)
+        if parallel > MAX_PARALLEL:
+            raise ValueError("%d chains at once is more than a machine runs: at most %d"
+                             % (parallel, MAX_PARALLEL))
         self.walk_budget = budget
         self.walk_parallel = parallel
         self.walk_spent = 0
@@ -707,6 +710,9 @@ class WalkMixin:
             pinned=self.walk_next, auto=auto, auto_goal=goal,
             chain=(dict(item=run["item"], run=run["run"], cap=run["cap"],
                         progress=dfs_runs.progress(run), live=run["live"]) if run else None),
+            chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],
+                         progress=dfs_runs.progress(r), live=r["live"])
+                    for r in self.walk_runs()],
             live=[dict(item=r["item"], pid=r["pid"], progress=dfs_runs.progress(r))
                   for r in self.live()],
             candidates=[dict(id=i["id"], goal=i["goal"]) for i in items if i["status"] == "open"],
