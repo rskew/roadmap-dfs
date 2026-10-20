@@ -27,7 +27,7 @@ DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
 SUBMIT_WAIT = 2.0           # seconds a first message may draw nothing after its Enter before Enter is pressed again
-RESUBMIT = ("claude",)      # the agents that get it: claude ignores an Enter on an empty prompt
+RESUBMIT = ("claude",)      # the agents that get it; a real claude 2.1.301 did nothing on an Enter at an empty prompt, idle or mid-turn (test_claude_chat)
 HANDOVER_TIMEOUT = 90.0     # after run.sh's opening turn: a real kiro-cli drew nothing for 12s to 25s (test_kiro_chat)
 # A fresh agent is quiet for more than QUIET while it starts and while it asks its first-launch
 # questions, so quiet alone types a message into the wrong place (found against the real TUIs):
@@ -364,11 +364,12 @@ class Relay:
                 self._resubmit(entered, stops)
 
     def _resubmit(self, entered, stops):
-        """A claude started a moment ago can take the pasted text into its input and not the Enter
-        after it, with nothing ready to tell it apart from one that is at its prompt (the first message
-        of every chat in the logs, typed 1.3s after the start). A submitted message makes it draw
-        at once, so if it writes nothing for SUBMIT_WAIT after the Enter, Enter is pressed again; an
-        Enter on an empty prompt does nothing."""
+        """A claude chat's first message was once typed 1.3s after the start (the log at 2026-10-19T00:17:26) and
+        stayed in claude's input, its Enter not acted on; the others, typed later, were submitted. That could not
+        be repeated against a real claude 2.1.301: it took the paste and Enter at every delay from 0.5s to 8s,
+        resumed or not, and when both came in one write, so the cause is not known. A submitted message makes
+        claude draw at once, so if it writes nothing for SUBMIT_WAIT after the Enter, Enter is pressed again; an
+        Enter at an empty prompt did nothing, idle or while claude was answering (test_claude_chat)."""
         end = time.time() + SUBMIT_WAIT
         while self.live and time.time() < end:
             if self.total_out != entered or self.stops != stops:
