@@ -132,6 +132,53 @@ class Background(unittest.TestCase):
         self.assertTrue(until(lambda: self.relay.rc is not None))
 
 
+# an "agent" that, like a claude started a moment ago, takes pasted text into its input and ignores
+# Enter until it has loaded; once it has, Enter submits what is in the input and an empty one does nothing
+LOADING = r'''
+import os, sys, time, tty
+tty.setraw(0)
+t0 = time.time()
+sys.stdout.write("ready\r\n"); sys.stdout.flush()
+buf = ""
+while True:
+    d = os.read(0, 4096).decode()
+    for ch in d.replace("\x1b[200~", "").replace("\x1b[201~", ""):
+        if ch == "\r":
+            if time.time() - t0 > 3.0 and buf:
+                open(os.environ["LOG"], "a").write(buf + "\n")
+                sys.stdout.write("working on " + buf + "\r\n"); sys.stdout.flush()
+                buf = ""
+        else:
+            buf += ch
+'''
+
+
+class Resubmitting(unittest.TestCase):
+    def setUp(self):
+        self.log = Path(tempfile.mkdtemp()) / "log"
+        self.log.write_text("")
+        self.env = dict(os.environ, LOG=str(self.log))
+
+    def lines(self):
+        return self.log.read_text().splitlines()
+
+    def test_a_first_message_whose_enter_a_loading_claude_ignored_is_submitted(self):
+        relay = ptyrelay.Relay(agent="claude").start([sys.executable, "-c", LOADING], env=self.env)
+        self.addCleanup(relay.close)
+        relay.send("Continue")
+        self.assertTrue(until(lambda: self.lines() == ["Continue"], 15), self.lines())
+        relay.send("again")
+        self.assertTrue(until(lambda: self.lines() == ["Continue", "again"], 8), self.lines())
+
+    def test_a_message_that_was_submitted_gets_no_second_enter(self):
+        relay = ptyrelay.Relay(agent="claude").start(["bash", "-c", AGENT], env=self.env)
+        self.addCleanup(relay.close)
+        relay.send("one")
+        self.assertTrue(until(lambda: self.lines() == ["one"]))
+        time.sleep(ptyrelay.SUBMIT_WAIT + 0.5)
+        self.assertEqual(self.lines(), ["one"])             # an Enter again would have been heard as an empty line
+
+
 class Looking(unittest.TestCase):
     """The terminal: a pipe for the keys and one for the display."""
 

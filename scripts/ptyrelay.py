@@ -26,6 +26,8 @@ import chatlog
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
+SUBMIT_WAIT = 2.0           # seconds a first message may draw nothing after its Enter before Enter is pressed again
+RESUBMIT = ("claude",)      # the agents that get it: claude ignores an Enter on an empty prompt
 HANDOVER_TIMEOUT = 90.0     # after run.sh's opening turn: a real kiro-cli drew nothing for 12s to 25s (test_kiro_chat)
 # A fresh agent is quiet for more than QUIET while it starts and while it asks its first-launch
 # questions, so quiet alone types a message into the wrong place (found against the real TUIs):
@@ -329,6 +331,7 @@ class Relay:
             except queue.Empty:
                 continue
             waited, stops = time.time(), self.stops
+            first = not self.typed
             end = waited + READY_TIMEOUT      # not before the agent has drawn itself and settled
             while self.live and time.time() < end and not self._ready():
                 if self.opening:
@@ -353,8 +356,28 @@ class Relay:
                 else "the agent had not settled in %ds, typed anyway" % READY_TIMEOUT))
             time.sleep(0.15)
             with self.lock:
-                if self.fd is not None:
-                    _try(os.write, self.fd, b"\r")
+                if self.fd is None:
+                    continue
+                _try(os.write, self.fd, b"\r")
+                entered = self.total_out
+            if first and self.agent in RESUBMIT:
+                self._resubmit(entered, stops)
+
+    def _resubmit(self, entered, stops):
+        """A claude started a moment ago can take the pasted text into its input and not the Enter
+        after it, with nothing ready to tell it apart from one that is at its prompt (the first message
+        of every chat in the logs, typed 1.3s after the start). A submitted message makes it draw
+        at once, so if it writes nothing for SUBMIT_WAIT after the Enter, Enter is pressed again; an
+        Enter on an empty prompt does nothing."""
+        end = time.time() + SUBMIT_WAIT
+        while self.live and time.time() < end:
+            if self.total_out != entered or self.stops != stops:
+                return
+            time.sleep(0.1)
+        with self.lock:
+            if self.fd is not None and self.total_out == entered and self.stops == stops:
+                _try(os.write, self.fd, b"\r")
+                self.log("no response %ds after the Enter: pressed Enter again" % SUBMIT_WAIT)
 
     # ── looking at it ──────────────────────────────────────────────────────────────────
     def attach(self):
