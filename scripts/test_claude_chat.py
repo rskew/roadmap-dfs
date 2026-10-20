@@ -3,6 +3,10 @@
 /nix/store, or TEST_CLAUDE) on a scratch HOME. Only the model is faked: a local server answers claude's
 `/v1/messages`, so no login is needed and nothing is spent. Skipped where no claude is installed.
 
+The tests here start a fresh claude only. That one resumed from a saved session takes the message as well, and
+so does a message with its Enter in one write: both were checked by hand, at start delays of 0.5s to 8s, and are
+not in this file.
+
 Run (with TMPDIR inside the repo when /tmp is noexec):  python3 roadmap-dfs/scripts/test_claude_chat.py
 """
 import glob

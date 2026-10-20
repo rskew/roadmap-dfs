@@ -1010,6 +1010,20 @@ class Chat(unittest.TestCase):
         self.assertEqual(st["messages"][-1], dict(role="agent", text="Again."))
         self.assertNotIn("W1", chats.pending)
 
+    def test_stop_drops_only_the_messages_never_typed_from_what_the_page_shows(self):
+        class Screen:
+            has_screen = True
+            def chat_live(s, scope): return True
+            def chat_active(s, scope): return False
+            def chat_send(s, scope, text): return True
+            def chat_interrupt(s, scope): return 1      # the second was never typed; the first was
+        chats = dfs_chat.Chats(walker=lambda: Screen())
+        chats.send("W1", "typed")
+        chats.send("W1", "not typed")
+        st = chats.interrupt("W1")
+        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
+                         [("you", "typed"), ("note", "Stopped before it answered.")])
+
     def test_the_chats_section_lists_every_conversation_newest_first(self):
         class Screen:
             has_screen = True

@@ -589,7 +589,11 @@ class Chats:
                 chatlog.log(scope, "page: stop, interrupt sent to the screen's chat")
                 if dropped:     # the message was stopped before it was typed: it is not sent, and not shown as sent
                     chatlog.log(scope, "page: stop, %d message(s) were never typed" % dropped)
-                    self.pending.pop(scope, None)
+                    kept = self.pending.get(scope, [])[:-dropped]      # the last ones sent: an earlier one was typed
+                    if kept:
+                        self.pending[scope] = kept
+                    else:
+                        self.pending.pop(scope, None)
                     self.stops[scope] = True
             else:
                 chatlog.log(scope, "page: stop, nothing was answering")
