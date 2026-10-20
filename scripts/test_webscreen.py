@@ -221,6 +221,62 @@ class OverHttp(unittest.TestCase):
         self.screen.__enter__()
 
 
+class InAChat(unittest.TestCase):
+    """The screen's thread is in a chat (`c`): the page's Start still starts the walk."""
+
+    call = OverHttp.call
+
+    def setUp(self):
+        OverHttp.setUp(self)
+        self.screen.__exit__()                                  # nothing drains but the chat
+        import ptyrelay
+        self.keys_r, self.keys_w = os.pipe()
+        self.out_r, self.out_w = os.pipe()
+        self._io = sys.stdin, sys.stdout
+        sys.stdin, sys.stdout = os.fdopen(self.keys_r, "r"), os.fdopen(self.out_w, "w")
+        self.drain = threading.Thread(target=self.read_display, daemon=True)
+        self.drain.start()
+        relay = ptyrelay.Relay().start(["bash", "-c", "echo ready; cat >/dev/null"])
+        self.addCleanup(relay.close)
+        self.ui.start_chat = lambda scope: relay
+        self.ui.poll = self.ui.drain_commands                   # the real poll's part that answers the page
+        self.ui.scr = types.SimpleNamespace(clear=lambda: None, refresh=lambda: None)
+        self._curses = {n: getattr(TUI.curses, n) for n in ("def_prog_mode", "endwin", "reset_prog_mode")}
+        for n in self._curses:
+            setattr(TUI.curses, n, lambda: None)
+        self.chat = threading.Thread(target=self.ui.open_chat, args=("W1",), daemon=True)
+        self.chat.start()
+
+    def read_display(self):
+        try:
+            while os.read(self.out_r, 4096):
+                pass
+        except OSError:
+            pass
+
+    def tearDown(self):
+        os.write(self.keys_w, b"\x1d")                          # ctrl-]: back to the roadmap
+        self.chat.join(5)
+        self.assertFalse(self.chat.is_alive())
+        for n, f in self._curses.items():
+            setattr(TUI.curses, n, f)
+        sys.stdin, sys.stdout = self._io
+        for fd in (self.keys_w, self.out_r):
+            os.close(fd)
+        self.screen = types.SimpleNamespace(__exit__=lambda: None)
+        OverHttp.tearDown(self)
+
+    def test_the_page_starts_the_walk_while_the_screen_is_in_a_chat(self):
+        status, body = self.call("POST", "/api/walk/start", dict(budget=3))
+        self.assertEqual(status, 200, body)
+        self.assertTrue(self.ui.walk_on)
+        self.assertTrue(self.chat.is_alive())                   # still in the chat
+
+    # and every other control the page has, as from a screen not in a chat
+    test_the_page_controls_the_screens_walk_and_reads_its_state = \
+        OverHttp.test_the_page_controls_the_screens_walk_and_reads_its_state
+
+
 class Reopening(unittest.TestCase):
     """A node added on the page to a finished task reopens it, and the page's "Walk here
     next" reads the walk from the screen: once the screen has reloaded, the page is told."""

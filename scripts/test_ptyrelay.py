@@ -258,6 +258,24 @@ class Looking(unittest.TestCase):
         self.relay.send("after")                                # still reachable from the page
         self.assertTrue(until(lambda: "after" in self.log.read_text()))
 
+    def test_attached_the_screen_goes_on_polling_while_keys_keep_coming(self):
+        """The screen's thread is in `attach` for as long as the chat is looked at, so its poll
+        (the page's walk Start, the walk's tick) runs from here, and a steady stream of keys
+        must not starve it."""
+        polls = []
+        self.t = threading.Thread(target=lambda: self.result.append(
+            self.relay.attach(idle=lambda: polls.append(time.time()), every=0.1)), daemon=True)
+        self.t.start()
+        self.assertTrue(self.seen(b"ready"))
+        end = time.time() + 1.0
+        while time.time() < end:                                # a key every 20 ms, faster than `every`
+            os.write(self.keys_w, b"x")
+            time.sleep(0.02)
+        os.write(self.keys_w, b"\x1d")
+        self.t.join(5)
+        self.assertEqual(self.result, [True])
+        self.assertGreaterEqual(len(polls), 5, polls)
+
     def test_when_it_ends_attached_that_is_said(self):
         self.t.start()
         os.write(self.keys_w, b"quit\r")
