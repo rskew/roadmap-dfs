@@ -3712,8 +3712,8 @@ class UI(WalkMixin):
         if it.get("corrections"):
             out.append(("corrected, not yet carried out: %s"
                         % ", ".join(it["corrections"]), curses.A_BOLD))
-        out.append(("sessions %d of %d since the author spoke · critic in %d"
-                    % (it.get("sessions", 0), 10, max(5 - it.get("since_critic", 0), 0)),
+        out.append(("sessions %d since the author spoke · critic in %d"
+                    % (it.get("sessions", 0), max(5 - it.get("since_critic", 0), 0)),
                     look("chrome")))
         if self.tree_flagged:
             out.append(("only ⚑ assumptions and raises · p shows every node",

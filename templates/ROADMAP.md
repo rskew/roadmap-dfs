@@ -33,8 +33,8 @@ backtracks to the first node whose evidence does not carry its determination, wh
 withdraws that node and everything below it. A lesser finding (a wording, a stale
 sentence, a missing test for a guard) is never a node of its own: it rides in one
 node beside a real finding, or in the review's `ok` for the author to read. Reviews
-have no round limit: some tasks need extensive review, and the session limit below is
-the backstop for a review loop.
+have no round limit: some tasks need extensive review, and the budget of sessions a
+run is given is the backstop for a review loop.
 
 Raise only for what needs the author, the system's designer and user: a fact only
 they have, a preference between outcomes, access the session lacks, or a task that
@@ -47,10 +47,10 @@ call, since the author orders the tasks. Anything you could
 reasonably choose, choose: and where the choice matters and could go the other way,
 write it down as that node's hypothesis, so
 the author, who reviews the whole tree when the task is done, finds it. A raise blocks the task until it is
-answered, and an answer reopens it until a work session acts on the answer. Ten
-sessions on a task without the author raises for their review. When the author
-corrects a node, everything below it is pruned; confirmed, the work resumes under it
-and the siblings made after it are pruned too; refuted, it resumes at a sibling.
+answered, and an answer reopens it until a work session acts on the answer. When the
+author corrects a node, everything below it is pruned; confirmed, the work resumes
+under it and the siblings made after it are pruned too; refuted, it resumes at a
+sibling.
 Confirming a node that already stood confirmed prunes nothing.
 
 ## §1 Settled law

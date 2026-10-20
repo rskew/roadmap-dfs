@@ -2,8 +2,8 @@
 """The runner's loop, driven end to end against a stub agent, in a real git repo.
 
 What it pins is the part no session decides: that the runner records each session in
-the task's Log, runs a critic after every CRITIC_EVERY work sessions, raises after
-SESSION_LIMIT without the author, stops when a session moved nothing, clears a dirty
+the task's Log, runs a critic after every CRITIC_EVERY work sessions, never raises by a
+count of sessions without the author, stops when a session moved nothing, clears a dirty
 tree that is not this task's, and fails a critic that touched the code.
 
 Run:  python3 roadmap-dfs/scripts/test_chain.py
@@ -1354,19 +1354,19 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
         self.assertIn("no verdict", out)
 
-    def test_ten_sessions_without_the_author_raise_for_review(self):
+    def test_work_sessions_without_the_author_never_raise_by_their_count(self):
+        # Eleven work sessions in a row: the chain's cap stops it, not a raise.
         recipe = ",".join(["work"] * 5 + ["ok"] + ["work"] * 5 + ["ok"] + ["work"])
-        rc, meta, out = self.run_chain(recipe, cap=20)
-        self.assertEqual((rc, meta.get("stop")), (0, "blocked"), out)
-        self.assertEqual(self.kinds_run().count("work"), 10, out)
-        raises = dfs_tree.open_raises(self.tree())
-        self.assertEqual(len(raises), 1)
-        self.assertIn("10 work sessions", raises[0]["body"])
+        rc, meta, out = self.run_chain(recipe, cap=13)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
+        self.assertEqual(self.kinds_run().count("work"), 11, out)
+        self.assertEqual(dfs_tree.open_raises(self.tree()), [], out)
+        self.assertEqual(dfs_tree.sessions_since_author(self.tree()), 11)
 
     def test_an_answer_resets_the_session_count(self):
-        recipe = ",".join(["work"] * 5 + ["ok"] + ["work"] * 5 + ["ok"])
-        self.run_chain(recipe, cap=20)
+        self.run_chain("work,work,raise", cap=4)
         t = self.tree()
+        self.assertEqual(dfs_tree.sessions_since_author(t), 3)
         ts = dfs_tree.open_raises(t)[0]["ts"]
         old = dfs_tree.dfs_paths.work_root
         dfs_tree.dfs_paths.work_root = lambda: self.root
@@ -1374,9 +1374,10 @@ class Chain(unittest.TestCase):
             dfs_tree.append_log("W1", "answer", [ts], "carry on")
         finally:
             dfs_tree.dfs_paths.work_root = old
+        self.assertEqual(dfs_tree.sessions_since_author(self.tree()), 0)
         self.count.write_text("0")
         self.kinds.write_text("")
-        rc, meta, out = self.run_chain("work,confirm,rok", cap=4)
+        rc, meta, out = self.run_chain("work,confirm,ok,rok", cap=4)
         self.assertEqual(meta.get("stop"), "done", out)
 
     def test_a_complete_tree_is_not_done_until_its_implementation_is_reviewed(self):
@@ -1425,13 +1426,12 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         self.assertEqual(dfs_tree.open_raises(self.tree()), [], out)
 
-    def test_a_review_loop_is_stopped_by_the_session_limit(self):
-        rc, meta, out = self.run_chain("confirm" + ",rnode,fixn" * 5, cap=12,
-                                       DFS_SESSION_LIMIT="3", DFS_CRITIC_EVERY="50")
-        raises = dfs_tree.open_raises(self.tree())
-        self.assertEqual((rc, meta.get("stop")), (0, "blocked"), out)
-        self.assertEqual(len(raises), 1, out)
-        self.assertIn("work sessions", raises[0]["body"])
+    def test_a_review_loop_is_stopped_by_the_chains_cap(self):
+        rc, meta, out = self.run_chain("confirm" + ",rnode,fixn" * 6, cap=13,
+                                       DFS_CRITIC_EVERY="50")
+        self.assertEqual(self.kinds_run(), ["work"] + ["review", "work"] * 6, out)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
+        self.assertEqual(dfs_tree.open_raises(self.tree()), [], out)
 
     def test_a_second_review_that_comes_back_ok_finishes_the_task(self):
         rc, meta, out = self.run_chain("confirm,rnode,fixn,rminor", cap=8)

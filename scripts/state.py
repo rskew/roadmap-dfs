@@ -144,7 +144,6 @@ def state_for(task: str):
         review_due=int(dfs_tree.review_due(t) and status == "open"
                        and not dfs_tree.open_raises(t)),
         review_rounds=dfs_tree.review_rounds_unsettled(t),
-        limit=int(since_author >= dfs_tree.SESSION_LIMIT),
         # Marked a draft: the walk never picks it, but a pin or a run by hand works it.
         draft=int(dfs_tree.is_draft(t)),
         # No node yet: the work session's job is to lay the tree out, not to build.
@@ -580,10 +579,9 @@ def brief(task: str) -> str:
            "nothing; the node's commit replaces `started` with its ruling, and a "
            "session cut off mid-node leaves it for the next to see."
            % (dfs_paths.rel(dfs_paths.SCRIPTS), task),
-           "- **Session %d of %d** since the author last spoke on this task; at %d the "
-           "task raises for their review. The critic reviews after %d more."
-           % (st["sessions"] + 1, dfs_tree.SESSION_LIMIT, dfs_tree.SESSION_LIMIT,
-              max(dfs_tree.CRITIC_EVERY - st["since_critic"] - 1, 0)),
+           "- **Session %d** since the author last spoke on this task. The critic "
+           "reviews after %d more."
+           % (st["sessions"] + 1, max(dfs_tree.CRITIC_EVERY - st["since_critic"] - 1, 0)),
            ""]
     said = _author_since_last_ok(t)
     todo = [c for c in dfs_tree.corrections(t) if not c["done"]]
@@ -965,7 +963,7 @@ def main() -> int:
             return 2
         st = state_for(args[1])
         for k in ("status", "why", "sessions", "since_critic", "critic_due", "review_due",
-                  "review_rounds", "limit", "plan", "progress"):
+                  "review_rounds", "plan", "progress"):
             print("%s=%s" % (k, shlex.quote(str(st[k]))))
         return 0
     if args and args[0] == "--critic-problem":

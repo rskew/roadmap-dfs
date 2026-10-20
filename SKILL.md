@@ -150,7 +150,7 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   Goal is met, and how you know. A reviewer then judges the implementation; each
   finding that shows the Goal is not met arrives as a new open node (lesser ones
   batched into one), and the next session fixes it. Reviews repeat until one comes
-  back ok; the session limit is the backstop for a loop.
+  back ok; the budget of sessions a run is given is the backstop for a loop.
 - **The session that completes the tree writes the `## Summary`**, in the same commit
   as the last node: a section ABOVE `## Goal` (add it, or rewrite it if a review
   reopened the task), two to four plain sentences for someone who has not read the
