@@ -400,9 +400,7 @@ def enter(task):
             share_ignored_state(wt)
         catch_up(name, wt)
         return wt
-    if dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES:
-        return None
-    if _git("rev-parse", "--verify", "--quiet", "HEAD").returncode != 0:
+    if not dfs_paths.gets_worktree(task):
         return None
     fresh = not _has_branch(name)
     _git("worktree", "prune")   # a worktree deleted by hand stays registered, and blocks the add

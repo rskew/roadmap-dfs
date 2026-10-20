@@ -198,6 +198,9 @@ class Ticks:
         ui.started = []
         ui.start_chain = lambda item, cap: (ui.started.append((item, cap))
                                             or "/runs/new")
+        # Whether a task gets a worktree: yes, unless a test says otherwise (the real answer
+        # is about the checkout the tests run in).
+        ui.walk_cuts = lambda item: True
         ui.__dict__.update(kw)
         ui.data.setdefault("items", [])
         return ui
@@ -760,6 +763,29 @@ class Parallel(Ticks, unittest.TestCase):
         self.live(ui, [self.chain(live=True)])
         ui.walk_tick()
         self.assertEqual([i for i, _ in ui.started], ["W9"])
+
+    def test_without_worktrees_the_walk_runs_one_chain_in_the_checkout_at_a_time(self):
+        ui = self.two(walk_budget=10)
+        ui.walk_cuts = lambda item: item == "W9"      # only W9 has a worktree of its own
+        self.live(ui, [])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7"])
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7"], "W8 would share W7's checkout")
+        ui.walk_parallel = 3
+        ui.walk_tick()
+        self.assertEqual([i for i, _ in ui.started], ["W7", "W9"], "a task with a worktree runs beside it")
+
+    def test_the_prompt_says_when_no_worktree_is_cut_for_a_parallel_walk(self):
+        ui = self.ui(walk_on=False)
+        ui.walk_cuts = lambda item: False
+        ui.event = lambda kind, text: text
+        ui.walk_begin(10, 3)
+        self.assertIn("one at a time", ui.msg)
+        ui.walk_off("x")
+        ui.walk_cuts = lambda item: True
+        ui.walk_begin(10, 3)
+        self.assertNotIn("one at a time", ui.msg)
 
     def test_a_chain_that_ends_has_its_slot_refilled_from_what_is_left_of_the_budget(self):
         ui = self.two(walk_budget=10, walk_chains=[

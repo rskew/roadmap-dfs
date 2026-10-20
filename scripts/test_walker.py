@@ -26,6 +26,9 @@ def run(d, item, live=False, stop="", run_no="1", cap="5", resets=""):
 class FakeWalker(dfs_walk.HeadlessWalk):
     """The world, in memory: items, chains, and what was asked of them."""
 
+    def walk_cuts(self, item):
+        return True     # a worktree each; the real answer is about the checkout the tests run in
+
     def __init__(self):
         super().__init__()
         self.world_items = [dict(id="W1", goal="one", status="open", reachable=True),

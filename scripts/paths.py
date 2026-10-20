@@ -500,6 +500,16 @@ def branch():
     return None
 
 
+def gets_worktree(task):
+    """Whether `task` is worked in a worktree of its own: it has one, or the checkout is on
+    the default branch with a commit to cut one from (what `branch.enter` does). When not,
+    the task is worked in place, in this checkout."""
+    if worktree(task):
+        return True
+    return (branch() in DEFAULT_BRANCHES
+            and _git("rev-parse", "--verify", "--quiet", "HEAD").returncode == 0)
+
+
 _TAG_CACHE = {}
 
 
