@@ -218,9 +218,26 @@ class Chat(unittest.TestCase):
         dfs_paths.work_root = lambda: self.root
         dfs_paths._TAG_CACHE.clear()
         self.changes = 0
+        self.hosts = []                             # the ChatHosts of screens a test made: ended in tearDown
         self.chats = dfs_chat.Chats(on_change=lambda: setattr(self, "changes", self.changes + 1))
 
+    def end_hosts(self, timeout=30):
+        """End the chats of every screen the test made and wait until each relay has written its exit to the
+        chat log. The relay logs that from its own thread after the agent is gone, and `chatlog` finds the log
+        under DFS_RUN_DIR when it writes, so a line written after tearDown has put that back lands in
+        `<cwd>/.dfs/runs/chat/`."""
+        for host in self.hosts:
+            host.close_all()
+        logs = self.root / ".dfs" / "runs" / "chat"
+        end = time.time() + timeout
+        while time.time() < end:
+            text = "".join(p.read_text() for p in logs.glob("*.log"))
+            if text.count(" start pid=") <= text.count(" exit "):
+                return
+            time.sleep(0.05)
+
     def tearDown(self):
+        self.end_hosts()
         for k, v in self._env.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -792,7 +809,7 @@ class Chat(unittest.TestCase):
         ui = object.__new__(tui.UI)
         ui.agent = agent
         ui.chat_host = ptyrelay.ChatHost()
-        self.addCleanup(ui.chat_host.close_all)
+        self.hosts.append(ui.chat_host)
         return dfs_chat.Chats(walker=lambda: tui.UiWalker(ui))
 
     def wait_for(self, chats, scope, ok, timeout=15):
