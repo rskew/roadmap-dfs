@@ -155,6 +155,9 @@ def main(argv):
     print("Ran %d tests in %.1fs (%.1fs of tests)" % (total["run"], wall, sum(s for s, _ in took)))
     bad = ", ".join("%s=%d" % (k, total[k]) for k in ("failures", "errors", "skipped") if total[k])
     print(("FAILED (%s)" % bad) if failed else ("OK (%s)" % bad if bad else "OK"))
+    for f in sorted(Path(__file__).resolve().parent.glob(".dfs/**/*")):     # every test has a root of its own: none writes here
+        if f.is_file() and f.stat().st_mtime >= time.time() - wall - 5:
+            print("a test wrote %s at %s" % (f.relative_to(Path.cwd()) if f.is_relative_to(Path.cwd()) else f, time.strftime("%H:%M:%S", time.localtime(f.stat().st_mtime))))
 
     try:
         tf.parent.mkdir(parents=True, exist_ok=True)
