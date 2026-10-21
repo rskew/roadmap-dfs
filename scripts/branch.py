@@ -577,9 +577,11 @@ def out_of(r):
 
 def _gist(text, limit=400):
     """A hook's or git's output on one line, without the guard's own "--warn" aside, cut at
-    a word and marked when cut."""
+    a word and marked when cut. A coordinate the guard quotes loses its line number
+    (`a.py:12` is `a.py`): the gist goes into the task file, where the guard warns of one."""
+    import check as dfs_check
     one = " ".join(l.strip() for l in text.splitlines() if "--warn covers" not in l)
-    one = " ".join(one.split())
+    one = dfs_check.COORD.sub(lambda m: m.group(0).rsplit(":", 1)[0], " ".join(one.split()))
     return one if len(one) <= limit else one[:limit].rsplit(" ", 1)[0] + " …"
 
 
@@ -701,7 +703,9 @@ def merge(task):
         _commit_task_files(task, wt, "the log and edits left uncommitted")
     except BranchError as e:
         _reopen_with(task, wt, "Fix what refuses the commit of %s's files on %s" % (task, name),
-                     "The runner could not commit the task's own files on %s: %s" % (name, e),
+                     "The runner's commit of the task's own files was refused: %s Fix what the "
+                     "message names (`check.py --staged` in the worktree prints the guard's "
+                     "whole message) and commit the task's files." % _gist(str(e)),
                      "the node asking for the refused commit to be fixed")
         return "guard"
     stray = [l[3:] for l in _git("status", "--porcelain", cwd=wt).stdout.splitlines()]

@@ -366,6 +366,30 @@ class Chain(unittest.TestCase):
         self.assertTrue(gist.endswith("word …"), gist)
         self.assertNotIn("--warn", gist)
         self.assertEqual(dfs_branch._gist("a\nb"), "a b")
+        self.assertEqual(dfs_branch._gist("W2.md line 3 carries 'scripts/a.py:12'."),
+                         "W2.md line 3 carries 'scripts/a.py'.")
+
+    def test_a_refused_commit_s_node_carries_a_short_gist_with_no_coordinate(self):
+        # The node once held the guard's whole message: it grew the task file past its
+        # budget and carried the coordinates it quoted, so its own commit was refused next.
+        self.run_chain("work,confirm", cap=2)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text('#!/bin/sh\necho "guard says: W1.md line 9 carries \'a.py:12\'" >&2\n'
+                        'yes "more of it" | head -300 >&2\nexit 1\n')
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        before = item.read_text() + "- 2026-01-01T00:00:00Z · note\n"
+        item.write_text(before)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 3, r.stderr)
+        text = item.read_text()
+        self.assertIn("Fix what refuses the commit of W1's files on dfs/W1", text)
+        self.assertIn("guard says: W1.md line 9 carries 'a.py'", text)
+        self.assertNotIn("a.py:12", text)
+        self.assertLess(len(text) - len(before), 900)
 
     def test_a_merge_waits_for_another_chains_merge_to_finish(self):
         # Two chains of a parallel walk finishing at once: the second merge waits on the
