@@ -1,0 +1,288 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which loading screen looks low resolution, and would a 1024px icon fix it</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .step { border: 1.5px solid #333; border-radius: 6px; padding: 8px 12px; background: #fff; }
+  .arrow { text-align: center; color: #555; line-height: 28px; }
+  .slider { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+  .slider input { width: 100%; min-height: 36px; }
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ddd; }
+  td.pick { font-weight: 600; }
+  .up { color: #b94c40; } .down { color: #2f6b3a; }
+  .pair { display: flex; gap: 12px; flex-wrap: wrap; }
+  .pair figure { margin: 0; flex: 1 1 140px; }
+  .pair canvas { width: 100%; height: auto; display: block; border: 1px solid #ccc; image-rendering: pixelated; }
+  figcaption { font-size: 14px; color: #444; margin-top: 4px; }
+  .muted { color: #555; font-size: 14px; }
+  .screens { display: flex; gap: 12px; }
+  .screens figure { margin: 0; flex: 1 1 0; }
+  .phone { aspect-ratio: 9 / 16; border: 2px solid #333; border-radius: 14px; background: #f5f4ef;
+           display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+  .phone.sys { background: #f5f4ef; }
+  .phone .circ { width: 62%; aspect-ratio: 1; border-radius: 50%; overflow: hidden; background: #efede7; }
+  .phone .sq { width: 40%; aspect-ratio: 1; background: #efede7; overflow: hidden; }
+  .phone canvas { width: 100%; height: 100%; display: block; }
+  .phone .name { font-size: 13px; color: #333; }
+  .toggle { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+  .toggle button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .toggle button[aria-pressed=true] { background: #16191c; color: #fff; }
+</style>
+
+<h1>Which loading screen looks low resolution?</h1>
+<p class="muted">An installed app on Android 12 or later can show two loading screens, one after the other. They draw the icon from different places, so which one looks soft decides the fix.</p>
+<div class="screens">
+  <figure><div class="phone sys"><div class="circ"><canvas id="mockA" width="240" height="240"></canvas></div></div>
+    <figcaption><b>A · Android's launch screen</b>: the icon in a circle, no name. Drawn from the launcher icon Chrome minted from the maskable icon.</figcaption></figure>
+  <figure><div class="phone"><div class="sq"><canvas id="mockB" width="240" height="240"></canvas></div><div class="name">roadmap</div></div>
+    <figcaption><b>B · Chrome's splash</b>: the paper colour, the square icon, the name under it. Drawn from the manifest's <code>any</code> icon.</figcaption></figure>
+</div>
+
+<h2>B, Chrome's splash: is today's icon scaled up?</h2>
+
+<div class="flow">
+  <div class="step">The app starts: Chrome draws the <b>splash</b>, the paper colour with the icon in the middle.</div>
+  <div class="arrow">↓</div>
+  <div class="step">It wants an icon <b id="dpword">128dp</b> wide (Chromium's <code>webapp_splash_image_size_ideal</code>) × the phone's pixel density, in pixels.</div>
+  <div class="arrow">↓</div>
+  <div class="step">From the manifest's <code>any</code> icons it takes the smallest one at least that wide, else the largest it has.</div>
+  <div class="arrow">↓</div>
+  <div class="step" id="verdict">…</div>
+</div>
+
+<h2>Chromium's ideal splash size</h2>
+<div class="toggle" role="group" aria-label="Ideal splash size">
+  <button type="button" data-dp="128" aria-pressed="true">128dp (Chromium's 2015 source)</button>
+  <button type="button" data-dp="192" aria-pressed="false">192dp (my first guess, unsourced)</button>
+</div>
+<p class="muted">The current value is unconfirmed. At 128dp a 512px icon covers phones up to 4×, so B would already be sharp today.</p>
+<h2>Your phone's density</h2>
+<div class="slider">
+  <label for="dpr">Pixel density: <output id="dprout">3</output>×</label>
+  <input type="range" id="dpr" min="2" max="4" step="0.125" value="3">
+</div>
+<p id="need">…</p>
+
+<table>
+  <thead><tr><th>Icon</th><th>Now</th><th>With this change</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<h2>The amber node at that size, magnified 4×</h2>
+<div class="pair">
+  <figure><canvas id="now" width="160" height="160"></canvas><figcaption id="capnow">Now</figcaption></figure>
+  <figure><canvas id="with" width="160" height="160"></canvas><figcaption id="capwith">With 1024px</figcaption></figure>
+</div>
+<p class="muted">Each picture draws the icon at its file's size, scales it to the splash's size as Chrome does, then shows the node blown up so the softness is visible on any screen.</p>
+
+<h2>What would show the 1024px icon wrong</h2>
+<p>Chromium's ideal is still 128dp (then B is sharp already), or what looks soft is A, the circle, or the drawing is sharp but small on the paper. Tell me which below; a screenshot settles it at a glance.</p>
+
+<script>
+  var NOW = [192, 512], WITH = [192, 512, 1024], DP = 128;
+  function draw(ctx, s) {                       // icon.svg, drawn at s pixels
+    var k = s / 512;
+    ctx.fillStyle = "#efede7"; ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = "#16191c"; ctx.lineWidth = 26 * k; ctx.lineJoin = "miter";
+    ctx.beginPath(); ctx.moveTo(150*k,140*k); ctx.lineTo(256*k,140*k); ctx.lineTo(256*k,236*k); ctx.lineTo(362*k,236*k); ctx.lineTo(362*k,336*k);
+    ctx.moveTo(256*k,236*k); ctx.lineTo(256*k,318*k); ctx.stroke();
+    ctx.fillStyle = "#16191c"; ctx.fillRect(128*k,118*k,44*k,44*k);
+    ctx.fillStyle = "#c99f30"; ctx.beginPath(); ctx.arc(256*k,236*k,30*k,0,7); ctx.fill();
+    ctx.fillStyle = "#b94c40"; ctx.fillRect(208*k,318*k,96*k,30*k);
+    ctx.fillStyle = "#3f6aa1"; ctx.beginPath(); ctx.arc(362*k,352*k,40*k,0,7); ctx.fill();
+  }
+  function pick(sizes, want) { var ok = sizes.filter(function (s) { return s >= want; }); return ok.length ? Math.min.apply(0, ok) : Math.max.apply(0, sizes); }
+  function show(id, file, want) {
+    var src = document.createElement("canvas"); src.width = src.height = file; draw(src.getContext("2d"), file);
+    var mid = document.createElement("canvas"); mid.width = mid.height = want;
+    var m = mid.getContext("2d"); m.imageSmoothingEnabled = true; m.imageSmoothingQuality = "low";
+    // A 512px picture scaled up the way a phone does it: the small one stretched over the big one.
+    m.drawImage(src, 0, 0, want, want);
+    var out = document.getElementById(id).getContext("2d"); out.imageSmoothingEnabled = false;
+    var c = 236 / 512 * want, r = 20 / 512 * want * 2;    // a box around the amber node
+    out.clearRect(0, 0, 160, 160);
+    out.drawImage(mid, 256 / 512 * want - r, c - r, 2 * r, 2 * r, 0, 0, 160, 160);
+  }
+  function render() {
+    var d = +document.getElementById("dpr").value, want = Math.round(DP * d);
+    document.getElementById("dpword").textContent = DP + "dp";
+    document.querySelectorAll("[data-dp]").forEach(function (b) { b.setAttribute("aria-pressed", +b.dataset.dp === DP); });
+    var a = pick(NOW, want), b = pick(WITH, want);
+    document.getElementById("dprout").textContent = d;
+    document.getElementById("need").textContent = "The splash wants a " + want + "px icon.";
+    var rows = "";
+    WITH.forEach(function (s) {
+      var inNow = NOW.indexOf(s) >= 0;
+      rows += "<tr><td>" + s + "px</td><td" + (s === a ? ' class="pick"' : "") + ">" + (inNow ? (s === a ? "taken" : "–") : "not there") +
+              "</td><td" + (s === b ? ' class="pick"' : "") + ">" + (s === b ? "taken" : "–") + "</td></tr>";
+    });
+    document.getElementById("rows").innerHTML = rows;
+    var fa = want / a, fb = want / b;
+    document.getElementById("verdict").innerHTML = "Now: the " + a + "px icon is " +
+      (fa > 1 ? '<span class="up">scaled <b>up</b> ×' + fa.toFixed(2) + "</span>, so it blurs." : '<span class="down">scaled down ×' + fa.toFixed(2) + "</span>.") +
+      " With 1024px: the " + b + "px icon is " + (fb > 1 ? '<span class="up">scaled up ×' + fb.toFixed(2) + "</span>." : '<span class="down">scaled <b>down</b> ×' + fb.toFixed(2) + "</span>, so it stays sharp.");
+    function how(f) { return f > want ? " shrunk to " : f < want ? " stretched to " : " drawn at "; }
+    document.getElementById("capnow").textContent = "Now: " + a + "px" + how(a) + want + "px";
+    document.getElementById("capwith").textContent = "With 1024px: " + b + "px" + how(b) + want + "px";
+    show("now", a, want); show("with", b, want);
+  }
+  document.getElementById("dpr").addEventListener("input", function () { render(); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  document.querySelectorAll("[data-dp]").forEach(function (b) {
+    b.addEventListener("click", function () { DP = +b.dataset.dp; render(); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return { dpr: document.getElementById("dpr").value, dp: DP }; };
+  document.addEventListener("dfs-state", function (e) {
+    if (!e.detail) return;
+    if (e.detail.dpr) document.getElementById("dpr").value = e.detail.dpr;
+    if (e.detail.dp) DP = +e.detail.dp;
+    render();
+  });
+  draw(document.getElementById("mockA").getContext("2d"), 240);
+  var b = document.getElementById("mockB").getContext("2d"); draw(b, 240);
+  render();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="B, Chrome's splash (paper, square icon, name under it), looks blurry: keep the 1024px icons and finish."> B looks blurry: keep the 1024px icons</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="A, Android's launch screen (the icon in a circle) looks blurry: work on the launcher icon Chrome mints from the maskable icon."> A, the circle, looks blurry</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="The icon is sharp but the drawing is small on the screen: make the drawing fill more of the any icon, not its resolution."> Sharp, but the drawing is small</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

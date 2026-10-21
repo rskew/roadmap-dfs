@@ -1036,6 +1036,10 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
             status, raw, r = self.call("GET", i["src"])
             self.assertEqual((status, r.getheader("Content-Type")), (200, "image/png"), i["src"])
             self.assertTrue(raw.startswith(b"\x89PNG"))
+            w, h = int.from_bytes(raw[16:20], "big"), int.from_bytes(raw[20:24], "big")
+            self.assertEqual(f"{w}x{h}", i["sizes"], i["src"])
+        self.assertTrue(any(int(i["sizes"].split("x")[0]) >= 768 for i in m["icons"] if i.get("purpose") == "maskable"),
+                        "Android 12's launch screen draws the launcher icon built from the maskable icon, so offer it a large one")
         status, raw, r = self.call("GET", "/sw.js")
         self.assertEqual(status, 200)
         self.assertIn("javascript", r.getheader("Content-Type"))
