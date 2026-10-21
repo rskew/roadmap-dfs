@@ -1302,9 +1302,8 @@ class Chain(unittest.TestCase):
 
     def test_opus_plans_and_sonnet_implements(self):
         # W1 has a node, so its work sessions implement; the critic judges the tree.
-        self.run_chain("work,work,work,work,work,ok,work", cap=7)
-        self.assertEqual(self.models_run(),
-                         ["work sonnet"] * 5 + ["critic opus", "work sonnet"])
+        self.run_chain("work,ok,work", cap=3, DFS_CRITIC_EVERY="1")
+        self.assertEqual(self.models_run(), ["work sonnet", "critic opus", "work sonnet"])
 
     def test_the_work_session_that_opens_an_empty_tree_plans_on_opus(self):
         item = self.root / ".dfs" / "items" / "W1.md"
@@ -1345,15 +1344,15 @@ class Chain(unittest.TestCase):
         # A critic may not change code, and after it the dirt would read as W1's. In place,
         # where tasks take turns in the one checkout: off main, no worktree is cut.
         self.git("checkout", "-q", "-b", "elsewhere")
-        rc, meta, out = self.run_chain("work,work,work,work,work", cap=5)
+        rc, meta, out = self.run_chain("work", cap=1, DFS_CRITIC_EVERY="1")
         self.assertEqual(meta.get("stop"), "cap", out)
         # The last session anywhere was another task's, so the edit is not W1's. Its
         # ts is written out: W1's are bumped past the clock to stay unique.
         (self.root / ".dfs" / "items" / "W2.md").write_text(
             TASK.replace("W1", "W2") + "\n- 2099-01-01T00:00:00Z · session · work\n")
         (self.root / "app.txt").write_text("W2's half-done edit\n")
-        rc, meta, out = self.run_chain("work,work,work,work,work,stash,ok", cap=2)
-        self.assertEqual(self.kinds_run(), ["work"] * 6 + ["critic"], out)
+        rc, meta, out = self.run_chain("work,stash,ok", cap=2, DFS_CRITIC_EVERY="1")
+        self.assertEqual(self.kinds_run(), ["work", "work", "critic"], out)
 
     def test_another_tasks_later_session_does_not_make_a_worktrees_dirt_foreign(self):
         # Parallel chains each work in a worktree of their own, and with the roadmap
@@ -1424,21 +1423,21 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.log("critic")[0]["args"], ["ok"])
 
     def test_a_critic_issue_is_a_raise_and_blocks(self):
-        rc, meta, out = self.run_chain("work,work,work,work,work,issue,work", cap=7)
+        rc, meta, out = self.run_chain("work,issue,work", cap=3, DFS_CRITIC_EVERY="1")
         self.assertEqual((rc, meta.get("stop")), (0, "blocked"), out)
         self.assertEqual(self.kinds_run()[-1], "critic")
 
     def test_a_critic_that_changes_code_is_noted_and_the_chain_carries_on(self):
         # The tree cannot say whether the critic or the author (a chat session) made
         # the change, so it is left for the next session to commit, not a stop.
-        rc, meta, out = self.run_chain("work,work,work,work,work,meddle,work", cap=7)
+        rc, meta, out = self.run_chain("work,meddle,work", cap=3, DFS_CRITIC_EVERY="1")
         self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
         self.assertEqual(self.kinds_run()[-2:], ["critic", "work"], out)
         self.assertIn("changed outside .dfs/", out)
 
     def test_a_critic_that_changed_nothing_does_not_stop_the_chain(self):
-        rc, meta, out = self.run_chain("work,work,work,work,work,silent,work,work", cap=8)
-        self.assertEqual(self.kinds_run(), ["work"] * 5 + ["critic", "work", "work"], out)
+        rc, meta, out = self.run_chain("work,silent,work", cap=3, DFS_CRITIC_EVERY="1")
+        self.assertEqual(self.kinds_run(), ["work", "critic", "work"], out)
         self.assertEqual(meta.get("stop"), "cap", out)
         self.assertIn("Carrying on", out)
 
@@ -1448,20 +1447,19 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.kinds_run(), ["work", "review", "review"], out)
 
     def test_an_ok_that_names_no_node_is_not_accepted_and_carries_on(self):
-        rc, meta, out = self.run_chain("work,work,work,work,work,okbare,work,work", cap=8)
-        self.assertEqual(self.kinds_run(), ["work"] * 5 + ["critic", "work", "work"], out)
+        rc, meta, out = self.run_chain("work,okbare,work", cap=3, DFS_CRITIC_EVERY="1")
+        self.assertEqual(self.kinds_run(), ["work", "critic", "work"], out)
         self.assertEqual(meta.get("stop"), "cap", out)
         self.assertIn("ok was not accepted", out)
         self.assertIn("names no node", out)
 
     def test_an_ok_refused_twice_with_none_accepted_between_is_idle(self):
-        rc, meta, out = self.run_chain(
-            "work,work,work,work,work,okbare,work,work,work,work,work,okbare", cap=14)
+        rc, meta, out = self.run_chain("work,okbare,work,okbare", cap=4, DFS_CRITIC_EVERY="1")
         self.assertEqual((rc, meta.get("stop")), (1, "idle"), out)
         self.assertIn("refused twice with none accepted between", out)
 
     def test_a_critic_that_wrote_to_the_task_without_a_verdict_still_fails(self):
-        rc, meta, out = self.run_chain("work,work,work,work,work,noverdict", cap=7)
+        rc, meta, out = self.run_chain("work,noverdict", cap=2, DFS_CRITIC_EVERY="1")
         self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
         self.assertIn("no verdict", out)
 
@@ -1551,14 +1549,17 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.log("review")[-1]["args"], ["ok"])
 
     def test_the_authors_word_starts_the_review_rounds_over(self):
-        self.run_chain("confirm" + ",rnode,fixn" * 4, cap=12)
-        t = self.tree()
-        self.assertEqual(dfs_tree.review_rounds_unsettled(t), 4)
         old = dfs_tree.dfs_paths.work_root
         dfs_tree.dfs_paths.work_root = lambda: self.root
         try:
+            for _ in range(4):
+                dfs_tree.append_log("W1", "review", ["issues"], "a finding")
+            self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 4)
             dfs_tree.append_log("W1", "accept")
             self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 0)
+            dfs_tree.append_log("W1", "review", ["issues"], "a finding")
+            dfs_tree.append_log("W1", "review", ["ok"], "")
+            self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 0, "a review that came back ok settles them")
         finally:
             dfs_tree.dfs_paths.work_root = old
 
