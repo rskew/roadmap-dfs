@@ -18,8 +18,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import ptyrelay  # noqa: E402
-from test_agent_interrupt import CODEX, KIRO, OPENCODE, until  # noqa: E402
-from test_agent_models import FakeCodexModel, FakeOpenAIModel  # noqa: E402
+from test_agent_interrupt import CODEX, KIRO, OPENCODE  # noqa: E402
+from test_agent_models import FakeCodexModel, FakeOpenAIModel, start_until  # noqa: E402
 from test_kiro_model import FakeKiroModel  # noqa: E402
 
 
@@ -34,11 +34,15 @@ class FreshStart(unittest.TestCase):
             self.env.pop(k, None)
 
     def sent_at_launch_is_heard(self, argv, model, agent, env):
-        relay = ptyrelay.Relay(agent=agent).start(argv, env=dict(self.env, **env), cwd=str(self.home), size=(40, 120))
-        self.addCleanup(relay.close)
-        relay.send("HELLO-FRESH")                           # no settling: the chat is still starting
-        heard = lambda: [b for _, b in model.requests if b"HELLO-FRESH" in b]
-        self.assertTrue(until(heard, 90), "the model was asked with the message; the agent's screen:\n%s" % ptyrelay.chatlog.screen_text(relay.tail))
+        def start():
+            relay = ptyrelay.Relay(agent=agent).start(argv, env=dict(self.env, **env), cwd=str(self.home), size=(40, 120))
+            self.addCleanup(relay.close)
+            relay.send("HELLO-FRESH")                       # no settling: the chat is still starting
+            return relay
+
+        heard = lambda relay: [b for _, b in model.requests if b"HELLO-FRESH" in b]
+        relay, ok = start_until(start(), heard, start, 90)  # an opencode that hangs at start-up is started again
+        self.assertTrue(ok, "the model was asked with the message; the agent's screen:\n%s" % ptyrelay.chatlog.screen_text(relay.tail))
         self.assertTrue(relay.live, "the agent is still there")
 
     @unittest.skipUnless(KIRO, "no kiro-cli here")

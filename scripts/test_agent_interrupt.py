@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import ptyrelay  # noqa: E402
-from test_agent_models import FakeCodexModel, FakeOpenAIModel  # noqa: E402
+from test_agent_models import FakeCodexModel, FakeOpenAIModel, prompt_drawn, start_until  # noqa: E402
 from test_kiro_model import FakeKiroModel  # noqa: E402
 
 
@@ -58,9 +58,15 @@ class Interrupt(unittest.TestCase):
         return [b for _, b in model.requests if text.encode() in b and not (turn and b"Generate a title" in b)]
 
     def stop_a_slow_answer(self, argv, model, agent, env=None, settle=2, before=None):
-        relay = ptyrelay.Relay(agent=agent).start(argv, env=dict(self.env, **(env or {})), cwd=str(self.home), size=(40, 120))
-        self.addCleanup(relay.close)
-        self.assertTrue(until(lambda: relay.first_out, 30))
+        def start():
+            relay = ptyrelay.Relay(agent=agent).start(argv, env=dict(self.env, **(env or {})), cwd=str(self.home), size=(40, 120))
+            self.addCleanup(relay.close)
+            return relay
+
+        # opencode's first output comes before it hangs, when it does at start-up: its prompt is what is waited for
+        drawn, timeout = (prompt_drawn, 90) if agent == "opencode" else (lambda r: r.first_out, 30)
+        relay, up = start_until(start(), drawn, start, timeout)
+        self.assertTrue(up, "the agent started; its screen:\n%s" % ptyrelay.chatlog.screen_text(relay.tail))
         time.sleep(settle)                                    # a TUI starting up is quiet now and then, and takes no message
         relay.send("please take your time")
         self.assertTrue(until(lambda: self.hear(model, "take your time", turn=True), 60), "the agent asked the model for the answer")

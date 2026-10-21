@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
 import ptyrelay             # noqa: E402
-from test_agent_models import FakeOpenAIModel  # noqa: E402
+from test_agent_models import FakeOpenAIModel, start_until  # noqa: E402
 
 OPENCODE = os.environ.get("TEST_OPENCODE") or next(iter(sorted(glob.glob("/nix/store/*-opencode-1.18*/bin/opencode"))[::-1]), None) or shutil.which("opencode")
 
@@ -104,11 +104,23 @@ class OpencodeCrossing(unittest.TestCase):
         self.addCleanup(relay.close)
         return relay
 
+    def screen_again(self, text=None):
+        """The screen's opencode started again after it hung at start-up: the chat is recorded by now (its opening turn
+        is behind the interactive session run.sh opened), so it resumes the recorded session, and `text` is typed."""
+        relay = self.screen(CHAT_SID=json.loads(self.chats.path("project").read_text())["sid"], CHAT_RESUME="1")
+        if text:
+            relay.send(text)
+        return relay
+
     def type_on_the_screen(self, relay, text):
+        """Type `text` on the screen's opencode and see the page read it. Returns the relay the text went to, which is
+        not `relay` when its opencode hung at start-up and was started again (`start_until`)."""
         self.assertTrue(until(lambda: relay.first_out, 60), "the screen's opencode drew itself")
         relay.send(text)
-        self.assertTrue(until(lambda: self.heard(text), 60), "opencode on the screen asked the model with %r" % text)
+        relay, ok = start_until(relay, lambda r: self.heard(text), lambda: self.screen_again(text), 60)
+        self.assertTrue(ok, "opencode on the screen asked the model with %r" % text)
         self.assertTrue(until(lambda: ("you", text) in self.texts(), 60), "the page reads %r from the same session" % text)
+        return relay
 
     def test_a_conversation_the_page_began_is_resumed_on_the_screen_and_back(self):
         st = self.page_says("PAGE-ONE")
@@ -118,7 +130,7 @@ class OpencodeCrossing(unittest.TestCase):
         sid, resume = dfs_chat.claim("project", "opencode")
         self.assertEqual((sid, resume), (rec["sid"], True))
         relay = self.screen(CHAT_SID=sid, CHAT_RESUME="1")
-        self.type_on_the_screen(relay, "SCREEN-TWO")
+        relay = self.type_on_the_screen(relay, "SCREEN-TWO")
         self.assertTrue(until(lambda: ("agent", "FAKE-ANSWER") in self.texts()[2:], 30))
         relay.close()
         self.assertTrue(until(lambda: not relay.live, 10))
@@ -135,9 +147,9 @@ class OpencodeCrossing(unittest.TestCase):
         relay.send("EARLY-MSG")         # the author types before the summary is done
         time.sleep(5)
         self.assertFalse(self.heard("EARLY-MSG"), "nothing is typed into the headless opening turn")
-        self.assertTrue(until(lambda: self.heard("EARLY-MSG"), 120),
-                        "opencode on the screen asked the model with the early message; its screen:\n%s" % ptyrelay.chatlog.screen_text(relay.tail))
-        self.assertTrue(until(lambda: ("you", "EARLY-MSG") in self.texts(), 20), "and the page reads it from the same session")
+        relay, ok = start_until(relay, lambda r: self.heard("EARLY-MSG"), lambda: self.screen_again("EARLY-MSG"), 120)
+        self.assertTrue(ok, "opencode on the screen asked the model with the early message; its screen:\n%s" % ptyrelay.chatlog.screen_text(relay.tail))
+        self.assertTrue(until(lambda: ("you", "EARLY-MSG") in self.texts(), 60), "and the page reads it from the same session: %s" % self.texts())
 
     def test_a_conversation_the_screen_began_is_read_and_continued_by_the_page(self):
         self.assertEqual(dfs_chat.claim("project", "opencode"), ("", False))
@@ -145,7 +157,7 @@ class OpencodeCrossing(unittest.TestCase):
         self.assertTrue(until(lambda: self.chats.path("project").exists(), 60), "the opening turn was recorded")
         rec = json.loads(self.chats.path("project").read_text())
         self.assertEqual(rec["agent"], "opencode")
-        self.type_on_the_screen(relay, "SCREEN-ONE")
+        relay = self.type_on_the_screen(relay, "SCREEN-ONE")
         self.assertTrue(until(lambda: ("agent", "FAKE-ANSWER") in self.texts()[-2:], 30), "the screen's opencode finished answering")
         relay.close()
         self.assertTrue(until(lambda: not relay.live, 10))

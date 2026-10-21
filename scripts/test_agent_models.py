@@ -10,12 +10,22 @@ agent writes and the screens it draws are its own.
 A message that asks to "take your time" is answered in two parts, the second only when `release`
 is set (or after `hold` seconds), so a turn can be interrupted while it is answering. If the
 agent hangs up in between, `cancelled` is set: that is how a test sees an interrupt reach it.
+
+`start_until` is for the tests that start a real opencode: one in about five starts hangs on a loaded machine, and the
+test starts it again.
 """
 import http.server
 import json
 import select
 import socket
+import subprocess
+import sys
 import threading
+import time
+import unittest
+from unittest import mock
+
+import ptyrelay
 
 SLOW = "take your time"
 
@@ -162,3 +172,127 @@ class FakeOpenAIModel(FakeModel):
         chunk(None, usage=dict(prompt_tokens=1, completion_tokens=1, total_tokens=2))
         w.write(b"data: [DONE]\n\n")
         w.flush()
+
+
+# ── opencode's start-up hang ────────────────────────────────────────────────────────────
+# On a loaded machine about one real opencode start in five hangs, with or without ptyrelay in the way
+# (a bare pty and no relay: 3 of 12 starts under 16 busy loops, 2 of 12 with the repo hidden from git
+# by GIT_CEILING_DIRECTORIES): it draws its terminal queries, and its worker thread then never goes on,
+# so the prompt is never drawn and the process sleeps in epoll_wait, its CPU stuck at about 4.4s for
+# minutes. A start that is only slow is told from it by its CPU: every healthy start used at least 57
+# ticks (0.57s) in each 5s, a hung one 4 to 13.
+HUNG_SECONDS = 10           # how long a start with no prompt is watched
+HUNG_TICKS = 25             # and it is hung when it used fewer ticks of CPU (1/100s) than this in that time
+
+
+def cpu_ticks(pid):
+    try:
+        with open("/proc/%d/stat" % pid) as f:
+            fields = f.read().rsplit(")", 1)[1].split()
+        return int(fields[11]) + int(fields[12])
+    except (OSError, IndexError, ValueError, TypeError):
+        return None
+
+
+def prompt_drawn(relay):
+    """Whether relay's opencode has drawn its prompt screen."""
+    return ptyrelay.READY["opencode"] in ptyrelay.chatlog.screen_text(relay.tail, keep=ptyrelay.TAIL)
+
+
+def opencode_hung(relay, samples):
+    """Whether relay's opencode has started and then made no progress for HUNG_SECONDS. `samples` is the list
+    this call keeps its readings in: one per call of this function over the watch. Only once run.sh has said
+    it is starting the interactive opencode (relay.handed, which is after the chat's headless opening turn,
+    where nothing is expected to use CPU), or for a relay started on opencode itself, once it has written."""
+    if not relay.live or prompt_drawn(relay) or not (relay.handed or (relay.first_out and relay.started and not relay.opening)):
+        return False
+    ticks, now = cpu_ticks(relay.pid), time.time()
+    if ticks is None:
+        return False
+    if not samples or now - samples[-1][0] >= 1:
+        samples.append((now, ticks))
+    past = [s for s in samples if now - s[0] >= HUNG_SECONDS]
+    return bool(past) and ticks - past[-1][1] < HUNG_TICKS
+
+
+def start_until(relay, done, restart, timeout, tries=3):
+    """Wait up to `timeout` for done(relay). A relay whose opencode hangs at start-up (`opencode_hung`) is closed
+    and replaced by restart(), a started relay, at most `tries` starts in all. Returns the relay last started and
+    whether done(relay) came true. `restart` registers the relay for closing, as the first one is."""
+    for attempt in range(tries):
+        samples, end, hung = [], time.time() + timeout, False
+        while time.time() < end and not hung:
+            if done(relay):
+                return relay, True
+            hung = relay.agent == "opencode" and opencode_hung(relay, samples)
+            time.sleep(0.1)
+        if not hung:
+            return relay, False
+        relay.close()
+        print("opencode hung at start-up (start %d of %d)" % (attempt + 1, tries), file=sys.stderr)
+        if attempt + 1 < tries:
+            relay = restart()
+    return relay, False
+
+
+class Stand:
+    """Enough of a ptyrelay.Relay for `start_until`: a process that is the agent, and what it has drawn."""
+    agent, live, first_out, started, opening, handed = "opencode", True, 1.0, 1.0, False, 0.0
+
+    def __init__(self, code, drawn=b""):
+        self.proc = subprocess.Popen([sys.executable, "-c", code])
+        self.pid, self.tail, self.closed = self.proc.pid, bytearray(drawn), False
+
+    def close(self):
+        self.closed = True
+        self.proc.kill()
+        self.proc.wait()
+
+
+class StartUntil(unittest.TestCase):
+    IDLE, BUSY = "import time; time.sleep(60)", "while True: pass"
+
+    def setUp(self):
+        for name, value in (("HUNG_SECONDS", 1), ("HUNG_TICKS", 25)):
+            patcher = mock.patch.dict(globals(), {name: value})
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.stands = []
+
+    def stand(self, code, drawn=b""):
+        s = Stand(code, drawn)
+        self.stands.append(s)
+        self.addCleanup(s.close)
+        return s
+
+    def test_an_opencode_that_uses_no_cpu_and_has_drawn_no_prompt_is_started_again(self):
+        first = self.stand(self.IDLE)
+        second = self.stand(self.BUSY, b"ctrl+p commands")
+        relay, ok = start_until(first, prompt_drawn, lambda: second, 20)
+        self.assertEqual((relay, ok, first.closed), (second, True, True))
+
+    def test_one_that_is_using_cpu_is_waited_for_not_restarted(self):
+        busy = self.stand(self.BUSY)
+        relay, ok = start_until(busy, prompt_drawn, lambda: self.fail("a slow start was restarted"), 3)
+        self.assertEqual((relay, ok, busy.closed), (busy, False, False))
+
+    def test_one_that_has_drawn_its_prompt_is_done_however_idle_it_is(self):
+        idle = self.stand(self.IDLE, b"\x1b[1mctrl+p\x1b[0m commands")
+        self.assertEqual(start_until(idle, prompt_drawn, lambda: self.fail("restarted"), 3), (idle, True))
+
+    def test_the_last_start_is_closed_and_reported_not_done_when_every_one_hangs(self):
+        starts = [self.stand(self.IDLE) for _ in range(3)]
+        again = iter(starts[1:])
+        relay, ok = start_until(starts[0], prompt_drawn, lambda: next(again), 30)
+        self.assertEqual((relay, ok, [s.closed for s in starts]), (starts[2], False, [True, True, True]))
+
+    def test_run_sh_s_opening_turn_is_not_a_hang_however_idle_it_waits(self):
+        waiting = self.stand(self.IDLE)
+        waiting.first_out = 1.0
+        waiting.handed, waiting.opening = 0.0, True       # run.sh is running the headless opening turn
+        relay, ok = start_until(waiting, prompt_drawn, lambda: self.fail("restarted in the opening turn"), 3)
+        self.assertEqual((relay, ok, waiting.closed), (waiting, False, False))
+
+
+if __name__ == "__main__":
+    unittest.main()
