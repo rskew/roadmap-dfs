@@ -38,7 +38,7 @@ and the web page read the task through its worktree). The first run cuts the bra
 rebased onto the default branch and merged into it with `--no-ff` (local, never pushed) and the worktree and
 branch are removed. A rebase that conflicts reopens the item with a node to resolve it;
 uncommitted edits of yours that the merge would overwrite are stashed for the merge and put back
-uncommitted (a raise, with the stash kept, only if they conflict with what it brought in; an untracked file of yours that the branch adds is a raise, left where it is); a merge,
+uncommitted (a raise, with the stash kept, only if they conflict with what it brought in; an untracked file of yours, or an edit under `.dfs`, is a raise, left where it is); a merge,
 cherry-pick, revert or rebase of yours left unfinished in the checkout raises instead and is left alone. A
 gitignored `.dfs/` is worked the same way: the worktree links to your checkout's ignored
 planning files, so the screen and the sessions read and write one copy. That includes task

@@ -1842,7 +1842,7 @@ class Chain(unittest.TestCase):
         (self.root / "app.txt").write_text("the author's edit\n")
         r = self.merge_by_hand()
         self.assertEqual(r.returncode, 4, r.stderr)
-        self.assertIn("raised for the author", r.stderr + r.stdout)
+        self.assertIn("a raise names the stash", r.stderr + r.stdout)
         text = task.read_text()
         self.assertIn("edited since", text)
         self.assertIn("raise", text)
@@ -1955,6 +1955,29 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- author\n")
         self.assertTrue(self.wt.exists())
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_the_edit_set_aside_is_put_back_before_the_raise_for_one_that_stays(self):
+        # app.txt is stashed so the merge can go on; `.dfs/order.md` is a roadmap file and is not,
+        # so the second merge is refused over it too, and the raise leaves app.txt as it was
+        (self.root / ".dfs" / "order.md").write_text("- W1\n")
+        self.git("add", ".dfs/order.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "order")
+        self.enter()
+        (self.wt / ".dfs" / "order.md").write_text("- W1\n- branch\n")
+        (self.wt / "app.txt").write_text("worked\n")
+        self.git("add", ".dfs/order.md", "app.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: both", cwd=self.wt)
+        (self.root / ".dfs" / "order.md").write_text("- W1\n- author\n")
+        (self.root / "app.txt").write_text("the author's edit\n")
+        head = self.git("rev-parse", "HEAD")
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("raised for the author", r.stderr)
+        self.assertEqual(self.git("rev-parse", "HEAD"), head, r.stderr)
+        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- author\n")
+        self.assertEqual(self.git("stash", "list"), "")
+        self.assertTrue(self.wt.exists())
 
     def test_a_merge_does_not_write_a_clashing_edit_over_the_branchs_committed_force_tracked_file(self):
         (self.root / ".gitignore").write_text(".*\n!.gitignore\n")
