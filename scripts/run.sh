@@ -974,7 +974,7 @@ while True:
 
 t = dfs_tree.load(task)
 status, why = dfs_tree.status_of(t)
-if status == "done" and not dfs_tree.accepted(t):
+if status == "done" and dfs_tree.acceptable(t):
     if (ask("accept %s's tree as finished? [y/N]: " % task) or "n")[:1].lower() == "y":
         dfs_tree.append_log(task, "accept")
         wrote += 1

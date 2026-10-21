@@ -1728,6 +1728,15 @@ class Branches(InARepo):
         self.assertEqual(dfs_tree.task_ids(), ["W1", "W2"])
         self.assertTrue(dfs_tree.exists("W2"))
 
+    def test_a_task_created_in_one_worktree_is_counted_by_the_next_id_from_another_checkout(self):
+        wt = self.worktree()
+        self.assertEqual(dfs_tree.next_task_id(), "W2")
+        (wt / ".dfs/items/W7.md").write_text(task(node(1), "").replace("W1", "W7"))
+        self.assertEqual(dfs_tree.next_task_id(), "W8")
+        with self.assertRaises(ValueError):
+            dfs_tree.create_task("again", task="W7")
+        self.assertEqual(dfs_tree.task_ids(), ["W1"])   # a worktree's other files are not listed
+
     def test_the_marks_count_a_worked_tasks_edits_and_commits_in_its_worktree(self):
         wt = self.worktree()
         self.git("update-ref refs/remotes/origin/master HEAD")

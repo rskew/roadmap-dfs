@@ -216,6 +216,20 @@ def task_ids():
     return sorted(out)
 
 
+def worktree_task_ids():
+    """Every task id with a file in some item worktree's `.dfs/items`, its own or one a
+    session created there. Only for keeping ids apart: a worktree's copy of a task this
+    checkout has deleted is stale, so these are not listed as tasks."""
+    out = set()
+    for st in dfs_paths.worktree_states():
+        try:
+            names = [p.name for p in (st / "items").iterdir()]
+        except OSError:
+            continue
+        out.update(got[0] for got in (part_of(n) for n in names) if got)
+    return out
+
+
 def exists(task):
     return bool(part_tags(task))
 
@@ -787,7 +801,7 @@ def create_task(name, goal="", task=None, draft=False):
     if not re.fullmatch(r"[A-Za-z]+\d+%s" % re.escape(suffix), task):
         raise ValueError("a task id is letters then a number (W25)%s, not %r"
                          % (", tagged %s on this branch" % suffix if suffix else "", task))
-    if exists(task) or task in retired_ids():
+    if exists(task) or task in retired_ids() or task in worktree_task_ids():
         raise ValueError("%s already exists: pick another id" % task)
     path = part_path(task, tag)
     body = ["# %s · %s" % (task, name), "", "## Goal", "", (goal or "").strip() or name, "",
