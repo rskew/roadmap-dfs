@@ -1260,6 +1260,39 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.root / "app.txt").read_text(), "ours\n")
         self.assertEqual(self.stashes(), "On %s: another session" % self.git("symbolic-ref", "--short", "HEAD"))
 
+    def test_a_stash_whose_staged_half_alone_will_not_apply_is_put_back_without_the_index(self):
+        # staged edit to line 1, then undone in the working tree, and line 3 edited; the merge
+        # changed line 1, so `--index` cannot apply but the working-tree edit merges cleanly
+        self.commit_app("1\n2\n3\n")
+        (self.root / "app.txt").write_text("A\n2\n3\n")
+        self.git("add", "app.txt")
+        (self.root / "app.txt").write_text("1\n2\nC\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "dfs-merge-W1")
+        ours = self.git("rev-parse", "stash@{0}")
+        self.commit_app("Z\n2\n3\n")
+        self.assertEqual(self.branch_call("print(branch._put_back(%r, ['app.txt']))" % ours), "True")
+        self.assertEqual((self.root / "app.txt").read_text(), "Z\n2\nC\n")
+        self.assertEqual(self.stashes(), "")
+
+    def test_a_set_aside_finds_its_own_entry_when_another_session_pushes_right_after(self):
+        (self.root / "other.txt").write_text("theirs\n")
+        self.git("add", "other.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "other")
+        (self.root / "app.txt").write_text("the author's edit\n")
+        (self.root / "other.txt").write_text("another session's edit\n")
+        sha = self.branch_call(
+            "orig = branch._git\n"
+            "def racing(*a, **k):\n"
+            "    r = orig(*a, **k)\n"
+            "    if 'push' in a and 'dfs-merge-W1' in a:\n"
+            "        orig(*branch._identity(), 'stash', 'push', '-q', '-m', 'another session', '--', 'other.txt')\n"
+            "    return r\n"
+            "branch._git = racing\n"
+            "print(branch._set_aside('W1', ['app.txt']))")
+        entries = self.git("stash", "list", "--format=%H %gs").splitlines()
+        self.assertEqual(len(entries), 2)
+        self.assertEqual([l.split(" ", 1)[0] for l in entries if l.endswith("dfs-merge-W1")], [sha])
+
     def test_a_worktree_git_will_not_remove_is_said_so_not_claimed_removed(self):
         self.run_chain("work,confirm", cap=2)
         self.git("worktree", "lock", str(self.wt))

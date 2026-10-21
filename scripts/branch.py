@@ -761,10 +761,19 @@ def _refused_paths(r):
     return [l.strip() for l in out_of(r).splitlines() if l[:1] in ("\t", " ") and l.strip()]
 
 
+def _stash_subjects():
+    """{sha: subject} of the stash, newest first (a dict keeps the order)."""
+    out = {}
+    for line in _git("stash", "list", "--format=%H %gs").stdout.splitlines():
+        sha, _, subject = line.partition(" ")
+        out[sha] = subject
+    return out
+
+
 def _stash_index(sha):
     """Where the stash entry `sha` stands now (`stash@{n}`), None when it is gone."""
-    for n, line in enumerate(_git("stash", "list", "--format=%H").stdout.split()):
-        if line == sha:
+    for n, entry in enumerate(_stash_subjects()):
+        if entry == sha:
             return "stash@{%d}" % n
     return None
 
@@ -782,26 +791,29 @@ def _set_aside(task, paths):
     tracked = _git("ls-files", "-z", "--", *paths).stdout.split("\0")
     paths = [p for p in paths if p in tracked and not p.startswith(dfs_paths.STATE_DIR_NAME + "/")]
     tag = "dfs-merge-%s" % task
-    before = _git("rev-parse", "-q", "--verify", "refs/stash").stdout.strip()
+    before = set(_stash_subjects())
     if not paths or _git(*_identity(), "stash", "push", "-q", "-m", tag, "--", *paths).returncode != 0:
         return None
-    # `stash push` exits 0 when it saved nothing, and an older kept entry of ours must not be taken for it
-    # (another session's push between ours and this read must not be taken for it: the subject says whose)
-    after = _git("rev-parse", "-q", "--verify", "refs/stash").stdout.strip()
-    subject = _git("log", "-1", "--format=%s", "refs/stash").stdout.strip() if after else ""
-    return after if after != before and subject.endswith(tag) else None
+    # `stash push` exits 0 when it saved nothing, and an older kept entry of ours must not be taken
+    # for it; another session may push between ours and this read, so ours is the new entry whose
+    # subject says whose it is, wherever it stands
+    new = [sha for sha, subject in _stash_subjects().items() if sha not in before and subject.endswith(tag)]
+    return new[0] if new else None
 
 
 def _put_back(sha, paths):
-    """Apply the stash `sha` again and drop it. When it conflicts with what the merge brought
-    in, the paths go back to the default branch's content and the stash is kept (False)."""
-    if _git(*_identity(), "stash", "apply", "--index", "-q", sha).returncode == 0:
-        at = _stash_index(sha)
-        if at:   # never another session's entry when ours is gone
-            _git("stash", "drop", "-q", at)
-        return True
-    _git("reset", "-q", "--", *paths)
-    _git("checkout", "-q", "--", *paths)
+    """Apply the stash `sha` again and drop it. `--index` keeps what was staged; when only the
+    staged half will not apply (the merge changed what it was staged against) the edits are
+    applied without it, as plain working-tree edits. When they conflict with what the merge
+    brought in, the paths go back to the default branch's content and the stash is kept (False)."""
+    for index in (["--index"], []):
+        if _git(*_identity(), "stash", "apply", *index, "-q", sha).returncode == 0:
+            at = _stash_index(sha)
+            if at:   # never another session's entry when ours is gone
+                _git("stash", "drop", "-q", at)
+            return True
+        _git("reset", "-q", "--", *paths)
+        _git("checkout", "-q", "--", *paths)
     return False
 
 
