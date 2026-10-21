@@ -460,8 +460,13 @@ def _tracked_task_paths(task, wt):
             continue
         if any(q.is_symlink() for q in [wt / p, *(wt / p).parents] if wt in q.parents):
             continue
-        if _git("check-ignore", "-q", p, cwd=wt).returncode != 0:
-            out.append(p)
+        if _git("check-ignore", "-q", p, cwd=wt).returncode == 0:
+            continue
+        if (wt / p).is_dir() and not (
+                _git("ls-files", "--cached", "--others", "--exclude-standard", "--", p, cwd=wt).stdout.strip()
+                or _git("ls-tree", "-r", "--name-only", "HEAD", "--", p, cwd=wt).stdout.strip()):
+            continue   # a directory git knows nothing of: `commit --only` refuses the pathspec
+        out.append(p)
     return out
 
 
@@ -719,8 +724,9 @@ def merge(task):
     except BranchError as e:
         _reopen_with(task, wt, "Fix what refuses the commit of %s's files on %s" % (task, name),
                      "The runner's commit of the task's own files was refused: %s Fix what the "
-                     "message names (`check.py --staged` in the worktree prints the guard's "
-                     "whole message) and commit the task's files." % _gist(str(e)),
+                     "message names and commit the task's files. (`check.py --staged` in the worktree "
+                     "reruns the guard, and its output can include faults in files the "
+                     "runner did not commit.)" % _gist(str(e)),
                      "the node asking for the refused commit to be fixed")
         return "guard"
     stray = [l[3:] for l in _git("status", "--porcelain", cwd=wt).stdout.splitlines()]

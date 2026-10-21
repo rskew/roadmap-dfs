@@ -423,6 +423,19 @@ class Chain(unittest.TestCase):
         self.assertEqual(dfs_branch._gist(out),
                          "cannot commit W1's files: dfs_check: the roadmap broke its own rules. - the fault")
 
+    def test_an_empty_parts_directory_beside_a_changed_task_file_does_not_refuse_the_commit(self):
+        # `git commit --only` fails on a pathspec git knows nothing of: the task's parts
+        # directory, left empty after its files were deleted by hand, is not one to name.
+        self.run_chain("work,confirm", cap=2)
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        (self.wt / ".dfs" / "items" / "W1").mkdir(exist_ok=True)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("the log and edits left uncommitted", self.git("log", "--format=%s"))
+        self.assertNotIn("Fix what refuses the commit", (self.root / ".dfs/items/W1.md").read_text())
+
     def test_a_merge_waits_for_another_chains_merge_to_finish(self):
         # Two chains of a parallel walk finishing at once: the second merge waits on the
         # lock the first holds, and goes through after it, rather than failing on git's
