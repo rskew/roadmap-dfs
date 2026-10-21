@@ -108,6 +108,15 @@ class CodexCrossing(unittest.TestCase):
         self.assertTrue(until(lambda: self.heard(text), 60), "codex on the screen asked the model with %r" % text)
         self.assertTrue(until(lambda: ("you", text) in self.texts(), 20), "the page reads %r from the same session" % text)
 
+    def let_go(self, relay, sid):
+        """Close the screen's chat and wait until its codex has really let go of the conversation: the relay is
+        dead once its pty is shut, which can come before the codex it started is gone, and the page refuses to
+        send to a conversation another terminal still has open."""
+        relay.close()
+        self.assertTrue(until(lambda: not relay.live, 10))
+        t = time.time()
+        self.assertTrue(until(lambda: not dfs_chat.running_elsewhere(sid, agent="codex"), 30), "the screen's codex let the conversation go")
+
     def test_a_conversation_the_page_began_is_resumed_on_the_screen_and_back(self):
         st = self.page_says("PAGE-ONE")
         self.assertEqual([m["text"] for m in st["messages"]][-1], "FAKE-ANSWER", "a real codex exec answered: %s" % st["messages"])
@@ -118,8 +127,7 @@ class CodexCrossing(unittest.TestCase):
         relay = self.screen(CHAT_SID=sid, CHAT_RESUME="1")
         self.type_on_the_screen(relay, "SCREEN-TWO")
         self.assertTrue(until(lambda: ("agent", "FAKE-ANSWER") in self.texts()[2:], 30))
-        relay.close()
-        self.assertTrue(until(lambda: not relay.live, 10))
+        self.let_go(relay, sid)
         self.page_says("PAGE-THREE")
         last = self.heard("PAGE-THREE")[-1].decode()
         self.assertIn("PAGE-ONE", last, "the page's resumed turn carries the first message")
@@ -146,8 +154,7 @@ class CodexCrossing(unittest.TestCase):
         self.assertEqual(rec["agent"], "codex")
         self.type_on_the_screen(relay, "SCREEN-ONE")
         self.assertTrue(until(lambda: relay.live, 5))
-        relay.close()
-        self.assertTrue(until(lambda: not relay.live, 10))
+        self.let_go(relay, rec["sid"])
         self.page_says("PAGE-TWO")
         last = self.heard("PAGE-TWO")[-1].decode()
         self.assertIn("SCREEN-ONE", last)

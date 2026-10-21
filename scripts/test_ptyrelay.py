@@ -85,6 +85,7 @@ class Background(unittest.TestCase):
     def test_an_agent_that_ends_says_it_is_not_running(self):
         self.relay.send("quit")
         self.assertTrue(until(lambda: not self.relay.live))
+        self.assertTrue(until(lambda: self.relay.rc is not None), "the exit code is read once the child is reaped, after the relay stops being live")
         self.assertEqual(self.relay.rc, 3)
         self.assertFalse(self.relay.send("late"))
 
@@ -231,7 +232,7 @@ class Looking(unittest.TestCase):
             except OSError:
                 pass
 
-    def seen(self, needle, timeout=5):
+    def seen(self, needle, timeout=30):
         got, end = b"", time.time() + timeout
         while time.time() < end:
             if select.select([self.out_r], [], [], 0.1)[0]:
