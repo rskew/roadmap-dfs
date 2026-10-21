@@ -467,13 +467,17 @@ def _tracked_task_paths(task, wt):
 
 def _commit_task_files(task, wt, what):
     """Commit the task's own files left uncommitted in its worktree onto its branch. Those
-    git ignores (a gitignored roadmap, whole or in part) are shared, not the branch's."""
+    git ignores (a gitignored roadmap, whole or in part) are shared, not the branch's.
+    Only those paths: `--only` builds the commit from HEAD and them, so whatever else is
+    staged in the worktree (another task's file) is neither committed nor judged by the
+    guard here, and stays for `merge` to name as uncommitted."""
     paths = _tracked_task_paths(task, wt)
     if not paths:
         return
     _git("add", "--", *paths, cwd=wt)
-    if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
-        r = _git(*_identity(), "commit", "-q", "-m", "%s: %s" % (task, what), cwd=wt)
+    if _git("diff", "--cached", "--quiet", "HEAD", "--", *paths, cwd=wt).returncode != 0:
+        r = _git(*_identity(), "commit", "-q", "--only", "-m", "%s: %s" % (task, what),
+                 "--", *paths, cwd=wt)
         if r.returncode != 0:
             raise BranchError("cannot commit %s's files on %s: %s" %
                               (task, dfs_paths.item_branch(task), (r.stderr or r.stdout).strip()))

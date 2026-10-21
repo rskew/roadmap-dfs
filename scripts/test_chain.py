@@ -331,6 +331,33 @@ class Chain(unittest.TestCase):
         self.assertIn("Fix what refuses the commit of W1's files on dfs/W1", item.read_text())
         self.assertTrue(self.wt.exists())
 
+    def test_the_runner_commits_only_the_task_s_files_and_names_what_else_is_staged(self):
+        # Another task's file staged in the worktree was committed with the task's log, so
+        # the guard judged it and refused a commit no session of this task could put right.
+        self.run_chain("work,confirm", cap=2)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text('#!/bin/sh\ngit diff --cached --name-only | grep -q W2 && '
+                        '{ echo "guard says: W2 is wrong" >&2; exit 1; }\nexit 0\n')
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        (self.wt / ".dfs" / "items" / "W2.md").write_text("# W2 · other\n")
+        self.git("add", ".dfs/items/W2.md", cwd=self.wt)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertNotEqual(r.returncode, 0, r.stderr)
+        self.assertIn("W1: the log and edits left uncommitted",
+                      self.git("log", "--format=%s", "HEAD..dfs/W1"))
+        self.assertNotIn("W2", self.git("log", "--name-only", "--format=", "HEAD..dfs/W1"))
+        self.assertIn(".dfs/items/W2.md", self.git("diff", "--cached", "--name-only", cwd=self.wt))
+        text = item.read_text()
+        self.assertIn("Commit or drop the uncommitted changes", text)
+        self.assertIn(".dfs/items/W2.md", text)
+        self.assertNotIn("Fix what refuses the commit", text)
+        self.assertNotIn("guard says", text)
+
     def test_a_hooks_message_is_cut_at_a_word_without_the_guards_warn_aside(self):
         import branch as dfs_branch
         out = "first line\n(--warn covers only the warnings above)\n" + "word " * 200
