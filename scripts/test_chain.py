@@ -331,6 +331,33 @@ class Chain(unittest.TestCase):
         self.assertIn("Fix what refuses the commit of W1's files on dfs/W1", item.read_text())
         self.assertTrue(self.wt.exists())
 
+    def test_the_runner_commits_only_the_task_s_files_and_names_what_else_is_staged(self):
+        # Another task's file staged in the worktree was committed with the task's log, so
+        # the guard judged it and refused a commit no session of this task could put right.
+        self.run_chain("work,confirm", cap=2)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text('#!/bin/sh\ngit diff --cached --name-only | grep -q W2 && '
+                        '{ echo "guard says: W2 is wrong" >&2; exit 1; }\nexit 0\n')
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        (self.wt / ".dfs" / "items" / "W2.md").write_text("# W2 · other\n")
+        self.git("add", ".dfs/items/W2.md", cwd=self.wt)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertNotEqual(r.returncode, 0, r.stderr)
+        self.assertIn("W1: the log and edits left uncommitted",
+                      self.git("log", "--format=%s", "HEAD..dfs/W1"))
+        self.assertNotIn("W2", self.git("log", "--name-only", "--format=", "HEAD..dfs/W1"))
+        self.assertIn(".dfs/items/W2.md", self.git("diff", "--cached", "--name-only", cwd=self.wt))
+        text = item.read_text()
+        self.assertIn("Commit or drop the uncommitted changes", text)
+        self.assertIn(".dfs/items/W2.md", text)
+        self.assertNotIn("Fix what refuses the commit", text)
+        self.assertNotIn("guard says", text)
+
     def test_a_hooks_message_is_cut_at_a_word_without_the_guards_warn_aside(self):
         import branch as dfs_branch
         out = "first line\n(--warn covers only the warnings above)\n" + "word " * 200
@@ -339,6 +366,75 @@ class Chain(unittest.TestCase):
         self.assertTrue(gist.endswith("word …"), gist)
         self.assertNotIn("--warn", gist)
         self.assertEqual(dfs_branch._gist("a\nb"), "a b")
+        self.assertEqual(dfs_branch._gist("W2.md line 3 carries 'scripts/a.py:12'."),
+                         "W2.md line 3 carries 'scripts/a.py'.")
+
+    def test_a_refused_commit_s_node_carries_a_short_gist_with_no_coordinate(self):
+        # The node once held the guard's whole message: it grew the task file past its
+        # budget and carried the coordinates it quoted, so its own commit was refused next.
+        self.run_chain("work,confirm", cap=2)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text('#!/bin/sh\necho "guard says: W1.md line 9 carries \'a.py:12\'" >&2\n'
+                        'yes "more of it" | head -300 >&2\nexit 1\n')
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        before = item.read_text() + "- 2026-01-01T00:00:00Z · note\n"
+        item.write_text(before)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 3, r.stderr)
+        text = item.read_text()
+        self.assertIn("Fix what refuses the commit of W1's files on dfs/W1", text)
+        self.assertIn("guard says: W1.md line 9 carries 'a.py'", text)
+        self.assertNotIn("a.py:12", text)
+        self.assertLess(len(text) - len(before), 900)
+
+    def test_a_refused_commit_s_node_carries_the_fault_not_the_guards_notes_on_other_tasks(self):
+        # The guard prints a note for every over-budget task file in the index before the
+        # faults: four of them filled the whole gist and the node named only other tasks.
+        self.run_chain("work,confirm", cap=2)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\nfor t in W22 W48 W58 W70; do echo \"dfs_check: note \u2014 "
+                        ".dfs/items/$t.md is ~12,000 tokens, over the 10,000 budget. Not grown "
+                        "here.\"; done\necho 'dfs_check: the roadmap broke its own rules.'\n"
+                        "echo\necho '  - .dfs/items/W1.md line 9 has a Parent of its own id.'\n"
+                        "exit 1\n")
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 3, r.stderr)
+        text = item.read_text()
+        self.assertIn("W1.md line 9 has a Parent of its own id", text)
+        self.assertIn("the roadmap broke its own rules", text)
+        for t in ("W22", "W48", "W58", "W70"):
+            self.assertNotIn(t, text)
+
+    def test_the_guards_notes_are_dropped_from_a_gist_with_their_indented_lines(self):
+        import branch as dfs_branch
+        out = ("cannot commit W1's files: dfs_check: note \u2014 .dfs/items/W2.md is big.\n"
+               "dfs_check: note \u2014 no task file is in git yet\n  and so on:\n    - old\n"
+               "dfs_check: the roadmap broke its own rules.\n\n  - the fault\n")
+        self.assertEqual(dfs_branch._gist(out),
+                         "cannot commit W1's files: dfs_check: the roadmap broke its own rules. - the fault")
+
+    def test_an_empty_parts_directory_beside_a_changed_task_file_does_not_refuse_the_commit(self):
+        # `git commit --only` fails on a pathspec git knows nothing of: the task's parts
+        # directory, left empty after its files were deleted by hand, is not one to name.
+        self.run_chain("work,confirm", cap=2)
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        (self.wt / ".dfs" / "items" / "W1").mkdir(exist_ok=True)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("the log and edits left uncommitted", self.git("log", "--format=%s"))
+        self.assertNotIn("Fix what refuses the commit", (self.root / ".dfs/items/W1.md").read_text())
 
     def test_a_merge_waits_for_another_chains_merge_to_finish(self):
         # Two chains of a parallel walk finishing at once: the second merge waits on the

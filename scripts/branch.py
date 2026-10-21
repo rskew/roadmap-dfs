@@ -460,20 +460,29 @@ def _tracked_task_paths(task, wt):
             continue
         if any(q.is_symlink() for q in [wt / p, *(wt / p).parents] if wt in q.parents):
             continue
-        if _git("check-ignore", "-q", p, cwd=wt).returncode != 0:
-            out.append(p)
+        if _git("check-ignore", "-q", p, cwd=wt).returncode == 0:
+            continue
+        if (wt / p).is_dir() and not (
+                _git("ls-files", "--cached", "--others", "--exclude-standard", "--", p, cwd=wt).stdout.strip()
+                or _git("ls-tree", "-r", "--name-only", "HEAD", "--", p, cwd=wt).stdout.strip()):
+            continue   # a directory git knows nothing of: `commit --only` refuses the pathspec
+        out.append(p)
     return out
 
 
 def _commit_task_files(task, wt, what):
     """Commit the task's own files left uncommitted in its worktree onto its branch. Those
-    git ignores (a gitignored roadmap, whole or in part) are shared, not the branch's."""
+    git ignores (a gitignored roadmap, whole or in part) are shared, not the branch's.
+    Only those paths: `--only` builds the commit from HEAD and them, so whatever else is
+    staged in the worktree (another task's file) is neither committed nor judged by the
+    guard here, and stays for `merge` to name as uncommitted."""
     paths = _tracked_task_paths(task, wt)
     if not paths:
         return
     _git("add", "--", *paths, cwd=wt)
-    if _git("diff", "--cached", "--quiet", cwd=wt).returncode != 0:
-        r = _git(*_identity(), "commit", "-q", "-m", "%s: %s" % (task, what), cwd=wt)
+    if _git("diff", "--cached", "--quiet", "HEAD", "--", *paths, cwd=wt).returncode != 0:
+        r = _git(*_identity(), "commit", "-q", "--only", "-m", "%s: %s" % (task, what),
+                 "--", *paths, cwd=wt)
         if r.returncode != 0:
             raise BranchError("cannot commit %s's files on %s: %s" %
                               (task, dfs_paths.item_branch(task), (r.stderr or r.stdout).strip()))
@@ -573,9 +582,26 @@ def out_of(r):
 
 def _gist(text, limit=400):
     """A hook's or git's output on one line, without the guard's own "--warn" aside, cut at
-    a word and marked when cut."""
-    one = " ".join(l.strip() for l in text.splitlines() if "--warn covers" not in l)
-    one = " ".join(one.split())
+    a word and marked when cut. A coordinate the guard quotes loses its line number
+    (`a.py:12` is `a.py`): the gist goes into the task file, where the guard warns of one.
+    The guard's notes (`dfs_check: note — ...`, one per over-budget task file in the index,
+    printed before the faults) are dropped with their indented lines: they are about other
+    tasks and would fill the gist before the fault that refused the commit."""
+    import check as dfs_check
+    lines, noting = [], False
+    for l in text.splitlines():
+        head, mark, _ = l.partition("dfs_check: note")
+        if mark:
+            noting = True
+            if head.strip():
+                lines.append(head)
+        elif noting and l[:1].isspace():
+            pass
+        else:
+            noting = False
+            lines.append(l)
+    one = " ".join(l.strip() for l in lines if "--warn covers" not in l)
+    one = dfs_check.COORD.sub(lambda m: m.group(0).rsplit(":", 1)[0], " ".join(one.split()))
     return one if len(one) <= limit else one[:limit].rsplit(" ", 1)[0] + " …"
 
 
@@ -697,7 +723,10 @@ def merge(task):
         _commit_task_files(task, wt, "the log and edits left uncommitted")
     except BranchError as e:
         _reopen_with(task, wt, "Fix what refuses the commit of %s's files on %s" % (task, name),
-                     "The runner could not commit the task's own files on %s: %s" % (name, e),
+                     "The runner's commit of the task's own files was refused: %s Fix what the "
+                     "message names and commit the task's files. (`check.py --staged` in the worktree "
+                     "reruns the guard, and its output can include faults in files the "
+                     "runner did not commit.)" % _gist(str(e)),
                      "the node asking for the refused commit to be fixed")
         return "guard"
     stray = [l[3:] for l in _git("status", "--porcelain", cwd=wt).stdout.splitlines()]
