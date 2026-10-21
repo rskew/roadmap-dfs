@@ -578,9 +578,24 @@ def out_of(r):
 def _gist(text, limit=400):
     """A hook's or git's output on one line, without the guard's own "--warn" aside, cut at
     a word and marked when cut. A coordinate the guard quotes loses its line number
-    (`a.py:12` is `a.py`): the gist goes into the task file, where the guard warns of one."""
+    (`a.py:12` is `a.py`): the gist goes into the task file, where the guard warns of one.
+    The guard's notes (`dfs_check: note — ...`, one per over-budget task file in the index,
+    printed before the faults) are dropped with their indented lines: they are about other
+    tasks and would fill the gist before the fault that refused the commit."""
     import check as dfs_check
-    one = " ".join(l.strip() for l in text.splitlines() if "--warn covers" not in l)
+    lines, noting = [], False
+    for l in text.splitlines():
+        head, mark, _ = l.partition("dfs_check: note")
+        if mark:
+            noting = True
+            if head.strip():
+                lines.append(head)
+        elif noting and l[:1].isspace():
+            pass
+        else:
+            noting = False
+            lines.append(l)
+    one = " ".join(l.strip() for l in lines if "--warn covers" not in l)
     one = dfs_check.COORD.sub(lambda m: m.group(0).rsplit(":", 1)[0], " ".join(one.split()))
     return one if len(one) <= limit else one[:limit].rsplit(" ", 1)[0] + " …"
 

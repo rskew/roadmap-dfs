@@ -391,6 +391,38 @@ class Chain(unittest.TestCase):
         self.assertNotIn("a.py:12", text)
         self.assertLess(len(text) - len(before), 900)
 
+    def test_a_refused_commit_s_node_carries_the_fault_not_the_guards_notes_on_other_tasks(self):
+        # The guard prints a note for every over-budget task file in the index before the
+        # faults: four of them filled the whole gist and the node named only other tasks.
+        self.run_chain("work,confirm", cap=2)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/bin/sh\nfor t in W22 W48 W58 W70; do echo \"dfs_check: note \u2014 "
+                        ".dfs/items/$t.md is ~12,000 tokens, over the 10,000 budget. Not grown "
+                        "here.\"; done\necho 'dfs_check: the roadmap broke its own rules.'\n"
+                        "echo\necho '  - .dfs/items/W1.md line 9 has a Parent of its own id.'\n"
+                        "exit 1\n")
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 3, r.stderr)
+        text = item.read_text()
+        self.assertIn("W1.md line 9 has a Parent of its own id", text)
+        self.assertIn("the roadmap broke its own rules", text)
+        for t in ("W22", "W48", "W58", "W70"):
+            self.assertNotIn(t, text)
+
+    def test_the_guards_notes_are_dropped_from_a_gist_with_their_indented_lines(self):
+        import branch as dfs_branch
+        out = ("cannot commit W1's files: dfs_check: note \u2014 .dfs/items/W2.md is big.\n"
+               "dfs_check: note \u2014 no task file is in git yet\n  and so on:\n    - old\n"
+               "dfs_check: the roadmap broke its own rules.\n\n  - the fault\n")
+        self.assertEqual(dfs_branch._gist(out),
+                         "cannot commit W1's files: dfs_check: the roadmap broke its own rules. - the fault")
+
     def test_a_merge_waits_for_another_chains_merge_to_finish(self):
         # Two chains of a parallel walk finishing at once: the second merge waits on the
         # lock the first holds, and goes through after it, rather than failing on git's
