@@ -29,3 +29,47 @@ Two facts from the tally already bear on where to look:
 Only roadmap-dfs can be replayed from this box, since replay needs the repo at a
 task's starting commit. The other three projects contribute to the static analysis
 through their transcripts alone.
+
+## 2. Where the work goes
+
+`scripts/history.py` reads every transcript into one record per session (kind, task,
+tokens, tool calls, commits, refused commits, verdicts) and one per task, and prints
+the tables below. Dollars are the runner's own `total_cost_usd` where it recorded one,
+and otherwise tokens priced at the same ratios (input 1, cache read 0.1, cache write 2,
+output 5), which match the runner's figure to within 0.1% at the median and 40% at the
+90th percentile over 566 sessions it priced.
+
+Run on 2026-10-22 over 2,018 transcripts, 1,919 of them dfs sessions:
+
+| project | tasks | sessions per task, median / p90 | $ per task, median / p90 | review issues per task | raises |
+|---|---|---|---|---|---|
+| chirpstack-docker | 106 | 4 / 19 | 2.6 / 21.0 | 0.67 | 46 |
+| house | 20 | 4 / 22 | 3.6 / 24.0 | 0.75 | 3 |
+| roadmap-dfs | 99 | 3 / 13 | 2.0 / 9.4 | 0.74 | 10 |
+| shop-app | 22 | 6 / 30 | 7.4 / 50.3 | 1.95 | 22 |
+
+What it shows, most important first:
+
+1. **A finished tree is often not finished.** 41.5% of all dfs spend is on a task after
+   one of its reviews has already said issues. Of the 81 findings roadmap-dfs's reviews
+   wrote, 32 are bugs the work session did not test for (an interrupted merge, a
+   regression at one chain, a drag on a short screen), 19 are unmarked assumptions and
+   25 are lesser wording. The worst case, shop-app W13, had 18 reviews and every one
+   found issues. Quality, measured as review rounds with issues, is the largest cost
+   as well as the largest failure.
+2. **The tree does not branch in practice.** Of roadmap-dfs's 497 nodes none is
+   refuted, and across all four projects' transcripts a session wrote `Status: refuted`
+   about 35 times against about 2,350 `Status: confirmed`. Work proceeds as a confirmed
+   line; the parked siblings are never taken up. Either the work rarely meets evidence
+   against it, or sessions do not look for it: the 32 untested bugs suggest the second.
+3. **Review and critic are 29% of spend** (review 22.5%, critic 6.3%, work 71.2%).
+   Reviews are cheap per session (median $0.29 to $0.96) and are where the bugs
+   above were caught, so they are not the place to cut.
+4. **The guard refuses a commit in 11% of sessions** (214 of 1,919, 283 refusals).
+   The reasons most seen are a task file over its size budget (~144), a file:line
+   coordinate in a task file (~200 across files) and a node naming a Parent that does
+   not exist (~72). Each costs a retry, not a failure.
+5. **Re-reading is not a cost.** 128 of 2,964 `Read` calls repeat an earlier slice.
+
+Not measured yet: whether a task's work was later fixed by another task (needs commit
+subjects matched across tasks), and the author's time, which no transcript records.
