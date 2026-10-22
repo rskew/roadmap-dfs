@@ -64,7 +64,8 @@ that HEAD does not hold, and is judged against nothing for those files when the 
 says it is one, by committing with DFS_ADOPT=1 in the environment: every finding on them
 is printed as grandfathered and none refuses, including the size budget and the artefacts
 their text names, which it need not stage. That holds whether git holds no task file or
-holds some (a blanket `.*` rule, with a few force-added), but never for a file HEAD holds.
+holds some (a blanket `.*` rule, with a few force-added), but never for a file HEAD holds,
+and never on an item branch `dfs/<task>`: an adoption is committed on the default branch.
 Without it that commit is judged in full, and says so when it refuses, since a task file
 HEAD lacks is also new work: a session's first node, committed on `dfs/<task>`, on a
 branch a session works in place or in a repo with no commit, is no adoption.
@@ -637,7 +638,12 @@ def main() -> int:
     # A roadmap git already holds in part (a blanket `.*` rule that hides all but the
     # task files someone force-added) is adopted the same way: the author's DFS_ADOPT=1
     # grandfathers each staged task file HEAD does not hold, and never one it does.
-    declared = from_index and not dfs_paths.ignored() and bool(os.environ.get("DFS_ADOPT"))
+    # An item branch `dfs/<task>` is where a session's first node of a new task lands, so an
+    # adoption is never committed there: the variable does nothing on it and the hint is not
+    # printed. The author adopts on the default branch, before any item is cut.
+    on_item = dfs_paths.is_item_branch(dfs_paths.branch())
+    declared = (from_index and not dfs_paths.ignored() and not on_item
+                and bool(os.environ.get("DFS_ADOPT")))
     adds_new = False
     grand = []
     tasks = {}
@@ -727,7 +733,7 @@ def main() -> int:
     print("dfs_check: the roadmap broke its own rules.\n")
     for b in fatal + bad:
         print(f"  - {b}")
-    if adds_new and fatal and not declared and not dfs_paths.ignored():
+    if adds_new and fatal and not declared and not dfs_paths.ignored() and not on_item:
         print("\n  If this commit adopts task files written before the guard, commit it again with\n"
               "  DFS_ADOPT=1 in the environment, and the old findings of the files git does not\n"
               "  hold yet are not refused.")

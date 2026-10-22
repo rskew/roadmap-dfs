@@ -829,6 +829,20 @@ class Check(InARepo):
         self.assertIn("W1.2 names Parent W1.7", out)
         self.assertIn(".dfs/items/W2.md", out.split("grandfathered")[-1])
 
+    def test_an_item_branch_is_never_an_adoption(self):
+        self.write(self.old_roadmap_file())
+        self.git_commit(".dfs/items/W1.md")
+        subprocess.run(["git", "checkout", "-qb", "dfs/W2"], cwd=self.root, check=True)
+        (self.root / ".dfs/items/W2.md").write_text(self.old_roadmap_file().replace("W1", "W2"))
+        subprocess.run(["git", "add", ".dfs/items/W2.md"], cwd=self.root, check=True)
+        for env in ({}, {"DFS_ADOPT": "1"}):
+            with mock.patch.dict(os.environ, env):
+                code, out = self.run_check("--staged")
+            self.assertEqual(code, 1, out)
+            self.assertIn("names Parent W2,", out)
+            self.assertNotIn("grandfathered", out)
+            self.assertNotIn("DFS_ADOPT", out)
+
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()
         subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/artefacts/" + name],

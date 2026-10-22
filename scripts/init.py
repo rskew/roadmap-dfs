@@ -19,7 +19,8 @@ of the walk, one commit per node. Ignored by any other rule (a blanket `.*`, a `
 or half force-added, it is said here, with the rule (`dfs_paths.hidden`).
 
 Adopting a `.dfs` that already holds tasks: commit its task files in one commit with
-the hooks on and DFS_ADOPT=1 in the environment (`DFS_ADOPT=1 git commit`). The guard
+the hooks on and DFS_ADOPT=1 in the environment (`DFS_ADOPT=1 git commit`), on the default
+branch (on an item branch `dfs/<task>` the variable does nothing). The guard
 then grandfathers what each task file git does not hold yet holds (printed, not refused;
 `check.py`), also when git holds others, and judges every later commit only on what it
 changes. Without DFS_ADOPT a commit is judged in full: a task file git lacks is also new
@@ -200,7 +201,8 @@ Next:
         "     and each node's commit carries its code alone." if dfs_paths.ignored() else
         "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).\n"
         "     Tasks already in .dfs/items? Commit them all in that one commit, with\n"
-        "     DFS_ADOPT=1 in the environment (DFS_ADOPT=1 git commit): the guard then\n"
+        "     DFS_ADOPT=1 in the environment (DFS_ADOPT=1 git commit), on the default\n"
+        "     branch, not an item's dfs/<task> branch: the guard then\n"
         "     grandfathers what each task file git does not hold yet holds, printing it\n"
         "     without refusing, and you stage only the artefacts you want kept. Without it\n"
         "     the commit is judged in full, as a new roadmap's first node is.",
