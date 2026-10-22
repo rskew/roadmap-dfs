@@ -17,8 +17,10 @@ disk and writes nothing:
 
   python3 <scripts>/history.py [--projects GLOB] [--repo PROJECT=PATH ...] [--json OUT]
 
-`session(path)` measures one transcript, so a replay is scored by the same code as the
-history it is compared with.
+`session(path)` and `load(pattern)` measure transcripts, so a replay (replay.py) is scored
+by the same code as the history it is compared with. A replay's transcripts sit in a
+directory named `...-dfs-replay-...`, which the default pattern leaves out: a replay is an
+experiment on a task, not another task.
 """
 import collections
 import glob
@@ -37,6 +39,7 @@ KINDS = [
     ("work", re.compile(r"Read \.dfs/ROADMAP\.md and task (W\d+)'s parts")),
     ("chat", re.compile(r"Discuss the project with the author()")),
 ]
+REPLAY = "-dfs-replay-"
 VERDICT = re.compile(r"tree\.py\b.*?\blog (W\d+) (review|critic|raise|backtrack)\b ?(ok|issues)?")
 STARTED = re.compile(r"tree\.py\b.*?\bstart (W\d+) (W[\d.]+(?:@\S+)?)")
 SUBJECT = re.compile(r"""git\b[^|;&]*\bcommit\b.*?(?:-m\s+(['"])(.+?)\1|<<-?\s*'?EOF'?\s*\n(.+?)\n)""", re.S)
@@ -185,7 +188,7 @@ def tasks_of(sessions, logs):
         t = out.setdefault((s["project"], s["task"]), {
             "project": s["project"], "task": s["task"], "sessions": collections.Counter(),
             "usd": 0.0, "units": 0.0, "nodes": 0, "refused": 0, "rereads": 0,
-            "review_ok": 0, "review_issues": 0, "critic_issues": 0, "raises": 0,
+            "first_review": None, "review_ok": 0, "review_issues": 0, "critic_issues": 0, "raises": 0,
             "after_issues": 0.0, "start": s["start"], "end": s["end"]})
         # Spent once a review has already found the work wanting: the price of the
         # first finished tree not being finished.
@@ -199,6 +202,9 @@ def tasks_of(sessions, logs):
         for kind, value in s["verdicts"]:
             if kind == "review":
                 t["review_" + ("ok" if value == "ok" else "issues")] += 1
+                # Whether the first tree declared finished passes: what a change to the
+                # skill or the law is meant to move.
+                t["first_review"] = t["first_review"] or ("ok" if value == "ok" else "issues")
             elif kind == "backtrack" or (kind == "critic" and value == "issues"):
                 t["critic_issues"] += 1
             elif kind == "raise":
@@ -260,6 +266,41 @@ def report(sessions, tasks, rates, n_priced):
           f"review issues {t['review_issues']}/{t['review_ok'] + t['review_issues']} raises {t['raises']}\n")
 
 
+def find_repos(pattern, repos):
+    """Add to `repos` each project in `pattern` whose checkout is on this box. The
+    transcript directory is the checkout's path with every `/` and `.` made a `-`."""
+    for d in {project_of(os.path.basename(os.path.dirname(f))) for f in glob.glob(pattern)}:
+        for cand in ("/" + d[1:].replace("-", "/"), "/workspace/" + d.split("-workspace-")[-1]):
+            if d not in repos and os.path.isdir(os.path.join(cand, ".dfs")):
+                repos[d] = cand
+    return repos
+
+
+def price(sessions, costs):
+    """Put `usd` and `priced` on each session: the runner's own figure where it has one,
+    else the weighted units at the rate its model's priced sessions show."""
+    rate, overall, n_priced = calibrate(sessions, costs)
+    for s in sessions:
+        s["usd"] = costs.get(s["sid"]) or s["units"] * rate.get(s["model"], overall or 0)
+        s["priced"] = s["sid"] in costs
+    return overall or 0, n_priced
+
+
+def load(pattern, repos, replays=False):
+    """(sessions, tasks, rate, n_priced) for the transcripts matching `pattern`, with the
+    checkouts in `repos` ({project: path}, extended here) supplying costs and logs."""
+    files = [f for f in glob.glob(pattern)
+             if replays or REPLAY not in os.path.dirname(f)]
+    find_repos(pattern, repos)
+    sessions = [session(f) for f in files]
+    costs = {}
+    for repo in repos.values():
+        costs.update(runner_costs(repo))
+    rate, n_priced = price(sessions, costs)
+    logs = {p: author_log(r) for p, r in repos.items()}
+    return sessions, tasks_of(sessions, logs), rate, n_priced
+
+
 def main(argv):
     base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
     pattern = os.path.join(base, "projects", "*", "*.jsonl")
@@ -273,23 +314,8 @@ def main(argv):
             repos[k] = v
         elif a == "--json":
             out = next(it)
-    # A project whose checkout is on this box is found by its own name: the transcript
-    # directory is the checkout's path with every `/` and `.` made a `-`.
-    for d in {project_of(os.path.basename(os.path.dirname(f))) for f in glob.glob(pattern)}:
-        for cand in ("/" + d[1:].replace("-", "/"), "/workspace/" + d.split("-workspace-")[-1]):
-            if d not in repos and os.path.isdir(os.path.join(cand, ".dfs")):
-                repos[d] = cand
-    sessions = [session(f) for f in glob.glob(pattern)]
-    costs = {}
-    for repo in repos.values():
-        costs.update(runner_costs(repo))
-    rate, overall, n_priced = calibrate(sessions, costs)
-    for s in sessions:
-        s["usd"] = costs.get(s["sid"]) or s["units"] * rate.get(s["model"], overall or 0)
-        s["priced"] = s["sid"] in costs
-    logs = {p: author_log(r) for p, r in repos.items()}
-    tasks = tasks_of(sessions, logs)
-    report(sessions, tasks, overall or 0, n_priced)
+    sessions, tasks, rate, n_priced = load(pattern, repos)
+    report(sessions, tasks, rate, n_priced)
     if out:
         with open(out, "w") as fh:
             json.dump({"sessions": sessions, "tasks": list(tasks.values()), "repos": repos}, fh)
