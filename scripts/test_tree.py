@@ -849,8 +849,11 @@ class Check(InARepo):
         subprocess.run(["git", "checkout", "-qb", "dfs/W2"], cwd=self.root, check=True)
         (self.root / ".dfs/items/W2.md").write_text(self.old_roadmap_file().replace("W1", "W2"))
         subprocess.run(["git", "add", ".dfs/items/W2.md"], cwd=self.root, check=True)
-        for env in ({}, {"DFS_ADOPT": "1"}):
-            with mock.patch.dict(os.environ, env):
+        for value in (None, "1"):
+            with mock.patch.dict(os.environ):
+                os.environ.pop("DFS_ADOPT", None)
+                if value:
+                    os.environ["DFS_ADOPT"] = value
                 code, out = self.run_check("--staged")
             self.assertEqual(code, 1, out)
             self.assertIn("names Parent W2,", out)
@@ -864,6 +867,8 @@ class Check(InARepo):
             with mock.patch.dict(os.environ, {"DFS_ADOPT": value}):
                 code, out = self.run_check("--staged")
             self.assertEqual(code, code_was, (value, out))
+            if code_was:
+                self.assertIn("DFS_ADOPT=1", out)   # the way through is still named
 
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()
