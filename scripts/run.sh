@@ -919,8 +919,10 @@ except dfs_paths.NoBranch as e:
 if not dfs_tree.exists(sys.argv[1]) and not (dfs_paths.items() / ("%s.md" % sys.argv[1])).is_file():
     print("dfs_run: no task %s under %s" % (sys.argv[1], dfs_paths.rel(dfs_paths.items())),
           file=sys.stderr); raise SystemExit(2)
-# Said, not refused: a roadmap part git will not add never reaches the item's worktree,
-# which is cut from git, and this names the rule before a session finds it missing.
+# Said, not refused: a roadmap part git will not add is in no commit, and is in the item's
+# worktree only through the link to the main checkout's top-level entry that git ignores
+# (a file hidden inside a tracked directory never is); this names the rule before a session
+# finds one missing.
 hidden = dfs_paths.hidden()
 if hidden:
     print("dfs_run: " + dfs_paths.hidden_message(hidden), file=sys.stderr)

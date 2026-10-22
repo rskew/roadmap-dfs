@@ -612,7 +612,9 @@ def hidden() -> list:
     directory itself with nothing in it tracked, so that is the one way to be hidden that
     is not reported. A broader rule (a blanket `.*`, a `*.html`) or files force-added past
     a `.dfs/` rule leave the roadmap half in git: the tasks nobody force-added stay
-    untracked, and an item's worktree, cut from git, goes without them. Only the parts
+    untracked. An item's worktree is cut from git but links each top-level `.dfs` entry git
+    ignores to the main checkout's (`branch.share_ignored_state`), so a `.*` rule's hidden
+    files reach it and a `*.html` rule's pages, hidden inside a tracked directory, do not. Only the parts
     that make the roadmap are asked about (`roadmap_parts`): what else sits in `.dfs` is
     local (`runs/` and the rest of `.dfs/.gitignore`) or the project's own, which a
     `__pycache__` rule may hide as it does anywhere.
@@ -676,19 +678,34 @@ def _names_state_dir(pattern: str) -> bool:
     return pattern.removeprefix("/").removeprefix("**/") == STATE_DIR_NAME
 
 
+def _some(paths) -> str:
+    return ", ".join(paths[:6]) + (", …" if len(paths) > 6 else "")
+
+
 def hidden_message(found) -> str:
     """What `hidden()` found, a line per rule, for the author: the rule by file, line and
     pattern, so the fix is one edit away, then the two ways out."""
     rules = {}
     for h in found:
         rules.setdefault((h["source"], h["line"], h["pattern"]), []).append(h["path"])
-    lines = ["git will not add %d roadmap path%s, so %s stay%s out of every commit and "
-             "every item's worktree:" % (len(found), "" if len(found) == 1 else "s",
-                                         "it" if len(found) == 1 else "they",
-                                         "s" if len(found) == 1 else "")]
+    lines = ["git will not add %d roadmap path%s, so %s stay%s out of every commit:"
+             % (len(found), "" if len(found) == 1 else "s",
+                "it" if len(found) == 1 else "they", "s" if len(found) == 1 else "")]
     for (source, line, pattern), paths in rules.items():
-        shown = ", ".join(paths[:6]) + (", …" if len(paths) > 6 else "")
-        lines.append("    %s:%s  %s   hides %s" % (source, line, pattern, shown))
+        lines.append("    %s:%s  %s   hides %s" % (source, line, pattern, _some(paths)))
+    # An item's worktree links each top-level `.dfs` entry git ignores (`branch.share_ignored_state`),
+    # so a path inside one is there as the main checkout has it; a rule that hides a file inside
+    # a directory it leaves tracked puts it in no commit and no link.
+    linked, lost = [], []
+    for h in found:
+        top = "/".join(h["path"].split("/")[:2])
+        (linked if _git("check-ignore", "-q", "--no-index", top).returncode == 0
+         else lost).append(h["path"])
+    if linked:
+        lines.append("An item's worktree links the main checkout's copy of %s." % _some(linked))
+    if lost:
+        lines.append("An item's worktree has no copy of %s: a rule hides it inside a directory "
+                     "git tracks, so it is neither committed nor linked." % _some(lost))
     lines.append("Track the roadmap with a `!` rule after that line, or keep "
                  "%s/ as planning: a rule naming it, `%s/`, and nothing in it tracked."
                  % (STATE_DIR_NAME, STATE_DIR_NAME))

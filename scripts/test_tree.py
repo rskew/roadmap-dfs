@@ -717,6 +717,20 @@ class Check(InARepo):
         subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.root, check=True)
         self.first_node_is_refused()
 
+    def test_dfs_adopt_does_nothing_on_a_branch_worked_in_place(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")
+        subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.root, check=True)
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        for env in ({"DFS_ADOPT": ""}, {"DFS_ADOPT": "1"}):
+            with mock.patch.dict(os.environ, env):
+                code, out = self.run_check("--staged")
+            self.assertEqual(code, 1, out)
+            self.assertIn("names Parent W1,", out)
+            self.assertNotIn("grandfathered", out)
+            self.assertNotIn("DFS_ADOPT", out)
+
     def test_a_first_node_in_a_repo_with_no_commit_is_judged_in_full(self):
         self.first_node_is_refused()
 
@@ -807,6 +821,54 @@ class Check(InARepo):
                      "this commit\n    ADDS it."):
             self.assertIn(seen, out)
         self.assertNotIn("GREW", out)
+        self.assertIn("DFS_ADOPT=1", out)   # the way through is named when the file is new
+        with mock.patch.dict(os.environ, {"DFS_ADOPT": "1"}):
+            code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.assertIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged"):
+            self.assertIn(seen, out)
+        self.assertNotIn("broke its own rules", out)
+
+    def test_adopting_a_new_task_file_never_excuses_one_git_holds(self):
+        self.write(self.old_roadmap_file())
+        self.git_commit(".dfs/items/W1.md")   # held, with its old findings
+        (self.root / ".dfs/items/W2.md").write_text(self.old_roadmap_file().replace("W1", "W2"))
+        self.write(task(node(1) + node(2, parent=7)))   # a new fault in the held file
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/items/W2.md"],
+                       cwd=self.root, check=True)
+        with mock.patch.dict(os.environ, {"DFS_ADOPT": "1"}):
+            code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("W1.2 names Parent W1.7", out)
+        self.assertIn(".dfs/items/W2.md", out.split("grandfathered")[-1])
+
+    def test_an_item_branch_is_never_an_adoption(self):
+        self.write(self.old_roadmap_file())
+        self.git_commit(".dfs/items/W1.md")
+        subprocess.run(["git", "checkout", "-qb", "dfs/W2"], cwd=self.root, check=True)
+        (self.root / ".dfs/items/W2.md").write_text(self.old_roadmap_file().replace("W1", "W2"))
+        subprocess.run(["git", "add", ".dfs/items/W2.md"], cwd=self.root, check=True)
+        for value in (None, "1"):
+            with mock.patch.dict(os.environ):
+                os.environ.pop("DFS_ADOPT", None)
+                if value:
+                    os.environ["DFS_ADOPT"] = value
+                code, out = self.run_check("--staged")
+            self.assertEqual(code, 1, out)
+            self.assertIn("names Parent W2,", out)
+            self.assertNotIn("grandfathered", out)
+            self.assertNotIn("DFS_ADOPT", out)
+
+    def test_only_dfs_adopt_1_adopts(self):
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        for value, code_was in (("0", 1), ("", 1), ("1", 0)):
+            with mock.patch.dict(os.environ, {"DFS_ADOPT": value}):
+                code, out = self.run_check("--staged")
+            self.assertEqual(code, code_was, (value, out))
+            if code_was:
+                self.assertIn("DFS_ADOPT=1", out)   # the way through is still named
 
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()

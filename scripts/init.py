@@ -19,11 +19,12 @@ of the walk, one commit per node. Ignored by any other rule (a blanket `.*`, a `
 or half force-added, it is said here, with the rule (`dfs_paths.hidden`).
 
 Adopting a `.dfs` that already holds tasks: commit its task files in one commit with
-the hooks on and DFS_ADOPT=1 in the environment (`DFS_ADOPT=1 git commit`). While git
-holds no task file, the guard then grandfathers what they hold (printed, not refused;
-`check.py`), and judges every later commit only on what it changes. Without DFS_ADOPT a
-commit is judged in full: HEAD holding no task file is also a new roadmap's state, and
-its first node is a session's.
+the hooks on and DFS_ADOPT=1 in the environment (`DFS_ADOPT=1 git commit`), on the default
+branch (on any other branch, an item's `dfs/<task>` or one worked in place, the variable does nothing). The guard
+then grandfathers what each task file git does not hold yet holds (printed, not refused;
+`check.py`), also when git holds others, and judges every later commit only on what it
+changes. Without DFS_ADOPT a commit is judged in full: a task file git lacks is also new
+work, and its first node is a session's.
 
 A hook that already exists is left alone and the lines to add are printed instead,
 since it is the project's. Hooks in .git/hooks belong to this clone only, so run
@@ -200,10 +201,11 @@ Next:
         "     and each node's commit carries its code alone." if dfs_paths.ignored() else
         "Commit what it wrote under .dfs/ (or gitignore .dfs/ to keep it as planning).\n"
         "     Tasks already in .dfs/items? Commit them all in that one commit, with\n"
-        "     DFS_ADOPT=1 in the environment (DFS_ADOPT=1 git commit): while git holds no\n"
-        "     task file the guard then grandfathers what they hold, printing it without\n"
-        "     refusing, and you stage only the artefacts you want kept. Without it the\n"
-        "     commit is judged in full, as a new roadmap's first node is.",
+        "     DFS_ADOPT=1 in the environment (DFS_ADOPT=1 git commit), on the default\n"
+        "     branch, not an item's dfs/<task> or any other branch: the guard then\n"
+        "     grandfathers what each task file git does not hold yet holds, printing it\n"
+        "     without refusing, and you stage only the artefacts you want kept. Without it\n"
+        "     the commit is judged in full, as a new roadmap's first node is.",
         dfs_paths.command("run.sh", "--open"),
         dfs_paths.command("run.sh", "<task>", "[sessions]"),
         dfs_paths.command("tui.py"), os.environ.get("DFS_ARTEFACT_PORT") or 3016,

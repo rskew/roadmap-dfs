@@ -194,6 +194,14 @@ class Hidden(unittest.TestCase):
         said = dfs_paths.hidden_message(dfs_paths.hidden())
         self.assertIn(".gitignore:1  .*   hides .dfs/", said)
         self.assertIn("1 roadmap path,", said)
+        self.assertIn("An item's worktree links the main checkout's copy of .dfs/", said)
+        self.assertNotIn("has no copy", said)
+
+    def test_a_page_hidden_inside_a_tracked_directory_is_said_to_miss_the_worktree(self):
+        self.ignore("*.html\n")
+        said = dfs_paths.hidden_message(dfs_paths.hidden())
+        self.assertIn("An item's worktree has no copy of .dfs/artefacts/a.html", said)
+        self.assertNotIn("links the main checkout", said)
 
     def test_outside_git_nothing(self):
         shutil.rmtree(self.root / ".git")
