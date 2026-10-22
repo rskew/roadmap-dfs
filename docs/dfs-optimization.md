@@ -136,3 +136,79 @@ What the proof does not show, and what a comparison has to allow for:
   and a replay should be given a timeout on a single Bash call.
 - **The tool is the current one**, not the original's, so the control arm is the current
   tool; the original column is the history, not a control.
+
+## 4. What to try, and how to find out
+
+### The measure
+
+Judged on a replay, a change succeeds if more first finished trees **pass their first
+review**, at a cost no higher than the control's. That is the one number the history
+supports as the thing to move: over the 234 tasks that had a review, the first review
+found issues in 70 (30%); 87 tasks (37%) had at least one issues round and spent 69% of
+all dfs dollars; 27 tasks (12%) had three or more and spent 42%. The cost is a long
+tail of review loops, not a typical task. Cost per task, rounds with issues and refused
+commits are read beside it, and a reviewer that passes more often by finding less is
+caught by the next section's check, not by this number.
+
+### Candidates
+
+Ordered by (share of spend the evidence puts behind it) over (cost and risk of trying
+it). Each names the file it changes and the replay that tests it.
+
+| # | Change | Evidence | Where | Test replay |
+|---|---|---|---|---|
+| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 32 of 81 review findings are bugs the work did not test for; 41.7% of spend follows an issues review; 35 refuted nodes against 2,350 confirmed says sessions rarely look for evidence against their own work. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
+| 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 19 of 81 findings are unmarked assumptions. | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `history.py --json`, filter on the finding's class) |
+| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. A task that needs five review rounds usually has more than five problems at round one. | 44 tasks needed two or more issue rounds; shop-app W13: 18 reviews, all with issues. Cuts rounds, not work, if the second finding was already there at round one; no evidence yet that it was. | the review prompt (`run.sh`) | a task with 3+ rounds: compare findings of round 1 against the union of later rounds in the task log before spending a replay |
+| 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 214 of 1,919 sessions hit a refusal, about 283 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
+| 5 | **Cap a review loop.** After three issues rounds the task raises for the author instead of continuing. | 12% of tasks hold 42% of spend. Does not improve quality, it limits the loss, and hands the author the tail. | `state.py` | none: read from history by counting what the cap would have saved |
+
+Not candidates, from the evidence: cutting reviews (they are 22.6% of spend and where
+the bugs were caught), re-read avoidance (128 of 2,971 reads), and encouraging branching
+as an end in itself (candidate 1 is the version of it with a purpose).
+
+### The loop
+
+    mine → choose → change → replay control and changed → compare → keep or drop → mine
+
+1. **Mine.** `python3 <scripts>/history.py --json /tmp/dfs-history.json` produces the
+   dataset. Pick the failure class and the tasks it appears in.
+2. **Choose** one candidate and a replayable set: roadmap-dfs tasks that are small
+   (original at most $3), whose evidence lies in the repo (not `~/.codex`, not the
+   network), and whose original first review found issues, so the control has
+   something to move. Take at least four. `replay.py plan TASK` prints the starting
+   point and the original's numbers.
+3. **Change** the tool, on a branch of this repo, one candidate at a time: the changed
+   arm is that revision (`--tool-ref REV`), the control is the revision it branched from.
+   A change to the law goes as `--law FILE`, with the same revision for the tool.
+4. **Replay** each task under each arm **three times**: 4 tasks × 2 arms × 3 = 24 replays,
+   at the W55 figures roughly $30 to $85. Run them one at a time, since each is a chain
+   in its own scratch clone and the limits are the account's. Each replay is bounded:
+   `--cap` sessions, and `--bash-minutes M` (default 15) is the most one Bash call may
+   run, with twice that as the most a call may ask for, so a runaway search ends in
+   minutes, where W55's replay sat 53 minutes in `grep -r /`. A call that hits the bound
+   shows in the transcript as a timeout; count those as a result (the task needed
+   something the scratch clone lacks) and drop the task from the set if it recurs.
+5. **Compare** the arms per task, never pooled: first-review pass rate (out of 3),
+   median dollars, refused commits, replays that stopped BLOCKED or on the cap. Then
+   read the reviews of the changed arm's passes: a pass counts only if the review's
+   `ok` names what it checked. A candidate is **kept** if it passes the first review in
+   at least two more replays of the twelve than the control does, and no task gets worse
+   by more than one replay of three; with this sample a smaller difference is noise (one
+   task replayed to 1.3 and 3.5 dollars). **Dropped** otherwise, with the numbers in the
+   candidate's row.
+6. **Keep** means merged into the tool and recorded here (the row, the arms, the
+   figures) and the control for the next candidate is now the changed tool. Candidates
+   are tested one at a time for that reason: two changes in one arm cannot be told apart.
+
+What the loop cannot see: whether a change helps on projects other than roadmap-dfs
+(only its history can be replayed); the author's time; and drift in the model between
+the control run and the changed run, which is why the arms are interleaved, control then
+changed, task by task, in one sitting, and not run as two batches on different days.
+
+### Next
+
+Candidate 3 can be answered from the task logs with no replay, so it goes first: for the
+44 tasks with two or more issue rounds, whether the later rounds' findings were
+already present in the tree at round one. Then candidate 1 on four tasks, the first real
+run of the loop.

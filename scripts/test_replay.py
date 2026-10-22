@@ -107,6 +107,11 @@ class StartingPointTest(unittest.TestCase):
 
 
 class ScoreTest(unittest.TestCase):
+    def test_a_replay_bounds_one_bash_call(self):
+        b = replay.bash_bound(15)
+        self.assertEqual(b, {"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1800000"})
+        self.assertEqual(replay.bash_bound(0.5)["BASH_DEFAULT_TIMEOUT_MS"], "30000")
+
     def test_why_a_chain_stopped_is_its_last_stop_line(self):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / ".git").mkdir()

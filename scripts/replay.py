@@ -9,9 +9,9 @@ chain (run.sh) work the task, and measures the result with history.py's `session
 
   python3 <scripts>/replay.py plan    TASK [--repo PATH]
   python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE]
-  python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR]
+  python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M]
   python3 <scripts>/replay.py score   DEST TASK [--repo PATH]
-  python3 <scripts>/replay.py replay  TASK DEST [--cap N] [... prepare's flags]   (all three)
+  python3 <scripts>/replay.py replay  TASK DEST [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
 
 The system that changes is the TOOL (`--tool DIR`: a roadmap-dfs checkout or store path,
 or `--tool-ref REV`: a revision of the repo being replayed, when that repo is roadmap-dfs
@@ -136,11 +136,22 @@ def export_tool(repo, rev, into):
     return into
 
 
-def run(dest, task, cap=None, tool=None):
+BASH_MINUTES = 15
+
+
+def bash_bound(minutes):
+    """The child's Bash limits, so one call cannot sit for the runner's hour (W55's replay
+    spent 53 minutes in `grep -r /`): an unnamed call gets `minutes`, and no call more than
+    twice that. A call that really needs longer fails loudly and the session sees why."""
+    ms = int(float(minutes) * 60_000)
+    return {"BASH_DEFAULT_TIMEOUT_MS": str(ms), "BASH_MAX_TIMEOUT_MS": str(2 * ms)}
+
+
+def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES):
     dest = Path(dest).resolve()
     info = json.loads((dest / ".git" / "replay.json").read_text())
     tool = Path(tool or info["tool"])
-    env = {**os.environ, "DFS_TOOL": str(tool)}
+    env = {**os.environ, "DFS_TOOL": str(tool), **bash_bound(bash_minutes)}
     cmd = ["bash", str(tool / "scripts" / "run.sh"), task, str(cap or 6)]
     # The chain's own words are kept beside the replay: its last "dfs_run: DONE|BLOCKED|CAP"
     # line is why it stopped, which the runner's meta.json (the task's status) does not say.
@@ -210,7 +221,7 @@ def main(argv):
         sys.stdout.write(__doc__)
         return 2
     cmd, rest = argv[0], argv[1:]
-    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None}
+    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES}
     pos = []
     it = iter(rest)
     for a in it:
@@ -231,7 +242,7 @@ def main(argv):
         sys.stdout.write(f"prepared {dest} under tool {tool}\n")
     elif cmd == "run":
         dest, task = pos
-        return run(dest, task, opts["cap"], opts["tool"])
+        return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"])
     elif cmd == "score":
         dest, task = pos
         compare(task, original(repo, task), score(dest, task))
@@ -240,7 +251,7 @@ def main(argv):
         dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"])
         before = original(repo, task)
         cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
-        run(dest, task, cap, tool)
+        run(dest, task, cap, tool, opts["bash-minutes"])
         compare(task, before, score(dest, task))
     return 0
 
