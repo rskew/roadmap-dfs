@@ -704,16 +704,22 @@ const FLOWS = {
     await openWalk(page);
     await page.selectOption("#nextsel", "W2");
     await page.selectOption("#agentsel", "codex");
-    // Every field is in the box: the budget and chains beside Next and Agent, and Start walk starts with no dialog.
-    assert(/permission prompts/i.test(await page.textContent("#walkbox")), "starting says what it does");
+    // Every field is in the box: the budget and chains beside Next and Agent. Start walk still asks, with nothing to fill in.
     await page.fill("#walkbox #bud", "7");
     await page.fill("#walkbox #par", "2");
     await page.evaluate(() => drawTasks());
     same(await page.$eval("#bud", el => el.value), "7", "a redraw of the list keeps what was typed in the box");
-    await page.click("[data-act=walkstart]");
+    await page.click("[data-act=walkstart]"); await dialog(page);
+    assert(!(await page.$("dialog input, dialog select")), "the dialog holds no field");
+    await page.click("dialog button[value=cancel]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    assert(/Walk is off/.test(await page.textContent("#walkbox")), "a cancel leaves the walk off");
+    same(await page.$eval("#bud", el => el.value), "7", "and keeps what was typed");
+    await page.click("[data-act=walkstart]"); await dialog(page);
+    assert(/permission prompts/i.test(await page.textContent("dialog")), "starting says what it does");
+    await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => /Walking/.test(document.querySelector("#walkbox")?.textContent || ""));
     assert(/7/.test(await page.textContent("#walkbox")), "the budget shows");
-    assert(!(await page.$("dialog[open]")), "no dialog opened on the way");
     assert(/2 at a time/.test(await page.textContent("#walkbox")), "the chains went with it");
     await page.click("[data-act=walkstop]");
     await page.waitForFunction(() => /Walk is off/.test(document.querySelector("#walkbox")?.textContent || ""));

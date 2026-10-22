@@ -718,7 +718,7 @@ function walkHtml() {
     <div class="row2"><label for="agentsel">Agent</label><select id="agentsel">${agents}</select></div>
     ${w.on ? "" : walkFields()}
     <div class="row2 act"><span></span>${w.on ? `<button class="btn" data-act="walkstop">Stop walk</button>` : `<button class="btn primary" data-act="walkstart">Start walk</button>`}</div>
-    ${w.on ? "" : `<p class="line2" id="walkhow">The budget is sessions over the whole walk, shared by the chains that run at once on separate branches. Agents run on this machine with their permission prompts off.</p>`}
+    ${w.on ? "" : `<p class="line2" id="walkhow">The budget is sessions over the whole walk, shared by the chains that run at once on separate branches.</p>`}
     ${chains}${events}</details>`;
 }
 async function setAgent(agent) {
@@ -736,12 +736,15 @@ function walkFields() {
   return `<div class="row2"><label for="bud">Budget</label><span class="pair"><input type="number" id="bud" min="1" max="500" value="${esc(v.budget ?? S.walk.budget)}" required aria-describedby="walkhow">
       <label for="par">Chains</label><input type="number" id="par" min="1" max="16" value="${esc(v.parallel ?? (S.walk.parallel || 1))}" required aria-describedby="walkhow"></span></div>`;
 }
-async function walkStart(btn) {
+/* Starting is still a decision of its own, as `w` then ⏎ is on the screen: the dialog asks, with nothing to fill in.
+   The numbers are read from the box before it opens, since a push may redraw the box behind it. */
+function walkStartForm() {
   const bud = $("#bud"), par = $("#par");
   if (!bud.reportValidity() || !par.reportValidity()) return;
-  btn.disabled = true;
-  try { S.walk = await api("/api/walk/start", { budget: parseInt(bud.value, 10), parallel: parseInt(par.value, 10) }); S.walkDraft = null; toast("Walking."); drawTasks(); }
-  catch (e) { toast(e.message, true); btn.disabled = false; }
+  const budget = parseInt(bud.value, 10), parallel = parseInt(par.value, 10);
+  form(`<h3>Start the walk?</h3>
+    <p class="muted" style="margin:0">It starts agent sessions on this machine, depth-first, ${budget} in all${parallel > 1 ? `, ${parallel} chains at once` : ""}, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>${buttons("Start walk")}`,
+    async () => { S.walk = await api("/api/walk/start", { budget, parallel }); S.walkDraft = null; toast("Walking."); drawTasks(); });
 }
 function chainStopForm(item) {
   form(`<h3>Stop ${esc(item)}'s chain?</h3>
@@ -1573,7 +1576,7 @@ document.addEventListener("click", e => {
     chat: () => chatOpen(d.scope), chattop: chatTop, chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
     chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
-    walkstart: () => walkStart(b), walkstop: async () => { try { S.walk = await api("/api/walk/stop", {}); toast("Walk stopped; its chain ends after this run."); drawTasks(); } catch (e) { toast(e.message, true); } },
+    walkstart: walkStartForm, walkstop: async () => { try { S.walk = await api("/api/walk/stop", {}); toast("Walk stopped; its chain ends after this run."); drawTasks(); } catch (e) { toast(e.message, true); } },
     chainstop: () => chainStopForm(d.item),
     draft: async () => { try { const on = d.draft === "1"; wrote(await api("/api/draft", { task: S.task.id, draft: on }), on ? S.task.id + " is a draft: the walk passes it over." : S.task.id + " is ready: the walk takes it in its turn."); } catch (e) { toast(e.message, true); } },
     walkhere: async () => { try { S.walk = await api("/api/walk/pin", { item: d.item }); toast(S.walk.pinned ? "The walk goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
@@ -1641,7 +1644,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#ctx")
 addEventListener("scroll", ctxClose, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 document.addEventListener("input", e => { if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = { budget: $("#bud").value, parallel: $("#par").value }; });
-document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); const b = $("#walkbox [data-act=walkstart]"); if (b && !b.disabled) walkStart(b); } });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStartForm(); } });
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
