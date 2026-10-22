@@ -65,10 +65,11 @@ says it is one, by committing with DFS_ADOPT=1 in the environment: every finding
 is printed as grandfathered and none refuses, including the size budget and the artefacts
 their text names, which it need not stage. That holds whether git holds no task file or
 holds some (a blanket `.*` rule, with a few force-added), but never for a file HEAD holds,
-and never on an item branch `dfs/<task>`: an adoption is committed on the default branch.
-Without it that commit is judged in full, and says so when it refuses, since a task file
-HEAD lacks is also new work: a session's first node, committed on `dfs/<task>`, on a
-branch a session works in place or in a repo with no commit, is no adoption.
+and never off the default branch (`main`, `master`; one with no commit yet counts), neither
+on an item branch `dfs/<task>` nor on a branch a session works in place: an adoption is
+committed on the default branch. Without it that commit is judged in full, and says so when
+it refuses, since a task file HEAD lacks is also new work: a session's first node, committed
+on `dfs/<task>` or on a branch worked in place, is no adoption.
 
 ⚠️ A GITIGNORED `.dfs` (`dfs_paths.ignored`) holds nothing at HEAD, so every check
 AGAINST HEAD above has nothing to compare and passes, and the hook never calls this,
@@ -638,11 +639,13 @@ def main() -> int:
     # A roadmap git already holds in part (a blanket `.*` rule that hides all but the
     # task files someone force-added) is adopted the same way: the author's DFS_ADOPT=1
     # grandfathers each staged task file HEAD does not hold, and never one it does.
-    # An item branch `dfs/<task>` is where a session's first node of a new task lands, so an
-    # adoption is never committed there: the variable does nothing on it and the hint is not
-    # printed. The author adopts on the default branch, before any item is cut.
-    on_item = dfs_paths.is_item_branch(dfs_paths.branch())
-    declared = (from_index and not dfs_paths.ignored() and not on_item
+    # A session's first node of a new task lands on an item branch `dfs/<task>`, or in place on
+    # whatever branch the checkout is on when it is off main, so an adoption is committed
+    # nowhere else than the default branch: off it the variable does nothing and the hint is
+    # not printed. A default branch with no commit yet still adopts, since that is where a
+    # roadmap is first committed; the author's DFS_ADOPT=1 is what tells it from a first node.
+    off_default = dfs_paths.branch() not in dfs_paths.DEFAULT_BRANCHES
+    declared = (from_index and not dfs_paths.ignored() and not off_default
                 and os.environ.get("DFS_ADOPT") == "1")
     adds_new = False
     grand = []
@@ -733,7 +736,7 @@ def main() -> int:
     print("dfs_check: the roadmap broke its own rules.\n")
     for b in fatal + bad:
         print(f"  - {b}")
-    if adds_new and fatal and not declared and not dfs_paths.ignored() and not on_item:
+    if adds_new and fatal and not declared and not dfs_paths.ignored() and not off_default:
         print("\n  If this commit adopts task files written before the guard, commit it again with\n"
               "  DFS_ADOPT=1 in the environment, and the old findings of the files git does not\n"
               "  hold yet are not refused.")

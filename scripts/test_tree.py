@@ -717,6 +717,20 @@ class Check(InARepo):
         subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.root, check=True)
         self.first_node_is_refused()
 
+    def test_dfs_adopt_does_nothing_on_a_branch_worked_in_place(self):
+        (self.root / "code.txt").write_text("a\n")
+        self.git_commit("code.txt")
+        subprocess.run(["git", "checkout", "-qb", "feature"], cwd=self.root, check=True)
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        for env in ({"DFS_ADOPT": ""}, {"DFS_ADOPT": "1"}):
+            with mock.patch.dict(os.environ, env):
+                code, out = self.run_check("--staged")
+            self.assertEqual(code, 1, out)
+            self.assertIn("names Parent W1,", out)
+            self.assertNotIn("grandfathered", out)
+            self.assertNotIn("DFS_ADOPT", out)
+
     def test_a_first_node_in_a_repo_with_no_commit_is_judged_in_full(self):
         self.first_node_is_refused()
 
