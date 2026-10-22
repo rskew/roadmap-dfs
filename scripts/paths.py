@@ -682,8 +682,8 @@ def hidden_message(found) -> str:
     rules = {}
     for h in found:
         rules.setdefault((h["source"], h["line"], h["pattern"]), []).append(h["path"])
-    lines = ["git will not add %d roadmap path%s, so %s stay%s out of every commit and "
-             "every item's worktree:" % (len(found), "" if len(found) == 1 else "s",
+    lines = ["git will not add %d roadmap path%s, so %s stay%s out of every commit (an "
+             "item's worktree links the main checkout's copy):" % (len(found), "" if len(found) == 1 else "s",
                                          "it" if len(found) == 1 else "they",
                                          "s" if len(found) == 1 else "")]
     for (source, line, pattern), paths in rules.items():
