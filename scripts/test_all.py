@@ -8,7 +8,10 @@ so the run takes about as long as its slowest test. Each shard is its own `pytho
 that patches a module or os.environ cannot reach another shard's.
 
 Run:  python3 roadmap-dfs/scripts/test_all.py [-j N] [name ...]
-      a name is a module, class or test id prefix (`test_chain`, `test_web.Web`); none runs all.
+      a name is a module, class or test id prefix (`test_chain`, `test_web.Web`); none runs all
+      but the real-agent modules (REAL_AGENT), which start the agents' own CLIs and fail on the
+      host's faults as much as on the code's: `--real-agents` runs them, one shard at a time
+      after the parallel pass, and so does naming one.
       With /tmp mounted noexec, set TMPDIR to a directory inside the repo, as for any one module.
 """
 import argparse
@@ -25,6 +28,8 @@ HERE = Path(__file__).resolve().parent
 SHARD_SECONDS = 2.0     # what a shard is packed to; past it, a subprocess per shard costs little
 UNKNOWN_SECONDS = 0.5   # a test with no time remembered
 MARK = "\0test_all "    # the line a shard ends its stdout with, ahead of its results
+REAL_AGENT = ("test_opencode_chat", "test_codex_chat", "test_claude_chat", "test_kiro_chat",
+              "test_agent_start", "test_agent_interrupt")    # modules whose tests run a real agent CLI
 
 
 def times_file():
@@ -48,6 +53,14 @@ def discover(names):
     found = [i.replace("unittest.loader._FailedTest.", "") for i in ids(suite)
              if not i.startswith(Path(__file__).stem + ".")]
     return [i for i in found if not names or any(i == n or i.startswith(n + ".") for n in names)]
+
+
+def split(test_ids, with_real, names):
+    """(the tests of the parallel pass, the real-agent tests of the serial pass, how many were left out)."""
+    real = [t for t in test_ids if t.split(".", 1)[0] in REAL_AGENT]
+    rest = [t for t in test_ids if t.split(".", 1)[0] not in REAL_AGENT]
+    wanted = with_real or any(n.split(".", 1)[0] in REAL_AGENT for n in names)
+    return (rest, real, 0) if wanted else (rest, [], len(real))
 
 
 def shards(test_ids, known):
@@ -113,6 +126,8 @@ def main(argv):
     ap.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1)
     ap.add_argument("--timeout", type=int, default=900, help="seconds one shard may run")
     ap.add_argument("--slowest", type=int, default=10, help="how many of the slowest tests to list")
+    ap.add_argument("--real-agents", action="store_true",
+                    help="also run the %d real-agent modules, serially after the parallel pass" % len(REAL_AGENT))
     ap.add_argument("names", nargs="*")
     a = ap.parse_args(argv)
 
@@ -122,24 +137,31 @@ def main(argv):
         known = json.loads(tf.read_text())
     except (OSError, ValueError):
         known = {}
-    todo = shards(discover(a.names), known)
+    rest, real, left_out = split(discover(a.names), a.real_agents, a.names)
+    passes = [(shards(rest, known), a.jobs), (shards(real, known), 1)]
+    todo = [s for sh, _ in passes for s in sh]
     if not todo:
         print("no tests match %s" % " ".join(a.names), file=sys.stderr)
         return 2
     print("%d tests in %d shards on %d jobs" % (sum(len(s) for _, s in todo), len(todo), a.jobs), flush=True)
+    if left_out:
+        print("%d real-agent tests left out (%s...): --real-agents runs them" % (left_out, REAL_AGENT[0]), flush=True)
 
     total = {"run": 0, "failures": 0, "errors": 0, "skipped": 0}
     failed = []
-    with concurrent.futures.ThreadPoolExecutor(a.jobs) as pool:
-        for f in concurrent.futures.as_completed([pool.submit(spawn, s, a.timeout) for _, s in todo]):
-            names, rc, out, err, tally, _ = f.result()
-            for k in total:
-                total[k] += tally[k]
-            known.update(tally["took"])
-            ok = rc == 0 and not tally["failures"] and not tally["errors"]
-            if not ok:
-                failed.append((names, out, err))
-            print("." if ok else "F", end="", flush=True)
+    for sh, jobs in passes:
+        if sh and sh is not passes[0][0]:
+            print("\n%d real-agent tests, one shard at a time" % sum(len(s) for _, s in sh), flush=True)
+        with concurrent.futures.ThreadPoolExecutor(jobs) as pool:
+            for f in concurrent.futures.as_completed([pool.submit(spawn, s, a.timeout) for _, s in sh]):
+                names, rc, out, err, tally, _ = f.result()
+                for k in total:
+                    total[k] += tally[k]
+                known.update(tally["took"])
+                ok = rc == 0 and not tally["failures"] and not tally["errors"]
+                if not ok:
+                    failed.append((names, out, err))
+                print("." if ok else "F", end="", flush=True)
     print()
 
     for names, out, err in failed:
