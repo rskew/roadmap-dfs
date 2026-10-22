@@ -17,6 +17,7 @@ test starts it again.
 import http.server
 import json
 import select
+import signal
 import socket
 import subprocess
 import sys
@@ -215,21 +216,28 @@ def opencode_hung(relay, samples):
     return bool(past) and ticks - past[-1][1] < HUNG_TICKS
 
 
+def opencode_crashed(relay):
+    """Whether relay's opencode was killed by SIGBUS, which a loaded machine does to it now and then (its
+    executable is mapped from a store on zfs; seen at start-up, mid-turn on the screen and in `opencode run`)."""
+    return relay.agent == "opencode" and not relay.live and relay.rc == -signal.SIGBUS
+
+
 def start_until(relay, done, restart, timeout, tries=3):
-    """Wait up to `timeout` for done(relay). A relay whose opencode hangs at start-up (`opencode_hung`) is closed
-    and replaced by restart(), a started relay, at most `tries` starts in all. Returns the relay last started and
+    """Wait up to `timeout` for done(relay). A relay whose opencode hangs at start-up (`opencode_hung`) or is
+    killed by SIGBUS (`opencode_crashed`) is closed and replaced by restart(), a started relay, at most `tries` starts in all. Returns the relay last started and
     whether done(relay) came true. `restart` registers the relay for closing, as the first one is."""
     for attempt in range(tries):
         samples, end, hung = [], time.time() + timeout, False
         while time.time() < end and not hung:
             if done(relay):
                 return relay, True
-            hung = relay.agent == "opencode" and opencode_hung(relay, samples)
+            hung = relay.agent == "opencode" and (opencode_crashed(relay) or opencode_hung(relay, samples))
             time.sleep(0.1)
         if not hung:
             return relay, False
         relay.close()
-        print("opencode hung at start-up (start %d of %d)" % (attempt + 1, tries), file=sys.stderr)
+        print("opencode %s (start %d of %d)" % ("was killed by SIGBUS" if opencode_crashed(relay) else "hung at start-up",
+                                                  attempt + 1, tries), file=sys.stderr)
         if attempt + 1 < tries:
             relay = restart()
     return relay, False
@@ -237,7 +245,7 @@ def start_until(relay, done, restart, timeout, tries=3):
 
 class Stand:
     """Enough of a ptyrelay.Relay for `start_until`: a process that is the agent, and what it has drawn."""
-    agent, live, first_out, started, opening, handed = "opencode", True, 1.0, 1.0, False, 0.0
+    agent, live, first_out, started, opening, handed, rc = "opencode", True, 1.0, 1.0, False, 0.0, None
 
     def __init__(self, code, drawn=b""):
         self.proc = subprocess.Popen([sys.executable, "-c", code])
@@ -285,6 +293,19 @@ class StartUntil(unittest.TestCase):
         again = iter(starts[1:])
         relay, ok = start_until(starts[0], prompt_drawn, lambda: next(again), 30)
         self.assertEqual((relay, ok, [s.closed for s in starts]), (starts[2], False, [True, True, True]))
+
+    def test_an_opencode_killed_by_sigbus_is_started_again_even_after_its_prompt_was_drawn(self):
+        first = self.stand(self.IDLE, b"ctrl+p commands")
+        first.live, first.rc = False, -signal.SIGBUS
+        second = self.stand(self.IDLE, b"ctrl+p commands")
+        relay, ok = start_until(first, lambda r: r is second, lambda: second, 20)
+        self.assertEqual((relay, ok, first.closed), (second, True, True))
+
+    def test_one_that_ended_any_other_way_is_not_started_again(self):
+        gone = self.stand(self.IDLE)
+        gone.live, gone.rc = False, 0
+        relay, ok = start_until(gone, lambda r: False, lambda: self.fail("restarted"), 2)
+        self.assertEqual((relay, ok), (gone, False))
 
     def test_run_sh_s_opening_turn_is_not_a_hang_however_idle_it_waits(self):
         waiting = self.stand(self.IDLE)
