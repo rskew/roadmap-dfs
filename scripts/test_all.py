@@ -45,14 +45,24 @@ def ids(suite):
             yield t.id()
 
 
-def discover(names):
+def discover():
     sys.path.insert(0, str(HERE))
     loader = unittest.TestLoader()
     suite = loader.discover(str(HERE), pattern="test_*.py", top_level_dir=str(HERE))
     # a module that does not import is a _FailedTest: run it by name so its shard reports the error
     found = [i.replace("unittest.loader._FailedTest.", "") for i in ids(suite)
              if not i.startswith(Path(__file__).stem + ".")]
+    return found
+
+
+def named(found, names):
     return [i for i in found if not names or any(i == n or i.startswith(n + ".") for n in names)]
+
+
+def remembered(known, found):
+    """The times of the tests this tree has, named in this run or not: the file is shared by every worktree."""
+    have = set(found)
+    return {t: s for t, s in known.items() if t in have}
 
 
 def split(test_ids, with_real, names):
@@ -137,7 +147,8 @@ def main(argv):
         known = json.loads(tf.read_text())
     except (OSError, ValueError):
         known = {}
-    rest, real, left_out = split(discover(a.names), a.real_agents, a.names)
+    everything = discover()
+    rest, real, left_out = split(named(everything, a.names), a.real_agents, a.names)
     passes = [(shards(rest, known), a.jobs), (shards(real, known), 1)]
     todo = [s for sh, _ in passes for s in sh]
     if not todo:
@@ -183,7 +194,7 @@ def main(argv):
 
     try:
         tf.parent.mkdir(parents=True, exist_ok=True)
-        tf.write_text(json.dumps(known, indent=0, sort_keys=True))
+        tf.write_text(json.dumps(remembered(known, everything), indent=0, sort_keys=True))
     except OSError:
         pass
     return 1 if failed else 0
