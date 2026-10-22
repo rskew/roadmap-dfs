@@ -436,8 +436,8 @@ class Flows(unittest.TestCase):
     def test_a_big_screen_gets_a_rail_scaled_type_and_a_pointer_and_keys(self):
         self.flow("wide")
 
-    def test_a_game_controller_moves_focus_presses_backs_out_and_shows_hints_only_while_connected(self):
-        self.flow("pad")
+    def test_scrolling_selects_the_control_in_the_middle_and_leaves_room_to_centre_the_ends(self):
+        self.flow("mid")
 
     def tag_a_task(self):
         """A task begun on a branch, `W1@serve-real-records`, beside the main branch's W1."""

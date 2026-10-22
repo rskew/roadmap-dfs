@@ -40,7 +40,6 @@ paintBackground();
 :root { --bar: calc(56px * var(--z)); --tabs: calc(52px * var(--z)); --col: calc(880px * var(--z)); --page: calc(1180px * var(--z)); }
 body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 :root { scroll-padding: calc(env(safe-area-inset-top, 0px) + var(--bar) + var(--s3)) 0 calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s3)); }
-:root:has(body.pad) { scroll-padding-bottom: calc(var(--tabs) + var(--hit) + env(safe-area-inset-bottom, 0px) + var(--s3)); }
 
 /* the bar: the mark, a name, a way back, and the three colours as one thin line */
 #bar {
@@ -71,6 +70,8 @@ html[data-loading] #stripe { opacity: 1; }
 #layout { max-width: var(--page); margin: 0 auto; }
 #view { padding: var(--s3) var(--s4) 28px; min-width: 0; }
 #view.col { max-width: var(--col); margin: 0 auto; }
+#view { padding-top: calc(var(--s3) + var(--mid-top, 0px)); padding-bottom: calc(28px + var(--mid-bot, 0px)); }   /* room to scroll the first and last control to the middle (midLayout) */
+:is(button.item, .row > .main).mid { outline: var(--rule-strong) solid var(--ink); outline-offset: calc(-1 * var(--rule-strong)); }
 iframe.artview { display: block; width: 100%; height: calc(100dvh - var(--bar) - var(--tabs) - 3rem); min-height: 50dvh; border: var(--rule) solid var(--line); background: #fff; }
 img.artview { max-width: 100%; height: auto; }
 /* a run's log: wrapped to the screen, scrolling inside its own box so the page keeps its bars */
@@ -337,14 +338,6 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 #ctx button { min-height: var(--hit); padding: 0 var(--s4); font-size: var(--fs-control); font-weight: 500; letter-spacing: var(--track-control); }
 #ctx button + button { border-top: var(--rule) solid var(--faint); }
 #ctx button:hover, #ctx button:focus-visible { background: var(--sel); }
-#padbar { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; display: none; align-items: center; gap: var(--s5); padding: var(--s2) var(--s4); background: var(--panel); border-top: var(--rule) solid var(--line); font-size: var(--fs-small); color: var(--muted); }
-body.pad #padbar { display: flex; }
-@media (max-width: 520px) { #padbar { gap: var(--s3); padding-inline: var(--s3); } #padbar span:nth-child(5), #padbar span:nth-child(-n+4) i { display: none; } }   /* a phone has room for the four glyphs and the legend, not their words */
-body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
-#padbar span, #padlegend li { display: inline-flex; align-items: center; gap: var(--s2); }
-#padbar b, #padlegend b { display: inline-flex; align-items: center; justify-content: center; min-width: calc(28px * var(--z)); height: calc(28px * var(--z)); padding: 0 var(--s1); border: var(--rule-strong) solid var(--ink); border-radius: calc(14px * var(--z)); color: var(--ink); font-size: var(--fs-label); font-weight: 600; }
-#padlegend { position: fixed; z-index: 21; right: var(--s4); bottom: calc(var(--hit) + var(--s5)); margin: 0; padding: var(--s4) var(--s5); list-style: none; background: var(--panel); border: var(--rule) solid var(--ink); font-size: var(--fs-small); display: grid; gap: var(--s2); }
-#padlegend[hidden] { display: none; }
 @media (min-width: 1500px) {
   /* three panes and no page cap: the screen is the layout. Tasks, then the tree, then the node. */
   #layout { max-width: none; }
@@ -371,11 +364,6 @@ body.pad { padding-bottom: calc(var(--hit) + var(--s3)); }
   <aside id="sheet" role="dialog" aria-label="Node" aria-modal="false"></aside>
 </div>
 <div id="scrim"></div>
-<div id="padbar" aria-hidden="true"><span><b>A</b><i>press</i></span><span><b>B</b><i>back</i></span><span><b>X</b><i>add</i></span><span><b>Y</b><i>flagged</i></span><span><b>LB</b><b>RB</b>node</span><span><b>☰</b>buttons</span></div>
-<ul id="padlegend" aria-label="Controller buttons" hidden>
-  <li><b>✥</b>d-pad or left stick: move focus</li><li><b>A</b>press the focused control</li><li><b>B</b>close, then go back</li>
-  <li><b>X</b>add a node</li><li><b>Y</b>flagged nodes only, and back</li><li><b>LB</b><b>RB</b>previous and next node</li><li><b>☰</b>this list</li>
-</ul>
 <dialog id="form"></dialog>
 <dialog id="chat" aria-label="Chat">
   <div class="chat-top"><span class="cap" id="chat-title"></span><span class="tag" id="chat-agent" hidden></span></div>
@@ -481,7 +469,8 @@ let NAVS = 0;
 const SCROLL = { at: {}, ready: false, t: null };
 try { SCROLL.at = JSON.parse(sessionStorage.getItem("scroll") || "{}") || {}; } catch (e) {}
 function scrollBack(where) {
-  window.scrollTo(0, SCROLL.at[where] || 0);
+  midLayout();
+  window.scrollTo(0, SCROLL.at[where] ?? MID.top);       // a screen not seen yet starts with its first control at the top, not in the middle
   SCROLL.ready = true;
 }
 function keepScroll(key, y) {
@@ -492,11 +481,74 @@ function keepScroll(key, y) {
 addEventListener("scroll", () => { if (SCROLL.ready && lastView) keepScroll(lastView, window.scrollY); }, { passive: true });
 addEventListener("pagehide", () => { try { sessionStorage.setItem("scroll", JSON.stringify(SCROLL.at)); } catch (e) {} });
 
+/* ── scrolling with a controller: the control in the middle of the screen is the one selected ───────────────────────────
+   A pad's stick reaches the page as the wheel or the page keys. While one of those scrolls a list of tasks, or a tree of
+   nodes, the control nearest the middle of what is visible (between the bar, the pinned Walk box and the tabs) takes
+   focus, marked `.mid` since a focus ring does not show after the wheel, and Enter (the pad's A) presses it. The page
+   keeps room above the first control and below the last so each can be scrolled to the middle (`--mid-top`, `--mid-bot`),
+   and a screen is first drawn scrolled past the room above, as before. Only with a hovering pointer: a touch screen is
+   scrolled by finger and has no use for a cursor. Tab and a click are left alone. */
+const MID = { on: matchMedia("(hover: hover)").matches, until: 0, last: -Infinity, picked: false, top: 0, bot: 0, raf: 0 };
+const MID_SEL = "#view :is(button.item, .row > .main)";
+const MID_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+const midCands = () => [...document.querySelectorAll(MID_SEL)].filter(el => el.getClientRects().length);
+function midEdges(pinned) {
+  let t = $("#bar").getBoundingClientRect().bottom, b = innerHeight;
+  const tabs = $("#tabs").getBoundingClientRect();
+  if (tabs.top > innerHeight / 2) b = tabs.top;           // the tabs are along the bottom on a narrow screen, in the bar on a wide one
+  const w = pinned && $("#walkbox");
+  if (w) { const r = w.getBoundingClientRect(); if (r.top <= t + 1 && r.bottom > t) t = r.bottom; }
+  return [t, b];
+}
+function midLayout() {
+  const v = $("#view"), cs = MID.on ? midCands() : [];
+  let top = 0, bot = 0;
+  if (cs.length) {
+    const [t, b] = midEdges(false), c = (t + b) / 2, f = cs[0].getBoundingClientRect(), l = cs[cs.length - 1].getBoundingClientRect();
+    const f0 = f.top + f.height / 2 + scrollY - MID.top, l0 = l.top + l.height / 2 + scrollY - MID.top;     // their middles, in the page with no room added
+    const d0 = document.documentElement.scrollHeight - MID.top - MID.bot;
+    top = Math.max(0, Math.round(c - f0));                 // the first control's middle is the screen's, scrolled to the top
+    bot = Math.max(0, Math.round(l0 - c - d0 + innerHeight));   // the last one's, scrolled to the end
+  }
+  if (top === MID.top && bot === MID.bot) return;
+  const was = MID.top; MID.top = top; MID.bot = bot;
+  v.style.setProperty("--mid-top", top + "px"); v.style.setProperty("--mid-bot", bot + "px");
+  if (top !== was && scrollY > 0) scrollBy(0, top - was);  // what is on screen stays where it was
+}
+function midSelect() {
+  MID.raf = 0;
+  const a = document.activeElement;
+  if (document.querySelector("dialog[open]") || (a && a.closest("input, textarea, select, #walkbox, dialog"))) return;
+  const [t, b] = midEdges(true), c = (t + b) / 2;
+  let best = null, score = Infinity;
+  for (const el of midCands()) {
+    const r = el.getBoundingClientRect(), d = c < r.top ? r.top - c : c > r.bottom ? c - r.bottom : 0;
+    const s = d + Math.abs((r.top + r.bottom) / 2 - c) / 1000;     // the one the middle is in, else the nearest; its middle breaks a tie
+    if (s < score) { best = el; score = s; }
+  }
+  if (!best) return;
+  if (best !== a) { document.querySelector(".mid")?.classList.remove("mid"); best.classList.add("mid"); best.focus({ preventScroll: true }); }
+  best.classList.add("mid");
+}
+if (MID.on) {
+  const user = () => { MID.until = performance.now() + 400; };
+  addEventListener("wheel", user, { passive: true });
+  addEventListener("keydown", e => { if (e.key === "Tab") { MID.until = 0; MID.last = -Infinity; } else if (MID_KEYS.has(e.key) && !e.altKey && !e.ctrlKey && !e.metaKey) user(); });
+  addEventListener("pointerdown", e => { if (e.target === document.documentElement) user(); });        // the scrollbar
+  addEventListener("scroll", () => {
+    const now = performance.now();
+    if (now < MID.until || now - MID.last < 150) { MID.last = now; if (!MID.raf) MID.raf = requestAnimationFrame(midSelect); }
+  }, { passive: true });
+  addEventListener("focusin", e => { MID.picked = !!e.target.classList?.contains("mid"); });
+  addEventListener("focusout", e => e.target.classList?.remove("mid"));
+  addEventListener("resize", () => midLayout());
+  new MutationObserver(() => midLayout()).observe($("#view"), { childList: true });
+}
+
 let lastView = "";
 let RENDERS = 0;
-/* With a pad focus is the cursor, and a draw replaces the controls: put focus back on the same one (by id, or its action
-   and target, else its place among the focusable controls) when the draw left it on the page, so a push from the
-   server does not send the cursor home. The same for a keyboard user in the pinned Walk box, who goes there in the middle of a walk. */
+/* A draw replaces the controls: for a keyboard user in the pinned Walk box, who goes there in the middle of a walk, put focus back on the same
+   control (by id, or its action and target, else its place among the focusable controls) when the draw left it on the page. */
 const FOCUSABLE = "button, a[href], summary, textarea, input:not([type=hidden]), select, [tabindex]:not([tabindex='-1'])";
 function focusKey(el) {
   if (!el || el === document.body) return null;
@@ -504,11 +556,12 @@ function focusKey(el) {
   return { sel, at: [...document.querySelectorAll(FOCUSABLE)].indexOf(el) };
 }
 async function render(force) {
-  const key = PAD.on || document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
+  const key = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
   await renderDraw(force);
-  if (key && (!document.activeElement || document.activeElement === document.body)) {
+  const lost = !document.activeElement || document.activeElement === document.body;
+  if (key && lost) {
     const el = (key.sel && $(key.sel)) || document.querySelectorAll(FOCUSABLE)[key.at]; if (el) el.focus();
-  }
+  } else if (MID.picked && lost) midSelect();      // the selected control was drawn over: the middle's is selected again
 }
 async function renderDraw(force) {
   // A render is a fetch and then a draw, and a newer one can start before an older one
@@ -1578,92 +1631,6 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#ctx")
 addEventListener("scroll", ctxClose, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
-
-/* ── a game controller: the Gamepad API, polled each frame while one is connected ──────────────────────────────────────
-   The d-pad and left stick move focus to the nearest control in that direction (inside the open dialog or menu when
-   there is one), A presses it, B closes then goes back, X adds a node, Y shows the flagged ones, the bumpers step through
-   the nodes, Start lists the buttons. The hint bar and the bigger focus ring (`body.pad`) are there only while a pad is. */
-const PAD = { on: false, held: new Set(), next: 0, raf: 0 };
-function padScope() { const d = [...document.querySelectorAll("dialog[open]")].pop(); return d || (!$("#ctx").hidden ? $("#ctx") : document); }
-function padTargets() {
-  return [...padScope().querySelectorAll(FOCUSABLE)].filter(el => {
-    if (el.disabled || el.closest("[hidden], [inert], details:not([open]) > :not(summary)")) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
-  });
-}
-/* Every control in scope is a candidate, on screen or not: the page scrolls to the one chosen, clear of the bar (`scroll-padding`) and, on the list, the pinned Walk box (`scroll-margin`).
-   Of the controls lying wholly past the focused one in `dir`, the nearest, counting a step off the line twice over; a
-   control that overlaps it (a wide row, its indented child) is not "to the right" of it, so none past it falls back to the centres. */
-function padMove(dir) {
-  const all = padTargets(), cur = document.activeElement;
-  if (!cur || cur === document.body || !all.includes(cur)) { const seen = all.filter(el => { const r = el.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; });
-    const first = seen.find(el => el.closest(".row.sel, #sheet")) || seen[0] || all[0]; if (first) first.focus(); return; }
-  const c = cur.getBoundingClientRect(), cx = c.left + c.width / 2, cy = c.top + c.height / 2, horiz = dir === "left" || dir === "right";
-  const pick = strict => {
-    let best = null, bestScore = Infinity;
-    for (const el of all) {
-      if (el === cur) continue;
-      const r = el.getBoundingClientRect(), dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
-      const past = dir === "right" ? r.left - c.right : dir === "left" ? c.left - r.right : dir === "down" ? r.top - c.bottom : c.top - r.bottom;
-      const along = strict ? past : dir === "right" ? dx : dir === "left" ? -dx : dir === "down" ? dy : -dy;
-      if (strict ? along < -2 : along <= 2) continue;
-      const score = Math.max(along, 0) + 2 * Math.abs(horiz ? dy : dx);
-      if (score < bestScore) { best = el; bestScore = score; }
-    }
-    return best;
-  };
-  const best = pick(true) || pick(false);
-  if (best) { best.focus(); best.scrollIntoView({ block: "nearest", inline: "nearest" }); }
-}
-function padBack() {
-  const d = [...document.querySelectorAll("dialog[open]")].pop();
-  if (!$("#padlegend").hidden) $("#padlegend").hidden = true;
-  else if (d) d.close();
-  else if (!$("#ctx").hidden) ctxClose();
-  else if (S.task && route().view === "task" && S.node) leave(`t/${S.task.id}`);
-  else { const up = $("#tabs [data-act=up]") || $("#back:not([hidden])"); if (up) up.click(); }
-}
-const PAD_BUTTON = {
-  0: () => { const el = document.activeElement; if (el && el !== document.body) el.click(); else padMove("down"); },
-  1: padBack,
-  2: () => { if (!S.task || route().view !== "task" || $("dialog[open]")) return; const b = $("#sheet [data-act=add]") || $(".actions [data-act=add]"); if (b) b.click(); },
-  3: () => { if (!S.task || route().view !== "task" || $("dialog[open]")) return; S.flagged = !S.flagged; S.sig = ""; render(true); },
-  4: () => { if (S.task && route().view === "task" && !$("dialog[open]")) step(-1); },
-  5: () => { if (S.task && route().view === "task" && !$("dialog[open]")) step(1); },
-  9: () => { $("#padlegend").hidden = !$("#padlegend").hidden; },
-  12: () => padMove("up"), 13: () => padMove("down"), 14: () => padMove("left"), 15: () => padMove("right"),
-};
-const PAD_DIRS = { 12: "up", 13: "down", 14: "left", 15: "right" };
-function padPoll(now) {
-  // only the standard layout has the d-pad, A/B/X/Y and bumpers where the buttons below say they are
-  const pads = [...(navigator.getGamepads ? navigator.getGamepads() : [])].filter(p => p && p.mapping === "standard");
-  if (!pads.length) { PAD.held = new Set(); PAD.on = false; PAD.raf = 0; document.body.classList.remove("pad"); $("#padlegend").hidden = true; return; }
-  const down = new Set();
-  for (const p of pads) {
-    p.buttons.forEach((b, i) => { if (b.pressed) down.add(i); });
-    const x = p.axes[0] || 0, y = p.axes[1] || 0;
-    if (Math.abs(x) > .5 || Math.abs(y) > .5) down.add(Math.abs(x) > Math.abs(y) ? (x > 0 ? 15 : 14) : (y > 0 ? 13 : 12));
-  }
-  for (const i of down) {
-    const fresh = !PAD.held.has(i);
-    // a direction held down repeats: after 400ms, then every 120ms
-    if (fresh || (PAD_DIRS[i] && now >= PAD.next)) {
-      if (PAD_BUTTON[i]) PAD_BUTTON[i]();
-      if (PAD_DIRS[i]) PAD.next = now + (fresh ? 400 : 120);
-    }
-  }
-  PAD.held = down;
-  PAD.raf = requestAnimationFrame(padPoll);
-}
-function padStart() {
-  const any = navigator.getGamepads && [...navigator.getGamepads()].some(p => p && p.mapping === "standard");
-  if (!any) return;
-  PAD.on = true; document.body.classList.add("pad");
-  if (!PAD.raf) PAD.raf = requestAnimationFrame(padPoll);
-}
-addEventListener("gamepadconnected", padStart);
-padStart();                                              // a pad pressed before the page loaded is already connected
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
 let pushT;

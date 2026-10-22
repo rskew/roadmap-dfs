@@ -1881,103 +1881,51 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await ctx.close();
   },
 
-  // A game controller: nothing of it shows until a pad connects; then the d-pad moves focus, A presses, B backs out,
-  // the bumpers step nodes, Y shows the flagged ones, X adds, Start lists the buttons. The pad is faked on `navigator`.
-  async pad(b) {
-    const ctx = await b.newContext({ ...DESKTOP, colorScheme: "light" });
-    await ctx.addInitScript(() => {
-      window.__pad = null;
-      navigator.getGamepads = () => window.__pad ? [window.__pad, null, null, null] : [null, null, null, null];
-      window.__press = (...ix) => { window.__pad.buttons = Array.from({ length: 17 }, (_, i) => ({ pressed: ix.includes(i), value: ix.includes(i) ? 1 : 0 })); };
+  // Scrolling by the wheel or the page keys (what a pad's stick is mapped to) selects the control in the middle of the screen,
+  // and the page has room to scroll the first and the last control there. Tab leaves the selection alone; a touch screen has none of it.
+  async mid(b) {
+    const { ctx, page, errors } = await open(b, DESKTOP);
+    const state = () => page.evaluate(() => {
+      const bar = document.querySelector("#bar").getBoundingClientRect().bottom, c = (bar + innerHeight) / 2;
+      const all = [...document.querySelectorAll("#view button.item")], mid = r => Math.round(r.top + r.height / 2 - c);
+      const a = document.activeElement, r = a.getBoundingClientRect();
+      return { y: scrollY, n: all.length, first: mid(all[0].getBoundingClientRect()), last: mid(all[all.length - 1].getBoundingClientRect()),
+        firstTop: Math.round(all[0].getBoundingClientRect().top - bar), at: all.indexOf(a), hasMid: a.classList.contains("mid"), off: Math.round(r.top + r.height / 2 - c), inside: r.top <= c && r.bottom >= c };
     });
-    const page = await ctx.newPage(); PAGES.push(page);
-    const errors = [];
-    page.on("pageerror", e => errors.push(String(e)));
-    await page.goto(URL_); await page.waitForSelector(".item");
-    // hold the button until the page's loop has seen it, then let go and wait for it to see that, so a busy machine cannot lose a press
-    const tap = async i => {
-      await page.evaluate(i => window.__press(i), i); await page.waitForFunction(i => PAD.held.has(i), i);
-      await page.evaluate(() => window.__press()); await page.waitForFunction(i => !PAD.held.has(i), i);
-    };
-    const at = () => page.evaluate(() => { const e = document.activeElement, r = e.getBoundingClientRect(); return { x: r.left, y: r.top, id: e.dataset.id || "", act: e.dataset.act || "", tag: e.tagName, ring: parseFloat(getComputedStyle(e).outlineWidth) }; });
-    const shown = sel => page.evaluate(s => { const e = document.querySelector(s); return !!e && getComputedStyle(e).display !== "none" && !e.hidden; }, sel);
-    assert(!(await shown("#padbar")) && !(await page.evaluate(() => document.body.classList.contains("pad"))), "no hint bar before a pad connects");
-    await page.evaluate(() => { window.__pad = { id: "fake", index: 0, connected: true, mapping: "standard", axes: [0, 0, 0, 0], buttons: [] }; window.__press(); window.dispatchEvent(new Event("gamepadconnected")); });
-    await page.waitForSelector("#padbar", { state: "visible" });
-    // d-pad: the first press lands on a control, down goes lower, a ring of 4px or more shows where it is
-    await tap(13); const a = await at(); assert(a.tag !== "BODY", "the d-pad puts focus on a control");
-    assert(a.ring >= 4, `the focus ring is ${a.ring}px with a pad`);
-    await tap(13); const b2 = await at(); assert(b2.y > a.y, `down moves focus lower (${a.y} to ${b2.y})`);
-    await tap(12); const c = await at(); assert(c.y < b2.y, "up moves it back");
-    // A presses the focused task, which opens it
-    await page.focus(".item[data-id=W9]"); await tap(0);
-    await page.waitForSelector(".row"); assert(await page.evaluate(() => location.hash.startsWith("#/t/W9")), "A opens the task");
-    // A on a node opens it; the right of a tree row is the sheet
-    await page.focus(".row .main"); await tap(0); await page.waitForSelector("#sheet.open");
-    const open1 = await page.evaluate(() => location.hash);
-    await page.focus(".row .main"); const row = await at(); await tap(15); const right = await at();
-    assert(right.x > row.x + 100, `right moves focus across, to the node (${row.x} to ${right.x})`);
-    // bumpers step through the nodes
-    await tap(5); await page.waitForFunction(h => location.hash !== h, open1);
-    const open2 = await page.evaluate(() => location.hash);
-    await tap(4); await page.waitForFunction(h => location.hash !== h, open2);
-    assert(await page.evaluate(h => location.hash === h, open1), "RB then LB return to the node");
-    // B closes the node
-    await tap(1); await page.waitForFunction(() => !document.querySelector("#sheet.open"));
-    // Y shows the flagged nodes only, and again all of them
-    const all = (await page.$$(".row")).length;
-    await tap(3); await page.waitForFunction(n => document.querySelectorAll(".row").length < n, all);
-    await tap(3); await page.waitForFunction(n => document.querySelectorAll(".row").length === n, all);
-    // X adds a node: a dialog; the d-pad stays inside it; B closes it
-    await tap(2); await dialog(page);
-    for (let i = 0; i < 4; i++) { await tap(13); assert(await page.evaluate(() => !!document.activeElement.closest("dialog")), "focus stays in the open dialog"); }
-    await tap(1); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
-    // Start lists the buttons; B closes the list before anything else
-    await tap(9); assert(await shown("#padlegend"), "Start shows the legend");
-    await tap(1); assert(!(await shown("#padlegend")), "B closes the legend");
-    // the pad goes: the hint bar and the big ring go with it
-    await page.evaluate(() => { window.__pad = null; window.dispatchEvent(new Event("gamepaddisconnected")); });
-    await page.waitForFunction(() => !document.body.classList.contains("pad"));
-    assert(!(await shown("#padbar")), "no hint bar once the pad is gone");
+    const settle = async () => { let y = -1; for (let i = 0; i < 20; i++) { const n = await page.evaluate(() => scrollY); if (n === y) return; y = n; await page.waitForTimeout(80); } };
+    const s0 = await state();
+    assert(s0.firstTop < 200, `a list opens with its first task near the top, not in the middle (${s0.firstTop}px under the bar)`);
+    assert(s0.n >= 3, "the fixture has a few tasks to scroll through");
+    await page.mouse.move(600, 400); await page.mouse.wheel(0, 300);
+    await page.waitForFunction(() => document.activeElement.classList.contains("mid"));
+    await settle(); await page.waitForTimeout(100);
+    const s1 = await state();
+    assert(s1.hasMid && s1.inside, `after the wheel the task in the middle is selected (it is ${s1.off}px off the middle)`);
+    // End: the last task is scrolled to the middle and selected
+    await page.keyboard.press("End"); await settle(); await page.waitForTimeout(100);
+    const s2 = await state();
+    assert(Math.abs(s2.last) <= 2, `End scrolls the last task to the middle (${s2.last}px off)`);
+    assert(s2.at === s2.n - 1 && s2.hasMid, "and it is the one selected");
+    // Home: the first
+    await page.keyboard.press("Home"); await settle(); await page.waitForTimeout(100);
+    const s3 = await state();
+    assert(Math.abs(s3.first) <= 2 && s3.y === 0, `Home scrolls the first task to the middle (${s3.first}px off, at ${s3.y})`);
+    assert(s3.at === 0 && s3.hasMid, "and it is the one selected");
+    // Enter presses the selected task
+    await page.keyboard.press("Enter"); await page.waitForSelector(".row");
+    assert(await page.evaluate(() => location.hash.startsWith("#/t/")), "Enter opens the selected task");
+    // the same in the tree of nodes, and Tab does not send the selection back to the middle
+    await page.mouse.wheel(0, 200); await settle(); await page.waitForTimeout(100);
+    assert(await page.evaluate(() => document.activeElement.matches(".row > .main.mid")), "in a tree the node in the middle is selected");
+    await page.keyboard.press("Tab"); await settle(); await page.waitForTimeout(300);
+    assert(await page.evaluate(() => !document.querySelector(".mid")), "Tab moves the selection off the middle's choice and it stays moved");
     same(errors, [], "no page errors");
     await ctx.close();
 
-    // A phone, with a task list taller than the screen: the d-pad walks to the last task, which scrolls into view clear of the bars.
-    // A pad whose mapping is not "standard" is ignored.
-    const pctx = await b.newContext({ viewport: { width: 390, height: 700 }, hasTouch: true, isMobile: true });
-    await pctx.addInitScript(() => {
-      window.__pad = null;
-      navigator.getGamepads = () => window.__pad ? [window.__pad, null, null, null] : [null, null, null, null];
-      window.__press = (...ix) => { window.__pad.buttons = Array.from({ length: 17 }, (_, i) => ({ pressed: ix.includes(i), value: ix.includes(i) ? 1 : 0 })); };
-    });
-    const ph = await pctx.newPage(); PAGES.push(ph);
-    const perrors = [];
-    ph.on("pageerror", e => perrors.push(String(e)));
-    await ph.goto(URL_); await ph.waitForSelector(".item");
-    await ph.evaluate(() => { window.__pad = { id: "odd", index: 0, connected: true, mapping: "", axes: [0, 0, 0, 0], buttons: [] }; window.__press(); window.dispatchEvent(new Event("gamepadconnected")); });
-    await ph.waitForTimeout(200);
-    assert(!(await ph.evaluate(() => document.body.classList.contains("pad"))), "a pad that is not standard-mapped is ignored");
-    await ph.evaluate(() => { window.__pad.mapping = "standard"; window.dispatchEvent(new Event("gamepadconnected")); });
-    await ph.waitForSelector("#padbar", { state: "visible" });
-    const ptap = async i => {
-      await ph.evaluate(i => window.__press(i), i); await ph.waitForFunction(i => PAD.held.has(i), i);
-      await ph.evaluate(() => window.__press()); await ph.waitForFunction(i => !PAD.held.has(i), i);
-    };
-    const tasks = await ph.$$eval(".item[data-id]", els => els.map(e => e.dataset.id));
-    const last = tasks[tasks.length - 1];
-    assert(await ph.evaluate(() => document.documentElement.scrollHeight > innerHeight + 50), "the task list is taller than the phone screen");
-    let reached = "";
-    for (let i = 0; i < tasks.length * 3 && reached !== last; i++) { await ptap(13); reached = await ph.evaluate(() => document.activeElement.dataset.id || ""); }
-    assert(reached === last, `down reaches the last task (${last}), got ${reached || "nothing"}`);
-    const clear = await ph.evaluate(() => {
-      const r = document.activeElement.getBoundingClientRect(), top = c => Math.min(...["#tabs", "#padbar"].map(s => { const e = document.querySelector(s); return e && getComputedStyle(e).display !== "none" ? e.getBoundingClientRect().top : Infinity; }));
-      return { bottom: r.bottom, bar: top(), h: innerHeight };
-    });
-    assert(clear.bottom <= clear.bar + 0.5 && clear.bottom <= clear.h, `the focused task ends at ${clear.bottom}, above the fixed bars at ${clear.bar}`);
-    for (let i = 0; i < tasks.length * 3 && reached !== tasks[0]; i++) { await ptap(12); reached = await ph.evaluate(() => document.activeElement.dataset.id || ""); }
-    assert(reached === tasks[0], "up walks back to the first task");
-    same(perrors, [], "no page errors on the phone");
-    await pctx.close();
+    const phone = await open(b, PHONE);
+    await phone.page.evaluate(() => scrollBy(0, 200)); await phone.page.waitForTimeout(300);
+    assert(await phone.page.evaluate(() => !document.querySelector(".mid") && !document.querySelector("#view").style.getPropertyValue("--mid-top")), "a touch screen selects nothing by scrolling and keeps no room");
+    await phone.ctx.close();
   },
 
   // Every screen, both themes, five widths (a phone, a narrow one, a laptop, a monitor, a big monitor): nothing overflows, text can be read, targets can be hit.
