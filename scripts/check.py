@@ -643,7 +643,7 @@ def main() -> int:
     # printed. The author adopts on the default branch, before any item is cut.
     on_item = dfs_paths.is_item_branch(dfs_paths.branch())
     declared = (from_index and not dfs_paths.ignored() and not on_item
-                and bool(os.environ.get("DFS_ADOPT")))
+                and os.environ.get("DFS_ADOPT") == "1")
     adds_new = False
     grand = []
     tasks = {}

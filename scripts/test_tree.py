@@ -843,6 +843,14 @@ class Check(InARepo):
             self.assertNotIn("grandfathered", out)
             self.assertNotIn("DFS_ADOPT", out)
 
+    def test_only_dfs_adopt_1_adopts(self):
+        self.write(self.old_roadmap_file())
+        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        for value, code_was in (("0", 1), ("", 1), ("1", 0)):
+            with mock.patch.dict(os.environ, {"DFS_ADOPT": value}):
+                code, out = self.run_check("--staged")
+            self.assertEqual(code, code_was, (value, out))
+
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()
         subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/artefacts/" + name],
