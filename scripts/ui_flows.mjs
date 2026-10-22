@@ -86,8 +86,10 @@ async function task(page, id) { await page.click(`.item[data-id=${id}]`); await 
 async function toList(page) {
   for (let i = 0; i < 3 && !(await page.$(".item")); i++) {
     await page.evaluate(() => document.querySelector("#sheet [data-act=close]")?.click());
-    const b = (await page.$("#tabs [data-act=up]")) || (await page.$("#back:not([hidden])"));
-    if (b && await b.isVisible()) await b.click();
+    // Clicked by selector, not through a handle: the page redraws as it settles, and a handle taken before
+    // that is detached by the time it is clicked.
+    const up = (await page.$("#tabs [data-act=up]")) ? "#tabs [data-act=up]" : "#back:not([hidden])";
+    if (await page.locator(up).isVisible()) await page.click(up, { timeout: 2000 }).catch(() => {});
     await page.waitForTimeout(150);
   }
   await page.waitForSelector(".item");
