@@ -327,6 +327,9 @@ class Flows(unittest.TestCase):
     def test_a_nudge_across_a_break_is_drawn_where_the_server_puts_it(self):
         self.flow("reorderbreak")
 
+    def test_a_drag_lands_either_side_of_a_break(self):
+        self.flow("reorderbreakdrag")
+
     def test_reorder_keeps_the_list_where_it_was_scrolled(self):
         self.flow("reorderkeepsscroll")
 

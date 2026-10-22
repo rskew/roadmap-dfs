@@ -879,7 +879,7 @@ function drawTasks(push) {
   let seg = 0, html = held ? "" : walkHtml();
   for (const it of S.state.items) {
     const fenced = it.segment > seg && !S.only;
-    if (fenced) html += `<div class="break cap">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
+    if (fenced) html += `<div class="break cap" data-fence="${esc(it.id)}">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
     seg = it.segment;
     if (S.only && !it.needs_you) continue;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
@@ -977,7 +977,11 @@ async function moveTask(id, move, more) {
 // into, and letting go posts a place. It stays among its siblings, as Up and Down did; the arrows change the parent.
 let DRAG = null;
 const rowOf = id => $(`[data-row="${CSS.escape(id)}"]`);
-// the ids from `id` to the end of its subtree, and the ids beside it under the same parent
+// a break is a sibling at the root, "|" and the id of the task under it, drawn as its rule
+const isFence = x => x[0] === "|";
+const slotOf = x => isFence(x) ? $(`[data-fence="${CSS.escape(x.slice(1))}"]`) : rowOf(x);
+// the ids from `id` to the end of its subtree, and the ids beside it under the same parent, with the breaks drawn between
+// them at the root: the gaps either side of a break are two places, the end of one segment and the start of the next
 function spanOf(id) {
   const its = S.state.items, i = its.findIndex(x => x.id === id);
   let j = i + 1; while (j < its.length && its[j].depth > its[i].depth) j++;
@@ -987,19 +991,27 @@ function siblingsOf(id) {
   const its = S.state.items, i = its.findIndex(x => x.id === id), d = its[i].depth;
   let lo = i; while (lo > 0 && its[lo - 1].depth >= d) lo--;
   let hi = i + 1; while (hi < its.length && its[hi].depth >= d) hi++;
-  return its.slice(lo, hi).filter(x => x.depth === d).map(x => x.id);
+  const out = [];
+  for (let j = lo; j < hi; j++) {
+    if (its[j].depth !== d) continue;
+    if (!d && !S.only && its[j].segment > (j ? its[j - 1].segment : 0)) out.push("|" + its[j].id);   // as drawTasks draws one
+    out.push(its[j].id);
+  }
+  return out;
 }
 function dragUpdate() {
   const D = DRAG; if (!D) return;
   const dy = D.y - D.y0 + window.scrollY - D.scroll0;
   for (const id of D.span) { const r = rowOf(id); if (r) r.style.transform = `translateY(${dy}px)`; }
-  const others = D.sibs.filter(x => x !== D.id), mid = id => { const b = rowOf(id).getBoundingClientRect(); return b.top + b.height / 2; };
+  const others = D.sibs.filter(x => x !== D.id), mid = x => { const b = slotOf(x).getBoundingClientRect(); return b.top + b.height / 2; };
   const at = others.findIndex(x => mid(x) > D.y), idx = at < 0 ? others.length : at;
   for (const r of document.querySelectorAll(".drop-before, .drop-after")) r.classList.remove("drop-before", "drop-after");
   D.drop = null;
   if (!others.length || idx === D.sibs.indexOf(D.id)) return;
-  if (idx < others.length) { D.drop = { target: others[idx], where: "before" }; rowOf(others[idx]).classList.add("drop-before"); }
-  else { const t = others[idx - 1]; D.drop = { target: t, where: "after" }; rowOf(spanOf(t).pop()).classList.add("drop-after"); }
+  // the gap is before the task under it, else after the task over it: so with a break under the gap it lands above the break
+  const under = others[idx], over = others[idx - 1];
+  if (under !== undefined && !isFence(under)) { D.drop = { target: under, where: "before" }; rowOf(under).classList.add("drop-before"); }
+  else if (over !== undefined && !isFence(over)) { D.drop = { target: over, where: "after" }; rowOf(spanOf(over).pop()).classList.add("drop-after"); }
 }
 function dragEnd() {
   if (!DRAG) return;
