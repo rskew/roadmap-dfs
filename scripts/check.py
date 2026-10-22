@@ -59,15 +59,15 @@ copy of the file already has is not this commit's and is not refused, so a rule 
 after a task was written does not hold every later commit on it hostage; nor is a name
 of an unstaged artefact that HEAD's text already carried.
 
-The commit that ADOPTS a committed roadmap, the first to bring its task files into git
-(HEAD holds none), is judged against nothing when the author says it is one, by
-committing with DFS_ADOPT=1 in the environment: every finding on its files is printed
-as grandfathered and none refuses, including the size budget and the artefacts its text
-names, which it need not stage. Without it that commit is judged in full, and says so
-when it refuses, since HEAD holding no task file is also a new roadmap's state: its first
-task's first node, committed on `dfs/<task>`, on a branch a session works in place or in
-a repo with no commit, is no adoption. A task file new to a roadmap git already holds is
-new work and is judged in full either way.
+The commit that ADOPTS a roadmap written before the guard brings task files into git
+that HEAD does not hold, and is judged against nothing for those files when the author
+says it is one, by committing with DFS_ADOPT=1 in the environment: every finding on them
+is printed as grandfathered and none refuses, including the size budget and the artefacts
+their text names, which it need not stage. That holds whether git holds no task file or
+holds some (a blanket `.*` rule, with a few force-added), but never for a file HEAD holds.
+Without it that commit is judged in full, and says so when it refuses, since a task file
+HEAD lacks is also new work: a session's first node, committed on `dfs/<task>`, on a
+branch a session works in place or in a repo with no commit, is no adoption.
 
 ⚠️ A GITIGNORED `.dfs` (`dfs_paths.ignored`) holds nothing at HEAD, so every check
 AGAINST HEAD above has nothing to compare and passes, and the hook never calls this,
@@ -624,19 +624,21 @@ def main() -> int:
         if dfs_paths.branch() is not None:   # two branches with one tag, not detached
             fatal.append(str(e))
     judge_writer = not merging()   # also: the other parent's commits were judged there
-    # The commit that first brings a committed roadmap's task files into git has nothing
-    # to be judged against: what they hold was written before the guard saw them, under
+    # A commit that first brings a committed roadmap's task files into git has nothing to
+    # judge them against: what they hold was written before the guard saw them, under
     # whatever rules stood then. Their findings are grandfathered, shown and not refused,
-    # and every later commit is judged on what it changes. But HEAD holding no task file
-    # is also a new roadmap's state, when its first task's first node is committed: on an
-    # item branch `dfs/<task>`, on a branch a session works in place when the checkout is
-    # off main, or in a repo with no commit. Nothing in the commit tells the two apart, so
-    # the author says so: an adoption is committed with DFS_ADOPT=1 in the environment
-    # and no other commit is one. A task file new to a roadmap git already holds is judged
-    # in full either way: a task written from the screen is first committed with its
-    # first node (`branch.py` `carry_uncommitted`), and a branch's part with its own.
-    adoptable = from_index and not dfs_paths.ignored() and not head_names("items")
-    adopting = adoptable and bool(os.environ.get("DFS_ADOPT"))
+    # and every later commit is judged on what it changes. But a task file HEAD lacks is
+    # also new work: a new roadmap's first node, committed on an item branch `dfs/<task>`,
+    # on a branch a session works in place when the checkout is off main, or in a repo
+    # with no commit; a task written from the screen is first committed with its first
+    # node (`branch.py` `carry_uncommitted`). Nothing in the commit tells the two apart,
+    # so the author says so: an adoption is committed with DFS_ADOPT=1 in the environment
+    # and no other commit is one.
+    # A roadmap git already holds in part (a blanket `.*` rule that hides all but the
+    # task files someone force-added) is adopted the same way: the author's DFS_ADOPT=1
+    # grandfathers each staged task file HEAD does not hold, and never one it does.
+    declared = from_index and not dfs_paths.ignored() and bool(os.environ.get("DFS_ADOPT"))
+    adds_new = False
     grand = []
     tasks = {}
     for rel in now_items:
@@ -656,6 +658,8 @@ def main() -> int:
             rel = dfs_paths.rel(path)
             head = at_head(path)
             head_arc = at_head(arc_dir / tasks[task][tag]) or ""
+            adopting = declared and head is None
+            adds_new = adds_new or (from_index and head is None)
             shape = check_shape(task, text, arc, tag, whole)
             if head is not None:   # a fault HEAD already had is not this commit's
                 had = collections.Counter(check_shape(task, head, head_arc, tag, head_whole))
@@ -710,8 +714,8 @@ def main() -> int:
     tasks = now_items
 
     if grand:
-        print("dfs_check: note — no task file is in git yet, so this commit adopts the roadmap\n"
-              "  and what its files already hold is grandfathered: the %d finding%s below %s\n"
+        print("dfs_check: note — DFS_ADOPT is set, so this commit adopts the task files git does\n"
+              "  not hold yet and what they already hold is grandfathered: the %d finding%s below %s\n"
               "  not refused, and every later commit is judged only on what it changes."
               % (len(grand), "" if len(grand) == 1 else "s", "is" if len(grand) == 1 else "are"))
         for g in grand:
@@ -723,9 +727,10 @@ def main() -> int:
     print("dfs_check: the roadmap broke its own rules.\n")
     for b in fatal + bad:
         print(f"  - {b}")
-    if adoptable and fatal:
-        print("\n  If this commit adopts a roadmap written before the guard, commit it again with\n"
-              "  DFS_ADOPT=1 in the environment, and its old findings are not refused.")
+    if adds_new and fatal and not declared and not dfs_paths.ignored():
+        print("\n  If this commit adopts task files written before the guard, commit it again with\n"
+              "  DFS_ADOPT=1 in the environment, and the old findings of the files git does not\n"
+              "  hold yet are not refused.")
     if warn_only and not fatal:
         print("\n  (warning only — not blocking this commit)")
         return 0

@@ -17,15 +17,16 @@ nix run github:rskew/roadmap-dfs#sandbox exec dfs-tui    # the tui in a sandbox
 
 A `.dfs` that already holds tasks, written before the guard (the pre-commit hook `init` installs) saw them, is
 adopted by committing its task files in one commit with the hook on and `DFS_ADOPT=1` in the environment
-(`DFS_ADOPT=1 git commit`). While git holds no task file, the guard then judges that commit against nothing:
-every finding on what the files already hold (a rule added after a task was written, a file over the size
-budget) is printed as grandfathered and none refuses the commit, and an artefact page a task names is committed
-only if you stage it. Without `DFS_ADOPT` the commit is judged in full, since git holding no task file is also a
-new roadmap's state and its first node is a session's; a refusal there names the variable. Every later commit is
-judged only on what it changes, so an old rule finding never blocks one. The size budget is the exception: a file
-adopted over it is refused ("GREW it") by the next commit that adds to it, a session's log line included, until
-`tree.py shelve` brings it under. A task file added once git already holds others is new work and is
-judged in full.
+(`DFS_ADOPT=1 git commit`). The guard then judges each staged task file git does not hold yet against nothing,
+whether git holds no task file or holds some (a blanket `.*` rule with a few force-added): every finding on
+what the file already holds (a rule added after a task was written, a file over the size budget) is printed as
+grandfathered and none refuses the commit, and an artefact page a task names is committed only if you stage
+it. A task file git already holds is judged on what the commit changes, with or without the variable. Without
+`DFS_ADOPT` the commit is judged in full, since a task file git lacks is also new work and its first node is a
+session's; a refusal that adds such a file names the variable. Every later commit is judged only on what it
+changes, so an old rule finding never blocks one. The size budget is the exception: a file adopted over it is
+refused ("GREW it") by the next commit that adds to it, a session's log line included, until `tree.py shelve`
+brings it under.
 
 ## Where an item is worked
 

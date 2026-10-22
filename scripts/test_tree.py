@@ -807,6 +807,27 @@ class Check(InARepo):
                      "this commit\n    ADDS it."):
             self.assertIn(seen, out)
         self.assertNotIn("GREW", out)
+        self.assertIn("DFS_ADOPT=1", out)   # the way through is named when the file is new
+        with mock.patch.dict(os.environ, {"DFS_ADOPT": "1"}):
+            code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.assertIn("grandfathered", out)
+        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged"):
+            self.assertIn(seen, out)
+        self.assertNotIn("broke its own rules", out)
+
+    def test_adopting_a_new_task_file_never_excuses_one_git_holds(self):
+        self.write(self.old_roadmap_file())
+        self.git_commit(".dfs/items/W1.md")   # held, with its old findings
+        (self.root / ".dfs/items/W2.md").write_text(self.old_roadmap_file().replace("W1", "W2"))
+        self.write(task(node(1) + node(2, parent=7)))   # a new fault in the held file
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/items/W2.md"],
+                       cwd=self.root, check=True)
+        with mock.patch.dict(os.environ, {"DFS_ADOPT": "1"}):
+            code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("W1.2 names Parent W1.7", out)
+        self.assertIn(".dfs/items/W2.md", out.split("grandfathered")[-1])
 
     def test_an_upload_no_text_names_is_left_alone_and_a_missing_file_is_not_refused(self):
         name = self.attached_picture()
