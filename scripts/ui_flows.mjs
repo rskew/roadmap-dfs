@@ -1448,6 +1448,49 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // A drag can land either side of a break: the gap just above it is the end of the segment above, and the gap just under it
+  // the start of the one below, so the task beside a break crosses it by one gap, and any task reaches the end of a segment.
+  async reorderbreakdrag(b) {
+    // a phone tall enough to hold the list: no grip lies under Add a task, and no drag reaches an edge where the list scrolls
+    const { page, errors } = await open(b, { ...PHONE, viewport: { width: PHONE.viewport.width, height: 1400 } });
+    const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
+    const [a, c, d, e, ...tail] = await ids();
+    fs.writeFileSync(path.join(DIR, ".dfs", "order.md"), `- ${a}\n- ${c}\n\n---\n\n- ${d}\n- ${e}\n${tail.map(t => `- ${t}\n`).join("")}`);
+    await page.reload();
+    await page.waitForSelector(".item");
+    const shape = () => page.$$eval("#view .item, #view .break", es => es.map(e => e.classList.contains("break") ? "|" : e.querySelector(".iid").textContent.trim()).slice(0, 5).join(" "));
+    same(await shape(), `${a} ${c} | ${d} ${e}`, "the break is drawn after the first two tasks");
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".moves");
+    const box = sel => page.$eval(sel, el => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; });
+    // hold the task's grip and let go at `frac` of the way down the break's row
+    const drag = async (id, frac, line) => {
+      // the list still: the one the last drop pushed may be redrawn after its reply
+      for (let was = null, now; was !== (now = await page.$eval("#view .break", e => e.getBoundingClientRect().top)); was = now) await page.waitForTimeout(200);
+      const grip = await box(`[data-grip=${id}]`), fence = await box("#view .break");
+      await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(grip.x + grip.width / 2, fence.y + fence.height * frac, { steps: 6 });
+      // a pointermove is delivered on the next frame, so the line the last step draws comes after the move resolves
+      await page.waitForSelector(line, { timeout: 2000 }).catch(() => null);
+      const shown = await page.$$eval(".drop-before, .drop-after", es => es.map(e => e.dataset.row + "." + e.className.match(/drop-\w+/)[0]).join() || "no line");
+      assert(await page.$(line), `holding ${id} at ${frac} of the break shows ${line}, not ${shown}`);
+      await page.mouse.up();
+      await page.waitForFunction(() => !document.querySelector(".item.pending"), null, { timeout: 8000 });
+    };
+    // the first task under the break, let go just above it: the last task of the segment above
+    await drag(d, 0.25, `[data-row=${c}].drop-after`);
+    same(await shape(), `${a} ${c} ${d} | ${e}`, "dragged up to just above the break, the task ends the segment above it");
+    if (process.env.DFS_SHOT) { const f = await box("#view .break"); await page.screenshot({ path: process.env.DFS_SHOT, clip: { x: 0, y: Math.max(0, f.y - 420), width: PHONE.viewport.width, height: 640 } }); }
+    // and back, let go just under it: the first task of the segment below
+    await drag(d, 0.75, `[data-row=${e}].drop-before`);
+    same(await shape(), `${a} ${c} | ${d} ${e}`, "dragged down to just under the break, the task starts the segment below it");
+    // a task further down reaches the end of the segment above in one drag
+    await drag(e, 0.25, `[data-row=${c}].drop-after`);
+    same(await shape(), `${a} ${c} ${e} | ${d}`, "a task from lower down lands at the end of the segment above the break");
+    same(errors, [], "no page errors");
+  },
+
   // Switching Reorder on or off keeps the list where the reader was: the rows grow a strip of moves, and the row
   // at the top of the screen stays at the top of the screen instead of the page keeping its offset into new content.
   async reorderkeepsscroll(b) {
