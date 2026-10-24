@@ -40,6 +40,7 @@ def until(fn, timeout=30):
 @unittest.skipUnless(OPENCODE, "no opencode here")
 class OpencodeCrossing(unittest.TestCase):
     def setUp(self):
+        self.retyped = {}                   # message -> how many times `screen_again` typed it again after a restart
         self.root = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         (self.root / ".dfs" / "items").mkdir(parents=True)
@@ -109,6 +110,7 @@ class OpencodeCrossing(unittest.TestCase):
         is behind the interactive session run.sh opened), so it resumes the recorded session, and `text` is typed."""
         relay = self.screen(CHAT_SID=json.loads(self.chats.path("project").read_text())["sid"], CHAT_RESUME="1")
         if text:
+            self.retyped[text] = self.retyped.get(text, 0) + 1
             relay.send(text)
         return relay
 
@@ -120,12 +122,17 @@ class OpencodeCrossing(unittest.TestCase):
             "is running" if relay.live else "ended with rc=%s" % relay.rc, page, ptyrelay.chatlog.screen_text(relay.tail))
 
     def yous(self):
-        """What the page reads as said by the user, a message typed again after the opencode that had it was killed
-        (`start_until`) counted once."""
-        out = []
+        """What the page reads as said by the user. A message typed again after the opencode that had it was killed
+        (`start_until`) is counted once, as many times as it was typed again and no more: a message the relay typed
+        twice with no restart is read twice."""
+        out, again = [], dict(self.retyped)
         for role, text in self.texts():
-            if role == "you" and out[-1:] != [text]:
-                out.append(text)
+            if role != "you":
+                continue
+            if out[-1:] == [text] and again.get(text):
+                again[text] -= 1
+                continue
+            out.append(text)
         return out
 
     def type_on_the_screen(self, relay, text):

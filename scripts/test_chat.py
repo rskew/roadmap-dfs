@@ -123,7 +123,8 @@ PY
 KIRO_STUB = r"""#!/usr/bin/env bash
 # a kiro-cli that records its arguments, keeps a session under ~/.kiro/sessions and prints
 # `--output-format stream-json` events, all in the shapes a real kiro-cli 2.27.1 wrote
-# (fixtures/kiro; test_kiro_chat and test_kiro run the real one). Without `--output-format` it is the
+# (fixtures/kiro; test_kiro_chat, test_agent_start and test_agent_interrupt run the real one, and
+# test_kiro's stream is a stand-in too). Without `--output-format` it is the
 # interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
 case "$*" in *--output-format*) ;; *) exit 0 ;; esac
@@ -229,23 +230,26 @@ class Chat(unittest.TestCase):
         for host in self.hosts:
             host.close_all()
         logs = self.root / ".dfs" / "runs" / "chat"
-        end = time.time() + timeout
+        end, text = time.time() + timeout, ""
         while time.time() < end:
             text = "".join(p.read_text() for p in logs.glob("*.log"))
             if text.count(" start pid=") <= text.count(" exit "):
                 return
             time.sleep(0.05)
+        self.fail("a relay's exit was not in the chat log in %ds: %s" % (timeout, text))
 
     def tearDown(self):
-        self.end_hosts()
-        for k, v in self._env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
-        dfs_paths.work_root = self._wr
-        dfs_paths._TAG_CACHE.clear()
-        shutil.rmtree(self.root, ignore_errors=True)
+        try:
+            self.end_hosts()
+        finally:
+            for k, v in self._env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            dfs_paths.work_root = self._wr
+            dfs_paths._TAG_CACHE.clear()
+            shutil.rmtree(self.root, ignore_errors=True)
 
     def settle(self, scope, timeout=20):
         end = time.time() + timeout

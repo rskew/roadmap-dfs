@@ -114,7 +114,6 @@ class CodexCrossing(unittest.TestCase):
         send to a conversation another terminal still has open."""
         relay.close()
         self.assertTrue(until(lambda: not relay.live, 10))
-        t = time.time()
         self.assertTrue(until(lambda: not dfs_chat.running_elsewhere(sid, agent="codex"), 30), "the screen's codex let the conversation go")
 
     def test_a_conversation_the_page_began_is_resumed_on_the_screen_and_back(self):
