@@ -711,6 +711,7 @@ function walkHtml() {
   const events = w.events.length ? `<details><summary class="cap">Activity</summary><ul class="ev">${w.events.slice(0, 6).map(e =>
     `<li><time>${esc(e.age)}</time><span>${esc(e.text)}</span></li>`).join("")}</ul></details>` : "";
   const brief = w.on ? `${w.used}/${w.budget} sessions${names ? ", " + names : ""}` : `next ${esc(w.pinned || w.auto || "none")} · ${esc(w.agent)}`;
+  if (w.on) S.walkDraft = null;
   const open = S.walkOpen === true;
   return `<details class="walk" id="walkbox" ${open ? "open" : ""}><summary><span class="cap">Walk</span><span class="state">${state}</span><span class="brief">${brief}</span><span class="chev" aria-hidden="true"></span></summary>
     <p class="line2">${line2}</p>
@@ -743,7 +744,7 @@ function walkStartForm() {
   if (!bud.reportValidity() || !par.reportValidity()) return;
   const budget = parseInt(bud.value, 10), parallel = parseInt(par.value, 10);
   form(`<h3>Start the walk?</h3>
-    <p class="muted" style="margin:0">It starts agent sessions on this machine, depth-first, ${budget} in all${parallel > 1 ? `, ${parallel} chains at once` : ""}, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>${buttons("Start walk")}`,
+    <p class="muted" style="margin:0">It starts agent sessions on this machine, depth-first, ${budget} sessions in all${parallel > 1 ? `, ${parallel} chains at once` : ""}, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>${buttons("Start walk")}`,
     async () => { S.walk = await api("/api/walk/start", { budget, parallel }); S.walkDraft = null; toast("Walking."); drawTasks(); });
 }
 function chainStopForm(item) {
