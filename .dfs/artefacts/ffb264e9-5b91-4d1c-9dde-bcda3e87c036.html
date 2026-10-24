@@ -1,0 +1,216 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W109.2: carry an untracked task file into a reused worktree</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 760px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .tabs button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; gap: 10px; }
+  .path { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 12px; }
+  .path h3 { font-size: 15px; margin: 0 0 4px; }
+  .step { margin: 4px 0; padding: 6px 8px; border-radius: 4px; background: #f1efe9; }
+  .ok { background: #e3f2e1; } .bad { background: #f8dcdc; } .warn { background: #fbefd2; }
+  .cap { color: #444; margin: 10px 0 0; }
+  @media (min-width: 720px) { .dg { flex-direction: row; } .path { flex: 1; } }
+</style>
+
+<h1>An untracked task file and the three ways <code>branch.enter</code> reaches a worktree</h1>
+<p>The author writes <code>.dfs/items/W117.md</code> in the main checkout and does not commit it.
+  The walk reaches W117. Pick an option to see what each path does with the file.</p>
+<div class="tabs" role="group" aria-label="Option">
+  <button type="button" data-opt="now" aria-pressed="true">Now</button>
+  <button type="button" data-opt="carry" aria-pressed="false">Carry on reuse (chosen)</button>
+  <button type="button" data-opt="commit" aria-pressed="false">Commit on main first</button>
+  <button type="button" data-opt="refuse" aria-pressed="false">Refuse in the preflight</button>
+</div>
+<div class="dg">
+  <div class="path" data-node="fresh"><h3>No dfs/W117 branch yet</h3>
+    <div class="step">git worktree add -b dfs/W117</div>
+    <div class="step" id="r-fresh"></div></div>
+  <div class="path" data-node="branch"><h3>dfs/W117 left by an earlier attempt</h3>
+    <div class="step">git worktree add dfs/W117 (reused), catch_up</div>
+    <div class="step" id="r-branch"></div></div>
+  <div class="path" data-node="wt"><h3>.dfs/worktrees/W117 already there</h3>
+    <div class="step">catch_up only</div>
+    <div class="step" id="r-wt"></div></div>
+</div>
+<p class="cap" id="cap"></p>
+<h2>What would show the choice wrong</h2>
+<p>You want the walk to commit new or changed task files and <code>order.md</code> on your
+  default branch itself before it cuts a worktree, rather than move them across uncommitted.
+  Evidence so far: a scratch repo reproduced the stop on the two reuse paths only. The fresh
+  cut already moves the file (W75.5, W75.19).</p>
+<script>
+  var R = {
+    now: [["ok","carry_uncommitted moves W117.md in; the session runs"],
+          ["bad","no carry: \u201chas no .dfs/items/W117.md\u201d, the chain stops"],
+          ["bad","no carry: the same stop"],
+          "Today only the fresh cut moves the file. The two reuse paths stop the chain before any session starts, and the walk goes off."],
+    carry: [["ok","unchanged: moved in"],
+            ["ok","moved in, since the worktree has no copy and the branch does not track it"],
+            ["ok","moved in, the same way"],
+            "A new file the worktree lacks moves across on every path. An edit to a file the worktree already has stays in the main checkout, as it does now. Nothing is committed on your branch."],
+    commit: [["warn","a commit on main of every new or changed task file and order.md, then the cut"],
+             ["bad","the branch predates that commit: catch_up must fast-forward it, and cannot once it has commits"],
+             ["bad","the same as a reused branch"],
+             "Commits your own edits (other tasks\u2019 files too) on your branch without you, and still leaves the reuse paths to catch_up."],
+    refuse: [["ok","unchanged: moved in"],
+             ["warn","the walk stops before the chain and names W117.md as untracked"],
+             ["warn","the same"],
+             "Caught sooner, but you still commit by hand, which the bug report asks not to need."]
+  };
+  function show(o) {
+    var r = R[o];
+    ["fresh","branch","wt"].forEach(function (k, i) {
+      var e = document.getElementById("r-" + k); e.className = "step " + r[i][0]; e.textContent = r[i][1];
+    });
+    document.getElementById("cap").textContent = r[3];
+    document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.opt === o); });
+  }
+  var cur = "now";
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () { cur = b.dataset.opt; show(cur); if (window.dfsAnswer) dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return cur; };
+  document.addEventListener("dfs-state", function (e) { if (R[e.detail]) { cur = e.detail; show(cur); } });
+  show(cur);
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
