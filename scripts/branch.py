@@ -106,10 +106,14 @@ def _dirty(paths):
     return out
 
 
-def carry_uncommitted(task, wt):
+def carry_uncommitted(task, wt, new_only=False):
     """Move the task's uncommitted files from this checkout into `wt`, and put them back
     to HEAD here: the task's state is whatever the author last left (a raise answered, a
     task just written from the screen), and the branch's first session commits it.
+    `new_only`, for a branch or worktree that already exists, moves only the files neither
+    side has: not in this checkout's HEAD, not in `wt` and not on its branch (a task file
+    written after an earlier attempt cut the branch, which no session could be briefed
+    without). An edit of a file the worktree has stays here, for the merge to judge.
     Returns the paths moved."""
     root = dfs_paths.work_root()
     moved = []
@@ -117,6 +121,10 @@ def carry_uncommitted(task, wt):
         src, dst = root / p, wt / p
         if dst.parent.resolve() == src.parent.resolve():
             continue   # the worktree reaches it through a link: it is the one copy, already shared
+        if new_only and ("D" in st or dst.exists() or dst.is_symlink()
+                         or _git("cat-file", "-e", "HEAD:" + p).returncode == 0
+                         or _git("cat-file", "-e", "HEAD:" + p, cwd=wt).returncode == 0):
+            continue
         if "D" in st:
             if dst.exists():
                 dst.unlink()
@@ -399,6 +407,7 @@ def enter(task):
         if ignored:
             share_ignored_state(wt)
         catch_up(name, wt)
+        _carry_new(task, wt)
         return wt
     if not dfs_paths.gets_worktree(task):
         return None
@@ -418,13 +427,23 @@ def enter(task):
             print("dfs_branch: %d uncommitted path(s) of %s moved into %s" %
                   (len(moved), task, dfs_paths.rel(wt)), file=sys.stderr)
     else:
-        print("dfs_branch: %s existed; reused, and %s's uncommitted edits here are left as they are" %
+        print("dfs_branch: %s existed; reused, and %s's uncommitted edits here to files it has are left as they are" %
               (name, task), file=sys.stderr)
         if catch_up(name, wt):
             print("dfs_branch: %s had no commits of its own; moved up to %s" %
                   (name, dfs_paths.branch()), file=sys.stderr)
+        _carry_new(task, wt)
     carry_named_attachments(task, wt)
     return wt
+
+
+def _carry_new(task, wt):
+    """`carry_uncommitted` for a worktree that existed or a branch reused: the task's new
+    files move in, named on stderr."""
+    moved = carry_uncommitted(task, wt, new_only=True)
+    if moved:
+        print("dfs_branch: %d new path(s) of %s moved into %s, which had none of them" %
+              (len(moved), task, dfs_paths.rel(wt)), file=sys.stderr)
 
 
 def _restore(task):
