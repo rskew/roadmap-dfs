@@ -610,7 +610,7 @@ async function renderDraw(force) {
       if (mine !== RENDERS) return;
       if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
       S.state = state; S.needs = state.needs_you; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
-      S.node = null; if (JSON.stringify([state, walk]) !== drawn) drawTasks();
+      S.node = null; if (JSON.stringify([state, walk]) !== drawn) drawTasks(true);
     }
     chrome(r);
     if (r.view === "task") refreshNeeds();
@@ -865,9 +865,17 @@ const pinSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() =>
   root.setProperty("--bar-h", $("#bar").getBoundingClientRect().height + "px");
   if (box) root.setProperty("--pin-h", box.getBoundingClientRect().height + "px");
 }) : null;
-function drawTasks() {
+function typingInBox() {
+  const a = document.activeElement;
+  return !!(a && (a.id === "bud" || a.id === "par") && a.closest("#walkbox") && S.walk && S.walk.enabled && !S.walk.on);
+}
+function drawTasks(push) {
   const items = S.state.items.filter(i => !S.only || i.needs_you);
-  let seg = 0, html = walkHtml();
+  // A push (drawTasks(true)) redraws the list, and a redrawn number field puts the caret back at its start: digits typed after the push
+  // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
+  const held = push && typingInBox() ? $("#walkbox") : null;
+  S.boxHeld = !!held;
+  let seg = 0, html = held ? "" : walkHtml();
   for (const it of S.state.items) {
     const fenced = it.segment > seg && !S.only;
     if (fenced) html += `<div class="break cap">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
@@ -899,7 +907,9 @@ function drawTasks() {
   }
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
-  $("#view").className = "col"; $("#view").innerHTML = html;
+  $("#view").className = "col";
+  if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }
+  else $("#view").innerHTML = html;
   if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
@@ -1644,6 +1654,16 @@ document.addEventListener("click", ctxClose, true);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#ctx").hidden) { ctxClose(); e.stopPropagation(); } }, true);
 addEventListener("scroll", ctxClose, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
+// The box held while a number was being typed in it is drawn once focus has left, on its own, so a row being dragged
+// is not redrawn under the pointer; and not between the press and the release of a tap on one of its buttons, which
+// the draw would swallow.
+document.addEventListener("focusout", e => setTimeout(function catchUp() {
+  const box = $("#view #walkbox");
+  if (!S.boxHeld || !box || typingInBox() || (e.relatedTarget && box.contains(e.relatedTarget))) return;
+  if ($("#walkbox :active")) return void setTimeout(catchUp, 200);
+  S.boxHeld = false; box.outerHTML = walkHtml();
+  if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
+}, 0));
 document.addEventListener("input", e => { if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = { budget: $("#bud").value, parallel: $("#par").value }; });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStartForm(); } });
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });

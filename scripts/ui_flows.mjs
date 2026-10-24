@@ -707,8 +707,22 @@ const FLOWS = {
     // Every field is in the box: the budget and chains beside Next and Agent. Start walk still asks, with nothing to fill in.
     await page.fill("#walkbox #bud", "7");
     await page.fill("#walkbox #par", "2");
-    await page.evaluate(() => drawTasks());
+    await page.evaluate(() => { document.activeElement.blur(); drawTasks(); });
     same(await page.$eval("#bud", el => el.value), "7", "a redraw of the list keeps what was typed in the box");
+    // A push while a number is being typed leaves the field alone: the next digit goes after the last, not in front of it.
+    await page.click("#bud"); await page.keyboard.press("Control+a"); await page.keyboard.type("1");
+    await page.evaluate(() => render(false)); await page.waitForTimeout(150);
+    await page.keyboard.type("2");
+    same(await page.$eval("#bud", el => el.value), "12", "a push between two digits does not reorder them");
+    // What the held box missed is drawn once focus leaves the field.
+    await page.evaluate(() => { S.walk.agent = "held-agent"; drawTasks(true); });
+    assert(!/held-agent/.test(await page.textContent("#walkbox")), "the box is held while a number is typed in it");
+    await page.evaluate(() => document.activeElement.blur());
+    await page.waitForFunction(() => /held-agent/.test(document.querySelector("#walkbox")?.textContent || ""));
+    same(await page.$eval("#bud", el => el.value), "12", "and the draw after it keeps the number");
+    await page.evaluate(() => { S.walk.agent = "codex"; drawTasks(); });
+    await page.fill("#walkbox #bud", "7");
+    await page.evaluate(() => document.activeElement.blur());
     await page.click("[data-act=walkstart]"); await dialog(page);
     assert(!(await page.$("dialog input, dialog select")), "the dialog holds no field");
     await page.click("dialog button[value=cancel]");
