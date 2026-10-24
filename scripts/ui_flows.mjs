@@ -723,6 +723,16 @@ const FLOWS = {
     await page.evaluate(() => { S.walk.agent = "codex"; drawTasks(); });
     await page.fill("#walkbox #bud", "7");
     await page.evaluate(() => document.activeElement.blur());
+    // Enter in either number field asks the same question as Start walk does.
+    for (const id of ["#bud", "#par"]) {
+      await page.focus(id); await page.keyboard.press("Enter"); await dialog(page);
+      assert(/Start the walk\?/.test(await page.textContent("dialog[open]")), `Enter in ${id} opens the Start the walk? dialog`);
+      await page.click("dialog button[value=cancel]");
+      await page.waitForFunction(() => !document.querySelector("dialog[open]") && !document.querySelector("#form").innerHTML);   // its close handler has run
+    }
+    // A walk seen running, as one started from the terminal is, drops the numbers typed on the page.
+    same(await page.evaluate(() => { walkSeen({ on: true }); return S.walkDraft; }), null, "a walk running drops what was typed in the box");
+    await page.evaluate(() => { S.walkDraft = { budget: "7", parallel: "2" }; });
     await page.click("[data-act=walkstart]"); await dialog(page);
     assert(!(await page.$("dialog input, dialog select")), "the dialog holds no field");
     await page.click("dialog button[value=cancel]");

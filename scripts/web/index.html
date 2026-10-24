@@ -578,7 +578,7 @@ async function renderDraw(force) {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
       let t; const at = WROTE;
-      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk")]);
+      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk").then(walkSeen)]);
       S.walkAt = at;
       if (mine !== RENDERS) return;
       S.node = r.node;
@@ -606,7 +606,7 @@ async function renderDraw(force) {
         S.node = null; drawTasks(); chrome(r); scrollBack(where);
         drawn = JSON.stringify([S.state, S.walk]);
       }
-      const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk")]);
+      const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk").then(walkSeen)]);
       if (mine !== RENDERS) return;
       if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
       S.state = state; S.needs = state.needs_you; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
@@ -688,6 +688,8 @@ function chrome(r) {
 }
 
 /* ── the walk: start it, stop it, choose where it goes next ─────────────────────── */
+// A walk that is running, however it started, ends the numbers typed in the box: after it they show its own again.
+function walkSeen(w) { if (w && w.on) S.walkDraft = null; return w; }
 function walkHtml() {
   const w = S.walk;
   if (!w || !w.enabled) return "";
@@ -711,7 +713,6 @@ function walkHtml() {
   const events = w.events.length ? `<details><summary class="cap">Activity</summary><ul class="ev">${w.events.slice(0, 6).map(e =>
     `<li><time>${esc(e.age)}</time><span>${esc(e.text)}</span></li>`).join("")}</ul></details>` : "";
   const brief = w.on ? `${w.used}/${w.budget} sessions${names ? ", " + names : ""}` : `next ${esc(w.pinned || w.auto || "none")} · ${esc(w.agent)}`;
-  if (w.on) S.walkDraft = null;
   const open = S.walkOpen === true;
   return `<details class="walk" id="walkbox" ${open ? "open" : ""}><summary><span class="cap">Walk</span><span class="state">${state}</span><span class="brief">${brief}</span><span class="chev" aria-hidden="true"></span></summary>
     <p class="line2">${line2}</p>
