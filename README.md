@@ -57,7 +57,7 @@ back on the default branch.
 
 A walk takes a budget of sessions and, optionally, a number of chains to run at once: `w` on the
 screen reads `20` or `20 3` (⏎ takes the last walk's numbers), `:walk 20 3` does the same, and the
-web page's Start form has a "Chains at once" field. The default is 1, one chain at a time as
+web page's walk box has a "Chains" field beside its Budget. The default is 1, one chain at a time as
 before. With more, each free slot takes a task of its own, the walk's continuation first and then
 the order, so separate branches run together, each in its own worktree. Where no worktree is cut
 (the checkout is off `main`/`master`, has no commit yet, or is not a repo) a chain would work in

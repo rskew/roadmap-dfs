@@ -704,12 +704,47 @@ const FLOWS = {
     await openWalk(page);
     await page.selectOption("#nextsel", "W2");
     await page.selectOption("#agentsel", "codex");
+    // Every field is in the box: the budget and chains beside Next and Agent. Start walk still asks, with nothing to fill in.
+    await page.fill("#walkbox #bud", "7");
+    await page.fill("#walkbox #par", "2");
+    await page.evaluate(() => { document.activeElement.blur(); drawTasks(); });
+    same(await page.$eval("#bud", el => el.value), "7", "a redraw of the list keeps what was typed in the box");
+    // A push while a number is being typed leaves the field alone: the next digit goes after the last, not in front of it.
+    await page.click("#bud"); await page.keyboard.press("Control+a"); await page.keyboard.type("1");
+    await page.evaluate(() => render(false)); await page.waitForTimeout(150);
+    await page.keyboard.type("2");
+    same(await page.$eval("#bud", el => el.value), "12", "a push between two digits does not reorder them");
+    // What the held box missed is drawn once focus leaves the field.
+    await page.evaluate(() => { S.walk.agent = "held-agent"; drawTasks(true); });
+    assert(!/held-agent/.test(await page.textContent("#walkbox")), "the box is held while a number is typed in it");
+    await page.evaluate(() => document.activeElement.blur());
+    await page.waitForFunction(() => /held-agent/.test(document.querySelector("#walkbox")?.textContent || ""));
+    same(await page.$eval("#bud", el => el.value), "12", "and the draw after it keeps the number");
+    await page.evaluate(() => { S.walk.agent = "codex"; drawTasks(); });
+    await page.fill("#walkbox #bud", "7");
+    await page.evaluate(() => document.activeElement.blur());
+    // Enter in either number field asks the same question as Start walk does.
+    for (const id of ["#bud", "#par"]) {
+      await page.focus(id); await page.keyboard.press("Enter"); await dialog(page);
+      assert(/Start the walk\?/.test(await page.textContent("dialog[open]")), `Enter in ${id} opens the Start the walk? dialog`);
+      await page.click("dialog button[value=cancel]");
+      await page.waitForFunction(() => !document.querySelector("dialog[open]") && !document.querySelector("#form").innerHTML);   // its close handler has run
+    }
+    // A walk seen running, as one started from the terminal is, drops the numbers typed on the page.
+    same(await page.evaluate(() => { walkSeen({ on: true }); return S.walkDraft; }), null, "a walk running drops what was typed in the box");
+    await page.evaluate(() => { S.walkDraft = { budget: "7", parallel: "2" }; });
+    await page.click("[data-act=walkstart]"); await dialog(page);
+    assert(!(await page.$("dialog input, dialog select")), "the dialog holds no field");
+    await page.click("dialog button[value=cancel]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    assert(/Walk is off/.test(await page.textContent("#walkbox")), "a cancel leaves the walk off");
+    same(await page.$eval("#bud", el => el.value), "7", "and keeps what was typed");
     await page.click("[data-act=walkstart]"); await dialog(page);
     assert(/permission prompts/i.test(await page.textContent("dialog")), "starting says what it does");
-    await page.fill("#bud", "7");
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => /Walking/.test(document.querySelector("#walkbox")?.textContent || ""));
     assert(/7/.test(await page.textContent("#walkbox")), "the budget shows");
+    assert(/2 at a time/.test(await page.textContent("#walkbox")), "the chains went with it");
     await page.click("[data-act=walkstop]");
     await page.waitForFunction(() => /Walk is off/.test(document.querySelector("#walkbox")?.textContent || ""));
     same(errors, [], "no page errors");

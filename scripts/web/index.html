@@ -181,6 +181,8 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 .walk .line2 { color: var(--muted); font-size: var(--fs-small); margin: 0 0 6px; }
 .walk .row2 { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0; }
 .walk .row2.act { margin-bottom: 14px; }
+.walk .pair { display: flex; align-items: center; gap: 10px; }
+.walk .pair input { flex: 1; min-height: var(--hit); padding-block: 0; }
 .walk label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
 .walk .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
 .walk .chain span:first-child { overflow-wrap: anywhere; }
@@ -576,7 +578,7 @@ async function renderDraw(force) {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
       let t; const at = WROTE;
-      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk")]);
+      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk").then(walkSeen)]);
       S.walkAt = at;
       if (mine !== RENDERS) return;
       S.node = r.node;
@@ -604,11 +606,11 @@ async function renderDraw(force) {
         S.node = null; drawTasks(); chrome(r); scrollBack(where);
         drawn = JSON.stringify([S.state, S.walk]);
       }
-      const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk")]);
+      const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk").then(walkSeen)]);
       if (mine !== RENDERS) return;
       if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
       S.state = state; S.needs = state.needs_you; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
-      S.node = null; if (JSON.stringify([state, walk]) !== drawn) drawTasks();
+      S.node = null; if (JSON.stringify([state, walk]) !== drawn) drawTasks(true);
     }
     chrome(r);
     if (r.view === "task") refreshNeeds();
@@ -686,6 +688,8 @@ function chrome(r) {
 }
 
 /* ── the walk: start it, stop it, choose where it goes next ─────────────────────── */
+// A walk that is running, however it started, ends the numbers typed in the box: after it they show its own again.
+function walkSeen(w) { if (w && w.on) S.walkDraft = null; return w; }
 function walkHtml() {
   const w = S.walk;
   if (!w || !w.enabled) return "";
@@ -714,7 +718,9 @@ function walkHtml() {
     <p class="line2">${line2}</p>
     <div class="row2"><label for="nextsel">Next</label><select id="nextsel">${options}</select></div>
     <div class="row2"><label for="agentsel">Agent</label><select id="agentsel">${agents}</select></div>
+    ${w.on ? "" : walkFields()}
     <div class="row2 act"><span></span>${w.on ? `<button class="btn" data-act="walkstop">Stop walk</button>` : `<button class="btn primary" data-act="walkstart">Start walk</button>`}</div>
+    ${w.on ? "" : `<p class="line2" id="walkhow">The budget is sessions over the whole walk, shared by the chains that run at once on separate branches.</p>`}
     ${chains}${events}</details>`;
 }
 async function setAgent(agent) {
@@ -725,13 +731,22 @@ async function setNext(item) {
   try { S.walk = await api("/api/walk/pin", { item: item || null }); toast(item ? "Next goes to " + item + "." : "Next is automatic."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
+/* The walk's budget and chains sit in the box beside Next and Agent, and Start walk takes them from there.
+   What is typed is kept in S.walkDraft, since a push redraws the list and the box with it. */
+function walkFields() {
+  const v = S.walkDraft || {};
+  return `<div class="row2"><label for="bud">Budget</label><span class="pair"><input type="number" id="bud" min="1" max="500" value="${esc(v.budget ?? S.walk.budget)}" required aria-describedby="walkhow">
+      <label for="par">Chains</label><input type="number" id="par" min="1" max="16" value="${esc(v.parallel ?? (S.walk.parallel || 1))}" required aria-describedby="walkhow"></span></div>`;
+}
+/* Starting is still a decision of its own, as `w` then ⏎ is on the screen: the dialog asks, with nothing to fill in.
+   The numbers are read from the box before it opens, since a push may redraw the box behind it. */
 function walkStartForm() {
+  const bud = $("#bud"), par = $("#par");
+  if (!bud.reportValidity() || !par.reportValidity()) return;
+  const budget = parseInt(bud.value, 10), parallel = parseInt(par.value, 10);
   form(`<h3>Start the walk?</h3>
-    <p class="muted" style="margin:0">It starts agent sessions on this machine, depth-first, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>
-    <div><label for="bud">Budget, in sessions</label><input type="number" id="bud" name="budget" min="1" max="500" value="${esc(S.walk.budget)}" required></div>
-    <div><label for="par">Chains at once</label><input type="number" id="par" name="parallel" min="1" max="16" value="${esc(S.walk.parallel || 1)}" required>
-      <p class="muted" style="margin:4px 0 0">Separate branches run together and share the budget; a task under another waits until its parent is done. 1 works one chain at a time.</p></div>${buttons("Start walk")}`,
-    async fd => { S.walk = await api("/api/walk/start", { budget: parseInt(fd.get("budget"), 10), parallel: parseInt(fd.get("parallel"), 10) }); toast("Walking."); drawTasks(); });
+    <p class="muted" style="margin:0">It starts agent sessions on this machine, depth-first, ${budget} sessions in all${parallel > 1 ? `, ${parallel} chains at once` : ""}, until the budget is spent or you stop it, waiting for a new task when every branch is blocked or finished. They run with the agent's permission prompts off.</p>${buttons("Start walk")}`,
+    async () => { S.walk = await api("/api/walk/start", { budget, parallel }); S.walkDraft = null; toast("Walking."); drawTasks(); });
 }
 function chainStopForm(item) {
   form(`<h3>Stop ${esc(item)}'s chain?</h3>
@@ -851,9 +866,17 @@ const pinSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() =>
   root.setProperty("--bar-h", $("#bar").getBoundingClientRect().height + "px");
   if (box) root.setProperty("--pin-h", box.getBoundingClientRect().height + "px");
 }) : null;
-function drawTasks() {
+function typingInBox() {
+  const a = document.activeElement;
+  return !!(a && (a.id === "bud" || a.id === "par") && a.closest("#walkbox") && S.walk && S.walk.enabled && !S.walk.on);
+}
+function drawTasks(push) {
   const items = S.state.items.filter(i => !S.only || i.needs_you);
-  let seg = 0, html = walkHtml();
+  // A push (drawTasks(true)) redraws the list, and a redrawn number field puts the caret back at its start: digits typed after the push
+  // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
+  const held = push && typingInBox() ? $("#walkbox") : null;
+  S.boxHeld = !!held;
+  let seg = 0, html = held ? "" : walkHtml();
   for (const it of S.state.items) {
     const fenced = it.segment > seg && !S.only;
     if (fenced) html += `<div class="break cap">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
@@ -885,7 +908,9 @@ function drawTasks() {
   }
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
-  $("#view").className = "col"; $("#view").innerHTML = html;
+  $("#view").className = "col";
+  if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }
+  else $("#view").innerHTML = html;
   if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
@@ -1630,6 +1655,18 @@ document.addEventListener("click", ctxClose, true);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#ctx").hidden) { ctxClose(); e.stopPropagation(); } }, true);
 addEventListener("scroll", ctxClose, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
+// The box held while a number was being typed in it is drawn once focus has left, on its own, so a row being dragged
+// is not redrawn under the pointer; and not between the press and the release of a tap on one of its buttons, which
+// the draw would swallow.
+document.addEventListener("focusout", e => setTimeout(function catchUp() {
+  const box = $("#view #walkbox");
+  if (!S.boxHeld || !box || typingInBox() || (e.relatedTarget && box.contains(e.relatedTarget))) return;
+  if ($("#walkbox :active")) return void setTimeout(catchUp, 200);
+  S.boxHeld = false; box.outerHTML = walkHtml();
+  if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
+}, 0));
+document.addEventListener("input", e => { if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = { budget: $("#bud").value, parallel: $("#par").value }; });
+document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStartForm(); } });
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
