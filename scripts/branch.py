@@ -811,10 +811,23 @@ def _put_back(sha, paths):
             at = _stash_index(sha)
             if at:   # never another session's entry when ours is gone
                 _git("stash", "drop", "-q", at)
+            if not index:
+                print("dfs_branch: your staged edits to %s came back unstaged: the merge changed "
+                      "what they were staged against" % ", ".join(paths), file=sys.stderr)
             return True
         _git("reset", "-q", "--", *paths)
         _git("checkout", "-q", "--", *paths)
     return False
+
+
+def _stash_kept(task, paths, saved, why):
+    """Raise that the author's edits to `paths` stayed in the stash `saved`: they conflict with
+    the checkout as the merge left it, and those paths are as the merge left them."""
+    _raise_blocked(task, (
+        "%s %s your uncommitted edits to %s, which the merge needed out of the way, conflict with "
+        "the checkout as it stands. They are kept in the stash %s (message dfs-merge-%s) and those "
+        "paths are as the merge left them: `git stash apply %s` and resolve it.")
+        % (task, why, ", ".join(paths), saved[:12], task, saved[:12]))
 
 
 def _unmerged(task, wt, name, r, restore=lambda: None):
@@ -1024,8 +1037,8 @@ def merge(task):
 
     def restore():
         _put_back_shared_edits(aside)
-        if held:
-            _put_back(*held.pop())
+        if held and not _put_back(*held.pop()):
+            _stash_kept(task, paths, saved, "is not merged, and")
     try:
         _set_aside_shared_edits(name, wt, aside)
         r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name),
