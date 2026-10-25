@@ -1372,11 +1372,17 @@ def carry_attachments(task, text):
         return []
     here, there = dfs_paths.artefacts(), wt / dfs_paths.STATE_DIR_NAME / "artefacts"
     moved = []
-    for name in dict.fromkeys(ATTACHED_REF.findall(text)):
-        if (here / name).is_file() and not (there / name).exists():
-            there.mkdir(parents=True, exist_ok=True)
-            os.replace(here / name, there / name)
-            moved.append(name)
+    names = [n for n in dict.fromkeys(ATTACHED_REF.findall(text))
+             if (here / n).is_file() and not (there / n).exists()]
+    if names:   # a file this checkout tracks is the default branch's, not an upload to carry
+        r = subprocess.run(["git", "--literal-pathspecs", "ls-files", "--", *names],
+                           capture_output=True, text=True, cwd=here)
+        tracked = set(r.stdout.split()) if r.returncode == 0 else set()
+        names = [n for n in names if n not in tracked]
+    for name in names:
+        there.mkdir(parents=True, exist_ok=True)
+        os.replace(here / name, there / name)
+        moved.append(name)
     return moved
 
 

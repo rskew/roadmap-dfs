@@ -979,9 +979,11 @@ merge_item() {
 }
 
 # ⚠️ THE TASK IS READ FROM THE WORKTREE NOW, and the preflight above read the main
-# checkout's. The branch has only what git carries: on 2026-10-19 a project whose `.*`
-# rule hid `.dfs` reached the worktree with only its force-added files, and the first
-# briefing failed with "no task file". Said here with its cause, and kept as the stop.
+# checkout's. The branch has what git tracks, and `branch.enter` moves in the task's
+# untracked files; neither reaches a task file an ignore rule hides: on 2026-10-19 a
+# project whose `.*` rule hid `.dfs` reached the worktree with only its force-added
+# files, and the first briefing failed with "no task file". Said here with its cause,
+# and kept as the stop.
 if [ -n "$ITEM_TREE" ]; then
   cause="$(python3 - "$ITEM" "$HERE" "$ITEM_MAIN" "$ITEM_TREE" <<'PY'
 import subprocess, sys
@@ -992,8 +994,8 @@ if not dfs_tree.exists(task):
     rel = "%s/items/%s.md" % (dfs_paths.STATE_DIR_NAME, task)
     rule = subprocess.run(["git", "check-ignore", "-v", "--no-index", rel], cwd=main,
                           capture_output=True, text=True).stdout.split("\t")[0]
-    print("the worktree %s has no %s, which the main checkout has: the branch carries only "
-          "what git tracks%s" % (wt, rel,
+    print("the worktree %s has no %s, which the main checkout has: the branch does not track "
+          "it and it was not moved in from there%s" % (wt, rel,
                                  ", and the ignore rule %s hides it" % rule if rule else ""))
 PY
 )"

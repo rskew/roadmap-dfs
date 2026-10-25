@@ -154,7 +154,11 @@ def carry_named_attachments(task, wt):
         base = wt / p
         for f in ([base] if base.is_file() else sorted(base.rglob("*.md")) if base.is_dir() else []):
             texts.append(f.read_text())
-    return dfs_tree.carry_attachments(task, "\n".join(texts))
+    moved = dfs_tree.carry_attachments(task, "\n".join(texts))
+    if moved:
+        print("dfs_branch: %d attachment(s) of %s moved into %s: %s" %
+              (len(moved), task, dfs_paths.rel(wt), ", ".join(moved)), file=sys.stderr)
+    return moved
 
 
 def _exclude(line):

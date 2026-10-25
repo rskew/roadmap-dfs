@@ -748,9 +748,27 @@ class Chain(unittest.TestCase):
             TASK.replace("## Goal\n", "## Goal\n\nSee ![x](.dfs/artefacts/%s)\n" % name, 1))
         rc, meta, out = self.run_chain("work,confirm,rok")
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertIn("1 attachment(s) of W1 moved into .dfs/worktrees/W1: " + name, out)
         self.assertEqual(self.git("ls-files", ".dfs/artefacts/" + name), ".dfs/artefacts/" + name)
         self.assertEqual(self.git("status", "--porcelain", ".dfs/artefacts/" + name), "")
         self.assertFalse(self.wt.exists())
+
+    def test_an_attachment_the_main_checkout_tracks_is_not_moved_into_a_worktree_that_exists(self):
+        name = "0f1e2d3c-4b5a-4968-8776-655443322222.html"
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt))
+        (self.wt / "own.txt").write_text("own\n")
+        self.git("add", "own.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "own work", cwd=self.wt)
+        (self.root / ".dfs" / "artefacts").mkdir(exist_ok=True)   # another task's page, merged since the cut
+        (self.root / ".dfs" / "artefacts" / name).write_text("<p>page</p>")
+        self.git("add", ".dfs/artefacts/" + name)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "page", ".dfs/artefacts/" + name)
+        task = self.wt / ".dfs" / "items" / "W1.md"
+        task.write_text(task.read_text().replace("## Goal\n", "## Goal\n\nSee .dfs/artefacts/%s\n" % name, 1))
+        self.enter()
+        self.assertTrue((self.root / ".dfs" / "artefacts" / name).is_file())
+        self.assertEqual(self.git("status", "--porcelain", ".dfs/artefacts/" + name), "")
+        self.assertFalse((self.wt / ".dfs" / "artefacts" / name).exists())
 
     def test_an_untracked_task_file_the_worktree_has_is_left_in_both(self):
         self.untrack_task()
