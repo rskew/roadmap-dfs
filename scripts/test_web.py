@@ -527,12 +527,12 @@ class Web(unittest.TestCase):
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("function drawTasks() {"):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '';"
+        body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, pinSizes = null;"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment) => ({id, goal: 'g', depth: 0, status: 'open', segment, raises: 0,"
               " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
-              "const S = {only: false, reorder: false, moved: null,"
+              "const S = {only: false, reorder: false, moved: null, pending: new Set(),"
               " state: {needs_you: 0, items: [row('W1', 0), row('W2', 1)]}};" + body +
               "drawTasks(); const off = view.innerHTML; S.reorder = true; drawTasks();"
               "console.log(JSON.stringify([off, view.innerHTML]))")
@@ -540,14 +540,37 @@ class Web(unittest.TestCase):
         self.assertNotIn("data-act=\"move\"", off)
         self.assertEqual(off.count('<button class="item'), 2, "a row is one button to open the task")
         self.assertNotIn('<button class="item', on, "a row holding buttons is not itself a button")
-        for move in ("out", "in", "break"):
+        for move in ("out", "in", "break", "stop"):
             self.assertEqual(on.count('data-move="%s"' % move), 2, move)
+        self.assertEqual(on.count("Stop break"), 2, "a plain or absent break offers a stop break")
         for move in ("up", "down"):
             self.assertNotIn('data-move="%s"' % move, on, "a drag replaces the up and down buttons")
         self.assertEqual(on.count('data-grip="W'), 2, "each row has a grip to drag it by")
         self.assertEqual(on.count("\u2190"), 2, "out is a left arrow")
         self.assertEqual(on.count("\u2192"), 2, "in is a right arrow")
         self.assertEqual(on.count("Remove break"), 1, "only W2 sits behind a fence")
+
+    def test_a_stop_break_is_drawn_apart_from_a_plain_one_and_offers_to_be_plain(self):
+        """drawTasks() in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, pinSizes = null;"
+              "const view = {}; const $ = s => s === '#view' ? view : null;"
+              "const row = (id, segment, stop, w) => ({id, goal: 'g', depth: 0, status: 'open', segment, stop, raises: 0,"
+              " assumptions: [], rev: '', waiting_on: w || '', blocked_by: '', why: '', needs_you: false});"
+              "const S = {only: false, reorder: true, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "row('W1', 0, false), row('W2', 1, true), row('W3', 2, false, 'W2')]}};" + body +
+              "drawTasks(); console.log(JSON.stringify(view.innerHTML))")
+        html = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(html.count('class="break cap stop"'), 1, "only the stop break is drawn as one")
+        self.assertEqual(html.count('class="break cap"'), 1)
+        self.assertIn("stop break, above is done", html)
+        self.assertIn("break, waiting on W2", html)
+        self.assertEqual(html.count("Plain break"), 1, "W2 sits behind a stop break")
+        self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
 
     def test_the_walk_panel_is_collapsed_until_the_reader_opens_it(self):
         """walkHtml() in index.html, run under node (skipped when there is none): closed
@@ -1065,6 +1088,31 @@ class Web(unittest.TestCase):
         _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
         self.assertEqual({i["segment"] for i in data["items"]}, {0})
         self.assertNotIn("---", self.order_file())
+
+    def test_a_stop_break_is_made_flipped_and_survives_other_moves(self):
+        self.three_tasks()
+        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="stop"))
+        self.assertEqual([(i["id"], i["segment"], i["stop"]) for i in data["items"]],
+                         [("W1", 0, False), ("W2", 1, True), ("W3", 1, True)],
+                         "no fence there: one is put in that stops a walk")
+        self.assertIn("--- stop", self.order_file())
+        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="up"))
+        self.assertEqual([(i["id"], i["stop"]) for i in data["items"]],
+                         [("W1", False), ("W3", True), ("W2", True)], "a move keeps the stop")
+        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="stop"))
+        self.assertEqual({i["stop"] for i in data["items"]}, {False}, "a stop break made plain")
+        self.assertEqual({i["segment"] for i in data["items"]}, {0, 1}, "the fence stays")
+        self.assertNotIn("--- stop", self.order_file())
+        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
+        self.assertEqual({i["segment"] for i in data["items"]}, {0})
+        self.assertNotIn("---", self.order_file())
+
+    def test_a_stop_break_that_cannot_be_made_is_refused_and_writes_nothing(self):
+        self.three_tasks()
+        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
+        self.assertEqual(status, 409)
+        self.assertIn("first task", data["error"])
+        self.assertFalse((self.root / ".dfs" / "order.md").exists())
 
     def test_a_move_that_cannot_be_made_is_refused_with_the_reason_and_writes_nothing(self):
         self.three_tasks()
