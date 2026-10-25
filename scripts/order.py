@@ -29,6 +29,10 @@ above it is `done` — not merely unblocked — and `dfs_state.walk` derives tha
 are kept apart: "answer this", "answer something above this" and "finish something
 before this" are three different instructions.
 
+A break may carry one parameter, `--- stop` (`STOP`, below): the same fence, which a
+walk that waited at it also ENDS at, so the author reviews before going on (`walk.py`'s
+`walk_stop_at`).
+
 ⚠️ **A break can never sit INSIDE a subtree**, and that is what makes it cheap: it
 ends every open branch, so the line after one is always a root, no span can contain
 one, and no move can smuggle one into a branch. It is also why a break is only
@@ -76,14 +80,26 @@ INDENT = "  "
 # wants letters then digits), so the two can share one list without a flag.
 BREAK = "---"
 
+# ⚠️ A STOP BREAK is a fence that also ENDS A WALK at it: `--- stop`. The fence holds
+# what is after it exactly as `---` does; what it adds is for the walk (`walk.py`), which
+# turns itself off once it has worked everything before one it had to wait for, so the
+# author reviews that work before a walk they start goes past it. It is the break's own
+# parameter rather than a second kind of line because it is the same fence: moving,
+# folding and toggling it are the break's rules, and only the walk reads the difference.
+STOP = "--- stop"
+
 # ⚠️ Counted only once the list has STARTED. A rule above the prose is decoration —
 # and YAML front matter is a rule with nothing above it to gate — so a fence before
 # the first id would silently hold the entire roadmap.
-BREAK_LINE = re.compile(r"^\s*-{3,}\s*$")
+BREAK_LINE = re.compile(r"^\s*-{3,}(\s+stop)?\s*$", re.I)
 
 
 def is_break(name: str) -> bool:
-    return name == BREAK
+    return name in (BREAK, STOP)
+
+
+def is_stop(name: str) -> bool:
+    return name == STOP
 
 DEFAULT_HEADER = """# Implementation tree
 
@@ -95,12 +111,14 @@ onto the next branch rather than stopping.
 A rule on its own line is a BREAK: everything after it waits until everything before
 it is done, which is the one thing nesting cannot say. A break separates whole
 branches — it never cuts one — and an item written after it is behind it, including
-one nobody has placed yet.
+one nobody has placed yet. A rule followed by the word `stop` is a STOP break: it
+also ends a walk that waited at it once everything before it is done, so the work can
+be reviewed, and the next walk goes past it.
 
 Read by `<scripts>/tui.py` (`[`/`]` move the selected item among its
 siblings, `{`/`}` move it out of and into a branch, `b` puts a break above it or takes
-one away) and by `state.py`, which returns the items in this order with their
-depth and the segment each is in. An item not named here sorts after every item that
+one away, `B` makes it a stop break or plain again) and by `state.py`, which returns
+the items in this order with their depth and the segment each is in. An item not named here sorts after every item that
 is, at the root, by id. See `order.py` for why this is not §2.
 
 Prose goes above the list; the list is the last thing in the file.
@@ -125,7 +143,8 @@ def nodes_of(text: str):
     still nests the way it looks. A depth can only ever step down by one, which is
     what makes the list a tree rather than a set of numbers.
 
-    A break comes back as `(BREAK, 0)` in its place, and ⚠️ **it EMPTIES the stack**:
+    A break comes back as `(BREAK, 0)` in its place (`(STOP, 0)` for `--- stop`), and
+    ⚠️ **it EMPTIES the stack**:
     the line after a fence is a root whatever its indent, so a `---` hand-written in
     the middle of a branch closes that branch rather than fencing off half of it.
     That one line is what guarantees a break is never inside a subtree — which every
@@ -133,12 +152,17 @@ def nodes_of(text: str):
     """
     seen, out, stack = set(), [], []
     for line in text.splitlines():
-        if BREAK_LINE.match(line):
+        rule = BREAK_LINE.match(line)
+        if rule:
             # Not before the first id (that rule is prose, or front matter), and not
             # twice running — a second fence over the same ground gates nothing the
             # first does not, and would leave an empty segment for the screen to draw.
+            # Folded, the fence stops a walk if either of them did.
+            kind = STOP if rule.group(1) else BREAK
             if out and not is_break(out[-1][0]):
-                out.append((BREAK, 0))
+                out.append((kind, 0))
+            elif out and is_stop(kind):
+                out[-1] = (STOP, 0)
             stack = []
             continue
         m = ID_LINE.match(line)
@@ -248,13 +272,15 @@ def tree_of(items):
     list built without the breaks would delete every fence in the file the first time
     anything moved. The segment numbers are what they are put back by, including a gap
     left by a segment whose items have all been closed and deleted, which is why the
-    inner loop is a `while` and not an `if`.
+    inner loop is a `while` and not an `if`. An item's `stop` says its segment was opened
+    by a stop break, and the fence written last before it carries it; `nodes_of` folds
+    the gap's fences back into that one.
     """
     out, seg = [], 0
     for i in items:
         while seg < i.get("segment", 0):
-            out.append((BREAK, 0))
             seg += 1
+            out.append((STOP if i.get("stop") and seg == i["segment"] else BREAK, 0))
         out.append((i["id"], i["depth"]))
     return out
 
@@ -373,6 +399,30 @@ def has_break_above(nodes, item) -> bool:
     return i is not None and i > 0 and is_break(nodes[i - 1][0])
 
 
+def stop_toggled(nodes, item):
+    """`nodes` with the fence above `item` made a stop break, or made plain again.
+
+    With no fence above it, one is put there that stops a walk at once, under the
+    same refusals as `break_toggled` (a nested item, the first item); taking a fence
+    away altogether stays `break_toggled`'s, so this key never removes a fence.
+    """
+    i = index_of(nodes, item)
+    if i is None or nodes[i][1] != 0:
+        return None
+    if i and is_break(nodes[i - 1][0]):
+        flip = BREAK if is_stop(nodes[i - 1][0]) else STOP
+        return nodes[:i - 1] + [(flip, 0)] + nodes[i:]
+    if i == 0:
+        return None
+    return nodes[:i] + [(STOP, 0)] + nodes[i:]
+
+
+def has_stop_above(nodes, item) -> bool:
+    """Whether the fence right above `item` is a stop break."""
+    i = index_of(nodes, item)
+    return i is not None and i > 0 and is_stop(nodes[i - 1][0])
+
+
 def header_of(text: str) -> str:
     """Everything the author wrote above the list, kept across a rewrite of it."""
     if not text.strip():
@@ -420,7 +470,7 @@ def render(nodes) -> str:
         if is_break(name):
             if out and out[-1]:
                 out.append("")
-            out.extend([BREAK, ""])
+            out.extend([name, ""])
         else:
             out.append("%s- %s" % (INDENT * depth, name))
     while out and not out[-1]:

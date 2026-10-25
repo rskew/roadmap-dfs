@@ -734,6 +734,7 @@ KEYS = [
     ("items", "{  <", ord("{"), "out", "move out of its branch"),
     ("items", "}  >", ord("}"), "in", "move into the branch above"),
     ("items", "b", ord("b"), "fence", "put a fence above it (asks first), or take the fence away"),
+    ("items", "B", ord("B"), "stopbreak", "make the fence above it a stop break, which ends a walk there, or plain again"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
     ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
@@ -1994,9 +1995,10 @@ class UI(WalkMixin):
         shown = set(self.visible())
         for idx, it in enumerate(self.items):
             while seg < it.get("segment", 0):
-                if not self.only_mine:
-                    rows.append(("break", it.get("waiting_on")))
                 seg += 1
+                if not self.only_mine:
+                    rows.append(("break", it.get("waiting_on"),
+                                 bool(it.get("stop")) and seg == it.get("segment", 0)))
             if idx in shown:
                 rows.append(("item", idx))
         return rows
@@ -2075,6 +2077,32 @@ class UI(WalkMixin):
         if self.retree(after, it, refusal):
             self.said(it, "is no longer behind a break" if had
                           else "now waits on everything above the break")
+
+    def toggle_stop(self):
+        """Make the fence above the selected item a STOP break, or plain again; with no
+        fence there, put up one that stops (asking first, as `b` does).
+
+        A stop break holds what is after it as any fence does, and a walk that worked up
+        to it ends there, so the author reviews before a walk they start goes past it
+        (`walk.walk_stop_at`). Taking the fence away altogether is `b`'s."""
+        it = self.current()
+        if it is None:
+            return
+        nodes = self.nodes()
+        had = dfs_order.has_break_above(nodes, it["id"])
+        stops = dfs_order.has_stop_above(nodes, it["id"])
+        after = dfs_order.stop_toggled(nodes, it["id"])
+        if after is not None and not had:
+            if self.prompt("put a stop break above %s — everything after waits on everything "
+                           "above, and a walk ends there? [y/N]:" % it["id"])[:1].lower() != "y":
+                self.msg = "no break added"
+                return
+        refusal = ("is nested — a break separates whole branches, never cuts one"
+                   if it["depth"] else
+                   "is the first item — a break above it would gate nothing")
+        if self.retree(after, it, refusal):
+            self.said(it, "is behind a plain break: a walk goes on through it" if stops
+                          else "is behind a stop break: a walk ends there")
 
     def said(self, it, did):
         self.event("order", "%s %s" % (it["id"], did))
@@ -2513,8 +2541,8 @@ class UI(WalkMixin):
         # while drawing rules between them puts the cursor off the bottom by one row
         # per fence above it — the same complaint the windowing was added for.
         rows = self.list_rows()
-        sel_row = next((n for n, (kind, val) in enumerate(rows)
-                        if kind == "item" and val == self.sel), 0)
+        sel_row = next((n for n, row in enumerate(rows)
+                        if row == ("item", self.sel)), 0)
         if sel_row < self.list_scroll:
             self.list_scroll = sel_row
         elif sel_row >= self.list_scroll + height:
@@ -2542,15 +2570,17 @@ class UI(WalkMixin):
         aheadw = max([len(a) for a in aheads.values()] + [0])
         aheadw = aheadw + 2 if aheadw else 0
         for i in range(min(height, len(rows) - self.list_scroll)):
-            kind, val = rows[self.list_scroll + i]
+            kind, val = rows[self.list_scroll + i][:2]
             y = top + i
             if kind == "break":
                 # ⚠️ The rule SAYS what it is holding. A bare line reads as decoration
                 # and a decoration that silently stops the walk is the worst of both:
                 # `waiting on W12` is the item to go and finish, and `above is done`
                 # is a fence that is no longer in anybody's way.
-                label = ("── break · waiting on %s " % val) if val \
-                        else "── break · above is done "
+                # A stop break says so: it is also where a walk ends (`walk_stop_at`).
+                name = "stop break" if rows[self.list_scroll + i][2] else "break"
+                label = ("── %s · waiting on %s " % (name, val)) if val \
+                        else "── %s · above is done " % name
                 w = self.main_w() - 1
                 self.put(y, 2, (label + "─" * max(0, w - 2 - len(label)))[:max(0, w - 2)],
                          look("chrome"))
@@ -4970,6 +5000,8 @@ class UI(WalkMixin):
             # Unpaired, because a fence has two states and not two directions: the
             # screen shows which one the row is in, so one key is the whole of it.
             self.toggle_break()
+        elif ch == ord("B"):
+            self.toggle_stop()
         elif ch in (ord("{"), ord("}")):
             # The SHIFTED pair, for the other axis of the same move: same fingers,
             # same pairing, and nothing else to learn once `[`/`]` is in the hand.

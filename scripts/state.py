@@ -54,24 +54,28 @@ def items():
     ⚠️ The list comes back in the tree's DEPTH-FIRST PREORDER, which is the file's
     own order, so nothing here traverses anything. A task nobody has placed yet is a
     root at the end, in the LAST segment — held by every fence, because that is
-    where the file says it is.
+    where the file says it is. `stop` is whether the fence that opened the item's
+    segment is a stop break (`--- stop`), folded over a gap the way the fences are.
     """
     found = {}
     for task in task_ids():
         t = dfs_tree.load(task)
         found[task] = t["name"] or (t["goal"].splitlines()[0] if t["goal"] else "")
     placed = dfs_order.nodes_of(dfs_order.read_text())
-    out, seen, seg = [], set(), 0
+    out, seen, seg, stop, filled = [], set(), 0, False, True
     for name, depth in placed:
         if dfs_order.is_break(name):
-            seg += 1
+            # A segment left empty (its items closed and deleted) passes its stop on.
+            seg, stop = seg + 1, dfs_order.is_stop(name) or (stop and not filled)
+            filled = False
             continue
         if name in found:
-            out.append(dict(id=name, goal=found[name], depth=depth, segment=seg))
+            out.append(dict(id=name, goal=found[name], depth=depth, segment=seg, stop=stop))
             seen.add(name)
+            filled = True
     for name in sorted(found, key=dfs_order.sort_key("")):
         if name not in seen:
-            out.append(dict(id=name, goal=found[name], depth=0, segment=seg))
+            out.append(dict(id=name, goal=found[name], depth=0, segment=seg, stop=stop))
     return out
 
 

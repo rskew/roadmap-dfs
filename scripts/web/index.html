@@ -154,6 +154,8 @@ pre.runlog .r-err { color: var(--attention); }
 body.dragging { user-select: none; -webkit-user-select: none; }
 .break { margin: 18px 0 6px; display: flex; align-items: center; gap: var(--s3); }
 .break::after { content: ""; flex: 1; border-top: var(--rule) solid var(--line); }
+.break.stop { font-weight: 600; }
+.break.stop::after { border-top-style: double; border-top-width: 4px; }
 .hint { color: var(--muted); padding: 28px 0; }
 p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 /* Add a task floats at the bottom right, clear of the tab bar; the gap keeps the last row from hiding under it */
@@ -886,7 +888,7 @@ function drawTasks(push) {
   let seg = 0, html = held ? "" : walkHtml();
   for (const it of S.state.items) {
     const fenced = it.segment > seg && !S.only;
-    if (fenced) html += `<div class="break cap" data-fence="${esc(it.id)}">break, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
+    if (fenced) html += `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
     seg = it.segment;
     if (S.only && !it.needs_you) continue;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
@@ -907,7 +909,7 @@ function drawTasks(push) {
       const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
-        <span class="moves">${mv("out", "\u2190", "Move out of its parent:")}${mv("in", "\u2192", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}</span>${grip}</div>`;
+        <span class="moves">${mv("out", "\u2190", "Move out of its parent:")}${mv("in", "\u2192", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break above a plain one, which a walk passes:" : "Make the break above a stop break, which ends a walk that waited at it:")}</span>${grip}</div>`;
     } else if (it.archivable) {
       const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;

@@ -292,6 +292,64 @@ class Breaks(unittest.TestCase):
         self.assertEqual(dfs_order.render([("W1", 0), (dfs_order.BREAK, 0)]), "- W1\n")
 
 
+class StopBreaks(unittest.TestCase):
+    """⚠️ `--- stop` is the same fence with a parameter the walk reads: it ends a walk.
+
+    So the tests are that it is a fence everywhere a fence is (moves, folds, the file)
+    and that nothing but its own key turns it back into a plain one.
+    """
+
+    SHAPE = "- W1\n- W2\n\n--- stop\n\n- W3\n  - W4\n"
+
+    def nodes(self):
+        return dfs_order.nodes_of(self.SHAPE)
+
+    def test_a_stop_rule_is_a_stop_node_in_its_place(self):
+        self.assertEqual(self.nodes(), [("W1", 0), ("W2", 0), (dfs_order.STOP, 0),
+                                        ("W3", 0), ("W4", 1)])
+        self.assertTrue(dfs_order.is_break(dfs_order.STOP))
+        self.assertEqual(dfs_order.order_of(self.SHAPE), ["W1", "W2", "W3", "W4"])
+
+    def test_it_round_trips_through_the_file(self):
+        self.assertIn("- W2\n\n--- stop\n\n- W3\n", dfs_order.render(self.nodes()))
+        self.assertEqual(dfs_order.nodes_of(dfs_order.render(self.nodes())), self.nodes())
+
+    def test_a_folded_fence_stops_if_either_rule_did(self):
+        for text in ("- W1\n---\n--- stop\n- W2\n", "- W1\n--- STOP\n---\n- W2\n"):
+            self.assertEqual(dfs_order.nodes_of(text),
+                             [("W1", 0), (dfs_order.STOP, 0), ("W2", 0)], text)
+
+    def test_the_stop_toggle_flips_the_fence_above_or_adds_a_stopping_one(self):
+        plain = dfs_order.stop_toggled(self.nodes(), "W3")
+        self.assertEqual(plain[2], (dfs_order.BREAK, 0))
+        self.assertFalse(dfs_order.has_stop_above(plain, "W3"))
+        self.assertEqual(dfs_order.stop_toggled(plain, "W3"), self.nodes())
+        self.assertTrue(dfs_order.has_stop_above(self.nodes(), "W3"))
+        self.assertEqual(dfs_order.stop_toggled(self.nodes(), "W2"),
+                         [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), (dfs_order.STOP, 0),
+                          ("W3", 0), ("W4", 1)])
+
+    def test_the_stop_toggle_refuses_where_a_break_is_refused(self):
+        self.assertIsNone(dfs_order.stop_toggled(self.nodes(), "W1"))
+        self.assertIsNone(dfs_order.stop_toggled(self.nodes(), "W4"))
+
+    def test_the_break_toggle_takes_a_stop_break_away(self):
+        self.assertEqual(dfs_order.break_toggled(self.nodes(), "W3"),
+                         [("W1", 0), ("W2", 0), ("W3", 0), ("W4", 1)])
+
+    def test_a_move_keeps_the_stop(self):
+        after = dfs_order.moved(self.nodes(), "W3", -1)
+        self.assertEqual(after, [("W1", 0), ("W2", 0), ("W3", 0), ("W4", 1),
+                                 (dfs_order.STOP, 0)])
+
+    def test_tree_of_puts_the_stop_back_on_the_last_fence_before_the_item(self):
+        items = [dict(id="W1", depth=0, segment=0), dict(id="W2", depth=0, segment=1),
+                 dict(id="W3", depth=0, segment=3, stop=True)]
+        self.assertEqual(dfs_order.tree_of(items),
+                         [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), (dfs_order.BREAK, 0),
+                          (dfs_order.STOP, 0), ("W3", 0)])
+
+
 class Walking(unittest.TestCase):
     """⚠️ A RAISE blocks the whole SUBTREE, and a walk steps onto the next branch.
 
@@ -512,6 +570,24 @@ class ThroughTheDerivation(InAWorkRoot):
         self.assertEqual([(i["id"], i["segment"]) for i in dfs_state.full()["items"]],
                          [("W1", 0), ("W2", 2), ("W3", 2)])
 
+    def test_the_items_behind_a_stop_break_say_so_and_a_move_keeps_it(self):
+        dfs_order.write_order([("W3", 0), (dfs_order.STOP, 0), ("W2", 0), ("W1", 0)])
+        items = dfs_state.full()["items"]
+        self.assertEqual([(i["id"], i["stop"]) for i in items],
+                         [("W3", False), ("W2", True), ("W1", True)])
+        dfs_order.write_order(dfs_order.moved(dfs_order.tree_of(items), "W1", -1))
+        self.assertIn("\n--- stop\n", dfs_order.read_text())
+
+    def test_a_stop_break_above_an_emptied_segment_still_stops(self):
+        dfs_order.write_order([("W1", 0), (dfs_order.STOP, 0), ("W9", 0),
+                               (dfs_order.BREAK, 0), ("W2", 0)])
+        items = dfs_state.full()["items"]
+        self.assertEqual([(i["id"], i["segment"], i["stop"]) for i in items],
+                         [("W1", 0, False), ("W2", 2, True), ("W3", 2, True)])
+        dfs_order.write_order(dfs_order.tree_of(items))
+        self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
+                         [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), ("W3", 0)])
+
 
 class ContinuingTheLastRun(InAWorkRoot):
     """⚠️ A walk finishes what it started, so `next_item` is not the order's answer
@@ -616,13 +692,13 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.ui.sel = 0
 
         def reload(note=""):
-            items, seg = [], 0
+            items, seg, stop = [], 0, False
             for name, depth in dfs_order.nodes_of(dfs_order.read_text()):
                 if dfs_order.is_break(name):
-                    seg += 1
+                    seg, stop = seg + 1, dfs_order.is_stop(name)
                     continue
                 items.append({"id": name, "depth": depth, "segment": seg,
-                              "status": "open"})
+                              "status": "open", "stop": stop})
             # Through the real derivation, so the rows carry what the screen reads
             # off them — `parent` after a reparent, `waiting_on` after a fence.
             self.ui.data = {"items": dfs_state.walk(items)}
@@ -642,6 +718,29 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.assertEqual(self.ui.current()["waiting_on"], "W1")
         self.assertEqual([r[0] for r in self.ui.list_rows()],
                          ["item", "break", "item", "item"])
+
+    def test_capital_b_makes_the_fence_a_stop_break_and_plain_again(self):
+        self.ui.sel = 1
+        self.ui.answers = ["y"]
+        self.ui.toggle_stop()
+        self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
+                         [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), ("W3", 0)])
+        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", True))
+        self.assertIn("a walk ends there", self.ui.msg)
+        self.ui.toggle_stop()
+        self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
+                         [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])
+        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", False))
+        self.ui.sel = 0
+        self.ui.toggle_stop()
+        self.assertIn("first item", self.ui.msg)
+
+    def test_capital_b_without_a_yes_adds_no_break(self):
+        self.ui.sel = 1
+        self.ui.answers = ["n"]
+        self.ui.toggle_stop()
+        self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
+                         [("W1", 0), ("W2", 0), ("W3", 0)])
 
     def test_what_a_held_row_says(self):
         # ⚠️ A marker only ever replaces `open`. The fence is the reason this matters:

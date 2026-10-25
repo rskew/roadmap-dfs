@@ -151,7 +151,7 @@ def state_json():
             assumptions=list(it.get("assumptions") or ()),
             corrections=list(it.get("corrections") or ()),
             waiting_on=it.get("waiting_on") or "", blocked_by=it.get("blocked_by") or "",
-            segment=it.get("segment", 0), ahead=it.get("ahead", 0), base=it.get("base") or "origin/main",
+            segment=it.get("segment", 0), stop=bool(it.get("stop")), ahead=it.get("ahead", 0), base=it.get("base") or "origin/main",
             uncommitted=it.get("uncommitted") or "", archivable=bool(it.get("archivable")),
             draft=bool(it.get("draft")),
             running=running.get(it["id"], ""), next=it["id"] == nxt))
@@ -607,7 +607,7 @@ def new_task(body):
     return dict(added=task)
 
 
-MOVES = {"up", "down", "out", "in", "break", "place"}
+MOVES = {"up", "down", "out", "in", "break", "stop", "place"}
 
 # Why a move that cannot be made cannot: the terminal's own words (tui.py reorder,
 # reparent, toggle_break), since it is the same rule refusing.
@@ -620,7 +620,7 @@ MOVE_REFUSAL = {
 
 
 def reorder(body):
-    """Move one task in `.dfs/order.md`, as the terminal's `[` `]` `{` `}` `b` do.
+    """Move one task in `.dfs/order.md`, as the terminal's `[` `]` `{` `}` `b` `B` do.
 
     The whole tree is read from the derivation, moved by `order.py`, and written whole
     (`write_order`), so the fences survive. A move that cannot be made is a 409 saying
@@ -638,6 +638,11 @@ def reorder(body):
         if move == "break":
             had = dfs_order.has_break_above(nodes, item)
             after = dfs_order.break_toggled(nodes, item)
+            refusal = ("is nested — a break separates whole branches, never cuts one"
+                       if dict(nodes).get(item) else
+                       "is the first task — a break above it would gate nothing")
+        elif move == "stop":
+            after = dfs_order.stop_toggled(nodes, item)
             refusal = ("is nested — a break separates whole branches, never cuts one"
                        if dict(nodes).get(item) else
                        "is the first task — a break above it would gate nothing")

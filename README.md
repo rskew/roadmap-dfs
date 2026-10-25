@@ -87,6 +87,17 @@ docker logs <repo>-dev                                    # its output (podman l
 nix run github:rskew/roadmap-dfs#sandbox stop
 ```
 
+## Stop breaks
+
+A break in `order.md` (a `---` line between root branches) holds everything after it until
+everything before it is done, and a walk carries on through it once it opens. Written
+`--- stop`, the break also **ends the walk** there: a walk that had to wait at it turns itself
+off once everything before it is done and its chains have ended, saying which break it stopped
+at, so you can review that work first. The walk you start next finds the break open and goes
+past it; a task you pin with `n` goes past it too. `B` on the tui's item list, or the Stop break / Plain break button beside Break
+on the web page's Reorder list, makes the break above the selected task a stop break, or plain
+again (the tui adds one, after asking, where there is none); `b` still takes a break away.
+
 ## Drafts
 
 A task can be a **draft**: still open, but the walk never picks it as its next item, never carries on into it

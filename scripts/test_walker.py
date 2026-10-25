@@ -14,6 +14,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import state as dfs_state  # noqa: E402
 import walk as dfs_walk   # noqa: E402
 
 
@@ -192,6 +193,98 @@ class Interface(unittest.TestCase):
         t.join(2)
         self.assertFalse(self.w.walk_on)
         self.assertIn("boom", self.w.walk_note)
+
+
+class StopBreaks(unittest.TestCase):
+    """⚠️ A walk ends at a `--- stop` break it had to wait for, and the next walk passes it.
+
+    The items go through `dfs_state.walk`, so the fence is the one the order derives."""
+
+    def setUp(self):
+        self.w = FakeWalker()
+        self.addCleanup(self.w.restore)
+
+    def shape(self, first, stop=True, second="open"):
+        """W1 before the fence, W2 behind it."""
+        self.w.world_items = dfs_state.walk([
+            dict(id="W1", goal="one", depth=0, status=first, segment=0, stop=False),
+            dict(id="W2", goal="two", depth=0, status=second, segment=1, stop=stop)])
+        self.w.next_item = dfs_state.next_item(self.w.world_items)
+        self.w.reload()
+
+    def finish_w1(self):
+        """W1's chain ends with W1 reviewed and done."""
+        self.w.world_content = {"a"}
+        self.shape("done", stop=self.w.world_items[1]["stop"])
+        self.w.run_dirs = [run("d1", "W1", stop="done")]
+        self.w.walk_tick()
+
+    def test_the_walk_that_worked_up_to_it_ends_there(self):
+        self.shape("open")
+        self.w.start(10)
+        self.assertEqual(self.w.started_chains, [("W1", "10")])
+        self.finish_w1()
+        self.assertFalse(self.w.walk_on)
+        self.assertIn("stop break above W2", self.w.walk_note)
+        self.assertEqual(self.w.started_chains, [("W1", "10")])
+
+    def test_a_plain_break_lets_the_same_walk_go_on(self):
+        self.shape("open", stop=False)
+        self.w.start(10)
+        self.finish_w1()
+        self.assertTrue(self.w.walk_on)
+        self.assertEqual([c for c, _ in self.w.started_chains], ["W1", "W2"])
+
+    def test_the_walk_started_after_it_opened_goes_past_it(self):
+        self.shape("done")
+        self.w.start(10)
+        self.assertEqual(self.w.started_chains, [("W2", "10")])
+
+    def test_while_something_before_it_is_blocked_the_walk_waits_and_does_not_end(self):
+        self.shape("blocked")
+        self.w.start(10)
+        self.assertTrue(self.w.walk_on)
+        self.assertTrue(self.w.snapshot()["pending"])
+
+    def test_the_walk_shows_nothing_next_once_it_is_at_the_break(self):
+        self.shape("open")
+        self.w.start(10)
+        self.w.run_dirs = [run("d1", "W1", live=True)]
+        self.shape("done")              # reviewed ok; its chain is still merging it
+        self.assertEqual(self.w.data["next_item"], "W2")
+        self.assertIsNone(self.w.snapshot()["next"])
+        self.assertTrue(self.w.walk_on)
+
+    def test_a_walk_with_every_slot_taken_still_holds_the_break(self):
+        self.shape("open")
+        self.w.run_dirs = [run("h1", "W1", live=True)]     # a chain started by hand
+        self.w.start(10)
+        self.assertEqual(self.w.started_chains, [])
+        self.shape("done")
+        self.w.run_dirs = [run("h1", "W1", stop="done")]   # it has ended
+        self.w.walk_tick()
+        self.assertEqual(self.w.started_chains, [])
+        self.assertFalse(self.w.walk_on)
+        self.assertIn("stop break above W2", self.w.walk_note)
+
+    def test_a_hand_started_chain_still_merging_the_last_task_holds_the_walk_on(self):
+        self.shape("open")
+        self.w.start(10, 2)
+        self.assertEqual([c for c, _ in self.w.started_chains], ["W1"])
+        self.w.started_chains = []
+        self.shape("done")
+        # W1 is reviewed and done, its chain (the walk's own) ended, and a second chain
+        # started by hand is still merging it.
+        self.w.run_dirs = [run("d1", "W1", stop="done"), run("h1", "W1", live=True)]
+        self.w.walk_tick()
+        self.assertTrue(self.w.walk_on)
+        self.assertEqual(self.w.started_chains, [])
+
+    def test_a_pin_goes_past_it(self):
+        self.shape("open")
+        self.w.pin("W2")
+        self.w.start(10)
+        self.assertEqual(self.w.started_chains, [("W2", "10")])
 
 
 class Ago(unittest.TestCase):
