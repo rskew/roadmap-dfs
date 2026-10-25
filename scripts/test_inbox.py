@@ -18,6 +18,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -262,6 +263,68 @@ class ToolCodexModel(FakeCodexModel):
             input_tokens=1, output_tokens=1, total_tokens=2, input_tokens_details=dict(cached_tokens=0),
             output_tokens_details=dict(reasoning_tokens=0)))), "response.completed"))
         w.flush()
+
+
+@unittest.skipUnless(CLAUDE, "no claude here")
+class EndToEnd(unittest.TestCase):
+    """A whole chain (run.sh) around a real claude and a stand-in model, a message sent to the live run
+    through the page's endpoint (a real web.py), and the message found in the session's own transcript."""
+
+    def test_a_message_sent_from_the_page_to_a_live_chain_is_in_its_session_transcript(self):
+        import urllib.request
+        from test_chain import ROADMAP, TASK
+        base = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, base, ignore_errors=True)
+        root, home = base / "repo", base / "home"
+        (root / ".dfs" / "items").mkdir(parents=True)
+        (root / ".dfs" / "ROADMAP.md").write_text(ROADMAP)
+        (root / ".dfs" / "items" / "W1.md").write_text(TASK)
+        (root / ".gitignore").write_text(".dfs/runs/\n")
+        subprocess.run("git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm init", shell=True, cwd=root, check=True)
+        (home / ".claude").mkdir(parents=True)
+        (home / ".claude.json").write_text(json.dumps({"hasCompletedOnboarding": True,
+                                                       "customApiKeyResponses": {"approved": [KEY[-20:]], "rejected": []}}))
+        model = Model([("tool", "sleep 6"), ("text", "done")])
+        self.addCleanup(model.close)
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "AI_AGENT", "ANTHROPIC", "DFS_", "RUNDIR"))}
+        env.update(HOME=str(home), CLAUDE_CMD=CLAUDE, ANTHROPIC_API_KEY=KEY, DISABLE_AUTOUPDATER="1",
+                   ANTHROPIC_BASE_URL="http://127.0.0.1:%d" % model.server.server_address[1])
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        web = subprocess.Popen([sys.executable, str(HERE / "web.py"), "--no-walk", "--port", str(port)], cwd=root, env=env,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(web.wait)
+        self.addCleanup(web.kill)
+        chain = subprocess.Popen([str(HERE / "run.sh"), "W1", "1"], cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        self.addCleanup(chain.wait)
+        self.addCleanup(chain.kill)
+
+        def call(method, path, body=None):
+            req = urllib.request.Request("http://127.0.0.1:%d%s" % (port, path), method=method,
+                                         data=json.dumps(body).encode() if body is not None else None,
+                                         headers={"content-type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return r.status, json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read() or b"{}")
+
+        end = time.time() + 90
+        while not model.requests and time.time() < end:
+            time.sleep(0.1)
+        time.sleep(0.5)                                         # the model's Bash call is running
+        run = sorted(p.name for p in (root / ".dfs" / "runs").glob("dfs_run_*"))[-1]
+        status, sent = call("POST", "/api/run/message", dict(run=run, message="W104-PING from the page"))
+        self.assertEqual(status, 200, sent)
+        self.assertEqual([m["state"] for m in sent["messages"]], ["waiting"])
+        out, _ = chain.communicate(timeout=120)
+        self.assertEqual(len(model.requests), 2, out)
+        self.assertIn("W104-PING from the page", json.dumps(model.requests[1]))
+        status, log = call("GET", "/api/run/" + run)
+        self.assertEqual([m["state"] for m in log["messages"]], ["delivered"], log)
+        transcripts = list((home / ".claude" / "projects").glob("*/*.jsonl"))
+        self.assertTrue(any("W104-PING from the page" in t.read_text() for t in transcripts), transcripts)
 
 
 @unittest.skipUnless(CODEX, "no codex here")
