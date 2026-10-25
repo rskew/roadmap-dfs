@@ -382,7 +382,7 @@ def messages(d):
 
 def takes_messages(r):
     """Whether the run's agent has a way to hand a message into its session."""
-    return (r.get("agent") or "claude") == "claude"
+    return (r.get("agent") or "claude") in ("claude", "codex")
 
 
 def progress(r):

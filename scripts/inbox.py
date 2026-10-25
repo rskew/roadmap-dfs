@@ -4,6 +4,7 @@
     inbox.py post    as a PostToolUse hook: the next model call sees the messages
     inbox.py stop    as a Stop hook: a session about to end takes one more turn for them
     inbox.py --settings   the `--settings` JSON that installs both, as run.sh passes it
+    inbox.py --codex-args   the same for codex: the flags, one per line, that go BEFORE `exec`
 
 `run.sh` starts each claude work session with both hooks and `DFS_INBOX`, the run
 directory's `inbox/`, which the screen and the page write into (`runs.py`,
@@ -14,6 +15,8 @@ as if it were not there.
 read, and a move that fails means another hook took it, so two hooks running at once
 (parallel tool calls each fire one) never hand over the same message twice. Moved,
 it counts as delivered: the screen shows it so from then on.
+
+codex takes the same two hooks as `-c` overrides (`codex_args`), with the same JSON out.
 
 Checked against a real claude-code 2.1.308 under `-p`: PostToolUse's
 `additionalContext` is in the very next request, and a Stop hook's `block` makes the
@@ -66,12 +69,24 @@ def settings():
     return json.dumps({"hooks": {"PostToolUse": hook("post"), "Stop": hook("stop")}})
 
 
+def codex_args():
+    """The flags that install both hooks in `codex exec`: hooks switched on, the trust prompt
+    for a hook it has not seen bypassed, and each event as a TOML array of tables."""
+    me = os.path.abspath(__file__)
+    hook = lambda ev: '[{hooks=[{type="command",command=%s}]}]' % json.dumps("python3 %s %s" % (shlex.quote(me), ev))
+    return ["-c", "features.hooks=true", "--dangerously-bypass-hook-trust",
+            "-c", "hooks.PostToolUse=" + hook("post"), "-c", "hooks.Stop=" + hook("stop")]
+
+
 def main(argv):
     if argv[1:] == ["--settings"]:
         print(settings())
         return 0
+    if argv[1:] == ["--codex-args"]:
+        print("\n".join(codex_args()))
+        return 0
     if len(argv) != 2 or argv[1] not in ("post", "stop"):
-        print("usage: inbox.py post | stop | --settings", file=sys.stderr)
+        print("usage: inbox.py post | stop | --settings | --codex-args", file=sys.stderr)
         return 2
     try:
         sys.stdin.read()        # the hook's own input; drained so claude's write never blocks

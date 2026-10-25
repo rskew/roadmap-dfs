@@ -4,8 +4,12 @@
 /nix/store, or TEST_CLAUDE) under `-p` with the hooks run.sh gives it; only the model is
 faked, and they are skipped where no claude is installed.
 
+The same goes for codex (the build in /nix/store, or TEST_CODEX) with the `-c` overrides
+`inbox.codex_args` gives it.
+
 Run (with TMPDIR inside the repo when /tmp is noexec):  python3 roadmap-dfs/scripts/test_inbox.py
 """
+import glob
 import http.server
 import io
 import json
@@ -24,7 +28,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import inbox  # noqa: E402
 import runs as dfs_runs  # noqa: E402
+from test_agent_models import FakeCodexModel, sse  # noqa: E402
 from test_claude_chat import CLAUDE, KEY  # noqa: E402
+
+CODEX = os.environ.get("TEST_CODEX") or next(iter(sorted(glob.glob("/nix/store/*-codex-0.16*/bin/codex"))[::-1]), None) or shutil.which("codex")
 
 
 class Inbox(unittest.TestCase):
@@ -189,6 +196,84 @@ class RealClaude(unittest.TestCase):
         self.assertEqual(len(model.requests), 2)
         self.assertIn("W104-PING one more thing", json.dumps(model.requests[1]))
         self.assertEqual(result, "did the one more thing")
+
+
+class ToolCodexModel(FakeCodexModel):
+    """A stand-in Responses model: its first answer is a call of codex's `exec_command` with
+    `command`, every later one the text `say`."""
+
+    def __init__(self, command, say="done"):
+        super().__init__(say)
+        self.command = command
+
+    def answer(self, h, request, slow):
+        if len(self.requests) > 1:
+            return super().answer(h, request, slow)
+        w, call = h.wfile, dict(type="function_call", id="fc_1", call_id="call_1", name="exec_command",
+                                arguments=json.dumps({"cmd": self.command}), status="completed")
+        w.write(sse(dict(type="response.created", response=dict(id="resp_1", status="in_progress", output=[])), "response.created"))
+        w.write(sse(dict(type="response.output_item.done", output_index=0, item=call), "response.output_item.done"))
+        w.write(sse(dict(type="response.completed", response=dict(id="resp_1", status="completed", output=[call], usage=dict(
+            input_tokens=1, output_tokens=1, total_tokens=2, input_tokens_details=dict(cached_tokens=0),
+            output_tokens_details=dict(reasoning_tokens=0)))), "response.completed"))
+        w.flush()
+
+
+@unittest.skipUnless(CODEX, "no codex here")
+class RealCodex(unittest.TestCase):
+    def session(self, command, meanwhile):
+        """Run `codex exec` as run.sh does for a work session, call `meanwhile(model, run_dir)`
+        while it runs, and return the model, the run directory and codex's stream."""
+        model = ToolCodexModel(command)
+        model.__enter__()
+        self.addCleanup(model.__exit__, None, None, None)
+        home = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        (home / ".codex").mkdir()
+        (home / ".codex" / "config.toml").write_text('[projects."%s"]\ntrust_level = "trusted"\n' % home)
+        run_dir = home / "dfs_run_x"
+        run_dir.mkdir()
+        env = dict(os.environ, HOME=str(home), DFS_INBOX=str(run_dir / "inbox"), **model.env())
+        for k in ("CODEX_HOME", "CODEX_THREAD_ID", "CODEX_SESSION_ID"):
+            env.pop(k, None)
+        p = subprocess.Popen([CODEX, *model.args(), *inbox.codex_args(), "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+                              "work the task"], env=env, cwd=str(home), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        meanwhile(model, run_dir)
+        out, err = p.communicate(timeout=120)
+        self.assertEqual(p.returncode, 0, err)
+        return model, run_dir, out
+
+    def test_a_message_sent_during_a_tool_call_is_in_the_next_model_call(self):
+        def send(model, run_dir):
+            end = time.time() + 60
+            while not model.requests and time.time() < end:
+                time.sleep(0.05)
+            time.sleep(1)                   # the command is running
+            dfs_runs.post_message(str(run_dir), "W104-PING also check the README")
+        model, run_dir, out = self.session("sleep 4", send)
+        bodies = [b.decode() for _, b in model.requests]
+        self.assertEqual(len(bodies), 2, bodies)
+        self.assertNotIn("W104-PING", bodies[0])
+        self.assertIn("W104-PING also check the README", bodies[1])
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+        self.assertIn('"done"', out)
+
+    def test_a_message_waiting_when_the_session_would_stop_gets_one_more_turn(self):
+        def send(model, run_dir):
+            dfs_runs.post_message(str(run_dir), "W104-PING one more thing")
+        model, run_dir, out = self.session("true", send)
+        bodies = [b.decode() for _, b in model.requests]
+        self.assertGreaterEqual(len(bodies), 2)
+        self.assertIn("W104-PING one more thing", bodies[-1])
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
+    def test_the_codex_flags_name_this_hook_for_both_events(self):
+        args = inbox.codex_args()
+        self.assertIn("features.hooks=true", args)
+        self.assertIn("--dangerously-bypass-hook-trust", args)
+        self.assertTrue(any(a.startswith("hooks.PostToolUse=") and "inbox.py post" in a for a in args))
+        self.assertTrue(any(a.startswith("hooks.Stop=") and "inbox.py stop" in a for a in args))
 
 
 if __name__ == "__main__":

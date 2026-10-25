@@ -75,6 +75,7 @@ echo "$kind $(printf '%s\n' "$@" | grep -A1 -x -e '--model' | tail -1)" >> "$KIN
 echo "${RUNDIR:-<unset>}" > "$KINDS_FILE.rundir"
 echo "${DFS_INBOX:-<unset>}" > "$KINDS_FILE.inbox"
 echo "$(printf '%s\n' "$@" | grep -A1 -x -e '--settings' | tail -1)" > "$KINDS_FILE.settings"
+printf '%s\n' "$@" > "$KINDS_FILE.argv"
 pwd -P > "$KINDS_FILE.cwd"
 recipe="$(python3 -c 'import os,sys; r=os.environ["RECIPE"].split(","); i=int(sys.argv[1])-1; print(r[i] if i < len(r) else "nothing")' "$n")"
 T="python3 $TREE_PY"
@@ -138,14 +139,14 @@ class Chain(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
         shutil.rmtree(self.aside, ignore_errors=True)
 
-    def run_chain(self, recipe, cap=6, **env):
-        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE=recipe,
+    def run_chain(self, recipe, cap=6, flags=(), **env):
+        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, CODEX_CMD="bash %s" % self.stub, RECIPE=recipe,
                  COUNT_FILE=str(self.count), KINDS_FILE=str(self.kinds),
                  TREE_PY=str(HERE / "tree.py"), HOME=str(self.aside), **env)
         # Run from inside a chain, the environment names THAT chain's directory; this
         # chain must make its own (see `export -n RUNDIR` in run.sh).
         e.pop("RUNDIR", None) if "RUNDIR" not in env else None
-        p = subprocess.run([str(RUNNER), "W1", str(cap)], cwd=self.root, env=e,
+        p = subprocess.run([str(RUNNER), *flags, "W1", str(cap)], cwd=self.root, env=e,
                            capture_output=True, text=True, timeout=300)
         metas = sorted((self.root / ".dfs" / "runs").glob("*/meta.json"),
                        key=lambda f: f.stat().st_mtime)
@@ -1509,6 +1510,17 @@ class Chain(unittest.TestCase):
         self.assertEqual(sorted(hooks), ["PostToolUse", "Stop"])
         self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post"), hooks)
         self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop"), hooks)
+
+    def test_a_codex_work_session_is_started_with_the_inbox_hooks_before_exec_and_its_run_s_inbox(self):
+        named = self.aside / "named"
+        rc, _, out = self.run_chain("work", cap=1, flags=("--codex",), RUNDIR=str(named), AGENT_NIXPKGS_REV="none")
+        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), str(named.resolve() / "inbox"), out)
+        argv = (self.aside / "kinds.argv").read_text().splitlines()
+        before = argv[:argv.index("exec")]
+        self.assertIn("features.hooks=true", before)
+        self.assertIn("--dangerously-bypass-hook-trust", before)
+        self.assertTrue(any(a.startswith("hooks.PostToolUse=") and "inbox.py post" in a for a in before), argv)
+        self.assertTrue(any(a.startswith("hooks.Stop=") and "inbox.py stop" in a for a in before), argv)
 
     def test_a_raise_blocks(self):
         rc, meta, out = self.run_chain("raise")

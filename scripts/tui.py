@@ -1185,6 +1185,10 @@ def codex_item_lines(item, live=False):
     if t == "todo_list":
         return [("  ☰ todo list, %d items" % len(item.get("items") or []), "dim")]
     if t == "error":
+        # codex's notice that run.sh started it with the inbox hooks' trust bypassed (inbox.py
+        # --codex-args), which it prints twice: a note, not a failure.
+        if "--dangerously-bypass-hook-trust" in str(item.get("message") or ""):
+            return [("  · hooks run without review: the inbox's, for the author's messages", "dim")]
         return [("  ⨯ %s" % (item.get("message") or "no message"), "err")]
     # An item type nobody has taught this screen still gets a row NAMING itself,
     # rather than being dropped: a codex release that adds one should read as one

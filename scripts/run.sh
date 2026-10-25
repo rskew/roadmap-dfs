@@ -693,7 +693,13 @@ run_session() {
     # here keeps a foreground launch and a TUI-launched one reading the same thing.
     SID=""
     meta_set sid=""
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
+    # The author's messages reach it as claude's do: two hooks that read the run's inbox
+    # (inbox.py), installed by `-c` overrides, one flag to a line. ⚠️ BEFORE `exec`: a `-c`
+    # after it replaces every `-c` the launch command gave before it (a model provider
+    # among them), and codex then asks api.openai.com.
+    local inbox_args=() inbox_arg
+    while IFS= read -r inbox_arg; do inbox_args+=("$inbox_arg"); done < <(python3 "$HERE/inbox.py" --codex-args)
+    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
       > "$log" < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"

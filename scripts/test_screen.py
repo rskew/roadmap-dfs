@@ -1105,7 +1105,7 @@ class AMessageToTheRunningSession(unittest.TestCase):
     def test_nothing_is_sent_to_an_ended_chain_an_agent_without_hooks_or_on_esc(self):
         self.chain["live"] = False
         self.assertIn("ended", self.send("x").msg)
-        self.chain.update(live=True, agent="codex")
+        self.chain.update(live=True, agent="kiro")
         self.assertIn("cannot take a message", self.send("x").msg)
         self.chain["agent"] = "claude"
         self.assertEqual(self.send("").msg, "sent nothing")
