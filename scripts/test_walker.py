@@ -255,6 +255,18 @@ class StopBreaks(unittest.TestCase):
         self.assertIsNone(self.w.snapshot()["next"])
         self.assertTrue(self.w.walk_on)
 
+    def test_a_walk_with_every_slot_taken_still_holds_the_break(self):
+        self.shape("open")
+        self.w.run_dirs = [run("h1", "W1", live=True)]     # a chain started by hand
+        self.w.start(10)
+        self.assertEqual(self.w.started_chains, [])
+        self.shape("done")
+        self.w.run_dirs = [run("h1", "W1", stop="done")]   # it has ended
+        self.w.walk_tick()
+        self.assertEqual(self.w.started_chains, [])
+        self.assertFalse(self.w.walk_on)
+        self.assertIn("stop break above W2", self.w.walk_note)
+
     def test_a_pin_goes_past_it(self):
         self.shape("open")
         self.w.pin("W2")

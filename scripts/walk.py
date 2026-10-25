@@ -383,6 +383,10 @@ class WalkMixin:
             for rec, run in ended:
                 if not self.walk_judge(rec, run):
                     return
+        # Recorded on every tick the walk is on, before the returns for a hold and for
+        # no free slot: a walk whose slots a hand-started chain filled still waits at
+        # the break, and must end there rather than go past it once that chain is done.
+        stop = self.walk_stop_at()
         if time.time() < self.walk_until:
             return
 
@@ -395,7 +399,6 @@ class WalkMixin:
         if free < 1:
             return
         busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in foreign}
-        stop = self.walk_stop_at()
         items = [i for i in self.items if stop is None or i.get("segment", 0) < stop]
         # ⚠️ A CHAIN WITH NO WORKTREE WORKS IN THE ONE CHECKOUT. Two of them there find each
         # other's half-done work as foreign dirt and interleave commits on one branch, so at
