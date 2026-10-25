@@ -194,6 +194,7 @@ class WalkMixin:
     walk_chains = ()
     walk_carry = ()
     walk_carry_pinned = ()
+    walk_stops = frozenset()
 
     def walk_init(self):
         self.walk_on = False
@@ -211,6 +212,7 @@ class WalkMixin:
         self.walk_note = ""         # why the last walk stopped, until the next one
         self.walk_next = None       # an item the author pinned for the next chain — walk_pin
         self.walk_pending = False   # on, but nothing is workable: waiting for a task to appear
+        self.walk_stops = frozenset()   # tasks behind a stop break that held them this walk
 
     def walk_begin(self, budget, parallel=1):
         """Turn the walk on with `budget` sessions, run `parallel` chains at a time: what `w`
@@ -233,6 +235,7 @@ class WalkMixin:
         self.walk_carry_pinned = set()
         self.walk_note = ""
         self.walk_pending = False
+        self.walk_stops = frozenset()
         both = "%d sessions" % budget + (", %d at a time" % parallel if parallel > 1 else "")
         self.msg = "walk: on, %s — w to stop" % both
         if parallel > 1 and not self.walk_cuts_new():
@@ -391,16 +394,20 @@ class WalkMixin:
         if free < 1:
             return
         busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in foreign}
+        stop = self.walk_stop_at()
+        items = [i for i in self.items if stop is None or i.get("segment", 0) < stop]
         # ⚠️ A CHAIN WITH NO WORKTREE WORKS IN THE ONE CHECKOUT. Two of them there find each
         # other's half-done work as foreign dirt and interleave commits on one branch, so at
         # most one chain without a worktree runs at a time; those with one run beside it.
         in_place = any(not self.walk_cuts(i) for i in busy)
-        lead = self.walk_lead(busy)
+        behind = {i["id"] for i in self.items} - {i["id"] for i in items}
+        lead = [x for x in self.walk_lead(busy)
+                if x not in behind or x == self.walk_next or x in self.walk_carry_pinned]
         picks, skipped = [], set()
         while True:
             # A task that would share the checkout with a chain already there is passed
             # over, and the slot goes to the next task, which may have a worktree of its own.
-            asked = dfs_state.next_items(self.items, free - len(picks), busy | skipped | set(picks),
+            asked = dfs_state.next_items(items, free - len(picks), busy | skipped | set(picks),
                                          first=[x for x in lead if x not in picks])
             if not asked:
                 break
@@ -413,6 +420,14 @@ class WalkMixin:
                 picks.append(item)
             if len(picks) >= free or not skipped & set(asked):
                 break
+        if not picks and stop is not None and not self.walk_chains and not any(
+                i.get("waiting_on") for i in self.items if i.get("segment", 0) == stop):
+            # Everything before the stop break is done and this walk's chains have
+            # ended: the end the author asked for, so they review before going on.
+            first = next(i["id"] for i in self.items if i.get("segment", 0) == stop)
+            self.walk_off("stopped at the stop break above %s: everything before it is "
+                          "done — review it, then start a walk to go on" % first)
+            return
         if not picks:
             # ⚠️ NOTHING TO TAKE IS A WAIT, NOT AN END. The walk stays on and asks
             # again on every tick (`reload` re-reads the trees), so a task created
@@ -446,6 +461,27 @@ class WalkMixin:
                 return
             self.walk_chains = self.walk_chains + [dict(
                 dir=rundir, item=item, started=started, content=content, pin=pin, cap=cap)]
+
+    def walk_stop_at(self, keep=True):
+        """The segment this walk takes nothing from, or None: the first one a STOP BREAK
+        (`--- stop`, `order.py`) opens that has held a task while the walk was on.
+
+        ⚠️ HELD WHILE THE WALK WAS ON, not merely there. A stop break is for the author
+        to review what was worked before it, so the walk that worked up to it ends there
+        (`walk_tick`), and the walk they start afterwards, which finds it open, passes it.
+        The tasks it held are kept by id, so a fence it held stays this walk's end once it
+        opens, and a renumbering of segments by a break added mid-walk does not move it.
+        Only the walk reads it: what the order says (`next_item`) is the fence as ever.
+        The pin is the author overriding the order, and goes past it. `keep` False reads
+        without recording what is held now (`walk_target`)."""
+        if not self.walk_on:
+            return None
+        stops = self.walk_stops | {i["id"] for i in self.items
+                                   if i.get("stop") and i.get("waiting_on")}
+        if keep:
+            self.walk_stops = frozenset(stops)
+        return min((i.get("segment", 0) for i in self.items
+                    if i.get("stop") and i["id"] in stops), default=None)
 
     def walk_cuts_new(self):
         """Whether a task with no worktree yet gets one cut (`paths.cuts_worktrees`)."""
@@ -523,14 +559,20 @@ class WalkMixin:
 
     def walk_target(self):
         """The one answer to "which task does the walk take next": the pin while that
-        task is open, else the order's answer (`next_item`). The screen's header and walk
+        task is open, else the order's answer (`next_item`), unless that is behind the
+        stop break this walk ends at (`walk_stop_at`). The screen's header and walk
         preview, the page's `next`, and the chain the walk starts all read this, so
         what is shown is what is taken. Reads only; `walk_pinned` is what drops a dead pin."""
         pin = self.walk_next
         if pin is not None and any(i["id"] == pin and i["status"] == "open"
                                    for i in self.items):
             return pin
-        return self.data.get("next_item")
+        nxt = self.data.get("next_item")
+        stop = self.walk_stop_at(keep=False)
+        if stop is not None and any(i["id"] == nxt and i.get("segment", 0) >= stop
+                                    for i in self.items):
+            return None
+        return nxt
 
     def walk_pinned(self):
         """The pinned item, while it can still be worked; a pin that cannot is dropped.
