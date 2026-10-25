@@ -73,6 +73,8 @@ kind=work; case "$prompt" in *"You are the critic"*) kind=critic ;; *"You are th
 echo "$kind" >> "$KINDS_FILE"
 echo "$kind $(printf '%s\n' "$@" | grep -A1 -x -e '--model' | tail -1)" >> "$KINDS_FILE.models"
 echo "${RUNDIR:-<unset>}" > "$KINDS_FILE.rundir"
+echo "${DFS_INBOX:-<unset>}" > "$KINDS_FILE.inbox"
+echo "$(printf '%s\n' "$@" | grep -A1 -x -e '--settings' | tail -1)" > "$KINDS_FILE.settings"
 pwd -P > "$KINDS_FILE.cwd"
 recipe="$(python3 -c 'import os,sys; r=os.environ["RECIPE"].split(","); i=int(sys.argv[1])-1; print(r[i] if i < len(r) else "nothing")' "$n")"
 T="python3 $TREE_PY"
@@ -1498,6 +1500,15 @@ class Chain(unittest.TestCase):
         self.assertTrue((named / "meta.json").exists(), "the runner ignored RUNDIR:\n" + out)
         self.assertEqual((self.aside / "kinds.rundir").read_text().strip(), "<unset>",
                          "the agent inherited the chain's directory")
+
+    def test_a_claude_work_session_is_started_with_the_inbox_hooks_and_its_run_s_inbox(self):
+        named = self.aside / "named"
+        rc, _, out = self.run_chain("work", cap=1, RUNDIR=str(named))
+        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), str(named.resolve() / "inbox"), out)
+        hooks = json.loads((self.aside / "kinds.settings").read_text())["hooks"]
+        self.assertEqual(sorted(hooks), ["PostToolUse", "Stop"])
+        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post"), hooks)
+        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop"), hooks)
 
     def test_a_raise_blocks(self):
         rc, meta, out = self.run_chain("raise")

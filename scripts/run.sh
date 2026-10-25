@@ -710,7 +710,13 @@ run_session() {
     # session goes, and we CHOSE the id, so the live turns are readable from the
     # first one — by tui.py, which is the only reader.
     meta_set sid="$SID"
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
+    # The author's messages from the screen or the page land in the run's inbox, and
+    # these two hooks hand them over: at the next tool call, or as one more turn when
+    # the session would stop (inbox.py). Without a message they print nothing.
+    local inbox_settings
+    inbox_settings="$(python3 "$HERE/inbox.py" --settings)"
+    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" \
+      --settings "$inbox_settings" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
     session_rc=$?
   fi
   return "$session_rc"
@@ -1023,7 +1029,7 @@ elif [ "$AGENT" = opencode ]; then
 elif [ "$AGENT" = kiro ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
 else
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --model <opus to plan, sonnet to implement> ${PERMISSION_ARGV[*]}"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --settings <the inbox hooks> --model <opus to plan, sonnet to implement> ${PERMISSION_ARGV[*]}"
 fi
 total_turns=0
 total_cost=0
