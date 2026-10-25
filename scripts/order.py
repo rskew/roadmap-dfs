@@ -29,6 +29,10 @@ above it is `done` — not merely unblocked — and `dfs_state.walk` derives tha
 are kept apart: "answer this", "answer something above this" and "finish something
 before this" are three different instructions.
 
+A break may carry one parameter, `--- stop` (`STOP`, below): the same fence, which a
+walk that waited at it also ENDS at, so the author reviews before going on (`walk.py`'s
+`walk_stop_at`).
+
 ⚠️ **A break can never sit INSIDE a subtree**, and that is what makes it cheap: it
 ends every open branch, so the line after one is always a root, no span can contain
 one, and no move can smuggle one into a branch. It is also why a break is only
@@ -107,12 +111,14 @@ onto the next branch rather than stopping.
 A rule on its own line is a BREAK: everything after it waits until everything before
 it is done, which is the one thing nesting cannot say. A break separates whole
 branches — it never cuts one — and an item written after it is behind it, including
-one nobody has placed yet.
+one nobody has placed yet. A rule followed by the word `stop` is a STOP break: it
+also ends a walk that waited at it once everything before it is done, so the work can
+be reviewed, and the next walk goes past it.
 
 Read by `<scripts>/tui.py` (`[`/`]` move the selected item among its
 siblings, `{`/`}` move it out of and into a branch, `b` puts a break above it or takes
-one away) and by `state.py`, which returns the items in this order with their
-depth and the segment each is in. An item not named here sorts after every item that
+one away, `B` makes it a stop break or plain again) and by `state.py`, which returns
+the items in this order with their depth and the segment each is in. An item not named here sorts after every item that
 is, at the root, by id. See `order.py` for why this is not §2.
 
 Prose goes above the list; the list is the last thing in the file.
