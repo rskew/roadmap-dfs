@@ -1804,6 +1804,14 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     if (process.env.DFS_UI_SHOT) await page.screenshot({ path: process.env.DFS_UI_SHOT });
     await page.click("#tabs [data-act=up]");
     await page.waitForSelector(".row");
+    // A run opened again, the live one just left or a finished one a second time, draws its console, not an empty box.
+    for (const [row, text] of [["a.runrow:has(.tag.settled)", "9 turns"], ["a.runrow:not(:has(.tag.settled))", "17 turns"], ["a.runrow:not(:has(.tag.settled))", "17 turns"]]) {
+      await page.click(row);
+      await page.waitForFunction(t => (document.querySelector("#runlog") || {}).textContent?.includes(t), text, { timeout: 4000 })
+        .catch(() => { throw new Error(`a run opened again shows its console (${text})`); });
+      await page.click("#tabs [data-act=up]");
+      await page.waitForSelector(".row");
+    }
     await page.goto(URL_ + "/#/r/W9/dfs_run_nope");
     await page.waitForSelector(".hint");
     assert((await page.textContent(".hint")).includes("No such run"), "an unknown run says so");

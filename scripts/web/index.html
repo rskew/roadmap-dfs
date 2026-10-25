@@ -805,7 +805,9 @@ async function drawSession(r, mine) {
 }
 async function drawRun(r, mine) {
   if (r.session) return drawSession(r, mine);
-  const key = r.task + "/" + r.name, view = $("#view"), fresh = RUNLOG.key !== key;
+  // A look is fresh, asking for the tail, unless this run's console box is on the page: `RUNLOG` outlives the screen,
+  // and asking a reopened run only for what came after its last look would fill a new, empty box with nothing.
+  const key = r.task + "/" + r.name, view = $("#view"), fresh = RUNLOG.key !== key || view.dataset.run !== key || !view.querySelector("#runlog");
   if (fresh) Object.assign(RUNLOG, { key, end: 0, text: "", info: null });
   let got;
   try { got = await api("/api/run/" + encodeURIComponent(r.name) + (fresh ? "" : "?from=" + RUNLOG.end)); }
