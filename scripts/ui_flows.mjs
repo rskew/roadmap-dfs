@@ -1838,6 +1838,12 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => document.querySelector("#runlog").textContent.includes("W9.12 is confirmed."), null, { timeout: 8000 })
       .catch(() => { throw new Error("a live session grows by itself"); });
     if (process.env.DFS_UI_SHOT) await page.screenshot({ path: process.env.DFS_UI_SHOT });
+    // Back on a session reached from the console returns to the task, not to the console, and Back there reaches the list.
+    await page.click("#tabs [data-act=up]");
+    await page.waitForFunction(() => location.hash === "#/t/W9" && document.querySelector(".row"), null, { timeout: 4000 })
+      .catch(async () => { throw new Error("Back on a session goes to its task, not " + await page.evaluate(() => location.hash)); });
+    await page.click("#tabs [data-act=up]");
+    await page.waitForSelector(".item[data-id=W9]");
     await page.goto(URL_ + "/#/r/W9/dfs_run_codex/run-7");
     await page.waitForSelector(".hint");
     assert((await page.textContent(".hint")).includes("No such session"), "an unknown session says so");
