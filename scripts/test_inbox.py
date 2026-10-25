@@ -282,13 +282,16 @@ class ToolOpenAIModel(FakeOpenAIModel):
     """A stand-in chat completions model: it answers a request that carries tools and no tool result
     with a call of opencode's `shell` running `command`, and every other request with the text `say`."""
 
-    def __init__(self, command, say="done"):
+    def __init__(self, command, say="done", answer_after=0):
         super().__init__(say)
         self.command = command
+        self.answer_after = answer_after      # seconds the answer to the tool's result takes
 
     def answer(self, h, request, slow):
         called = any(m.get("role") == "tool" for m in request.get("messages", []))
         if not request.get("tools") or called:
+            if called:
+                time.sleep(self.answer_after)
             return super().answer(h, request, slow)
         call = dict(index=0, id="call_1", type="function", function=dict(name="shell", arguments=json.dumps({"command": self.command})))
         for delta, finish in ((dict(role="assistant", tool_calls=[call]), None), ({}, "tool_calls")):
@@ -300,10 +303,10 @@ class ToolOpenAIModel(FakeOpenAIModel):
 
 @unittest.skipUnless(OPENCODE, "no opencode 2 here")
 class RealOpencode(unittest.TestCase):
-    def session(self, command, meanwhile):
+    def session(self, command, meanwhile, answer_after=0):
         """Run `opencode run` as run.sh does for a work session, call `meanwhile(model, run_dir)` while it
         runs, and return the model, the run directory and opencode's stream."""
-        model = ToolOpenAIModel(command)
+        model = ToolOpenAIModel(command, answer_after=answer_after)
         model.__enter__()
         self.addCleanup(model.__exit__, None, None, None)
         home = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
@@ -337,15 +340,18 @@ class RealOpencode(unittest.TestCase):
         self.assertIn("W104-PING also check the README", bodies[2])
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
-    def test_a_message_after_the_last_tool_call_stays_waiting(self):
+    def test_a_message_sent_while_the_model_writes_its_last_answer_gets_one_more_turn(self):
         def send(model, run_dir):
             end = time.time() + 60
             while len(model.requests) < 3 and time.time() < end:
-                time.sleep(0.05)
-            dfs_runs.post_message(str(run_dir), "W104-PING too late")
-        model, run_dir, out = self.session("true", send)
-        self.assertNotIn("W104-PING", "".join(b.decode() for _, b in model.requests))
-        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["waiting"])
+                time.sleep(0.02)
+            dfs_runs.post_message(str(run_dir), "W104-PING one more thing")
+        model, run_dir, out = self.session("true", send, answer_after=3)
+        bodies = [b.decode() for _, b in model.requests]
+        self.assertEqual(len(bodies), 4, bodies)
+        self.assertNotIn("W104-PING", bodies[2])
+        self.assertIn("W104-PING one more thing", bodies[3])
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
 
 class OpencodeWiring(unittest.TestCase):

@@ -19,9 +19,10 @@ it counts as delivered: the screen shows it so from then on.
 
 codex takes the same two hooks as `-c` overrides (`codex_args`), with the same JSON out.
 
-opencode 2.1.1 has no hook for a session about to end, only a plugin (`opencode_inbox/`) that runs
-`inbox.py post` after each tool call and adds its answer to the tool's result. A message
-that arrives after the last tool call is never read, and the screen and page list it so.
+opencode 2.1.1 has no hook for a session about to end, but its plugin (`opencode_inbox/`) can send the
+session a prompt: it polls the inbox, claims each message with `inbox.py post` and hands it over with
+`ctx.session.prompt(..., delivery: "steer")`, which opencode takes at its next step or, if the model is
+on its last answer, as one more turn. Only a message that arrives after the session has ended stays waiting.
 
 Checked against a real claude-code 2.1.308 under `-p`: PostToolUse's
 `additionalContext` is in the very next request, and a Stop hook's `block` makes the
