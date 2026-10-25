@@ -1064,5 +1064,52 @@ def tearDownModule():
     curses.color_pair = _color_pair
 
 
+
+class AMessageToTheRunningSession(unittest.TestCase):
+    """`M` on a live chain's log leaves the author's message in its inbox (inbox.py
+    hands it to the session), and the log lists each message waiting or delivered."""
+
+    def setUp(self):
+        import shutil
+        import tempfile
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.chain = dict(dir=self.d, live=True, agent="claude", item="W1")
+        saved = TUI.dfs_runs.run_dirs
+        TUI.dfs_runs.run_dirs = lambda: [self.chain]
+        self.addCleanup(setattr, TUI.dfs_runs, "run_dirs", saved)
+
+    def send(self, typed):
+        ui = a_screen([item("W1")], pane="agentlog", answers=[typed])
+        ui.send_message(dict(run=dict(self.chain)))
+        return ui
+
+    def test_a_typed_message_waits_in_the_inbox_and_is_listed_so(self):
+        ui = self.send("look at the README too")
+        self.assertIn("next tool call", ui.msg)
+        [m] = TUI.dfs_runs.messages(self.d)
+        self.assertEqual((m["text"], m["state"]), ("look at the README too", "waiting"))
+        [(line, _)] = ui.lines_messages(self.chain)
+        self.assertIn("waiting · look at the README too", line)
+
+    def test_a_delivered_message_says_so_and_one_left_when_the_chain_ended_was_never_read(self):
+        import inbox
+        TUI.dfs_runs.post_message(self.d, "first")
+        inbox.claim(TUI.dfs_runs.os.path.join(self.d, "inbox"))
+        TUI.dfs_runs.post_message(self.d, "second")
+        ui = a_screen([item("W1")])
+        lines = [t for t, _ in ui.lines_messages(dict(self.chain, live=False))]
+        self.assertRegex(lines[0], r"delivered \d\d:\d\d · first")
+        self.assertIn("never read · second", lines[1])
+
+    def test_nothing_is_sent_to_an_ended_chain_an_agent_without_hooks_or_on_esc(self):
+        self.chain["live"] = False
+        self.assertIn("ended", self.send("x").msg)
+        self.chain.update(live=True, agent="codex")
+        self.assertIn("cannot take a message", self.send("x").msg)
+        self.chain["agent"] = "claude"
+        self.assertEqual(self.send("").msg, "sent nothing")
+        self.assertEqual(TUI.dfs_runs.messages(self.d), [])
+
 if __name__ == "__main__":
     unittest.main()
