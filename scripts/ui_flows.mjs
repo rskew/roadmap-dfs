@@ -935,6 +935,12 @@ const FLOWS = {
     // a new chat opens with the summary, unprompted, before anything is said
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 1, null, { timeout: 20000 });
     assert(!(await page.$("#chat-log .msg.you")), "nobody has spoken: the opening is the tool's, not yours");
+    assert(/You are talking with the author about task W9/.test(await page.$eval("#chat-log .msg", m => m.classList.contains("prompt") ? m.textContent : "")), "and it is shown first, as the prompt");
+    if (process.env.DFS_SHOT) {      // for a node's screenshot: the top of the log, where the prompt is
+      const at = await page.$eval("#chat-log", l => { const y = l.scrollTop; l.scrollTop = 0; return y; });
+      await page.screenshot({ path: process.env.DFS_SHOT });
+      await page.$eval("#chat-log", (l, y) => { l.scrollTop = y; }, at);
+    }
     await page.fill("#chat-input", "Where is the journal mode decided?");
     await page.click("#chat-send");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 2, null, { timeout: 20000 });
@@ -947,9 +953,9 @@ const FLOWS = {
 await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent").length >= 3, null, { timeout: 20000 });
     await page.reload(); await page.waitForSelector(".row");          // the route is still W9
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
-    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 5, null, { timeout: 5000 });
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 6, null, { timeout: 5000 });
     await page.click("[data-act=chatclear]");
-    await page.waitForFunction(() => { const m = document.querySelectorAll("#chat-log .msg"); return m.length === 1 && m[0].classList.contains("agent") && !document.querySelector("#chat-log .msg.you"); }, null, { timeout: 20000 });    // and a new one opens with the summary again
+    await page.waitForFunction(() => { const m = document.querySelectorAll("#chat-log .msg"); return m.length === 2 && m[0].classList.contains("prompt") && m[1].classList.contains("agent") && !document.querySelector("#chat-log .msg.you"); }, null, { timeout: 20000 });    // and a new one opens with the summary again
     await page.click("[data-act=chatclose]");
     await toList(page);
     await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
@@ -957,17 +963,21 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
-  // An empty chat says what the agent may do: it has full permissions, so it must not claim to change nothing.
+  // A new chat has no text of the page's own at its top: what shows first is the prompt the agent was opened with.
   async chatempty(b) {
     const { page, errors } = await open(b, PHONE);
-    const state = { scope: "W9", messages: [], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    const state = { scope: "W9", messages: [], busy: true, busy_for: 1, live: false, elsewhere: false, note: "" };
     await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
     await task(page, "W9");
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
-    await page.waitForFunction(() => /Ask about/.test(document.querySelector("#chat-log").textContent));
-    const text = await page.textContent("#chat-log");
-    assert(!/changes nothing/.test(text), "the empty chat does not claim the agent changes nothing");
-    assert(/full permissions/.test(text), "the empty chat says the agent has full permissions");
+    await page.waitForSelector("#chat-log .msg.wait");
+    same(await page.$$eval("#chat-log > *", e => e.map(x => x.className)), ["msg wait"], "before the prompt is recorded, only the wait is drawn");
+    assert(!/Ask about|full permissions/.test(await page.textContent("#chat-log")), "the page's own paragraph is gone");
+    state.messages = [{ role: "prompt", text: "You are talking with the author about task W9: read .dfs/ROADMAP.md." }];
+    await page.waitForSelector("#chat-log .msg.prompt", { timeout: 10000 });
+    same(await page.$$eval("#chat-log > *", e => e.map(x => x.className)), ["msg prompt", "msg wait"], "the prompt is the chat's first message");
+    same(await page.textContent("#chat-log .msg.prompt .who"), "Prompt", "labelled as the prompt");
+    same(await page.textContent("#chat-log .msg.prompt .what"), state.messages[0].text, "in full, as the agent was given it");
     same(errors, [], "no page errors");
   },
 

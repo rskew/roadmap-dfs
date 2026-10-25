@@ -193,8 +193,9 @@ class Web(unittest.TestCase):
                 if not st["busy"]:
                     break
                 _t.sleep(0.1)
-            self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
-                             [("you", "Where are we?"), ("agent", "I read it. Hello from the agent.")])
+            self.assertEqual([(m["role"], m["text"][:37]) for m in st["messages"]],
+                             [("prompt", "You are talking with the author about"), ("you", "Where are we?"),
+                              ("agent", "I read it. Hello from the agent.")])
             status, st, _ = self.call("POST", "/api/chat/interrupt", dict(scope="W1"))
             self.assertEqual((status, st["busy"]), (200, False), "Stop with nothing answering changes nothing")
             self.assertEqual(self.call("POST", "/api/chat/interrupt", dict(scope="W9"))[0], 409)

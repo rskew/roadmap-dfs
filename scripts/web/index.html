@@ -282,7 +282,7 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .msg .what { white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.you { padding: var(--s2) var(--s3); background: var(--sel); border-left: var(--rule-status) solid var(--ink); }
 .msg.error { padding: var(--s2) var(--s3); background: var(--attention-wash); border-left: var(--rule-status) solid var(--attention); }
-.msg.wait, .msg.note { color: var(--muted); }
+.msg.wait, .msg.note, .msg.prompt { color: var(--muted); }
 pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
 ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } ul.md li, ol.md li { margin: 0 0 2px; overflow-wrap: anywhere; }
 .msg pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
@@ -1390,14 +1390,13 @@ const chatKey = () => "chat:" + CHAT.scope;
 function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  const who = { you: "You", agent: "Agent", error: "Not answered" };
+  const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
   const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent]);
   if (sig === CHAT.last) return;
   CHAT.last = sig;
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
   log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">Running in the terminal's process: type here, or press <code>c</code> there to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
-    + (st.messages.length ? "" : `<p class="muted">Ask about ${CHAT.scope === "project" ? "the project" : "this task"}: where the work is, what was refuted and why, what to do next. It has full permissions, as the screen&rsquo;s chat does: it can read and change files and run commands.</p>`)
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "");
   $("#chat-stop").hidden = !st.busy;

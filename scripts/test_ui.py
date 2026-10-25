@@ -311,7 +311,7 @@ class Flows(unittest.TestCase):
     def test_navigation_is_under_the_thumbs(self):
         self.flow("thumbs")
 
-    def test_an_empty_chat_says_the_agent_has_full_permissions(self):
+    def test_a_new_chat_starts_with_its_opening_prompt_and_no_text_of_the_pages_own(self):
         self.flow("chatempty")
 
     def test_stop_is_shown_while_the_agent_answers_and_asks_the_server_to_stop_it(self):
