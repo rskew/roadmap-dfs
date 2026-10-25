@@ -213,6 +213,15 @@ class Chain(unittest.TestCase):
         self.assertIn("dfs_run: git will not add 1 roadmap path", out)
         self.assertIn(".gitignore:2  *.html   hides .dfs/artefacts/a.html", out)
 
+    def test_the_merge_commit_carries_the_tasks_details_and_the_node_commits_carry_none(self):
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        body = self.git("log", "--merges", "-1", "--format=%b")
+        self.assertIn("W1 · the only thing", body)
+        self.assertIn("W1.1 · the step: confirmed. done.", body)
+        node = self.git("log", "--no-merges", "--grep", "^W1.1:", "-1", "--format=%b")
+        self.assertEqual(node, "")
+
     def test_a_passing_review_merges_the_branch_and_drops_the_worktree(self):
         (self.root / "app.txt").write_text("the author's edit\n")
         rc, meta, out = self.run_chain("work,confirm,rok")
