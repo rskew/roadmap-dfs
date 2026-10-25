@@ -885,8 +885,17 @@ const FLOWS = {
         assert(r.w >= 44 && r.x >= 0 && r.x + r.w <= await W(), `${name}: ${what} is at least 44px wide and inside the viewport (x ${Math.round(r.x)}, ${Math.round(r.w)}px wide)`);
         return r;
       };
+      // a thin line along the bar's foot, on its buttons' lower edge, so the thumb sees where they end and the gesture handle begins
+      const line = async (bar, btn, what) => {
+        const r = await page.evaluate(([bar, btn]) => {
+          const e = document.querySelector(bar), s = getComputedStyle(e, "::after");
+          return { content: s.content, h: parseFloat(s.height), y: e.getBoundingClientRect().bottom - parseFloat(s.bottom), btn: document.querySelector(btn).getBoundingClientRect().bottom };
+        }, [bar, btn]);
+        assert(r.content !== "none" && r.h >= 1 && r.h <= 2 && Math.abs(r.y - r.btn) <= 1, `${name}: a thin line under ${what}, on its buttons' lower edge (${JSON.stringify(r)})`);
+      };
       // the list: All, Needs you, Reorder and Chats in the bar, no filter strip above the rows and no Assumptions tab
       await low("#tabs [data-act=only][data-v='0']", "All"); await low("#tabs [data-act=only][data-v='1']", "Needs you"); await low("#tabs [data-act=reorder]", "Reorder"); await low("#tabs [data-tab=chats]", "Chats tab");
+      await line("#tabs", "#tabs [data-act=only][data-v='0']", "the bar");
       assert(!(await page.$(".filters")) && !(await page.$("[data-tab=assumptions]")), `${name}: the filters live in the bar and the Assumptions tab is gone`);
       assert(await page.$eval("#back", e => getComputedStyle(e).display === "none"), `${name}: no Back up in the header`);
       // a task: Chat and Flagged on the left, Back at the right
@@ -899,6 +908,7 @@ const FLOWS = {
       await page.click("#tabs [data-act=nextflag]"); await page.waitForSelector("#sheet.open");
       const nb = await low("#sheet [data-act=close]", "node Back"), np = await low("#sheet [data-act=prev]", "Prev");
       const nn = await low("#sheet [data-act=next]", "Next"), nf = await low("#sheet [data-act=nextflag]", "node Flagged");
+      await line("#sheet .sheet-nav", "#sheet [data-act=close]", "the node's bar");
       assert(np.x < nn.x && nn.x < nf.x && nf.x < nb.x, `${name}: Prev, Next, Flagged, Back, left to right`);
       assert(np.x < (await W()) / 3, `${name}: Prev is under the left thumb`);
       assert(nb.x + nb.w > (await W()) * 0.7, `${name}: Back is under the right thumb`);
@@ -914,6 +924,7 @@ const FLOWS = {
       // the chat: Back at the bottom
       await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
       await low("#chat [data-act=chatclose]", "chat Back");
+      await line("#chat .chat-nav", "#chat [data-act=chatclose]", "the chat's bar");
       await page.click("#chat [data-act=chatclose]"); await page.waitForFunction(() => !document.querySelector("#chat[open]"));
       same(errors, [], `${name}: no page errors`);
       await ctx.close();
@@ -923,6 +934,7 @@ const FLOWS = {
     await task(page, "W9");
     assert(await page.$eval("#back", e => getComputedStyle(e).display !== "none"), "desktop: Back is in the header");
     assert((await page.$eval("#tabs", e => e.getBoundingClientRect().y)) < 60, "desktop: the tabs are at the top");
+    assert(await page.$eval("#tabs", e => getComputedStyle(e, "::after").content === "none"), "desktop: no line under the tabs at the top");
     await ctx.close();
   },
 
