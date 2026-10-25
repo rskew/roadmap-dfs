@@ -1,0 +1,227 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W104: a message reaches a running session at its next tool call, or when it tries to stop</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .tabs button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .tl { display: flex; flex-direction: column; gap: 6px; }
+  .step { border: 1.5px solid #999; border-radius: 6px; padding: 8px 10px; background: #fff; }
+  .step .who { font-size: 13px; color: #555; display: block; }
+  .step.msg { border-color: #1f5fbf; background: #eaf1fc; }
+  .step.lands { border-color: #217a3c; background: #e7f5ea; }
+  .step.lost { border-color: #b3261e; background: #fbeaea; }
+  .costs { margin: 8px 0 0; padding-left: 20px; }
+  .ev { font-size: 14px; color: #333; }
+  summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+</style>
+
+<h1>When does the author's message reach the session?</h1>
+<p>A work session is <code>claude -p</code>: one long turn of model calls and tool calls, with no
+  prompt to type into. Pick a way in to see where a message the author sends mid-tool lands.</p>
+<div class="tabs" role="group" aria-label="Way in">
+  <button data-opt="hook" aria-pressed="true">Hook inbox (chosen)</button>
+  <button data-opt="stdin" aria-pressed="false">stdin stream</button>
+  <button data-opt="resume" aria-pressed="false">Stop and resume</button>
+</div>
+<div class="tl" id="tl"></div>
+<h2>What follows</h2>
+<ul class="costs" id="costs"></ul>
+<h2>What would show it wrong</h2>
+<p>The author needs a message to cut into a long tool call or a long model answer at once, rather than wait for it to end.</p>
+<details><summary>▸ Evidence so far</summary>
+<p class="ev">A real claude-code 2.1.308 run with <code>-p</code> against a stand-in model: a message written while a
+  3-second Bash call ran was in the very next model request, as "PostToolUse:Bash hook additional context". A message
+  waiting when the model ended its turn was handed back by the Stop hook, and the session took one more turn and answered it.</p>
+</details>
+<script>
+  var plans = {
+    hook: { steps: [["model", "plans, calls Bash"], ["tool", "Bash runs for minutes", "msg", "author sends a message"],
+                    ["hook", "PostToolUse hook finds it in the inbox", "lands"], ["model", "next call sees it, acts on it"],
+                    ["model", "ends its turn; Stop hook hands over any message still waiting"]],
+            costs: ["Lands at the next tool call, seconds to minutes later; never mid-answer.",
+                    "The work session's command and its one JSON result are unchanged.",
+                    "Claude only: codex, kiro and opencode each need their own way in, or say they cannot take one."] },
+    stdin: { steps: [["model", "plans, calls Bash"], ["tool", "Bash runs for minutes", "msg", "author sends a message on stdin"],
+                     ["model", "the turn carries on to its end"], ["model", "the queued message starts the next turn", "lands"]],
+             costs: ["Changes every work session to stream-json in and out, which every reader of the run's log parses.",
+                     "The runner must hold stdin open and close it after the last result, or claude never exits.",
+                     "Claude only, as the hook is."] },
+    resume: { steps: [["model", "plans, calls Bash"], ["tool", "Bash runs for minutes", "msg", "author sends a message"],
+                      ["runner", "kills the session; the Bash call is cut off", "lost"],
+                      ["model", "claude -p --resume with the message", "lands"]],
+              costs: ["Immediate, but whatever was in flight is lost and the session's budget restarts its count.",
+                      "Works for any agent that can resume a session.",
+                      "The page already stops a chain outright when that is what is needed."] }
+  };
+  var cur = "hook";
+  function draw() {
+    var p = plans[cur], tl = document.getElementById("tl"), c = document.getElementById("costs");
+    tl.innerHTML = ""; c.innerHTML = "";
+    p.steps.forEach(function (s) {
+      var d = document.createElement("div"); d.className = "step";
+      d.innerHTML = '<span class="who"></span>'; d.firstChild.textContent = s[0];
+      d.appendChild(document.createTextNode(s[1]));
+      if (s[2] === "lands" || s[2] === "lost") d.className += " " + s[2];
+      tl.appendChild(d);
+      if (s[2] === "msg") {
+        var m = document.createElement("div"); m.className = "step msg";
+        m.innerHTML = '<span class="who">author</span>'; m.appendChild(document.createTextNode(s[3])); tl.appendChild(m);
+      }
+    });
+    p.costs.forEach(function (t) { var li = document.createElement("li"); li.textContent = t; c.appendChild(li); });
+    document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.opt === cur); });
+  }
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () { cur = b.dataset.opt; draw(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return { opt: cur }; };
+  document.addEventListener("dfs-state", function (e) { if (e.detail && plans[e.detail.opt]) { cur = e.detail.opt; draw(); } });
+  draw();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="A hook inbox is right: the message lands at the next tool call or at the stop."> Hook inbox: next tool call is soon enough</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="The message must cut in at once: stop the session and resume it with the message."> Stop and resume: it must cut in at once</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
