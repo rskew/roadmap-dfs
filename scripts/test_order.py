@@ -692,13 +692,13 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.ui.sel = 0
 
         def reload(note=""):
-            items, seg = [], 0
+            items, seg, stop = [], 0, False
             for name, depth in dfs_order.nodes_of(dfs_order.read_text()):
                 if dfs_order.is_break(name):
-                    seg += 1
+                    seg, stop = seg + 1, dfs_order.is_stop(name)
                     continue
                 items.append({"id": name, "depth": depth, "segment": seg,
-                              "status": "open"})
+                              "status": "open", "stop": stop})
             # Through the real derivation, so the rows carry what the screen reads
             # off them — `parent` after a reparent, `waiting_on` after a fence.
             self.ui.data = {"items": dfs_state.walk(items)}
@@ -718,6 +718,29 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.assertEqual(self.ui.current()["waiting_on"], "W1")
         self.assertEqual([r[0] for r in self.ui.list_rows()],
                          ["item", "break", "item", "item"])
+
+    def test_capital_b_makes_the_fence_a_stop_break_and_plain_again(self):
+        self.ui.sel = 1
+        self.ui.answers = ["y"]
+        self.ui.toggle_stop()
+        self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
+                         [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), ("W3", 0)])
+        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", True))
+        self.assertIn("a walk ends there", self.ui.msg)
+        self.ui.toggle_stop()
+        self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
+                         [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])
+        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", False))
+        self.ui.sel = 0
+        self.ui.toggle_stop()
+        self.assertIn("first item", self.ui.msg)
+
+    def test_capital_b_without_a_yes_adds_no_break(self):
+        self.ui.sel = 1
+        self.ui.answers = ["n"]
+        self.ui.toggle_stop()
+        self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
+                         [("W1", 0), ("W2", 0), ("W3", 0)])
 
     def test_what_a_held_row_says(self):
         # ⚠️ A marker only ever replaces `open`. The fence is the reason this matters:

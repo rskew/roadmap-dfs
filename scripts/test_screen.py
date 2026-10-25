@@ -935,6 +935,24 @@ class ADoneTaskRecedesInTheList(unittest.TestCase):
             TUI.LOOK.update(saved)
         return ui.scr.puts
 
+    def test_a_stop_break_is_named_on_its_rule(self):
+        rows = [("item", 0), ("break", None, True), ("item", 1), ("break", "W2", False),
+                ("item", 2)]
+        def draw(me):
+            ui_rows = rows
+            items = [item("W1", status="done"), item("W2", status="open"),
+                     item("W3", status="open")]
+            ui = a_screen(items, sel=2, list_scroll=0)
+            ui.scr = me.Rec()
+            ui.run_tag = lambda iid: ("", 0)
+            ui.list_rows = lambda: ui_rows
+            ui.status_attr = lambda status: 7
+            ui.draw_list(0, 10)
+            return ui.scr.puts
+        lines = [p[2] for p in draw(self) if p[2].startswith("──")]
+        self.assertTrue(lines[0].startswith("── stop break · above is done "), lines)
+        self.assertTrue(lines[1].startswith("── break · waiting on W2 "), lines)
+
     def test_the_whole_row_is_dim_and_the_status_says_done_with_a_tick(self):
         puts = self.draw()
         row = lambda y: [p for p in puts if p[0] == y]

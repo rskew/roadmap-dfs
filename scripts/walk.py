@@ -195,6 +195,7 @@ class WalkMixin:
     walk_carry = ()
     walk_carry_pinned = ()
     walk_stops = frozenset()
+    walk_on = False
 
     def walk_init(self):
         self.walk_on = False
