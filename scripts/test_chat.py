@@ -181,6 +181,14 @@ PY
 """
 
 
+def talk(messages, about="task W1"):
+    """A conversation's messages as (role, text), after the opening prompt, which must come first and be the
+    page's framing for `about`."""
+    assert messages and messages[0]["role"] == "prompt", messages[:1]
+    assert messages[0]["text"].startswith("You are talking with the author about " + about), messages[0]["text"]
+    return [(m["role"], m["text"]) for m in messages[1:]]
+
+
 class Chat(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
@@ -355,8 +363,7 @@ class Chat(unittest.TestCase):
         st = self.chats.send("W1", "Where is the work?")
         self.assertTrue(st["busy"])
         st = self.settle("W1")
-        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
-                         [("you", "Where is the work?"), ("agent", "I read it. Fine.")])
+        self.assertEqual(talk(st["messages"]), [("you", "Where is the work?"), ("agent", "I read it. Fine.")])
         self.assertGreaterEqual(self.changes, 2, "the page is told when it starts and when it ends")
         self.assertTrue(self.chats.path("W1").exists(), "the session id is kept under the run root, not in the roadmap")
         self.assertEqual(list(self.chats.path("W1").parts[-3:-1]), ["runs", "chat"])
@@ -384,7 +391,7 @@ class Chat(unittest.TestCase):
         self.assertIn("--resume " + sid, second)
         self.assertNotIn("--session-id", second)
         self.assertNotIn("You are talking with the author", second)
-        self.assertEqual(len(st["messages"]), 4)
+        self.assertEqual(len(talk(st["messages"])), 4)     # the framing is the first turn's prompt alone
 
     def test_the_page_and_the_screen_are_one_conversation(self):
         sid, resume = dfs_chat.claim("W1")                    # the screen's c, before it opens
@@ -406,7 +413,7 @@ class Chat(unittest.TestCase):
         self.settle("W1")
         self.assertIn("--resume " + sid, self.calls()[1])
 
-    def test_the_screens_opening_prompt_and_the_harness_notes_are_not_the_conversation(self):
+    def test_the_screens_opening_prompt_is_the_chats_prompt_and_the_harness_notes_are_not_the_conversation(self):
         sid, _ = dfs_chat.claim("W1")
         t = Path(dfs_chat.dfs_context.transcript_path(sid, "claude"))
         t.parent.mkdir(parents=True, exist_ok=True)
@@ -420,7 +427,8 @@ class Chat(unittest.TestCase):
         ]
         t.write_text("".join(json.dumps(l) + "\n" for l in lines))
         self.assertEqual([(m["role"], m["text"]) for m in self.chats.state("W1")["messages"]],
-                         [("agent", "Here is where it stands."), ("you", "What next?")])
+                         [("prompt", "Read .dfs/ROADMAP.md and task W1's parts. Discuss task W1 with the author."),
+                          ("agent", "Here is where it stands."), ("you", "What next?")])
 
     def codex_rollout(self, sid, records):
         """A codex rollout as codex-cli 0.162.0 writes one: an envelope per line, the
@@ -456,7 +464,7 @@ class Chat(unittest.TestCase):
         self.chats.save_sid("W1", sid, "codex")
         st = self.chats.state("W1")
         self.assertEqual(st["agent"], "codex")
-        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
+        self.assertEqual(talk(st["messages"]),
                          [("you", "how is it?"), ("agent", "Let me read the tree."), ("agent", "It is open at W1.2."),
                           ("you", "and next?"), ("agent", "W1.3.")])
         self.assertEqual([c["count"] for c in self.chats.list() if c["scope"] == "W1"], [5])
@@ -483,8 +491,7 @@ class Chat(unittest.TestCase):
         self.use_codex()
         self.chats.send("W1", "Where is the work?")
         st = self.settle("W1")
-        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
-                         [("you", "Where is the work?"), ("agent", "I read it. Fine.")])
+        self.assertEqual(talk(st["messages"]), [("you", "Where is the work?"), ("agent", "I read it. Fine.")])
         rec = json.loads(self.chats.path("W1").read_text())
         self.assertEqual(rec["agent"], "codex")
         self.assertTrue(rec["sid"].startswith("01a14447-"), "the id is the one codex printed, not one chosen here")
@@ -561,15 +568,14 @@ class Chat(unittest.TestCase):
         db.close()
         self.assertTrue(dfs_chat.has_transcript(sid, "opencode"))
         self.assertEqual(dfs_chat.transcript_messages(sid, "opencode"),
-                         [dict(role="you", text="hello"), dict(role="agent", text="Reading.\nI read it. Fine.")])
+                         [dict(role="prompt", text="You are talking with the author about task W1."), dict(role="you", text="hello"), dict(role="agent", text="Reading.\nI read it. Fine.")])
         self.assertAlmostEqual(dfs_chat.transcript_mtime(sid, "opencode"), time.time(), delta=60)
 
     def test_an_opencode_turn_is_answered_kept_and_resumed_by_the_id_opencode_made(self):
         self.use_opencode()
         self.chats.send("W1", "Where is the work?")
         st = self.settle("W1")
-        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
-                         [("you", "Where is the work?"), ("agent", "Reading.\nI read it. Fine.")])
+        self.assertEqual(talk(st["messages"]), [("you", "Where is the work?"), ("agent", "Reading.\nI read it. Fine.")])
         rec = json.loads(self.chats.path("W1").read_text())
         self.assertEqual(rec["agent"], "opencode")
         self.assertTrue(rec["sid"].startswith("ses_"), "the id is the one opencode printed, not one chosen here")
@@ -636,7 +642,7 @@ class Chat(unittest.TestCase):
                        text=True, capture_output=True, check=True, env=dict(os.environ))
         self.assertTrue(dfs_chat.has_transcript(sid, "kiro"))
         self.assertEqual(dfs_chat.transcript_messages(sid, "kiro"),
-                         [dict(role="you", text="hello"), dict(role="agent", text="Let me look."), dict(role="agent", text="I read it. Fine.")])
+                         [dict(role="prompt", text="You are talking with the author about task W1."), dict(role="you", text="hello"), dict(role="agent", text="Let me look."), dict(role="agent", text="I read it. Fine.")])
         self.assertAlmostEqual(dfs_chat.transcript_mtime(sid, "kiro"), time.time(), delta=60)
         self.assertIsNone(dfs_chat.kiro_messages("../../etc"), "an id is a name, not a path")
 
@@ -661,15 +667,15 @@ class Chat(unittest.TestCase):
         self.addCleanup(os.environ.pop, "CHAT_STUB_NO_MODEL", None)
         self.chats.send("W1", "hi")
         st = self.settle("W1")
-        self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
-        self.assertIn("could not load the available models", st["messages"][1]["text"])
+        self.assertEqual([m["role"] for m in st["messages"]], ["prompt", "you", "error"])
+        self.assertIn("could not load the available models", st["messages"][2]["text"])
         self.assertTrue(self.chats.sid("W1").startswith("sess_"), "kiro named its session before it failed: the message is in it, so it is kept")
 
     def test_a_kiro_turn_is_answered_kept_and_resumed_by_the_id_kiro_made(self):
         self.use_kiro()
         self.chats.send("W1", "Where is the work?")
         st = self.settle("W1")
-        self.assertEqual([(m["role"], m["text"]) for m in st["messages"]],
+        self.assertEqual(talk(st["messages"]),
                          [("you", "Where is the work?"), ("agent", "Let me look."), ("agent", "I read it. Fine.")])
         rec = json.loads(self.chats.path("W1").read_text())
         self.assertEqual(rec["agent"], "kiro")
@@ -1072,13 +1078,14 @@ class Chat(unittest.TestCase):
         for want in ("concise summary", "assumption", "raise", "refuted", "what would make it wrong"):
             self.assertIn(want, asked)
         st = chats.state("W1")
-        self.assertEqual([m["role"] for m in st["messages"]], ["agent"])    # the opening prompt is the tool's, not yours
+        self.assertEqual([m["role"] for m in st["messages"]], ["prompt", "agent"])    # the opening prompt is the tool's, not yours
+        self.assertIn("concise summary", st["messages"][0]["text"])         # shown as it was asked
         chats.open("W1")                                                     # begun already: left as it is
         self.settle_on(chats, "W1")
         self.assertEqual(len(self.calls()), 1)
         chats.send("W1", "hi")
         self.settle_on(chats, "W1")
-        self.assertEqual([m["role"] for m in chats.state("W1")["messages"]], ["agent", "you", "agent"])
+        self.assertEqual([m["role"] for m in chats.state("W1")["messages"]], ["prompt", "agent", "you", "agent"])
         self.assertNotIn("concise summary", self.calls()[1])                 # the second turn is just the message
         # a new chat is a new opening
         chats.clear("W1")
@@ -1104,7 +1111,7 @@ class Chat(unittest.TestCase):
         st = self.settle("project")
         self.assertIn("the project as a whole", self.calls()[0])
         self.assertEqual(self.chats.state("W1")["messages"], [])
-        self.assertEqual(len(st["messages"]), 2)
+        self.assertEqual(len(talk(st["messages"], "the project as a whole")), 2)
 
     def test_a_failed_turn_says_so_and_the_chat_can_go_on(self):
         os.environ["CHAT_STUB_FAIL"] = "1"

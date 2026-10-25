@@ -87,9 +87,10 @@ TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is
 
 def transcript_messages(sid, agent="claude"):
     """The human turns and the agent's words in a session's transcript, in order:
-    [{role: you|agent, text}]. Tool calls and results, thinking, and the harness's own
-    notes are not part of a conversation, and the opening prompt the screen's chat starts
-    with is the screen's, not something the author said. Each agent keeps its transcript
+    [{role: prompt|you|agent, text}]. Tool calls and results, thinking, and the harness's own
+    notes are not part of a conversation. The opening prompt the screen's chat or the page's
+    first turn starts with is the tool's, not something the author said, so it is a `prompt`,
+    shown at the top for what the agent was asked. Each agent keeps its transcript
     in its own shape (`READERS`: a file of JSON lines, or opencode's sqlite store); one with
     no reader here reads as no conversation yet."""
     out, agent_at = [], {}
@@ -101,8 +102,10 @@ def transcript_messages(sid, agent="claude"):
             if text.startswith(("<command-", "<local-command", "<system-reminder")):
                 continue
             if "The author writes: " in text:                 # the page's first turn carries framing
-                text = text.rsplit("The author writes: ", 1)[1].strip()
+                framing, text = (x.strip() for x in text.rsplit("The author writes: ", 1))
+                out.append(dict(role="prompt", text=framing))
             elif OPENING.match(text) or PAGE_OPENING.match(text):   # an opening prompt: the tool's words
+                out.append(dict(role="prompt", text=text))
                 continue
             out.append(dict(role="you", text=text))
         elif key and key in agent_at:                        # one message, one line per block
@@ -728,7 +731,7 @@ class Chats:
             if not SCOPE.fullmatch(scope) or (scope != "project" and not dfs_tree.exists(scope)):
                 continue
             sid, agent = self.sid(scope), self.agent(scope)
-            messages = transcript_messages(sid, agent)
+            messages = [m for m in transcript_messages(sid, agent) if m["role"] != "prompt"]   # the conversation, not what opened it
             live = bool(w and w.chat_live(scope))
             busy = scope in self.busy or bool(live and w.chat_active(scope))
             if not messages and not live and not busy:
