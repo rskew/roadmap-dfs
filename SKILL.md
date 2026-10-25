@@ -205,8 +205,11 @@ when it is. Then:
   the code alone, since there is no task file to stage; a node that changed no
   tracked file, a refuted one included, is `git commit --allow-empty`, because the
   commit IS the node's record in git. Never `git add -f` a `.dfs` path.
-- **The body carries the node's `Parent:`, `Status:` and `Determination:` lines
-  verbatim**, so the walk reads from `git log` alone.
+- **On a branch, the body carries nothing of the node**: the merge commit says the
+  task's title, Summary and every node's status and Determination, once. **An item
+  worked in place has no branch and so no merge commit**: its node commits' bodies
+  carry the node's `Parent:`, `Status:` and `Determination:` lines verbatim, so the
+  walk reads from `git log` alone.
 - The rules on the task file are unchanged: a determined node is history, the log
   only grows, archive moves stay verbatim. Only nothing checks them against HEAD, so
   keep them yourself; "stage the archive" and "stage both files" have nothing to

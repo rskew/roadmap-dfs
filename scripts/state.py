@@ -537,9 +537,10 @@ def _ignored_note(task):
             "committed: git history alone records the walk. Every node still ends in a "
             "commit whose subject starts with its id, staging only the code (`git commit "
             "--allow-empty` for a node that changed no tracked file, a refuted one "
-            "included), and its body carries the node's `Parent:`, `Status:` and "
-            "`Determination:` lines verbatim, since the commit is the only copy git "
-            "keeps. `dfs_check` cannot compare against HEAD, so a determined node staying "
+            "included). On a branch the body carries nothing of the node: the merge "
+            "commit says the task's details once. An item worked in place has no merge "
+            "commit, so its node commit's body carries the node's `Parent:`, `Status:` "
+            "and `Determination:` lines verbatim. `dfs_check` cannot compare against HEAD, so a determined node staying "
             "unedited is on you."]
 
 

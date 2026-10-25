@@ -678,6 +678,23 @@ def _put_back_shared_edits(aside):
         (dfs_paths.work_root() / p).write_bytes(data)
 
 
+def _task_details(task):
+    """The merge commit's body: the task's title, its Summary and one line per node with its
+    status and Determination. The node commits carry none of this, so it is said once, here,
+    where the whole task lands on the default branch."""
+    import tree as dfs_tree
+    t = dfs_tree.load(task)
+    out = [t["title"].lstrip("# ")]
+    if t["sections"].get("Summary"):
+        out += ["", " ".join(t["sections"]["Summary"].split())]
+    if t["nodes"]:
+        out.append("")
+    for nd in t["nodes"]:
+        det = " ".join(nd["fields"].get("Determination", "").split())
+        out.append("%s · %s: %s.%s" % (nd["id"], nd["title"], nd["status"], " " + det if det else ""))
+    return "\n".join(out)
+
+
 @one_at_a_time
 def merge(task):
     """Merge `dfs/<task>` into the default branch, from the main checkout, and remove the
@@ -743,7 +760,8 @@ def merge(task):
     aside = {}
     try:
         _set_aside_shared_edits(name, wt, aside)
-        r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
+        r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name),
+                 "-m", _task_details(task), name)
         if r.returncode != 0:
             return _unmerged(task, wt, name, r, aside)
     finally:
