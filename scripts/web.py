@@ -377,7 +377,31 @@ def run_entry(r):
     return dict(name=os.path.basename(r["dir"]), item=r["item"], state=r["state"],
                 progress=dfs_runs.progress(r), mode=r["mode"], agent=r["agent"],
                 started=r["started"], finished=r["finished"], stop=r["stop"], rc=r["rc"],
-                peak=r["peak"], turns=r["turns"], has_log=bool(r["console"]), sessions=run_sessions(r))
+                peak=r["peak"], turns=r["turns"], has_log=bool(r["console"]), sessions=run_sessions(r),
+                messages=[dict(text=m["text"], state=m["state"], sent=m["sent"], delivered=m.get("delivered"))
+                          for m in dfs_runs.messages(r["dir"])],
+                takes_messages=bool(r["live"] and dfs_runs.takes_messages(r)))
+
+
+def run_message(body):
+    """The author's message to a live chain's session, left in its inbox: the session
+    reads it at its next tool call, or as it stops (inbox.py). It starts nothing, so it
+    is not off with the walk."""
+    name = need(body, "run", "a run")
+    text = need(body, "message", "a message")
+    run = next((r for r in dfs_runs.run_dirs() if os.path.basename(r["dir"]) == name), None)
+    if run is None:
+        raise Refused("no such run", 404)
+    if not run["live"]:
+        raise Refused("that chain has ended: there is no session to send to", 409)
+    if not dfs_runs.takes_messages(run):
+        raise Refused("a %s session cannot take a message" % run["agent"], 409)
+    try:
+        dfs_runs.post_message(run["dir"], text)
+    except OSError as e:
+        raise Refused("could not leave the message: %s" % e, 500)
+    HUB.notify()
+    return run_entry(run)
 
 
 SESSION_NAME = r"run-[0-9]+"
@@ -1142,6 +1166,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, new_task(body))
             if name == "order":
                 return self.json(200, reorder(body))
+            if name == "run/message":
+                return self.json(200, run_message(body))
             if name.startswith("chat/"):
                 return self.json(200, chat_act(name, body))
             if name.startswith(("walk/", "chain/")):

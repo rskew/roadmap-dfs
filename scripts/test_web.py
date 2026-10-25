@@ -1428,6 +1428,30 @@ class Web(unittest.TestCase):
         finally:
             dfs_runs.pid_is_chain = orig
 
+    def test_a_message_is_left_in_a_live_claude_chains_inbox_and_listed_on_its_run(self):
+        d = self.make_run("dfs_run_msg", console="one\n")
+        meta = json.loads((d / "meta.json").read_text())
+        meta.pop("finished"); meta["pid"] = str(os.getpid())
+        (d / "meta.json").write_text(json.dumps(meta))
+        self.make_run("dfs_run_done", console="one\n")
+        import runs as dfs_runs
+        orig = dfs_runs.pid_is_chain
+        dfs_runs.pid_is_chain = lambda pid: True
+        self.addCleanup(setattr, dfs_runs, "pid_is_chain", orig)
+        status, run, _ = self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message=" look at the README "))
+        self.assertEqual(status, 200, run)
+        self.assertTrue(run["takes_messages"])
+        self.assertEqual([(m["text"], m["state"]) for m in run["messages"]], [("look at the README", "waiting")])
+        self.assertEqual([m["text"] for m in dfs_runs.messages(str(d))], ["look at the README"])
+        _, log, _ = self.call("GET", "/api/run/dfs_run_msg")
+        self.assertEqual(log["messages"][0]["state"], "waiting")
+        self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_done", message="x"))[0], 409)
+        self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_nope", message="x"))[0], 404)
+        self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message=" "))[0], 400)
+        meta["agent"] = "codex"
+        (d / "meta.json").write_text(json.dumps(meta))
+        self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message="x"))[0], 409)
+
     def test_the_page_is_served_with_no_login(self):
         status, body, r = self.call("GET", "/")
         self.assertEqual(status, 200)
