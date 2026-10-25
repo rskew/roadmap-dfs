@@ -10,6 +10,7 @@ Run:  python3 roadmap-dfs/scripts/test_chain.py
 """
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -73,6 +74,9 @@ kind=work; case "$prompt" in *"You are the critic"*) kind=critic ;; *"You are th
 echo "$kind" >> "$KINDS_FILE"
 echo "$kind $(printf '%s\n' "$@" | grep -A1 -x -e '--model' | tail -1)" >> "$KINDS_FILE.models"
 echo "${RUNDIR:-<unset>}" > "$KINDS_FILE.rundir"
+echo "${DFS_INBOX:-<unset>}" > "$KINDS_FILE.inbox"
+echo "$(printf '%s\n' "$@" | grep -A1 -x -e '--settings' | tail -1)" > "$KINDS_FILE.settings"
+printf '%s\n' "$@" > "$KINDS_FILE.argv"
 pwd -P > "$KINDS_FILE.cwd"
 recipe="$(python3 -c 'import os,sys; r=os.environ["RECIPE"].split(","); i=int(sys.argv[1])-1; print(r[i] if i < len(r) else "nothing")' "$n")"
 T="python3 $TREE_PY"
@@ -136,14 +140,14 @@ class Chain(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
         shutil.rmtree(self.aside, ignore_errors=True)
 
-    def run_chain(self, recipe, cap=6, **env):
-        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE=recipe,
+    def run_chain(self, recipe, cap=6, flags=(), **env):
+        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, CODEX_CMD="bash %s" % self.stub, RECIPE=recipe,
                  COUNT_FILE=str(self.count), KINDS_FILE=str(self.kinds),
                  TREE_PY=str(HERE / "tree.py"), HOME=str(self.aside), **env)
         # Run from inside a chain, the environment names THAT chain's directory; this
         # chain must make its own (see `export -n RUNDIR` in run.sh).
         e.pop("RUNDIR", None) if "RUNDIR" not in env else None
-        p = subprocess.run([str(RUNNER), "W1", str(cap)], cwd=self.root, env=e,
+        p = subprocess.run([str(RUNNER), *flags, "W1", str(cap)], cwd=self.root, env=e,
                            capture_output=True, text=True, timeout=300)
         metas = sorted((self.root / ".dfs" / "runs").glob("*/meta.json"),
                        key=lambda f: f.stat().st_mtime)
@@ -1498,6 +1502,28 @@ class Chain(unittest.TestCase):
         self.assertTrue((named / "meta.json").exists(), "the runner ignored RUNDIR:\n" + out)
         self.assertEqual((self.aside / "kinds.rundir").read_text().strip(), "<unset>",
                          "the agent inherited the chain's directory")
+
+    def test_a_claude_work_session_is_started_with_the_inbox_hooks_and_its_run_s_inbox(self):
+        named = self.aside / "named"
+        rc, _, out = self.run_chain("work", cap=1, RUNDIR=str(named))
+        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), "<unset>", "the agent inherited the inbox, and so would what it runs")
+        hooks = json.loads((self.aside / "kinds.settings").read_text())["hooks"]
+        box = shlex.quote(str(named.resolve() / "inbox"))
+        self.assertEqual(sorted(hooks), ["PostToolUse", "Stop"])
+        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post " + box), hooks)
+        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop " + box), hooks)
+
+    def test_a_codex_work_session_is_started_with_the_inbox_hooks_before_exec_and_its_run_s_inbox(self):
+        named = self.aside / "named"
+        rc, _, out = self.run_chain("work", cap=1, flags=("--codex",), RUNDIR=str(named), AGENT_NIXPKGS_REV="none")
+        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), "<unset>", "the agent inherited the inbox, and so would what it runs")
+        argv = (self.aside / "kinds.argv").read_text().splitlines()
+        before = argv[:argv.index("exec")]
+        box = str(named.resolve() / "inbox")
+        self.assertIn("features.hooks=true", before)
+        self.assertIn("--dangerously-bypass-hook-trust", before)
+        self.assertTrue(any(a.startswith("hooks.PostToolUse=") and "inbox.py post " in a and box in a for a in before), argv)
+        self.assertTrue(any(a.startswith("hooks.Stop=") and "inbox.py stop " in a and box in a for a in before), argv)
 
     def test_a_raise_blocks(self):
         rc, meta, out = self.run_chain("raise")

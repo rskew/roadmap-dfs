@@ -750,6 +750,7 @@ KEYS = [
     ("tree", "tab", 9, "list", "back to the item list"),
     ("runs", "⏎", 10, "read", "read this run"),
     ("agentlog", "G", ord("G"), "follow", "to the end, and follow it while it grows"),
+    ("agentlog", "M", ord("M"), "message", "send the running session a message: it reads it at its next tool call"),
     ("artefact", "⏎", 10, "browse", "open this artefact in a browser"),
     ("panes", "3", ord("3"), "log", "the task's log"),
     ("panes", "l", ord("l"), "lastlog", "the log of the selected item's most recent run"),
@@ -1184,6 +1185,10 @@ def codex_item_lines(item, live=False):
     if t == "todo_list":
         return [("  ☰ todo list, %d items" % len(item.get("items") or []), "dim")]
     if t == "error":
+        # codex's notice that run.sh started it with the inbox hooks' trust bypassed (inbox.py
+        # --codex-args), which it prints twice: a note, not a failure.
+        if "--dangerously-bypass-hook-trust" in str(item.get("message") or ""):
+            return [("  · hooks run without review: the inbox's, for the author's messages", "dim")]
         return [("  ⨯ %s" % (item.get("message") or "no message"), "err")]
     # An item type nobody has taught this screen still gets a row NAMING itself,
     # rather than being dropped: a codex release that adds one should read as one
@@ -2949,8 +2954,10 @@ class UI(WalkMixin):
         if chain["live"]:
             out.append(("the script above, the agent's own turns below · "
                         + ("following · [K] stops the chain" if self.follow
-                           else "not following · [G] jumps back to the last line"),
+                           else "not following · [G] jumps back to the last line")
+                        + (" · [M] sends it a message" if dfs_runs.takes_messages(chain) else ""),
                         look("chrome")))
+        out.extend(self.lines_messages(chain))
         out.append(("", 0))
         for line in tail_lines(run["path"]):
             out.extend(self.log_wrap(width, line.replace("\t", "    "), 0))
@@ -2958,6 +2965,43 @@ class UI(WalkMixin):
             out.append(("  nothing written yet — the agent is starting", look("chrome")))
         out.extend(self.lines_live_agent(width, chain))
         return out
+
+    def lines_messages(self, chain):
+        """The author's messages to this chain's sessions, each waiting or delivered.
+        One still waiting when the chain has ended was never read."""
+        out = []
+        for m in dfs_runs.messages(chain["dir"]):
+            if m["state"] == "delivered":
+                state = "delivered " + time.strftime("%H:%M", time.localtime(m["delivered"]))
+            else:
+                state = "waiting" if chain["live"] else "never read"
+            first = m["text"].splitlines()[0] if m["text"] else ""
+            out.append(("you → session · %s · %s" % (state, first),
+                        look("accent") if m["state"] == "delivered" else look("chrome")))
+        return out
+
+    def send_message(self, run):
+        """Leave the author's message in the open run's chain's inbox, for the session
+        to read at its next tool call or as it stops (inbox.py)."""
+        if not run:
+            return
+        chain = next((r for r in dfs_runs.run_dirs() if r["dir"] == run["run"]["dir"]), None)
+        if chain is None or not chain["live"]:
+            self.msg = "that chain has ended: there is no session to send to"
+            return
+        if not dfs_runs.takes_messages(chain):
+            self.msg = dfs_runs.refusal(chain)
+            return
+        text = self.prompt("message to the running session (esc cancels): ").strip()
+        if not text:
+            self.msg = "sent nothing"
+            return
+        try:
+            dfs_runs.post_message(chain["dir"], text)
+        except OSError as e:
+            self.msg = "could not leave the message: %s" % e
+            return
+        self.msg = "sent: the session reads it at its next tool call, or as it stops"
 
     def lines_live_agent(self, width, chain):
         """The agent's OWN turns, while it is still taking them.
@@ -4801,6 +4845,8 @@ class UI(WalkMixin):
             self.scroll = 10 ** 6            # newest last, so it opens at the end
         elif ch == ord("m"):
             self.toggle_mine()
+        elif ch == ord("M") and self.pane == "agentlog":
+            self.send_message(self.open_run)
         elif ch == ord("z"):
             self.undo_order()
         elif ch == 27:

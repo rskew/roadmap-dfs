@@ -149,6 +149,36 @@ it: what the agent said, the commands it ran and what they printed. Under codex 
 the work is, since its console holds only the runner's own lines.
 Whoever can reach the page can read those logs too.
 
+## Sending a message to a running session
+
+While a chain is live you can say something to the session it is running. On the terminal, `M` in the
+chain's log asks for a line; on the page, a live run's console or session log has a one-line box and Send
+under it. Either leaves the line in the run's inbox, `.dfs/runs/<run>/inbox/`, and the log lists it as
+**waiting**, then **delivered** with the time a hook handed it over. A message left in an inbox when the
+chain ended reads **never read**, and nothing can be sent to a chain that has ended.
+
+A message never cuts into a tool call or an answer already running; it lands at the next point the agent
+lets one in, and what that is differs by agent (`scripts/inbox.py`, the hook every one of them runs):
+
+| agent | when it lands | a message after the last tool call |
+|---|---|---|
+| claude | after the tool call that is running, as that call's extra context; or, if the session was about to end, as one more turn | one more turn |
+| codex | the same: its PostToolUse and Stop hooks | one more turn |
+| opencode | the plugin in `scripts/opencode_inbox/` polls the inbox and sends the session a prompt: after the tool call that is running, or as one more turn if the model is writing its last answer | stays waiting once the session has ended |
+| kiro | kiro hands the model the output of no hook after a tool call, so a preToolUse hook **holds the next tool call back** with the message as its result; the model reads it and asks for the call again | stays waiting: with no further tool call there is nothing to hold back |
+
+A kiro run also starts under a custom agent, `dfs-inbox`, which `inbox.py --kiro-agent` writes to
+`.kiro/agents/` in the session's directory (git is told to ignore it); the agent keeps the default one's
+tools (less one that only the custom agent had). Every session a chain runs (work, critic and review)
+takes a message; `run.sh --review` (the author's answering pass) and the chat sessions are not part of a
+chain and take none. The hooks name the run's inbox in their own command, so nothing else the agent
+runs can read it (opencode's plugin, inside its process, reads `DFS_INBOX`).
+
+A message is for the session you are watching, not for a subagent it starts: claude and codex mark a
+subagent's hook calls, and the hook then leaves the message waiting for the main session's next tool call
+or stop. kiro marks nothing, so the `dfs-inbox` agent cannot be invoked as a sub-agent; any other agent the
+repository defines runs without the hook.
+
 Chrome on Android offers Install only on a secure origin: https, or `localhost`. Over plain
 `http://<lan address>:8765` the page works, but there is no Install. Two ways to https:
 

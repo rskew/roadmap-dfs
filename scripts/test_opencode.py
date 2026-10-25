@@ -93,6 +93,8 @@ set -euo pipefail
 n=$(( $(cat "$COUNT_FILE") + 1 )); echo "$n" > "$COUNT_FILE"
 printf '%s\n' "$@" > "$ARGV_DIR/argv-$n"
 printf '%s\n' "${OPENCODE_DISABLE_AUTOUPDATE:-<unset>}" > "$ARGV_DIR/env-$n"
+printf '%s\n' "${DFS_INBOX:-<unset>}" > "$ARGV_DIR/inbox-$n"
+printf '%s\n' "${OPENCODE_CONFIG_CONTENT:-<unset>}" > "$ARGV_DIR/config-$n"
 if [ "${LIMIT:-0}" = 1 ]; then
   python3 "$EMIT" "$n" limit; exit 1
 fi
@@ -164,8 +166,12 @@ class Chain(unittest.TestCase):
         self.assertEqual(meta.get("stop"), "cap", out)
         self.assertEqual(meta.get("agent"), "opencode")
         argv = (self.aside / "argv-1").read_text().splitlines()
-        self.assertEqual(argv[:4], ["run", "--format", "json", "--auto"], argv)
-        self.assertTrue(argv[4].startswith("Follow "), argv[4][:80])
+        self.assertEqual(argv[:5], ["run", "--standalone", "--format", "json", "--auto"], argv)
+        self.assertTrue(argv[5].startswith("Follow "), argv[5][:80])
+        # The author's messages: the run's inbox, and the plugin that reads it after each tool call.
+        inbox = (self.aside / "inbox-1").read_text().strip()
+        self.assertTrue(inbox.endswith("/inbox"), inbox)
+        self.assertIn("opencode_inbox", json.loads((self.aside / "config-1").read_text())["plugins"][-1])
         # The session id is opencode's, read out of its own stream, and the peak is the
         # largest input + cache read/write of any response.
         self.assertEqual(meta.get("sid"), SID % 2, out)

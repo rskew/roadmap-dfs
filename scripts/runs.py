@@ -325,6 +325,77 @@ def lower_cap(d, cap):
     os.replace(tmp, path)
 
 
+# ── the author's messages to a running session ──────────────────────────────────
+# A message is one file in the run directory's `inbox/`, named so that sorting the
+# names is sending order. `inbox.py`, the hook every agent runs, moves it to `delivered/` as it
+# hands it over, so where the file is says whether the session has it. A message sent
+# between sessions waits for the next one, and one still in `inbox/` when the chain
+# ends was never read.
+INBOX, DELIVERED = "inbox", "delivered"
+
+
+def post_message(d, text):
+    """Leave `text` in run directory `d`'s inbox, for the session's next tool call or
+    stop. Written aside and renamed in, so a hook never reads half a message."""
+    text = text.strip()
+    if not text:
+        raise ValueError("an empty message")
+    box = os.path.join(d, INBOX)
+    os.makedirs(box, exist_ok=True)
+    name = "%019d-%d.txt" % (time.time_ns(), os.getpid())
+    tmp = os.path.join(d, "." + name)
+    with open(tmp, "w") as fh:
+        fh.write(text + "\n")
+    os.replace(tmp, os.path.join(box, name))
+    return name
+
+
+def messages(d):
+    """The run's messages, oldest first: `text`, `sent` (epoch seconds), `state`
+    (`waiting` or `delivered`) and, once delivered, `delivered` (epoch seconds)."""
+    out = []
+    for state, sub in (("waiting", INBOX), ("delivered", DELIVERED)):
+        try:
+            names = os.listdir(os.path.join(d, sub))
+        except OSError:
+            continue
+        for name in names:
+            if not name.endswith(".txt") or name.startswith("."):
+                continue
+            path = os.path.join(d, sub, name)
+            try:
+                text = Path(path).read_text().rstrip("\n")
+                when = os.stat(path).st_mtime
+            except OSError:
+                continue
+            try:
+                sent = int(name.split("-", 1)[0]) / 1e9
+            except ValueError:
+                sent = when
+            m = dict(name=name, text=text, sent=sent, state=state)
+            if state == "delivered":
+                m["delivered"] = when
+            out.append(m)
+    out.sort(key=lambda m: m["name"])
+    return out
+
+
+# The agents with a way to hand a message into a running session (inbox.py), and why the others have none.
+TAKES_MESSAGES = ("claude", "codex", "opencode", "kiro")
+NO_WAY_IN = {}      # agent -> why it has none; every agent the chain runs has one now
+
+
+def takes_messages(r):
+    """Whether the run's agent has a way to hand a message into its session."""
+    return (r.get("agent") or "claude") in TAKES_MESSAGES
+
+
+def refusal(r):
+    """What to say when a message cannot go to the run's session, naming its agent and why."""
+    agent = r.get("agent") or "claude"
+    return "a %s session cannot take a message: %s" % (agent, NO_WAY_IN.get(agent, "it has no way to read the run's inbox"))
+
+
 def progress(r):
     """`run 2/5`, as far as the chain has said — the one line a marker can carry."""
     if r["run"] and r["cap"]:

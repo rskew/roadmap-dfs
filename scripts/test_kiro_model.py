@@ -11,12 +11,14 @@ A message that asks to "take your time" is answered in two parts with `hold` sec
 (or until `release` is set), so a turn can be interrupted while it is still answering.
 
 A message that asks to "use a tool" is answered with a `list_directory` call first, and the
-tool's result with `say`, as a model that uses a tool does.
+tool's result with `say`, as a model that uses a tool does. If the result says the call was
+"held back", the model asks for it again, and `lag` seconds pass before the first call is asked for.
 """
 import http.server
 import json
 import struct
 import threading
+import time
 import zlib
 
 from test_agent_models import wait_or_hang_up
@@ -47,9 +49,11 @@ METERING = event("meteringEvent", {"unit": "credit", "unitPlural": "credits", "u
 class FakeKiroModel:
     def __init__(self, say="hello from the fake model"):
         self.say = say
+        self.lag = 0                # seconds the first answer waits before it asks for the tool
         self.hold = 30              # seconds a "take your time" answer waits between its parts
         self.release = threading.Event()
         self.cancelled = threading.Event()      # kiro hung up on a slow answer: it was interrupted
+        self.requests_seen = 0
         self.requests = []          # (x-amz-target, body) of each call kiro made
         model = self
 
@@ -64,6 +68,9 @@ class FakeKiroModel:
                     request = json.loads(body)
                     if "take your time" in request["conversationState"]["currentMessage"]["userInputMessage"].get("content", ""):
                         return self.slowly(request)
+                    if model.lag and not model.requests_seen:
+                        model.requests_seen += 1
+                        time.sleep(model.lag)
                     self.reply("application/vnd.amazon.eventstream", model.generate(request))
                 else:
                     self.reply("text/plain", b"", 404)
@@ -96,10 +103,11 @@ class FakeKiroModel:
 
     def generate(self, request):
         current = request["conversationState"]["currentMessage"]["userInputMessage"]
-        answered_tool = bool(current.get("userInputMessageContext", {}).get("toolResults"))
-        if "use a tool" in current.get("content", "") and not answered_tool:
+        results = current.get("userInputMessageContext", {}).get("toolResults")
+        held = bool(results) and "held back" in json.dumps(results)
+        if (held or not results) and ("use a tool" in current.get("content", "") or held):
             return (event("assistantResponseEvent", {"content": "Let me look. "})
-                    + event("toolUseEvent", {"toolUseId": "tu1", "name": "list_directory",
+                    + event("toolUseEvent", {"toolUseId": "tu%d" % (1 + held), "name": "list_directory",
                                              "input": json.dumps({"path": "."}), "stop": True})
                     + METERING + event("metadataEvent", {"stopReason": "tool_use"}))
         # a stream with no stop reason is read as cut off, and asked again

@@ -394,6 +394,18 @@ class Flows(unittest.TestCase):
         self.flow("loadfail")
 
     def test_a_tasks_runs_open_their_log_and_a_live_log_grows(self):
+        self.with_runs("run_log")
+
+    def test_a_live_runs_log_takes_a_message_for_its_session_and_lists_it(self):
+        import runs as dfs_runs
+        self.with_runs("run_message")
+        live = next(r for r in dfs_runs.run_dirs() if r["item"] == "W9" and not r["finished"])
+        got = dfs_runs.messages(live["dir"])
+        self.assertEqual([(m["text"], m["state"]) for m in got], [("Use the other table", "waiting")],
+                         "the box left one message in the live chain's inbox, and none in the finished one's")
+        self.assertEqual([m for r in dfs_runs.run_dirs() if r["finished"] for m in dfs_runs.messages(r["dir"])], [])
+
+    def with_runs(self, flow):
         import runs as dfs_runs
         runs = self.root / ".dfs" / "runs"
         for name, finished, console in (
@@ -407,7 +419,7 @@ class Flows(unittest.TestCase):
         real = dfs_runs.pid_is_chain
         dfs_runs.pid_is_chain = lambda pid: True
         try:
-            self.flow("run_log")
+            self.flow(flow)
         finally:
             dfs_runs.pid_is_chain = real
 

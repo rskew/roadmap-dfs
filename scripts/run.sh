@@ -662,7 +662,16 @@ run_session() {
     # is 1 when it ends in an `error` event.
     SID=""
     meta_set sid=""
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --format json "${PERMISSION_ARGV[@]}" \
+    # The author's messages reach it through a plugin that reads the run's inbox after each
+    # tool call (inbox.py, opencode_inbox/). ⚠️ `--standalone`: without it the run goes to
+    # opencode's shared background service, which loads its config and plugins once, in the
+    # environment of whoever started it, so this run's plugin and DFS_INBOX would never be seen.
+    # DFS_INBOX is in opencode's environment (the plugin is in its process, and has no command to
+    # carry the box in); the other agents' hooks name the box in their commands and get none.
+    local opencode_config
+    opencode_config="$(python3 "$HERE/inbox.py" --opencode-config)"
+    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" OPENCODE_CONFIG_CONTENT="$opencode_config" \
+      "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" \
       "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"
@@ -676,8 +685,14 @@ run_session() {
     # The lines that are not JSON are read as kiro's own (limit.py, tui.py).
     SID=""
     meta_set sid=""
+    # The author's messages reach it through a preToolUse hook that holds a tool call back
+    # with the message as its result (inbox.py): kiro hands the model the output of no other
+    # hook after the start. A hook lives only in a custom agent, found as
+    # `.kiro/agents/dfs-inbox.json` in the working directory, which inbox.py writes and keeps
+    # out of git status; a message arriving after the last tool call stays waiting.
+    python3 "$HERE/inbox.py" --kiro-agent "$PWD" "$RUNDIR/inbox" > /dev/null
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
-      --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
+      --agent dfs-inbox --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
@@ -693,7 +708,13 @@ run_session() {
     # here keeps a foreground launch and a TUI-launched one reading the same thing.
     SID=""
     meta_set sid=""
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
+    # The author's messages reach it as claude's do: two hooks that read the run's inbox
+    # (inbox.py), installed by `-c` overrides, one flag to a line. ⚠️ BEFORE `exec`: a `-c`
+    # after it replaces every `-c` the launch command gave before it (a model provider
+    # among them), and codex then asks api.openai.com.
+    local inbox_args=() inbox_arg
+    while IFS= read -r inbox_arg; do inbox_args+=("$inbox_arg"); done < <(python3 "$HERE/inbox.py" --codex-args "$RUNDIR/inbox")
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
       > "$log" < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"
@@ -710,7 +731,13 @@ run_session() {
     # session goes, and we CHOSE the id, so the live turns are readable from the
     # first one — by tui.py, which is the only reader.
     meta_set sid="$SID"
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
+    # The author's messages from the screen or the page land in the run's inbox, and
+    # these two hooks hand them over: at the next tool call, or as one more turn when
+    # the session would stop (inbox.py). Without a message they print nothing.
+    local inbox_settings
+    inbox_settings="$(python3 "$HERE/inbox.py" --settings "$RUNDIR/inbox")"
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" \
+      --settings "$inbox_settings" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
     session_rc=$?
   fi
   return "$session_rc"
@@ -1021,9 +1048,9 @@ if [ "$AGENT" = codex ]; then
 elif [ "$AGENT" = opencode ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} run --format json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = kiro ]; then
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --agent dfs-inbox --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
 else
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --model <opus to plan, sonnet to implement> ${PERMISSION_ARGV[*]}"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --settings <the inbox hooks> --model <opus to plan, sonnet to implement> ${PERMISSION_ARGV[*]}"
 fi
 total_turns=0
 total_cost=0

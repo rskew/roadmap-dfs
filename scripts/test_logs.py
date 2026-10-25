@@ -116,6 +116,14 @@ class TheCapturedStream(unittest.TestCase):
         self.assertTrue(failed[0][0].startswith("    ← exit 1 · Main.hs:14:1: error:"))
         self.assertEqual(failed[0][1], "err")
 
+    def test_the_hook_trust_notice_codex_prints_for_the_inbox_hooks_is_a_note_not_a_failure(self):
+        notice = {"type": "item.completed", "item": {"id": "item_0", "type": "error", "message":
+                  "`--dangerously-bypass-hook-trust` is enabled. Enabled hooks may run without review for this invocation."}}
+        rows = TUI.codex_result_lines([notice])
+        self.assertEqual(texts(rows, "err"), [])
+        self.assertEqual([t for t in texts(rows, "dim") if "without review" in t],
+                         ["  · hooks run without review: the inbox's, for the author's messages"])
+
     def test_a_file_change_names_the_file_and_what_happened_to_it(self):
         self.assertIn("  ✎ update /workspace/shop-app/.dfs/ROADMAP.md",
                       texts(TUI.codex_result_lines(EXEC_RUN), "run"))
