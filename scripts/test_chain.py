@@ -436,6 +436,21 @@ class Chain(unittest.TestCase):
         self.assertIn("the log and edits left uncommitted", self.git("log", "--format=%s"))
         self.assertNotIn("Fix what refuses the commit", (self.root / ".dfs/items/W1.md").read_text())
 
+    def test_an_archive_part_staged_in_the_worktree_goes_into_the_runners_commit(self):
+        # `--only` commits the task's own paths: the archive's parts directory is one, or an
+        # archive part staged beside a changed task file would reopen the merge as dirty.
+        self.run_chain("work,confirm", cap=2)
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        part = self.wt / ".dfs" / "archive" / "items" / "W1" / "fx.md"
+        part.parent.mkdir(parents=True, exist_ok=True)
+        part.write_text("**W1.1 Approach**: shelved\n")
+        subprocess.run(["git", "add", "-f", str(part)], cwd=self.wt, check=True)
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("shelved", self.git("show", "HEAD:.dfs/archive/items/W1/fx.md"))
+
     def test_a_merge_waits_for_another_chains_merge_to_finish(self):
         # Two chains of a parallel walk finishing at once: the second merge waits on the
         # lock the first holds, and goes through after it, rather than failing on git's

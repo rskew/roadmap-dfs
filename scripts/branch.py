@@ -89,10 +89,10 @@ def _has_branch(name):
 
 def task_paths(task):
     """The files that are a task's own, as repo-relative paths: its file, its parts and
-    its archive."""
+    its archive and the archive's parts."""
     s = dfs_paths.STATE_DIR_NAME
     return ["%s/items/%s.md" % (s, task), "%s/items/%s" % (s, task),
-            "%s/archive/items/%s.md" % (s, task)]
+            "%s/archive/items/%s.md" % (s, task), "%s/archive/items/%s" % (s, task)]
 
 
 def _dirty(paths):
