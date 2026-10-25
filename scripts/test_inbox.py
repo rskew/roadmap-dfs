@@ -170,6 +170,41 @@ class Inbox(unittest.TestCase):
         self.assertEqual(hooks["PostToolUse"][0]["hooks"][0]["command"], "python3 %s post" % (HERE / "inbox.py"))
         self.assertEqual(hooks["Stop"][0]["hooks"][0]["command"], "python3 %s stop" % (HERE / "inbox.py"))
 
+    def test_a_hook_that_names_its_box_reads_that_inbox_and_not_the_environments(self):
+        import shlex
+        box = os.path.join(self.d, "inbox with a space")
+        elsewhere = os.path.join(self.d, "elsewhere")
+        dfs_runs.post_message(self.d, "in the named box")
+        os.rename(self.box, box)
+        hooks = json.loads(inbox.settings(box))["hooks"]
+        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post " + shlex.quote(box)))
+        self.assertTrue(any(a.startswith("hooks.Stop=") and shlex.quote(box) in a for a in inbox.codex_args(box)))
+        self.assertIn(shlex.quote(box), json.loads(inbox.kiro_agent(box))["hooks"]["preToolUse"][0]["command"])
+        run = subprocess.run(shlex.split(hooks["PostToolUse"][0]["hooks"][0]["command"]), input="{}", capture_output=True, text=True,
+                             env=dict(os.environ, DFS_INBOX=elsewhere))
+        self.assertIn("in the named box", run.stdout)
+        self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["delivered"])
+
+    def test_peek_leaves_the_messages_waiting_until_they_are_acked(self):
+        dfs_runs.post_message(self.d, "first")
+        dfs_runs.post_message(self.d, "second")
+        os.environ["DFS_INBOX"] = self.box
+        try:
+            out = io.StringIO()
+            with redirect_stdout(out):
+                self.assertEqual(inbox.main(["inbox.py", "peek"]), 0)
+            peeked = json.loads(out.getvalue())
+            self.assertEqual(len(peeked["names"]), 2)
+            self.assertLess(peeked["context"].index("first"), peeked["context"].index("second"))
+            self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["waiting", "waiting"])
+            self.assertEqual(inbox.main(["inbox.py", "ack", peeked["names"][0]]), 0)
+            self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["delivered", "waiting"])
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(inbox.main(["inbox.py", "ack", peeked["names"][0], peeked["names"][1]]), 0)     # a second ack of one is harmless
+            self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["delivered", "delivered"])
+        finally:
+            os.environ.pop("DFS_INBOX")
+
 
 class Model:
     """A stand-in `/v1/messages`: the n-th main-loop call gets `answers[n]`, ("tool", a Bash
@@ -263,9 +298,9 @@ class RealClaude(unittest.TestCase):
         run_dir.mkdir()
         env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "AI_AGENT", "ANTHROPIC"))}
         env.update(HOME=str(home), ANTHROPIC_API_KEY=KEY, ANTHROPIC_BASE_URL="http://127.0.0.1:%d" % model.server.server_address[1],
-                   DISABLE_AUTOUPDATER="1", DFS_INBOX=str(run_dir / "inbox"))
+                   DISABLE_AUTOUPDATER="1")      # the hooks name the box: the agent's environment does not
         p = subprocess.Popen([CLAUDE, "-p", "work the task", "--output-format", "json", "--dangerously-skip-permissions",
-                              "--settings", inbox.settings()],
+                              "--settings", inbox.settings(str(run_dir / "inbox"))],
                              env=env, cwd=str(home), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         meanwhile(model, run_dir)
         out, err = p.communicate(timeout=120)
@@ -440,10 +475,11 @@ class RealCodex(unittest.TestCase):
         (home / ".codex" / "config.toml").write_text('[projects."%s"]\ntrust_level = "trusted"\n' % home)
         run_dir = home / "dfs_run_x"
         run_dir.mkdir()
-        env = dict(os.environ, HOME=str(home), DFS_INBOX=str(run_dir / "inbox"), **model.env())
+        env = dict(os.environ, HOME=str(home), **model.env())
+        env.pop("DFS_INBOX", None)
         for k in ("CODEX_HOME", "CODEX_THREAD_ID", "CODEX_SESSION_ID"):
             env.pop(k, None)
-        p = subprocess.Popen([CODEX, *model.args(), *inbox.codex_args(), "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
+        p = subprocess.Popen([CODEX, *model.args(), *inbox.codex_args(str(run_dir / "inbox")), "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
                               "work the task"], env=env, cwd=str(home), stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         meanwhile(model, run_dir)
@@ -608,9 +644,9 @@ class RealKiro(unittest.TestCase):
         run_dir.mkdir()
         work.mkdir()
         subprocess.run(["git", "init", "-q", str(work)], check=True)       # its own repository, so the exclude line lands in it
-        inbox.install_kiro_agent(str(work))
-        env = dict(os.environ, PATH=os.path.dirname(KIRO) + ":" + os.environ["PATH"], KIRO_NO_AUTO_UPDATE="1", HOME=str(home),
-                   DFS_INBOX=str(run_dir / "inbox"), **model.env())
+        inbox.install_kiro_agent(str(work), str(run_dir / "inbox"))
+        env = dict(os.environ, PATH=os.path.dirname(KIRO) + ":" + os.environ["PATH"], KIRO_NO_AUTO_UPDATE="1", HOME=str(home), **model.env())
+        env.pop("DFS_INBOX", None)
         p = subprocess.Popen([KIRO, "chat", "--v3", "--output-format", "stream-json", "--agent", "dfs-inbox", "--no-interactive",
                               "--trust-all-tools", "use a tool please"], env=env, cwd=str(work), stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -688,6 +724,8 @@ class OpencodeWiring(unittest.TestCase):
         self.assertEqual(Path(cfg["plugins"][1]), HERE / "opencode_inbox")
         self.assertTrue((HERE / "opencode_inbox" / "index.js").is_file())
         self.assertEqual(json.loads(inbox.opencode_config({}))["plugins"], [str(HERE / "opencode_inbox")])
+        again = inbox.opencode_config({"OPENCODE_CONFIG_CONTENT": inbox.opencode_config({})})      # run under an opencode that has it
+        self.assertEqual(json.loads(again)["plugins"], [str(HERE / "opencode_inbox")])
 
     def test_every_agent_the_chain_runs_takes_a_message_and_an_unknown_one_is_refused_by_name(self):
         for agent in ("claude", "codex", "opencode", "kiro"):

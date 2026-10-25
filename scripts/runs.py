@@ -327,7 +327,7 @@ def lower_cap(d, cap):
 
 # ── the author's messages to a running session ──────────────────────────────────
 # A message is one file in the run directory's `inbox/`, named so that sorting the
-# names is sending order. `inbox.py`, the claude hook, moves it to `delivered/` as it
+# names is sending order. `inbox.py`, the hook every agent runs, moves it to `delivered/` as it
 # hands it over, so where the file is says whether the session has it. A message sent
 # between sessions waits for the next one, and one still in `inbox/` when the chain
 # ends was never read.

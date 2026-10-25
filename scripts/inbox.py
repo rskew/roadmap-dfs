@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""The claude hook that hands the author's messages to a running work session.
+"""The hook that hands the author's messages to a running session, whichever agent runs it.
 
-    inbox.py post    as a PostToolUse hook: the next model call sees the messages
-    inbox.py stop    as a Stop hook: a session about to end takes one more turn for them
-    inbox.py pre     as kiro's preToolUse hook: a tool call is held back, with the messages as its result
-    inbox.py --settings   the `--settings` JSON that installs both, as run.sh passes it
-    inbox.py --codex-args   the same for codex: the flags, one per line, that go BEFORE `exec`
+    inbox.py post [BOX]   as a PostToolUse hook: the next model call sees the messages
+    inbox.py stop [BOX]   as a Stop hook: a session about to end takes one more turn for them
+    inbox.py pre [BOX]    as kiro's preToolUse hook: a tool call is held back, with the messages as its result
+    inbox.py peek         opencode's plugin: the waiting messages, left where they are, as JSON {names, context}
+    inbox.py ack NAME...  opencode's plugin: the messages it has handed over, moved to `delivered/`
+    inbox.py --settings [BOX]   the `--settings` JSON that installs both, as run.sh passes it to claude
+    inbox.py --codex-args [BOX]   the same for codex: the flags, one per line, that go BEFORE `exec`
     inbox.py --opencode-config   the same for opencode: its `OPENCODE_CONFIG_CONTENT`, naming the plugin
-    inbox.py --kiro-agent DIR   the same for kiro: writes the agent `dfs-inbox` under DIR/.kiro/agents
+    inbox.py --kiro-agent DIR [BOX]   the same for kiro: writes the agent `dfs-inbox` under DIR/.kiro/agents
 
-`run.sh` starts each claude work session with both hooks and `DFS_INBOX`, the run
-directory's `inbox/`, which the screen and the page write into (`runs.py`,
+`run.sh` starts each session of a chain (work, critic and review) with these hooks, over BOX,
+the run directory's `inbox/`, which the screen and the page write into (`runs.py`,
 `post_message`). With nothing waiting the hook prints nothing and the session goes on
 as if it were not there.
+
+⚠️ THE BOX IS IN THE HOOK'S COMMAND, NOT IN THE AGENT'S ENVIRONMENT, for claude, codex and kiro:
+everything the agent runs inherits its environment, and a tool or test that ran `inbox.py`
+under a live session would claim the chain's messages. A hook without BOX reads `DFS_INBOX`,
+which only opencode's plugin, living in the agent's own process, still gets.
 
 ⚠️ CLAIMED BY RENAME, THEN READ. Each message is moved to `delivered/` before it is
 read, and a move that fails means another hook took it, so two hooks running at once
@@ -22,9 +29,10 @@ it counts as delivered: the screen shows it so from then on.
 codex takes the same two hooks as `-c` overrides (`codex_args`), with the same JSON out.
 
 opencode 2.1.1 has no hook for a session about to end, but its plugin (`opencode_inbox/`) can send the
-session a prompt: it polls the inbox, claims each message with `inbox.py post` and hands it over with
+session a prompt: it polls the inbox, reads the waiting messages with `inbox.py peek`, hands them over with
 `ctx.session.prompt(..., delivery: "steer")`, which opencode takes at its next step or, if the model is
-on its last answer, as one more turn. Only a message that arrives after the session has ended stays waiting.
+on its last answer, as one more turn, and only then moves them with `inbox.py ack`, so a prompt opencode
+refuses leaves them waiting. Only a message that arrives after the session has ended stays waiting.
 
 kiro-cli 2.31.1 runs hooks in a custom agent but hands the model the output of none that fires after
 a tool call or at a stop; only a preToolUse hook that exits 2 reaches it, as the held call's result
@@ -51,13 +59,23 @@ import sys
 HEAD = "The author sent this to the running session from the roadmap's screen or page:"
 
 
+def waiting(box):
+    """The names of the messages waiting in `box`, oldest first."""
+    try:
+        return sorted(n for n in os.listdir(box) if n.endswith(".txt") and not n.startswith("."))
+    except OSError:
+        return []
+
+
 def claim(box):
     """Move every waiting message to `delivered/` beside `box` and return their texts,
     oldest first."""
-    try:
-        names = sorted(n for n in os.listdir(box) if n.endswith(".txt") and not n.startswith("."))
-    except OSError:
-        return []
+    return take(box, waiting(box))
+
+
+def take(box, names):
+    """Move the messages `names` of `box` to `delivered/` beside it and return their texts, those
+    another hook did not take first."""
     done = os.path.join(os.path.dirname(os.path.abspath(box)), "delivered")
     os.makedirs(done, exist_ok=True)
     texts = []
@@ -89,14 +107,32 @@ def from_subagent(event):
     return bool(event.get("agent_id"))
 
 
+def said(texts):
+    return HEAD + "\n\n" + "\n\n---\n\n".join(texts)
+
+
+def peek(box):
+    """The waiting messages, left where they are: their names and what the session is told."""
+    pairs = []
+    for name in waiting(box):
+        try:
+            with open(os.path.join(box, name)) as fh:
+                text = fh.read().strip()
+        except OSError:
+            continue
+        if text:
+            pairs.append((name, text))
+    return {"names": [n for n, _ in pairs], "context": said([t for _, t in pairs]) if pairs else ""}
+
+
 def answer(event, texts):
     """The hook's JSON for `event` (`post` or `stop`), or None when there is nothing."""
     if not texts:
         return None
-    said = HEAD + "\n\n" + "\n\n---\n\n".join(texts)
+    text = said(texts)
     if event == "stop":
-        return {"decision": "block", "reason": said}
-    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": said}}
+        return {"decision": "block", "reason": text}
+    return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": text}}
 
 
 HELD = ("The author sent this to the running session from the roadmap's screen or page, and this tool call "
@@ -111,14 +147,20 @@ def held(texts):
 KIRO_AGENT = "dfs-inbox"
 
 
-def kiro_agent():
+def command(event, box=None):
+    """The hook's shell command for `event`: this file, and `box` when the hook is to read that inbox
+    and not `DFS_INBOX`."""
+    me = shlex.quote(os.path.abspath(__file__))
+    return "python3 %s %s%s" % (me, event, " " + shlex.quote(os.path.abspath(box)) if box else "")
+
+
+def kiro_agent(box=None):
     """The kiro agent that installs the `pre` hook. `tools: ["*"]` keeps every tool the default agent
     gives a work session, less `subagent_semantic_reviewer`, which only this agent would have. A hook is found
     only in an agent: the default one runs none."""
-    me = shlex.quote(os.path.abspath(__file__))
     return json.dumps({"name": KIRO_AGENT, "description": "the roadmap's work session, reading the run's inbox",
                        "tools": ["*"], "excludedTools": ["subagent_semantic_reviewer"],
-                       "hooks": {"preToolUse": [{"command": "python3 %s pre" % me}]}}, indent=2)
+                       "hooks": {"preToolUse": [{"command": command("pre", box)}]}}, indent=2)
 
 
 SELF_AS_SUBAGENT = ("this agent is the roadmap's own work session: as a sub-agent it would take the author's messages "
@@ -132,14 +174,14 @@ def self_as_subagent(event):
     return event.get("tool_name") == "invoke_sub_agent" and (event.get("tool_input") or {}).get("name") == KIRO_AGENT
 
 
-def install_kiro_agent(directory):
+def install_kiro_agent(directory, box=None):
     """Write the agent to `.kiro/agents/` in `directory`, the only place `--agent dfs-inbox` finds it besides the
     home directory, and keep it out of the repository's status through `info/exclude` when that is a repository."""
     agents = os.path.join(directory, ".kiro", "agents")
     os.makedirs(agents, exist_ok=True)
     path = os.path.join(agents, KIRO_AGENT + ".json")
     with open(path, "w") as fh:
-        fh.write(kiro_agent() + "\n")
+        fh.write(kiro_agent(box) + "\n")
     try:
         exclude = subprocess.run(["git", "-C", directory, "rev-parse", "--git-path", "info/exclude"],
                                  capture_output=True, text=True, check=True).stdout.strip()
@@ -158,18 +200,16 @@ def install_kiro_agent(directory):
     return path
 
 
-def settings():
+def settings(box=None):
     """The claude `--settings` JSON naming this file as both hooks."""
-    me = shlex.quote(os.path.abspath(__file__))
-    hook = lambda ev: [{"hooks": [{"type": "command", "command": "python3 %s %s" % (me, ev)}]}]
+    hook = lambda ev: [{"hooks": [{"type": "command", "command": command(ev, box)}]}]
     return json.dumps({"hooks": {"PostToolUse": hook("post"), "Stop": hook("stop")}})
 
 
-def codex_args():
+def codex_args(box=None):
     """The flags that install both hooks in `codex exec`: hooks switched on, the trust prompt
     for a hook it has not seen bypassed, and each event as a TOML array of tables."""
-    me = os.path.abspath(__file__)
-    hook = lambda ev: '[{hooks=[{type="command",command=%s}]}]' % json.dumps("python3 %s %s" % (shlex.quote(me), ev))
+    hook = lambda ev: '[{hooks=[{type="command",command=%s}]}]' % json.dumps(command(ev, box))
     return ["-c", "features.hooks=true", "--dangerously-bypass-hook-trust",
             "-c", "hooks.PostToolUse=" + hook("post"), "-c", "hooks.Stop=" + hook("stop")]
 
@@ -179,44 +219,59 @@ def opencode_config(env):
     added to its `plugins`; opencode joins that with the plugins of its other config."""
     cfg = json.loads(env.get("OPENCODE_CONFIG_CONTENT") or "{}")
     here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "opencode_inbox")
-    cfg["plugins"] = list(cfg.get("plugins") or []) + [here]
+    cfg["plugins"] = [p for p in cfg.get("plugins") or [] if p != here] + [here]     # once, under an opencode that already has it
     return json.dumps(cfg)
 
 
+USAGE = ("usage: inbox.py post|stop|pre [BOX] | peek | ack NAME... | --settings [BOX] | --codex-args [BOX] | "
+         "--opencode-config | --kiro-agent DIR [BOX]")
+
+
 def main(argv):
-    if argv[1:] == ["--settings"]:
-        print(settings())
+    args = argv[1:]
+    if args[:1] == ["--settings"] and len(args) <= 2:
+        print(settings(*args[1:]))
         return 0
-    if argv[1:] == ["--codex-args"]:
-        print("\n".join(codex_args()))
+    if args[:1] == ["--codex-args"] and len(args) <= 2:
+        print("\n".join(codex_args(*args[1:])))
         return 0
-    if argv[1:] == ["--opencode-config"]:
+    if args == ["--opencode-config"]:
         print(opencode_config(os.environ))
         return 0
-    if len(argv) == 3 and argv[1] == "--kiro-agent":
-        print(install_kiro_agent(argv[2]))
+    if args[:1] == ["--kiro-agent"] and len(args) in (2, 3):
+        print(install_kiro_agent(*args[1:]))
         return 0
-    if len(argv) != 2 or argv[1] not in ("post", "stop", "pre"):
-        print("usage: inbox.py post | stop | pre | --settings | --codex-args | --opencode-config | --kiro-agent DIR", file=sys.stderr)
+    if args[:1] in (["peek"], ["ack"]):
+        box = os.environ.get("DFS_INBOX")
+        if not box:
+            print("inbox.py %s: DFS_INBOX names no inbox" % args[0], file=sys.stderr)
+            return 2
+        if args[0] == "peek":
+            print(json.dumps(peek(box)))
+        else:
+            take(box, args[1:])
+        return 0
+    if not args or args[0] not in ("post", "stop", "pre") or len(args) > 2:
+        print(USAGE, file=sys.stderr)
         return 2
     try:
         data = sys.stdin.read()     # the hook's own input; read so the agent's write never blocks
     except (OSError, ValueError):
         data = ""
-    box = os.environ.get("DFS_INBOX")
+    box = args[1] if len(args) == 2 else os.environ.get("DFS_INBOX")
     event = hook_input(data)
     if from_subagent(event):
         return 0        # the message is for the session the author is watching, not for a subagent's call
-    if argv[1] == "pre":
+    if args[0] == "pre":
         if self_as_subagent(event):
             print(SELF_AS_SUBAGENT, file=sys.stderr)
             return 2
-        said = held(claim(box)) if box else None
-        if said:
-            print(said, file=sys.stderr)
+        text = held(claim(box)) if box else None
+        if text:
+            print(text, file=sys.stderr)
             return 2        # kiro: the tool call does not run, and this is its result
         return 0
-    out = answer(argv[1], claim(box)) if box else None
+    out = answer(args[0], claim(box)) if box else None
     if out:
         print(json.dumps(out))
     return 0

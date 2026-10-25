@@ -1448,6 +1448,8 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_done", message="x"))[0], 409)
         self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_nope", message="x"))[0], 404)
         self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message=" "))[0], 400)
+        self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message="x" * 4001))[0], 400)
+        self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message="x" * 4000))[0], 200)
         meta["agent"] = "codex"
         (d / "meta.json").write_text(json.dumps(meta))
         self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message="for codex"))[0], 200)

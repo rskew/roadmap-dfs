@@ -666,6 +666,8 @@ run_session() {
     # tool call (inbox.py, opencode_inbox/). ⚠️ `--standalone`: without it the run goes to
     # opencode's shared background service, which loads its config and plugins once, in the
     # environment of whoever started it, so this run's plugin and DFS_INBOX would never be seen.
+    # DFS_INBOX is in opencode's environment (the plugin is in its process, and has no command to
+    # carry the box in); the other agents' hooks name the box in their commands and get none.
     local opencode_config
     opencode_config="$(python3 "$HERE/inbox.py" --opencode-config)"
     "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" OPENCODE_CONFIG_CONTENT="$opencode_config" \
@@ -688,8 +690,8 @@ run_session() {
     # hook after the start. A hook lives only in a custom agent, found as
     # `.kiro/agents/dfs-inbox.json` in the working directory, which inbox.py writes and keeps
     # out of git status; a message arriving after the last tool call stays waiting.
-    python3 "$HERE/inbox.py" --kiro-agent "$PWD" > /dev/null
-    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
+    python3 "$HERE/inbox.py" --kiro-agent "$PWD" "$RUNDIR/inbox" > /dev/null
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
       --agent dfs-inbox --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"
@@ -711,8 +713,8 @@ run_session() {
     # after it replaces every `-c` the launch command gave before it (a model provider
     # among them), and codex then asks api.openai.com.
     local inbox_args=() inbox_arg
-    while IFS= read -r inbox_arg; do inbox_args+=("$inbox_arg"); done < <(python3 "$HERE/inbox.py" --codex-args)
-    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
+    while IFS= read -r inbox_arg; do inbox_args+=("$inbox_arg"); done < <(python3 "$HERE/inbox.py" --codex-args "$RUNDIR/inbox")
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
       > "$log" < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"
@@ -733,8 +735,8 @@ run_session() {
     # these two hooks hand them over: at the next tool call, or as one more turn when
     # the session would stop (inbox.py). Without a message they print nothing.
     local inbox_settings
-    inbox_settings="$(python3 "$HERE/inbox.py" --settings)"
-    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" \
+    inbox_settings="$(python3 "$HERE/inbox.py" --settings "$RUNDIR/inbox")"
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" \
       --settings "$inbox_settings" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
     session_rc=$?
   fi

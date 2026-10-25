@@ -383,12 +383,17 @@ def run_entry(r):
                 takes_messages=bool(r["live"] and dfs_runs.takes_messages(r)))
 
 
+MESSAGE_CHARS = 4000        # the page's box stops here (maxlength), and so does the endpoint
+
+
 def run_message(body):
     """The author's message to a live chain's session, left in its inbox: the session
     reads it at its next tool call, or as it stops (inbox.py). It starts nothing, so it
     is not off with the walk."""
     name = need(body, "run", "a run")
     text = need(body, "message", "a message")
+    if len(text) > MESSAGE_CHARS:
+        raise Refused("a message is at most %d characters" % MESSAGE_CHARS)
     run = next((r for r in dfs_runs.run_dirs() if os.path.basename(r["dir"]) == name), None)
     if run is None:
         raise Refused("no such run", 404)

@@ -10,6 +10,7 @@ Run:  python3 roadmap-dfs/scripts/test_chain.py
 """
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1505,22 +1506,24 @@ class Chain(unittest.TestCase):
     def test_a_claude_work_session_is_started_with_the_inbox_hooks_and_its_run_s_inbox(self):
         named = self.aside / "named"
         rc, _, out = self.run_chain("work", cap=1, RUNDIR=str(named))
-        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), str(named.resolve() / "inbox"), out)
+        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), "<unset>", "the agent inherited the inbox, and so would what it runs")
         hooks = json.loads((self.aside / "kinds.settings").read_text())["hooks"]
+        box = shlex.quote(str(named.resolve() / "inbox"))
         self.assertEqual(sorted(hooks), ["PostToolUse", "Stop"])
-        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post"), hooks)
-        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop"), hooks)
+        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post " + box), hooks)
+        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop " + box), hooks)
 
     def test_a_codex_work_session_is_started_with_the_inbox_hooks_before_exec_and_its_run_s_inbox(self):
         named = self.aside / "named"
         rc, _, out = self.run_chain("work", cap=1, flags=("--codex",), RUNDIR=str(named), AGENT_NIXPKGS_REV="none")
-        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), str(named.resolve() / "inbox"), out)
+        self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), "<unset>", "the agent inherited the inbox, and so would what it runs")
         argv = (self.aside / "kinds.argv").read_text().splitlines()
         before = argv[:argv.index("exec")]
+        box = str(named.resolve() / "inbox")
         self.assertIn("features.hooks=true", before)
         self.assertIn("--dangerously-bypass-hook-trust", before)
-        self.assertTrue(any(a.startswith("hooks.PostToolUse=") and "inbox.py post" in a for a in before), argv)
-        self.assertTrue(any(a.startswith("hooks.Stop=") and "inbox.py stop" in a for a in before), argv)
+        self.assertTrue(any(a.startswith("hooks.PostToolUse=") and "inbox.py post " in a and box in a for a in before), argv)
+        self.assertTrue(any(a.startswith("hooks.Stop=") and "inbox.py stop " in a and box in a for a in before), argv)
 
     def test_a_raise_blocks(self):
         rc, meta, out = self.run_chain("raise")

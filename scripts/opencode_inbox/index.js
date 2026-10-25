@@ -19,6 +19,8 @@ const waiting = (box) => {
   }
 }
 
+const inbox = (...args) => spawnSync("python3", [inboxPy, ...args], { input: "{}", encoding: "utf8" })
+
 export default {
   id: "dfs-inbox",
   setup: async (ctx) => {
@@ -28,12 +30,24 @@ export default {
       const box = process.env.DFS_INBOX
       if (watching || !box) return
       watching = true
+      let busy = false
       const timer = setInterval(async () => {
-        if (!waiting(box)) return
-        const ran = spawnSync("python3", [inboxPy, "post"], { input: "{}", encoding: "utf8" })
-        if (ran.status !== 0 || !ran.stdout.trim()) return
-        const text = JSON.parse(ran.stdout).hookSpecificOutput?.additionalContext
-        if (text) await ctx.session.prompt({ sessionID: request.sessionID, text, delivery: "steer" }).catch(() => {})
+        if (busy || !waiting(box)) return
+        busy = true
+        try {
+          // Read, hand over, and only then move the messages to delivered/: a prompt opencode
+          // refuses leaves them waiting for the next poll, and the log never calls them read.
+          const peeked = inbox("peek")
+          if (peeked.status !== 0) return
+          const { names, context } = JSON.parse(peeked.stdout)
+          if (!names.length) return
+          await ctx.session.prompt({ sessionID: request.sessionID, text: context, delivery: "steer" })
+          inbox("ack", ...names)
+        } catch {
+          // left waiting, tried again
+        } finally {
+          busy = false
+        }
       }, POLL_MS)
       timer.unref()
     })
