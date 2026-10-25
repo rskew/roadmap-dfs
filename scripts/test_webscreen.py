@@ -302,9 +302,10 @@ class Reopening(unittest.TestCase):
         for cmd in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t",
                                                    "commit", "-qm", "init"]):
             subprocess.run(["git"] + cmd, cwd=self.root, check=True)
-        self._wr, self._root = dfs_paths.work_root, TUI.ROOT
+        self._wr, self._root, self._state = dfs_paths.work_root, TUI.ROOT, TUI.STATE
         dfs_paths.work_root = lambda: self.root
         TUI.ROOT = self.root                    # the screen reads `state.py` run there
+        TUI.STATE = self.root / ".dfs"          # and `git status` there, not in the CWD's `.dfs`
         dfs_paths._TAG_CACHE.clear()
         self.ui = TUI.UI(None)
         self.ui.real = False
@@ -312,7 +313,7 @@ class Reopening(unittest.TestCase):
         self.ui.web = types.SimpleNamespace(notify=lambda: self.told.append(1))
 
     def tearDown(self):
-        dfs_paths.work_root, TUI.ROOT = self._wr, self._root
+        dfs_paths.work_root, TUI.ROOT, TUI.STATE = self._wr, self._root, self._state
         dfs_paths._TAG_CACHE.clear()
         shutil.rmtree(self.root, ignore_errors=True)
 

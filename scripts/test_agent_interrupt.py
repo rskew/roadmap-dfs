@@ -19,7 +19,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import ptyrelay  # noqa: E402
-from test_agent_models import FakeCodexModel, FakeOpenAIModel  # noqa: E402
+from test_agent_models import FakeCodexModel, FakeOpenAIModel, prompt_drawn, start_until  # noqa: E402
 from test_kiro_model import FakeKiroModel  # noqa: E402
 
 
@@ -52,18 +52,28 @@ class Interrupt(unittest.TestCase):
         for k in ("CODEX_HOME", "KIRO_HOME", "CLAUDE_CODE_SESSION_ID"):
             self.env.pop(k, None)
 
-    def hear(self, model, text):
-        return [b for _, b in model.requests if text.encode() in b]
+    def hear(self, model, text, turn=False):
+        """The requests carrying `text`; with `turn`, not the ones opencode makes to title the conversation, which
+        carry the user's message too and come first when the machine is loaded."""
+        return [b for _, b in model.requests if text.encode() in b and not (turn and b"Generate a title" in b)]
 
-    def stop_a_slow_answer(self, argv, model, agent, env=None, settle=2):
-        relay = ptyrelay.Relay(agent=agent).start(argv, env=dict(self.env, **(env or {})), cwd=str(self.home), size=(40, 120))
-        self.addCleanup(relay.close)
-        self.assertTrue(until(lambda: relay.first_out, 30))
+    def stop_a_slow_answer(self, argv, model, agent, env=None, settle=2, before=None):
+        def start():
+            relay = ptyrelay.Relay(agent=agent).start(argv, env=dict(self.env, **(env or {})), cwd=str(self.home), size=(40, 120))
+            self.addCleanup(relay.close)
+            return relay
+
+        # opencode's first output comes before it hangs, when it does at start-up: its prompt is what is waited for
+        drawn, timeout = (prompt_drawn, 90) if agent == "opencode" else (lambda r: r.first_out, 30)
+        relay, up = start_until(start(), drawn, start, timeout)
+        self.assertTrue(up, "the agent started; its screen:\n%s" % ptyrelay.chatlog.screen_text(relay.tail))
         time.sleep(settle)                                    # a TUI starting up is quiet now and then, and takes no message
         relay.send("please take your time")
-        self.assertTrue(until(lambda: self.hear(model, "take your time"), 60), "the agent asked the model")
+        self.assertTrue(until(lambda: self.hear(model, "take your time", turn=True), 60), "the agent asked the model for the answer")
         time.sleep(1.5)                                       # it is part-way through the answer
         self.assertFalse(model.cancelled.is_set())
+        if before:
+            before(relay)
         self.assertEqual(relay.interrupt(), 0)
         return relay
 
@@ -98,19 +108,13 @@ class Interrupt(unittest.TestCase):
 
     @unittest.skipUnless(OPENCODE, "no opencode here")
     def test_opencode_needs_a_second_escape(self):
+        def one_escape(relay):                                # a single ESC only arms its interrupt; the table in ptyrelay says two
+            os.write(relay.fd, b"\x1b")
+            self.assertFalse(model.cancelled.wait(3), "it is still answering after one ESC")
         with FakeOpenAIModel(say="DONE") as model:
-            relay = self.stop_a_slow_answer([OPENCODE], model, "opencode", model.env(), settle=8)
+            relay = self.stop_a_slow_answer([OPENCODE], model, "opencode", model.env(), settle=8, before=one_escape)
             self.assertTrue(model.cancelled.wait(10), "opencode hung up on the answer it was given")
             self.and_goes_on(relay, model)
-
-    @unittest.skipUnless(OPENCODE, "no opencode here")
-    def test_one_escape_only_arms_opencodes_interrupt(self):
-        was = dict(ptyrelay.INTERRUPT)
-        ptyrelay.INTERRUPT.clear()                            # a single ESC, as for the others
-        self.addCleanup(ptyrelay.INTERRUPT.update, was)
-        with FakeOpenAIModel(say="DONE") as model:
-            self.stop_a_slow_answer([OPENCODE], model, "opencode", model.env(), settle=8)
-            self.assertFalse(model.cancelled.wait(5), "it is still answering after one ESC")
 
 
 if __name__ == "__main__":

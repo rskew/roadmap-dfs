@@ -26,6 +26,8 @@ import chatlog
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
 READY_TIMEOUT = 25.0
+READY_MARKED_TIMEOUT = 90.0 # the same for an agent whose prompt screen is known (READY): a loaded machine left kiro on "Launching..." for over 25s, and a message typed then was lost
+FIRST_LAUNCH_WATCH = 120.0  # seconds after the start in which a first-launch question is still answered once a message has been typed
 SUBMIT_WAIT = 2.0           # seconds a first message may draw nothing after its Enter before Enter is pressed again
 RESUBMIT = ("claude",)      # the agents that get it; a real claude 2.1.301 did nothing on an Enter at an empty prompt, idle or mid-turn (test_claude_chat)
 HANDOVER_TIMEOUT = 90.0     # after run.sh's opening line, for the agent's own first output: a real kiro-cli drew nothing for 12s to 25s (test_kiro_chat)
@@ -323,31 +325,43 @@ class Relay:
             return False
         if self.typed:
             return True
+        if self._answer_first_launch():
+            return False
+        return self.agent not in READY or READY[self.agent] in chatlog.screen_text(self.tail, keep=TAIL)
+
+    def _answer_first_launch(self):
+        """Answer the agent's first-launch question if it is on the screen. True if it was."""
         screen = chatlog.screen_text(self.tail, keep=TAIL)
         asked = FIRST_LAUNCH.get(self.agent)
-        if asked and asked[0] in screen and not self.answered:
-            self.answered = True
-            self.log("first-launch question answered", screen[-400:])
-            for i, key in enumerate(asked[1]):
-                if i:
-                    time.sleep(INTERRUPT_GAP)       # kiro takes Down and Enter in one write as Enter
-                _try(os.write, self.fd, key)
-            self.last_out = time.time()         # wait for what the answer makes it draw
+        if not asked or asked[0] not in screen or self.answered:
             return False
-        return self.agent not in READY or READY[self.agent] in screen
+        self.answered = True
+        self.log("first-launch question answered", screen[-400:])
+        for i, key in enumerate(asked[1]):
+            if i:
+                time.sleep(INTERRUPT_GAP)       # kiro takes Down and Enter in one write as Enter
+            _try(os.write, self.fd, key)
+        self.last_out = time.time()         # wait for what the answer makes it draw
+        return True
 
     def _typist(self):
         while self.live:
             try:
                 text = self.outbox.get(timeout=0.5)
             except queue.Empty:
+                # a message typed once the agent had been quiet for QUIET, before its question was drawn (a starved
+                # codex draws it seconds after its splash), waits behind that question
+                if (self.typed and not self.answered and self.agent in FIRST_LAUNCH and self.fd is not None
+                        and time.time() - self.started < FIRST_LAUNCH_WATCH and time.time() - self.last_out >= QUIET):
+                    self._answer_first_launch()
                 continue
             waited, stops = time.time(), self.stops
             first = not self.typed
-            end = waited + READY_TIMEOUT      # not before the agent has drawn itself and settled
+            limit = READY_MARKED_TIMEOUT if self.agent in READY else READY_TIMEOUT
+            end = waited + limit      # not before the agent has drawn itself and settled
             while self.live and time.time() < end and not self._ready():
                 if self.opening:
-                    end = time.time() + READY_TIMEOUT       # the opening turn is not the agent being slow
+                    end = time.time() + limit       # the opening turn is not the agent being slow
                 elif self.handed and not self.first_out:
                     end = max(end, self.handed + HANDOVER_TIMEOUT)      # nor is the agent's own slow start
                 time.sleep(0.1)
@@ -364,8 +378,8 @@ class Relay:
                 self.typed = True
                 self.unsent = max(0, self.unsent - 1)
             self.log("typed %d characters after %.1fs wait (%s)" % (
-                len(text), time.time() - waited, "settled" if time.time() - waited < READY_TIMEOUT
-                else "the agent had not settled in %ds, typed anyway" % READY_TIMEOUT))
+                len(text), time.time() - waited, "settled" if time.time() - waited < limit
+                else "the agent had not settled in %ds, typed anyway" % limit))
             time.sleep(0.15)
             with self.lock:
                 if self.fd is None:

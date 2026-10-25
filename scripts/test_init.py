@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -99,7 +100,9 @@ class Init(unittest.TestCase):
         plain = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, plain, True)
         dfs_paths.work_root = lambda: plain
-        rc, out = self.run_init()
+        # TMPDIR may be inside a repo (where /tmp is noexec): git must not look above `plain`
+        with mock.patch.dict(os.environ, GIT_CEILING_DIRECTORIES=str(plain.parent)):
+            rc, out = self.run_init()
         self.assertEqual(rc, 2)
         self.assertIn("not in a git repo", out)
 

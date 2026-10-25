@@ -17,6 +17,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -115,6 +117,7 @@ class Flows(unittest.TestCase):
 
     def tearDown(self):
         self.handle.stop()
+        self.wait_for_requests()
         dfs_web.WALK.update(enabled=True, walker=None)
         dfs_web.CHAT["chats"] = None
         for k, v in self._saved.items():
@@ -125,6 +128,15 @@ class Flows(unittest.TestCase):
         dfs_paths.work_root = self._wr
         dfs_paths._TAG_CACHE.clear()
         shutil.rmtree(self.root, ignore_errors=True)
+
+    def wait_for_requests(self, timeout=10):
+        """The server's handler threads are daemons, which `stop()` does not join: a request the
+        browser had in flight when its flow ended still runs, and would read (and write the
+        title of) the real checkout once `work_root` is put back."""
+        end = time.time() + timeout
+        for t in threading.enumerate():
+            if "process_request_thread" in t.name:
+                t.join(max(0, end - time.time()))
 
     def flow(self, name):
         node, env = self.node

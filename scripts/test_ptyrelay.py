@@ -85,6 +85,7 @@ class Background(unittest.TestCase):
     def test_an_agent_that_ends_says_it_is_not_running(self):
         self.relay.send("quit")
         self.assertTrue(until(lambda: not self.relay.live))
+        self.assertTrue(until(lambda: self.relay.rc is not None), "the exit code is read once the child is reaped, after the relay stops being live")
         self.assertEqual(self.relay.rc, 3)
         self.assertFalse(self.relay.send("late"))
 
@@ -224,6 +225,11 @@ class Looking(unittest.TestCase):
         self.t = threading.Thread(target=lambda: self.result.append(self.relay.attach()), daemon=True)
 
     def tearDown(self):
+        # `attach` reads these descriptors until the chat ends: end it and wait for the thread before they
+        # are closed, or a thread still in `attach` reads whatever next gets the same descriptor numbers
+        self.relay.close()
+        if self.t.is_alive():
+            self.t.join(10)
         sys.stdin, sys.stdout = self._io
         for fd in (self.keys_w, self.out_r):
             try:
@@ -231,7 +237,7 @@ class Looking(unittest.TestCase):
             except OSError:
                 pass
 
-    def seen(self, needle, timeout=5):
+    def seen(self, needle, timeout=30):
         got, end = b"", time.time() + timeout
         while time.time() < end:
             if select.select([self.out_r], [], [], 0.1)[0]:
@@ -240,16 +246,24 @@ class Looking(unittest.TestCase):
                     return True
         return False
 
-    def test_attached_it_shows_and_takes_the_keyboard_and_the_page_still_types(self):
+    def looking(self):
+        """Start `attach` and wait until the display shows the agent's output. What the agent printed before
+        it was attached is not replayed, so a "ready" it printed at start may never be shown: a line typed
+        once `attach` has the display is the first thing it is sure to show."""
         self.t.start()
+        self.assertTrue(until(lambda: self.relay.attached, 30), "attach did not start")
+        self.assertTrue(self.relay.send("probe"))
+        self.assertTrue(self.seen(b"heard: probe"))
+
+    def test_attached_it_shows_and_takes_the_keyboard_and_the_page_still_types(self):
+        self.looking()
         self.assertTrue(self.relay.send("from the page"))
         self.assertTrue(self.seen(b"heard: from the page"))
         os.write(self.keys_w, b"from the keys\r")
         self.assertTrue(self.seen(b"heard: from the keys"))
 
     def test_ctrl_bracket_detaches_and_it_keeps_running(self):
-        self.t.start()
-        self.assertTrue(self.seen(b"ready"))
+        self.looking()
         os.write(self.keys_w, b"abc\x1d")
         self.t.join(5)
         self.assertEqual(self.result, [True])
@@ -265,16 +279,15 @@ class Looking(unittest.TestCase):
         polls = []
         self.t = threading.Thread(target=lambda: self.result.append(
             self.relay.attach(idle=lambda: polls.append(time.time()), every=0.1)), daemon=True)
-        self.t.start()
-        self.assertTrue(self.seen(b"ready"))
-        end = time.time() + 1.0
-        while time.time() < end:                                # a key every 20 ms, faster than `every`
+        self.looking()
+        end = time.time() + 5.0
+        while time.time() < end and len(polls) < 5:            # a key every 20 ms, faster than `every`
             os.write(self.keys_w, b"x")
             time.sleep(0.02)
         os.write(self.keys_w, b"\x1d")
         self.t.join(5)
         self.assertEqual(self.result, [True])
-        self.assertGreaterEqual(len(polls), 5, polls)
+        self.assertGreaterEqual(len(polls), 5, "starved: the poll ran %d times in 5s of keys" % len(polls))
 
     def test_when_it_ends_attached_that_is_said(self):
         self.t.start()
@@ -320,9 +333,12 @@ class Looking(unittest.TestCase):
         ptyrelay.time = types.SimpleNamespace(sleep=sleep, time=time.time)
         self.addCleanup(setattr, ptyrelay, "time", time)
         self.relay.resize((33, 74))
+        polled = threading.Event()
+        self.t = threading.Thread(target=lambda: self.result.append(
+            self.relay.attach(idle=polled.set, every=0.1)), daemon=True)
         self.t.start()
-        self.assertTrue(self.seen(b"ready"))
-        time.sleep(0.5)                         # past the redraw step, which passes through 73 on its way
+        # the first poll comes after the redraw step, which passes through 73 on its way
+        self.assertTrue(polled.wait(30), "attach had not finished fitting the agent in 30s")
         self.assertEqual(struct.unpack("HHHH", real(self.relay.fd))[:2], (33, 73))
 
     def test_attaching_to_a_chat_that_has_already_ended_returns_false(self):
@@ -337,10 +353,14 @@ class Sizing(unittest.TestCase):
 
     def agent(self, size=None):
         out = Path(tempfile.mkdtemp()) / "size"
-        script = "stty size > %s; trap 'stty size >> %s' WINCH; while :; do sleep 0.1; done" % (out, out)
+        script = "stty size > %s; trap 'stty size >> %s' WINCH; echo > %s.armed; while :; do sleep 0.1; done" % (out, out, out)
         relay = ptyrelay.Relay().start(["bash", "-c", script], size=size)
         self.addCleanup(relay.close)
         return relay, out
+
+    def armed(self, out):
+        """The agent has its WINCH trap in place: a resize before that is lost, not answered."""
+        return until(lambda: Path(str(out) + ".armed").exists(), 30)
 
     def sizes(self, out):
         return out.read_text().splitlines() if out.exists() else []
@@ -360,15 +380,17 @@ class Sizing(unittest.TestCase):
 
     def test_a_resize_of_the_screen_reaches_the_chats_in_the_background(self):
         relay, out = self.agent(size=(40, 120))
-        self.assertTrue(until(lambda: self.sizes(out) == ["40 120"]))
+        self.assertTrue(self.armed(out), "the agent did not get as far as its trap in 30s")
+        self.assertEqual(self.sizes(out), ["40 120"])
         host = ptyrelay.ChatHost()
         host.relays["W1"] = relay
         host.resize((24, 60))
-        self.assertTrue(until(lambda: self.sizes(out) == ["40 120", "24 60"]), self.sizes(out))
+        self.assertTrue(until(lambda: self.sizes(out) == ["40 120", "24 60"], 30), self.sizes(out))
 
     def test_a_chat_with_a_terminal_attached_is_left_to_it(self):
         relay, out = self.agent(size=(40, 120))
-        self.assertTrue(until(lambda: self.sizes(out) == ["40 120"]))
+        self.assertTrue(self.armed(out), "the agent did not get as far as its trap in 30s")
+        self.assertEqual(self.sizes(out), ["40 120"])
         relay.attached = True
         relay.resize((24, 60))
         time.sleep(0.3)
