@@ -354,6 +354,18 @@ class Check(InARepo):
     def problems(self, text):
         return dfs_check.check_shape("W1", text)
 
+    def test_a_parent_naming_the_task_is_a_child_of_the_task(self):
+        text = task("### W1.1 · step 1\nParent: W1\nStatus: open\n\n" + node(2, parent=1))
+        self.assertEqual(self.problems(text), [])
+        t = dfs_tree.parse(text, "W1")
+        self.assertEqual([nd["id"] for nd in dfs_tree.children(t, None)], ["W1.1"])
+        self.assertEqual([nd["id"] for nd in dfs_tree.descendants(t, None)], ["W1.1", "W1.2"])
+        self.assertIn("Parent: W1\n", dfs_tree.render(t))   # read as the task, kept as written
+        for other in ("W2", "W1.9", "W11"):   # another task, or a node that is not there
+            bad = task("### W1.1 · step 1\nParent: %s\nStatus: open\n" % other)
+            self.assertEqual(self.problems(bad),
+                             ["W1.1 names Parent %s, which does not exist" % other])
+
     def test_a_backtrack_names_a_node_and_a_node_may_carry_it_out(self):
         good = task(node(1, "confirmed") + node(2, parent=None, extra="Corrects: 2026-09-25T09:00:00Z\n"),
                     "- 2026-09-25T09:00:00Z · backtrack · W1.1\n  thin\n")
@@ -658,7 +670,7 @@ class Check(InARepo):
         self.assertNotIn(name, out)
 
     def test_a_shape_fault_head_already_had_refuses_only_the_commit_that_adds_one(self):
-        old = "### W1.1 · step 1\nParent: W1\nStatus: open\n\n"
+        old = "### W1.1 · step 1\nParent: W1.8\nStatus: open\n\n"
         self.write(task(old))
         self.git_commit(".dfs/items/W1.md")   # written before the rule, or past the guard
         self.write(task(old + node(2, parent=1)))
@@ -673,12 +685,12 @@ class Check(InARepo):
         self.assertNotIn("W1.1 names Parent", out)
 
     def old_roadmap_file(self):
-        """A task written before the guard saw it: a Parent naming the task, a Hypothesis
+        """A task written before the guard saw it: a Parent naming no node, a Hypothesis
         naming no page, an artefact on disk it never committed, and over the budget."""
         (self.root / ".dfs/artefacts").mkdir(parents=True, exist_ok=True)
         (self.root / ".dfs/artefacts/0f1e2d3c-4b5a-4968-8776-655443322110.png").write_bytes(b"x")
         bulk = "Evidence:\n" + "- for: it ran\n" * (dfs_state.HANDOFF_BUDGET // 2)
-        return task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+        return task("### W1.1 · step 1\nParent: W1.8\nStatus: open\n"
                     "Hypothesis: It holds. Wrong if not.\n" + bulk + "\n",
                     "- 2026-09-25T09:00:00Z · session · work\n"
                     "  ![x](.dfs/artefacts/0f1e2d3c-4b5a-4968-8776-655443322110.png)\n")
@@ -696,19 +708,19 @@ class Check(InARepo):
             code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
         self.assertIn("grandfathered", out)
-        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged"):
+        for seen in ("names Parent W1.8,", "names no artefact", "on disk but not staged"):
             self.assertIn(seen, out)
         self.assertNotIn("GREW", out)
         self.assertNotIn("broke its own rules", out)
 
     def first_node_is_refused(self):
-        self.write(task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+        self.write(task("### W1.1 · step 1\nParent: W1.8\nStatus: open\n"
                         "Hypothesis: It holds. Wrong if not.\n"))
         subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 1, out)
         self.assertNotIn("grandfathered", out)
-        for seen in ("names Parent W1,", "names no artefact"):
+        for seen in ("names Parent W1.8,", "names no artefact"):
             self.assertIn(seen, out)
 
     def test_a_first_node_worked_in_place_off_main_is_judged_in_full(self):
@@ -727,7 +739,7 @@ class Check(InARepo):
             with mock.patch.dict(os.environ, env):
                 code, out = self.run_check("--staged")
             self.assertEqual(code, 1, out)
-            self.assertIn("names Parent W1,", out)
+            self.assertIn("names Parent W1.8,", out)
             self.assertNotIn("grandfathered", out)
             self.assertNotIn("DFS_ADOPT", out)
 
@@ -738,13 +750,13 @@ class Check(InARepo):
         (self.root / "code.txt").write_text("a\n")
         self.git_commit("code.txt")   # a fresh roadmap: main holds no task file
         subprocess.run(["git", "checkout", "-qb", "dfs/W1"], cwd=self.root, check=True)
-        self.write(task("### W1.1 · step 1\nParent: W1\nStatus: open\n"
+        self.write(task("### W1.1 · step 1\nParent: W1.8\nStatus: open\n"
                         "Hypothesis: It holds. Wrong if not.\n"))
         subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 1, out)
         self.assertNotIn("grandfathered", out)
-        for seen in ("names Parent W1,", "names no artefact"):
+        for seen in ("names Parent W1.8,", "names no artefact"):
             self.assertIn(seen, out)
 
     def test_the_working_tree_check_of_a_fresh_task_is_no_adoption(self):
@@ -817,7 +829,7 @@ class Check(InARepo):
         code, out = self.run_check("--staged")
         self.assertEqual(code, 1, out)
         self.assertNotIn("grandfathered", out)
-        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged",
+        for seen in ("names Parent W1.8,", "names no artefact", "on disk but not staged",
                      "this commit\n    ADDS it."):
             self.assertIn(seen, out)
         self.assertNotIn("GREW", out)
@@ -826,7 +838,7 @@ class Check(InARepo):
             code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
         self.assertIn("grandfathered", out)
-        for seen in ("names Parent W1,", "names no artefact", "on disk but not staged"):
+        for seen in ("names Parent W1.8,", "names no artefact", "on disk but not staged"):
             self.assertIn(seen, out)
         self.assertNotIn("broke its own rules", out)
 
@@ -856,7 +868,7 @@ class Check(InARepo):
                     os.environ["DFS_ADOPT"] = value
                 code, out = self.run_check("--staged")
             self.assertEqual(code, 1, out)
-            self.assertIn("names Parent W2,", out)
+            self.assertIn("names Parent W2.8,", out)
             self.assertNotIn("grandfathered", out)
             self.assertNotIn("DFS_ADOPT", out)
 

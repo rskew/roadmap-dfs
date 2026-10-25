@@ -14,7 +14,7 @@ Each task is one file, `.dfs/items/<task>.md`:
     ## Tree
 
     ### W13.1 · <title>
-    Parent: W13.0                 (optional; absent means a child of the task)
+    Parent: W13.0                 (optional; absent, or `W13`, means a child of the task)
     Status: open | started | parked | confirmed | refuted
     Approach: <what this node does and how: the files, the change, the check>
     Hypothesis: <optional: an important, questionable assumption, and what would show it wrong>
@@ -304,7 +304,10 @@ def parse_nodes(body, task, pre=None):
             nd["raw"].pop()
         f = nd["fields"]
         nd["status"] = f.get("Status", "open").split()[0].lower() if f.get("Status") else "open"
-        nd["parent"] = f.get("Parent") or None
+        # The task is the tree's root, so a Parent naming it says what no Parent says:
+        # a session writes `Parent: W13` on a top-level node often enough that refusing
+        # it as a missing node only cost a refused commit and hid the node from the tree.
+        nd["parent"] = None if f.get("Parent") == task else (f.get("Parent") or None)
     return nodes
 
 
