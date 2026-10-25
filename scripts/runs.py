@@ -380,9 +380,20 @@ def messages(d):
     return out
 
 
+# The agents with a way to hand a message into a running session (inbox.py), and why the others have none.
+TAKES_MESSAGES = ("claude", "codex", "opencode")
+NO_WAY_IN = {"kiro": "kiro's v3 engine runs no hooks and has no plugin to read the run's inbox"}
+
+
 def takes_messages(r):
     """Whether the run's agent has a way to hand a message into its session."""
-    return (r.get("agent") or "claude") in ("claude", "codex")
+    return (r.get("agent") or "claude") in TAKES_MESSAGES
+
+
+def refusal(r):
+    """What to say when a message cannot go to the run's session, naming its agent and why."""
+    agent = r.get("agent") or "claude"
+    return "a %s session cannot take a message: %s" % (agent, NO_WAY_IN.get(agent, "it has no way to read the run's inbox"))
 
 
 def progress(r):

@@ -5,6 +5,7 @@
     inbox.py stop    as a Stop hook: a session about to end takes one more turn for them
     inbox.py --settings   the `--settings` JSON that installs both, as run.sh passes it
     inbox.py --codex-args   the same for codex: the flags, one per line, that go BEFORE `exec`
+    inbox.py --opencode-config   the same for opencode: its `OPENCODE_CONFIG_CONTENT`, naming the plugin
 
 `run.sh` starts each claude work session with both hooks and `DFS_INBOX`, the run
 directory's `inbox/`, which the screen and the page write into (`runs.py`,
@@ -17,6 +18,10 @@ read, and a move that fails means another hook took it, so two hooks running at 
 it counts as delivered: the screen shows it so from then on.
 
 codex takes the same two hooks as `-c` overrides (`codex_args`), with the same JSON out.
+
+opencode 2.1.1 has no hook for a session about to end, only a plugin (`opencode_inbox/`) that runs
+`inbox.py post` after each tool call and adds its answer to the tool's result. A message
+that arrives after the last tool call is never read, and the screen and page list it so.
 
 Checked against a real claude-code 2.1.308 under `-p`: PostToolUse's
 `additionalContext` is in the very next request, and a Stop hook's `block` makes the
@@ -78,6 +83,15 @@ def codex_args():
             "-c", "hooks.PostToolUse=" + hook("post"), "-c", "hooks.Stop=" + hook("stop")]
 
 
+def opencode_config(env):
+    """`OPENCODE_CONFIG_CONTENT` for opencode, `env`'s own (a JSON object, or none) with the plugin directory
+    added to its `plugins`; opencode joins that with the plugins of its other config."""
+    cfg = json.loads(env.get("OPENCODE_CONFIG_CONTENT") or "{}")
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "opencode_inbox")
+    cfg["plugins"] = list(cfg.get("plugins") or []) + [here]
+    return json.dumps(cfg)
+
+
 def main(argv):
     if argv[1:] == ["--settings"]:
         print(settings())
@@ -85,8 +99,11 @@ def main(argv):
     if argv[1:] == ["--codex-args"]:
         print("\n".join(codex_args()))
         return 0
+    if argv[1:] == ["--opencode-config"]:
+        print(opencode_config(os.environ))
+        return 0
     if len(argv) != 2 or argv[1] not in ("post", "stop"):
-        print("usage: inbox.py post | stop | --settings | --codex-args", file=sys.stderr)
+        print("usage: inbox.py post | stop | --settings | --codex-args | --opencode-config", file=sys.stderr)
         return 2
     try:
         sys.stdin.read()        # the hook's own input; drained so claude's write never blocks

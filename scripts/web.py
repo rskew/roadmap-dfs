@@ -395,7 +395,7 @@ def run_message(body):
     if not run["live"]:
         raise Refused("that chain has ended: there is no session to send to", 409)
     if not dfs_runs.takes_messages(run):
-        raise Refused("a %s session cannot take a message" % run["agent"], 409)
+        raise Refused(dfs_runs.refusal(run), 409)
     try:
         dfs_runs.post_message(run["dir"], text)
     except OSError as e:

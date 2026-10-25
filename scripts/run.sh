@@ -662,7 +662,14 @@ run_session() {
     # is 1 when it ends in an `error` event.
     SID=""
     meta_set sid=""
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --format json "${PERMISSION_ARGV[@]}" \
+    # The author's messages reach it through a plugin that reads the run's inbox after each
+    # tool call (inbox.py, opencode_inbox/). ⚠️ `--standalone`: without it the run goes to
+    # opencode's shared background service, which loads its config and plugins once, in the
+    # environment of whoever started it, so this run's plugin and DFS_INBOX would never be seen.
+    local opencode_config
+    opencode_config="$(python3 "$HERE/inbox.py" --opencode-config)"
+    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" OPENCODE_CONFIG_CONTENT="$opencode_config" \
+      "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" \
       "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"

@@ -2990,7 +2990,7 @@ class UI(WalkMixin):
             self.msg = "that chain has ended: there is no session to send to"
             return
         if not dfs_runs.takes_messages(chain):
-            self.msg = "a %s session cannot take a message" % chain["agent"]
+            self.msg = dfs_runs.refusal(chain)
             return
         text = self.prompt("message to the running session (esc cancels): ").strip()
         if not text:

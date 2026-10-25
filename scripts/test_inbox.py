@@ -5,7 +5,8 @@
 faked, and they are skipped where no claude is installed.
 
 The same goes for codex (the build in /nix/store, or TEST_CODEX) with the `-c` overrides
-`inbox.codex_args` gives it.
+`inbox.codex_args` gives it, and for opencode 2.1.1 (or TEST_OPENCODE) with the plugin
+`inbox.opencode_config` names.
 
 Run (with TMPDIR inside the repo when /tmp is noexec):  python3 roadmap-dfs/scripts/test_inbox.py
 """
@@ -28,7 +29,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import inbox  # noqa: E402
 import runs as dfs_runs  # noqa: E402
-from test_agent_models import FakeCodexModel, sse  # noqa: E402
+from test_agent_models import FakeCodexModel, FakeOpenAIModel, sse  # noqa: E402
 from test_claude_chat import CLAUDE, KEY  # noqa: E402
 
 CODEX = os.environ.get("TEST_CODEX") or next(iter(sorted(glob.glob("/nix/store/*-codex-0.16*/bin/codex"))[::-1]), None) or shutil.which("codex")
@@ -196,6 +197,7 @@ class RealClaude(unittest.TestCase):
         self.assertEqual(len(model.requests), 2)
         self.assertIn("W104-PING one more thing", json.dumps(model.requests[1]))
         self.assertEqual(result, "did the one more thing")
+OPENCODE = os.environ.get("TEST_OPENCODE") or next(iter(sorted(glob.glob("/nix/store/*-opencode-2.*/bin/opencode"))[::-1]), None)
 
 
 class ToolCodexModel(FakeCodexModel):
@@ -274,6 +276,92 @@ class RealCodex(unittest.TestCase):
         self.assertIn("--dangerously-bypass-hook-trust", args)
         self.assertTrue(any(a.startswith("hooks.PostToolUse=") and "inbox.py post" in a for a in args))
         self.assertTrue(any(a.startswith("hooks.Stop=") and "inbox.py stop" in a for a in args))
+
+
+class ToolOpenAIModel(FakeOpenAIModel):
+    """A stand-in chat completions model: it answers a request that carries tools and no tool result
+    with a call of opencode's `shell` running `command`, and every other request with the text `say`."""
+
+    def __init__(self, command, say="done"):
+        super().__init__(say)
+        self.command = command
+
+    def answer(self, h, request, slow):
+        called = any(m.get("role") == "tool" for m in request.get("messages", []))
+        if not request.get("tools") or called:
+            return super().answer(h, request, slow)
+        call = dict(index=0, id="call_1", type="function", function=dict(name="shell", arguments=json.dumps({"command": self.command})))
+        for delta, finish in ((dict(role="assistant", tool_calls=[call]), None), ({}, "tool_calls")):
+            h.wfile.write(sse(dict(id="c1", object="chat.completion.chunk", created=1, model="fake-model",
+                                   choices=[dict(index=0, delta=delta, finish_reason=finish)])))
+        h.wfile.write(b"data: [DONE]\n\n")
+        h.wfile.flush()
+
+
+@unittest.skipUnless(OPENCODE, "no opencode 2 here")
+class RealOpencode(unittest.TestCase):
+    def session(self, command, meanwhile):
+        """Run `opencode run` as run.sh does for a work session, call `meanwhile(model, run_dir)` while it
+        runs, and return the model, the run directory and opencode's stream."""
+        model = ToolOpenAIModel(command)
+        model.__enter__()
+        self.addCleanup(model.__exit__, None, None, None)
+        home = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        run_dir = home / "dfs_run_x"
+        run_dir.mkdir()
+        env = dict(os.environ, HOME=str(home), DFS_INBOX=str(run_dir / "inbox"), XDG_DATA_HOME=str(home / "data"),
+                   XDG_CONFIG_HOME=str(home / "cfg"), XDG_CACHE_HOME=str(home / "cache"), XDG_STATE_HOME=str(home / "state"),
+                   OPENCODE_DISABLE_AUTOUPDATE="true", **model.env())
+        env["OPENCODE_CONFIG_CONTENT"] = json.dumps(dict(json.loads(env["OPENCODE_CONFIG_CONTENT"]), plugins=[]))
+        env["OPENCODE_CONFIG_CONTENT"] = subprocess.run([sys.executable, str(HERE / "inbox.py"), "--opencode-config"], env=env,
+                                                        capture_output=True, text=True, check=True).stdout.strip()
+        p = subprocess.Popen([OPENCODE, "run", "--standalone", "--format", "json", "work the task"], env=env, cwd=str(home),
+                             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        meanwhile(model, run_dir)
+        out, _ = p.communicate(timeout=120)
+        self.assertEqual(p.returncode, 0, out)
+        return model, run_dir, out
+
+    def test_a_message_sent_during_a_tool_call_is_in_the_next_model_call(self):
+        def send(model, run_dir):
+            end = time.time() + 60
+            while len(model.requests) < 2 and time.time() < end:
+                time.sleep(0.05)
+            time.sleep(1)                   # the command is running
+            dfs_runs.post_message(str(run_dir), "W104-PING also check the README")
+        model, run_dir, out = self.session("sleep 4", send)
+        bodies = [b.decode() for _, b in model.requests]
+        self.assertEqual(len(bodies), 3, bodies)
+        self.assertNotIn("W104-PING", bodies[1])
+        self.assertIn("W104-PING also check the README", bodies[2])
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
+    def test_a_message_after_the_last_tool_call_stays_waiting(self):
+        def send(model, run_dir):
+            end = time.time() + 60
+            while len(model.requests) < 3 and time.time() < end:
+                time.sleep(0.05)
+            dfs_runs.post_message(str(run_dir), "W104-PING too late")
+        model, run_dir, out = self.session("true", send)
+        self.assertNotIn("W104-PING", "".join(b.decode() for _, b in model.requests))
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["waiting"])
+
+
+class OpencodeWiring(unittest.TestCase):
+    def test_the_config_adds_the_plugin_to_the_plugins_already_there(self):
+        cfg = json.loads(inbox.opencode_config({"OPENCODE_CONFIG_CONTENT": json.dumps({"model": "a/b", "plugins": ["/x"]})}))
+        self.assertEqual(cfg["model"], "a/b")
+        self.assertEqual(cfg["plugins"][0], "/x")
+        self.assertEqual(Path(cfg["plugins"][1]), HERE / "opencode_inbox")
+        self.assertTrue((HERE / "opencode_inbox" / "index.js").is_file())
+        self.assertEqual(json.loads(inbox.opencode_config({}))["plugins"], [str(HERE / "opencode_inbox")])
+
+    def test_opencode_takes_a_message_and_kiro_says_why_it_cannot(self):
+        self.assertTrue(dfs_runs.takes_messages({"agent": "opencode"}))
+        why = dfs_runs.refusal({"agent": "kiro"})
+        self.assertIn("kiro", why)
+        self.assertIn("no hooks", why)
 
 
 if __name__ == "__main__":
