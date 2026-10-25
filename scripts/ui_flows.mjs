@@ -1840,6 +1840,32 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors.filter(e => !/404/.test(e)), [], "no page errors");
   },
 
+  // A live claude run's log has a box that leaves a line for its session, listed under the log as waiting; a finished run has none.
+  async run_message(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.click("a.runrow:has(.tag.settled)");
+    await page.waitForSelector("#runmsg-form:not([hidden])");
+    await page.fill("#runmsg-input", "Use the other table");
+    await page.click("#runmsg-form button");
+    await page.waitForSelector("#runmsg-list .msg");
+    assert((await page.textContent("#runmsg-list")).includes("waiting"), "the sent line is listed as waiting");
+    assert((await page.textContent("#runmsg-list")).includes("Use the other table"), "the sent line is shown");
+    same(await page.inputValue("#runmsg-input"), "", "the box is emptied once the line is sent");
+    await page.fill("#runmsg-input", "half typed");
+    await new Promise(r => setTimeout(r, 2500));
+    same(await page.inputValue("#runmsg-input"), "half typed", "a poll does not wipe a line being typed");
+    const r = await page.evaluate(AUDIT);
+    assert(!r.overflow && !r.low.length && !r.small.length, `the box: ${r.overflow ? "scrolls sideways; " : ""}${r.low.join("; ")} ${r.small.join("; ")}`);
+    if (process.env.DFS_UI_SHOT) await page.screenshot({ path: process.env.DFS_UI_SHOT });
+    await page.click("#tabs [data-act=up]");
+    await page.waitForSelector(".row");
+    await page.click("a.runrow:not(:has(.tag.settled))");
+    await page.waitForSelector("#runlog");
+    assert((await page.$("#runmsg-form:not([hidden])")) === null, "a finished run has no box");
+    same(errors.filter(e => !/404/.test(e)), [], "no page errors");
+  },
+
   // A codex run's sessions are tabs beside its console, each drawn as the terminal's log pane draws it, and a live one grows.
   async run_session(b) {
     const { page, errors } = await open(b, PHONE);

@@ -88,6 +88,12 @@ pre.runlog .r-run, pre.runlog .r-head { font-weight: 600; }
 pre.runlog .r-out, pre.runlog .r-dim, pre.runlog .r-meta { color: var(--muted); }
 pre.runlog .r-think { color: var(--muted); font-style: italic; }
 pre.runlog .r-err { color: var(--attention); }
+/* the box that leaves a line for a live run's session, and the lines sent */
+#runmsg { padding-top: var(--s3); }
+#runmsg-form { display: flex; gap: var(--s2); align-items: flex-end; margin-bottom: var(--s3); }
+#runmsg-form[hidden] { display: none; }
+#runmsg-input { flex: 1; width: auto; min-height: var(--hit); }
+#runmsg-form .btn { flex: none; }
 
 /* tabs: two words; the current one carries a line */
 #tabs {
@@ -800,7 +806,7 @@ async function drawSession(r, mine) {
   Object.assign(RUNLOG, { key, end: 0, text: "", info: got });
   if (!view.querySelector("#runlog") || view.dataset.run !== key) {
     view.className = ""; view.dataset.run = key;
-    view.innerHTML = `<div class="runhead" id="runhead"></div><div id="runtabs"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Session ${esc(r.session)} of ${esc(got.progress)}"></pre>`;
+    view.innerHTML = `<div class="runhead" id="runhead"></div><div id="runtabs"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Session ${esc(r.session)} of ${esc(got.progress)}"></pre><div id="runmsg"></div>`;
   }
   $("#runhead").innerHTML = runTags(got) + (got.sid ? `<span class="muted">session ${esc(got.sid)}</span>` : "");
   $("#runtabs").innerHTML = runTabs(r, got);
@@ -809,6 +815,7 @@ async function drawSession(r, mine) {
     + (got.rows.length ? got.rows.map(([t, role]) => `<span class="r-${esc(role)}">${esc(t)}</span>`).join("\n") : "(nothing written yet)");
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
   if (atEnd) box.scrollTop = box.scrollHeight;
+  runMessages(got);
 }
 async function drawRun(r, mine) {
   if (r.session) return drawSession(r, mine);
@@ -826,14 +833,38 @@ async function drawRun(r, mine) {
   const head = runTags(got);
   if (!view.querySelector("#runlog") || view.dataset.run !== key) {
     view.className = ""; view.dataset.run = key;
-    view.innerHTML = `<div class="runhead" id="runhead"></div><div id="runtabs"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Log of ${esc(got.progress)}"></pre>`;
+    view.innerHTML = `<div class="runhead" id="runhead"></div><div id="runtabs"></div><pre class="runlog" id="runlog" tabindex="0" aria-label="Log of ${esc(got.progress)}"></pre><div id="runmsg"></div>`;
   }
   $("#runhead").innerHTML = head;
   $("#runtabs").innerHTML = (got.sessions || []).length ? runTabs(r, got) : "";
   const box = $("#runlog"), atEnd = fresh || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
   if (fresh || got.text || got.start !== got.end - got.text.length) box.textContent = (got.has_log ? (got.start > 0 && fresh ? "… earlier output is not shown …\n" : "") + RUNLOG.text || "(nothing written yet)" : "No log was kept for this run.");
   if (atEnd) box.scrollTop = box.scrollHeight;
+  runMessages(got);
 }
+/* The box under a live log that leaves the author's line in the chain's inbox, and the lines sent so far: the session
+   reads each at its next tool call or as it stops. The form is built once per view, so a poll never wipes a half-typed line. */
+function runMessages(got) {
+  const box = $("#runmsg");
+  if (!box) return;
+  if (!$("#runmsg-form")) {
+    box.innerHTML = `<form id="runmsg-form" hidden><input class="field" id="runmsg-input" maxlength="4000" autocomplete="off" aria-label="Message to the running session" placeholder="Tell the running session something"><button class="btn primary" type="submit">Send</button></form><div id="runmsg-list"></div>`;
+  }
+  $("#runmsg-form").hidden = !got.takes_messages;
+  const stateOf = m => m.state === "delivered" ? "delivered " + ago(m.delivered || m.sent) : got.state === "live" ? "waiting" : "never read";
+  const list = (got.messages || []).map(m => `<div class="msg you"><span class="who cap">${esc(stateOf(m))}</span><div class="what">${esc(m.text)}</div></div>`).join("");
+  if ($("#runmsg-list").dataset.html !== list) { $("#runmsg-list").innerHTML = list; $("#runmsg-list").dataset.html = list; }
+}
+document.addEventListener("submit", async ev => {
+  if (ev.target.id !== "runmsg-form") return;
+  ev.preventDefault();
+  const input = $("#runmsg-input"), text = input.value.trim();
+  if (!text || !RUNLOG.info) return;
+  const btn = ev.target.querySelector("button"); btn.disabled = true;
+  try { runMessages(await api("/api/run/message", { run: RUNLOG.info.name, message: text })); input.value = ""; toast("Sent: the session reads it at its next step."); }
+  catch (e) { toast(e.message, true); }
+  btn.disabled = false;
+});
 const RUN_TAGS = { live: ["settled", "live"], stopped: ["attention", "stopped"], finished: ["", "finished"], unknown: ["", "unknown"] };
 const runWhen = x => { const t = Date.parse(x.started); return t ? ago(t / 1000) : ""; };
 function runTags(x) {
