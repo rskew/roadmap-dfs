@@ -267,6 +267,19 @@ class StopBreaks(unittest.TestCase):
         self.assertFalse(self.w.walk_on)
         self.assertIn("stop break above W2", self.w.walk_note)
 
+    def test_a_hand_started_chain_still_merging_the_last_task_holds_the_walk_on(self):
+        self.shape("open")
+        self.w.start(10, 2)
+        self.assertEqual([c for c, _ in self.w.started_chains], ["W1"])
+        self.w.started_chains = []
+        self.shape("done")
+        # W1 is reviewed and done, its chain (the walk's own) ended, and a second chain
+        # started by hand is still merging it.
+        self.w.run_dirs = [run("d1", "W1", stop="done"), run("h1", "W1", live=True)]
+        self.w.walk_tick()
+        self.assertTrue(self.w.walk_on)
+        self.assertEqual(self.w.started_chains, [])
+
     def test_a_pin_goes_past_it(self):
         self.shape("open")
         self.w.pin("W2")

@@ -400,6 +400,7 @@ class WalkMixin:
             return
         busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in foreign}
         items = [i for i in self.items if stop is None or i.get("segment", 0) < stop]
+        before = {i["id"] for i in items}
         # ⚠️ A CHAIN WITH NO WORKTREE WORKS IN THE ONE CHECKOUT. Two of them there find each
         # other's half-done work as foreign dirt and interleave commits on one branch, so at
         # most one chain without a worktree runs at a time; those with one run beside it.
@@ -425,9 +426,11 @@ class WalkMixin:
             if len(picks) >= free or not skipped & set(asked):
                 break
         if not picks and stop is not None and not self.walk_chains and not any(
+                r["item"] in before for r in foreign) and not any(
                 i.get("waiting_on") for i in self.items if i.get("segment", 0) == stop):
-            # Everything before the stop break is done and this walk's chains have
-            # ended: the end the author asked for, so they review before going on.
+            # Everything before the stop break is done and no chain is still working on
+            # it, the walk's own or one started by hand (it may still be merging the last
+            # task): the end the author asked for, so they review before going on.
             first = next(i["id"] for i in self.items if i.get("segment", 0) == stop)
             self.walk_off("stopped at the stop break above %s: everything before it is "
                           "done — review it, then start a walk to go on" % first)
