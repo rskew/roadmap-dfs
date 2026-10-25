@@ -805,7 +805,9 @@ async function drawSession(r, mine) {
 }
 async function drawRun(r, mine) {
   if (r.session) return drawSession(r, mine);
-  const key = r.task + "/" + r.name, view = $("#view"), fresh = RUNLOG.key !== key;
+  // A look is fresh, asking for the tail, unless this run's console box is on the page: `RUNLOG` outlives the screen,
+  // and asking a reopened run only for what came after its last look would fill a new, empty box with nothing.
+  const key = r.task + "/" + r.name, view = $("#view"), fresh = RUNLOG.key !== key || view.dataset.run !== key || !view.querySelector("#runlog");
   if (fresh) Object.assign(RUNLOG, { key, end: 0, text: "", info: null });
   let got;
   try { got = await api("/api/run/" + encodeURIComponent(r.name) + (fresh ? "" : "?from=" + RUNLOG.end)); }
@@ -1619,9 +1621,21 @@ function showList() {
   if (now) window.scrollBy(0, now.getBoundingClientRect().top - was.top);
   drawBar(route());
 }
+/* A run's console and its session tabs are one stop on the way back: Back returns to the task, stepping back over
+   every tab of its runs when the task's screen (or one of its nodes) is beneath them, else putting the task in their place. */
+function leaveRun(r) {
+  const task = `t/${encodeURIComponent(r.task)}`, runs = `r/${encodeURIComponent(r.task)}/`;
+  for (let i = HIST.n - 1; i >= 0; i--) {
+    const h = HIST.at[i] || "";
+    if (h === task || h.startsWith(task + "/")) return history.go(i - HIST.n);
+    if (!h.startsWith(runs)) break;
+  }
+  go(`t/${r.task}`, true);
+}
 const up = () => {
   const r = route();
-  if (r.view === "artefact" || r.view === "run") return NAVS ? history.back() : go(`t/${r.task}`, true);
+  if (r.view === "run") return leaveRun(r);
+  if (r.view === "artefact") return NAVS ? history.back() : go(`t/${r.task}`, true);
   if (S.node) leave(`t/${S.task.id}`); else leave("");
 };
 $("#back").onclick = up;
