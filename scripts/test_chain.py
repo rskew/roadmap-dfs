@@ -738,6 +738,20 @@ class Chain(unittest.TestCase):
         self.assertIn("- for: look 1", (self.wt / ".dfs" / "items" / "W1.md").read_text())
         self.assertFalse((self.root / ".dfs" / "items" / "W1.md").exists())
 
+    def test_a_moved_task_file_s_attachment_reaches_a_worktree_that_exists(self):
+        name = "0f1e2d3c-4b5a-4968-8776-655443322111.png"
+        self.untrack_task()
+        self.git("worktree", "add", "-q", "-b", "dfs/W1", str(self.wt))
+        (self.root / ".dfs" / "artefacts").mkdir(exist_ok=True)
+        (self.root / ".dfs" / "artefacts" / name).write_bytes(b"png")
+        (self.root / ".dfs" / "items" / "W1.md").write_text(
+            TASK.replace("## Goal\n", "## Goal\n\nSee ![x](.dfs/artefacts/%s)\n" % name, 1))
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.git("ls-files", ".dfs/artefacts/" + name), ".dfs/artefacts/" + name)
+        self.assertEqual(self.git("status", "--porcelain", ".dfs/artefacts/" + name), "")
+        self.assertFalse(self.wt.exists())
+
     def test_an_untracked_task_file_the_worktree_has_is_left_in_both(self):
         self.untrack_task()
         self.enter()   # the fresh cut moves W1.md into the worktree, untracked there

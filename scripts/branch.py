@@ -408,6 +408,7 @@ def enter(task):
             share_ignored_state(wt)
         catch_up(name, wt)
         _carry_new(task, wt)
+        carry_named_attachments(task, wt)
         return wt
     if not dfs_paths.gets_worktree(task):
         return None
