@@ -1453,6 +1453,9 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message="for codex"))[0], 200)
         meta["agent"] = "kiro"
         (d / "meta.json").write_text(json.dumps(meta))
+        self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message="for kiro"))[0], 200)
+        meta["agent"] = "other"
+        (d / "meta.json").write_text(json.dumps(meta))
         self.assertEqual(self.call("POST", "/api/run/message", dict(run="dfs_run_msg", message="x"))[0], 409)
 
     def test_the_page_is_served_with_no_login(self):

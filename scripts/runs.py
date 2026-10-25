@@ -381,8 +381,8 @@ def messages(d):
 
 
 # The agents with a way to hand a message into a running session (inbox.py), and why the others have none.
-TAKES_MESSAGES = ("claude", "codex", "opencode")
-NO_WAY_IN = {"kiro": "kiro's v3 engine runs no hooks and has no plugin to read the run's inbox"}
+TAKES_MESSAGES = ("claude", "codex", "opencode", "kiro")
+NO_WAY_IN = {}      # agent -> why it has none; every agent the chain runs has one now
 
 
 def takes_messages(r):

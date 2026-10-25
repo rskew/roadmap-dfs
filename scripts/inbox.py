@@ -3,9 +3,11 @@
 
     inbox.py post    as a PostToolUse hook: the next model call sees the messages
     inbox.py stop    as a Stop hook: a session about to end takes one more turn for them
+    inbox.py pre     as kiro's preToolUse hook: a tool call is held back, with the messages as its result
     inbox.py --settings   the `--settings` JSON that installs both, as run.sh passes it
     inbox.py --codex-args   the same for codex: the flags, one per line, that go BEFORE `exec`
     inbox.py --opencode-config   the same for opencode: its `OPENCODE_CONFIG_CONTENT`, naming the plugin
+    inbox.py --kiro-agent DIR   the same for kiro: writes the agent `dfs-inbox` under DIR/.kiro/agents
 
 `run.sh` starts each claude work session with both hooks and `DFS_INBOX`, the run
 directory's `inbox/`, which the screen and the page write into (`runs.py`,
@@ -24,6 +26,12 @@ session a prompt: it polls the inbox, claims each message with `inbox.py post` a
 `ctx.session.prompt(..., delivery: "steer")`, which opencode takes at its next step or, if the model is
 on its last answer, as one more turn. Only a message that arrives after the session has ended stays waiting.
 
+kiro-cli 2.31.1 runs hooks in a custom agent but hands the model the output of none that fires after
+a tool call or at a stop; only a preToolUse hook that exits 2 reaches it, as the held call's result
+(probe_kiro_hooks.py). So `pre` claims the waiting messages and exits 2 with them on stderr: the
+call does not run, the model reads them, and asks for the call again. A message that arrives after
+the session's last tool call stays waiting.
+
 Checked against a real claude-code 2.1.308 under `-p`: PostToolUse's
 `additionalContext` is in the very next request, and a Stop hook's `block` makes the
 session answer its `reason` (test_inbox.py).
@@ -31,6 +39,7 @@ session answer its `reason` (test_inbox.py).
 import json
 import os
 import shlex
+import subprocess
 import sys
 
 HEAD = "The author sent this to the running session from the roadmap's screen or page:"
@@ -68,6 +77,52 @@ def answer(event, texts):
     return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": said}}
 
 
+HELD = ("The author sent this to the running session from the roadmap's screen or page, and this tool call "
+        "was held back so you read it first. Take it into account, then run the tool call again:")
+
+
+def held(texts):
+    """What kiro's model reads in place of the held tool call's result, or None with nothing waiting."""
+    return HELD + "\n\n" + "\n\n---\n\n".join(texts) if texts else None
+
+
+KIRO_AGENT = "dfs-inbox"
+
+
+def kiro_agent():
+    """The kiro agent that installs the `pre` hook. `tools: ["*"]` keeps every tool the default agent
+    gives a work session. A hook is found only in an agent: the default one runs none."""
+    me = shlex.quote(os.path.abspath(__file__))
+    return json.dumps({"name": KIRO_AGENT, "description": "the roadmap's work session, reading the run's inbox",
+                       "tools": ["*"], "hooks": {"preToolUse": [{"command": "python3 %s pre" % me}]}}, indent=2)
+
+
+def install_kiro_agent(directory):
+    """Write the agent to `.kiro/agents/` in `directory`, the only place `--agent dfs-inbox` finds it besides the
+    home directory, and keep it out of the repository's status through `info/exclude` when that is a repository."""
+    agents = os.path.join(directory, ".kiro", "agents")
+    os.makedirs(agents, exist_ok=True)
+    path = os.path.join(agents, KIRO_AGENT + ".json")
+    with open(path, "w") as fh:
+        fh.write(kiro_agent() + "\n")
+    try:
+        exclude = subprocess.run(["git", "-C", directory, "rev-parse", "--git-path", "info/exclude"],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+        exclude = os.path.join(directory, exclude)
+        line = "/.kiro/agents/%s.json" % KIRO_AGENT
+        os.makedirs(os.path.dirname(exclude), exist_ok=True)
+        have = []
+        if os.path.exists(exclude):
+            with open(exclude) as fh:
+                have = fh.read().splitlines()
+        if line not in have:
+            with open(exclude, "a") as fh:
+                fh.write(("" if not have or have[-1] == "" else "\n") + line + "\n")
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    return path
+
+
 def settings():
     """The claude `--settings` JSON naming this file as both hooks."""
     me = shlex.quote(os.path.abspath(__file__))
@@ -103,14 +158,23 @@ def main(argv):
     if argv[1:] == ["--opencode-config"]:
         print(opencode_config(os.environ))
         return 0
-    if len(argv) != 2 or argv[1] not in ("post", "stop"):
-        print("usage: inbox.py post | stop | --settings | --codex-args | --opencode-config", file=sys.stderr)
+    if len(argv) == 3 and argv[1] == "--kiro-agent":
+        print(install_kiro_agent(argv[2]))
+        return 0
+    if len(argv) != 2 or argv[1] not in ("post", "stop", "pre"):
+        print("usage: inbox.py post | stop | pre | --settings | --codex-args | --opencode-config | --kiro-agent DIR", file=sys.stderr)
         return 2
     try:
         sys.stdin.read()        # the hook's own input; drained so claude's write never blocks
     except (OSError, ValueError):
         pass
     box = os.environ.get("DFS_INBOX")
+    if argv[1] == "pre":
+        said = held(claim(box)) if box else None
+        if said:
+            print(said, file=sys.stderr)
+            return 2        # kiro: the tool call does not run, and this is its result
+        return 0
     out = answer(argv[1], claim(box)) if box else None
     if out:
         print(json.dumps(out))

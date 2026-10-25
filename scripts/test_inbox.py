@@ -4,6 +4,8 @@
 /nix/store, or TEST_CLAUDE) under `-p` with the hooks run.sh gives it; only the model is
 faked, and they are skipped where no claude is installed.
 
+kiro-cli 2.3x (or TEST_KIRO) runs the `dfs-inbox` agent `inbox.install_kiro_agent` writes, against test_kiro_model's stand-in.
+
 The same goes for codex (the build in /nix/store, or TEST_CODEX) with the `-c` overrides
 `inbox.codex_args` gives it, and for opencode 2.1.1 (or TEST_OPENCODE) with the plugin
 `inbox.opencode_config` names.
@@ -31,7 +33,9 @@ import inbox  # noqa: E402
 import runs as dfs_runs  # noqa: E402
 from test_agent_models import FakeCodexModel, FakeOpenAIModel, sse  # noqa: E402
 from test_claude_chat import CLAUDE, KEY  # noqa: E402
+from test_kiro_model import FakeKiroModel  # noqa: E402
 
+KIRO = os.environ.get("TEST_KIRO") or next(iter(sorted(glob.glob("/nix/store/*-kiro-cli-unwrapped-2.3*/bin/kiro-cli"))[::-1]), None)
 CODEX = os.environ.get("TEST_CODEX") or next(iter(sorted(glob.glob("/nix/store/*-codex-0.16*/bin/codex"))[::-1]), None) or shutil.which("codex")
 
 
@@ -94,6 +98,45 @@ class Inbox(unittest.TestCase):
         [t.start() for t in ts]
         [t.join() for t in ts]
         self.assertEqual(sorted(got), sorted("m%d" % i for i in range(40)))
+
+    def test_the_kiro_hook_holds_the_call_back_with_the_messages_on_stderr_and_exits_2(self):
+        err, old = io.StringIO(), sys.stderr
+        os.environ["DFS_INBOX"] = self.box
+        try:
+            self.assertEqual(self.run_pre(), (0, ""))           # nothing waiting: the call runs
+            dfs_runs.post_message(self.d, "first")
+            dfs_runs.post_message(self.d, "second")
+            code, said = self.run_pre()
+            self.assertEqual(code, 2)
+            self.assertIn("held back", said)
+            self.assertLess(said.index("first"), said.index("second"))
+            self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["delivered", "delivered"])
+            self.assertEqual(self.run_pre(), (0, ""))           # and the held call, made again, runs
+        finally:
+            os.environ.pop("DFS_INBOX")
+
+    def run_pre(self):
+        err, old_err, old_in = io.StringIO(), sys.stderr, sys.stdin
+        sys.stderr, sys.stdin = err, io.StringIO("{}")
+        try:
+            code = inbox.main(["inbox.py", "pre"])
+        finally:
+            sys.stderr, sys.stdin = old_err, old_in
+        return code, err.getvalue()
+
+    def test_the_kiro_agent_names_the_pre_hook_for_every_tool_and_stays_out_of_git_status(self):
+        agent = json.loads(inbox.kiro_agent())
+        self.assertEqual(agent["tools"], ["*"])
+        self.assertIn("inbox.py", agent["hooks"]["preToolUse"][0]["command"])
+        self.assertTrue(agent["hooks"]["preToolUse"][0]["command"].endswith(" pre"))
+        subprocess.run(["git", "init", "-q", self.d], check=True)
+        path = inbox.install_kiro_agent(self.d)
+        inbox.install_kiro_agent(self.d)                        # twice: one line in the exclude file
+        self.assertEqual(json.loads(Path(path).read_text()), agent)
+        status = subprocess.run(["git", "-C", self.d, "status", "--porcelain"], capture_output=True, text=True).stdout
+        self.assertNotIn(".kiro", status)
+        exclude = (Path(self.d) / ".git" / "info" / "exclude").read_text()
+        self.assertEqual(exclude.count("dfs-inbox.json"), 1)
 
     def test_the_settings_name_this_hook_for_both_events(self):
         hooks = json.loads(inbox.settings())["hooks"]
@@ -354,6 +397,67 @@ class RealOpencode(unittest.TestCase):
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
 
+@unittest.skipUnless(KIRO, "no kiro-cli 2.3x here")
+class RealKiro(unittest.TestCase):
+    def session(self, meanwhile, lag=0):
+        """Run `kiro-cli chat --v3` as run.sh does for a work session, under the `dfs-inbox` agent, call
+        `meanwhile(model, run_dir)` while the model is slow to ask for its tool, and return the model and the run directory."""
+        model = FakeKiroModel()
+        model.lag = lag
+        model.__enter__()
+        self.addCleanup(model.__exit__, None, None, None)
+        home = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        run_dir, work = home / "dfs_run_x", home / "work"
+        run_dir.mkdir()
+        work.mkdir()
+        subprocess.run(["git", "init", "-q", str(work)], check=True)       # its own repository, so the exclude line lands in it
+        inbox.install_kiro_agent(str(work))
+        env = dict(os.environ, PATH=os.path.dirname(KIRO) + ":" + os.environ["PATH"], KIRO_NO_AUTO_UPDATE="1", HOME=str(home),
+                   DFS_INBOX=str(run_dir / "inbox"), **model.env())
+        p = subprocess.Popen([KIRO, "chat", "--v3", "--output-format", "stream-json", "--agent", "dfs-inbox", "--no-interactive",
+                              "--trust-all-tools", "use a tool please"], env=env, cwd=str(work), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        meanwhile(model, run_dir)
+        out, _ = p.communicate(timeout=120)
+        self.assertEqual(p.returncode, 0, out)
+        return model, run_dir, out
+
+    def asked(self, model):
+        return [b.decode() for t, b in model.requests if t.endswith("GenerateAssistantResponse")]
+
+    def test_a_message_sent_before_a_tool_call_holds_it_back_and_is_in_the_next_model_call(self):
+        def send(model, run_dir):
+            end = time.time() + 60
+            while not self.asked(model) and time.time() < end:
+                time.sleep(0.05)
+            dfs_runs.post_message(str(run_dir), "W104-PING also check the README")
+        model, run_dir, out = self.session(send, lag=3)
+        bodies = self.asked(model)
+        self.assertEqual(len(bodies), 3, bodies)               # the call, the held call's result, the call made again
+        self.assertNotIn("W104-PING", bodies[0])
+        self.assertIn("W104-PING also check the README", bodies[1])
+        self.assertIn("held back", bodies[1])
+        now = json.loads(bodies[2])["conversationState"]["currentMessage"]["userInputMessage"]["userInputMessageContext"]["toolResults"]
+        self.assertEqual([r["toolUseId"] for r in now], ["tu2"])
+        self.assertNotIn("held back", json.dumps(now))         # asked again, the call ran
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
+    def test_with_no_message_the_tool_call_runs_as_it_would_without_the_hook(self):
+        model, run_dir, out = self.session(lambda model, run_dir: None)
+        self.assertEqual(len(self.asked(model)), 2)
+
+    def test_a_message_sent_after_the_last_tool_call_stays_waiting(self):
+        def send(model, run_dir):
+            end = time.time() + 60
+            while len(self.asked(model)) < 2 and time.time() < end:
+                time.sleep(0.02)
+            dfs_runs.post_message(str(run_dir), "W104-PING too late")
+        model, run_dir, out = self.session(send)
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["waiting"])
+        self.assertNotIn("W104-PING", "".join(self.asked(model)))
+
+
 class OpencodeWiring(unittest.TestCase):
     def test_the_config_adds_the_plugin_to_the_plugins_already_there(self):
         cfg = json.loads(inbox.opencode_config({"OPENCODE_CONFIG_CONTENT": json.dumps({"model": "a/b", "plugins": ["/x"]})}))
@@ -363,11 +467,11 @@ class OpencodeWiring(unittest.TestCase):
         self.assertTrue((HERE / "opencode_inbox" / "index.js").is_file())
         self.assertEqual(json.loads(inbox.opencode_config({}))["plugins"], [str(HERE / "opencode_inbox")])
 
-    def test_opencode_takes_a_message_and_kiro_says_why_it_cannot(self):
-        self.assertTrue(dfs_runs.takes_messages({"agent": "opencode"}))
-        why = dfs_runs.refusal({"agent": "kiro"})
-        self.assertIn("kiro", why)
-        self.assertIn("no hooks", why)
+    def test_every_agent_the_chain_runs_takes_a_message_and_an_unknown_one_is_refused_by_name(self):
+        for agent in ("claude", "codex", "opencode", "kiro"):
+            self.assertTrue(dfs_runs.takes_messages({"agent": agent}), agent)
+        self.assertFalse(dfs_runs.takes_messages({"agent": "other"}))
+        self.assertIn("a other session cannot take a message", dfs_runs.refusal({"agent": "other"}))
 
 
 if __name__ == "__main__":

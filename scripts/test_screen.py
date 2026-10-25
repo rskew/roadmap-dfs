@@ -1105,8 +1105,8 @@ class AMessageToTheRunningSession(unittest.TestCase):
     def test_nothing_is_sent_to_an_ended_chain_an_agent_without_hooks_or_on_esc(self):
         self.chain["live"] = False
         self.assertIn("ended", self.send("x").msg)
-        self.chain.update(live=True, agent="kiro")
-        self.assertIn("a kiro session cannot take a message: kiro's v3 engine runs no hooks", self.send("x").msg)
+        self.chain.update(live=True, agent="other")
+        self.assertIn("a other session cannot take a message", self.send("x").msg)
         self.chain["agent"] = "claude"
         self.assertEqual(self.send("").msg, "sent nothing")
         self.assertEqual(TUI.dfs_runs.messages(self.d), [])

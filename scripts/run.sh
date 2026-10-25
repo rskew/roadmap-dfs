@@ -683,8 +683,14 @@ run_session() {
     # The lines that are not JSON are read as kiro's own (limit.py, tui.py).
     SID=""
     meta_set sid=""
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
-      --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
+    # The author's messages reach it through a preToolUse hook that holds a tool call back
+    # with the message as its result (inbox.py): kiro hands the model the output of no other
+    # hook after the start. A hook lives only in a custom agent, found as
+    # `.kiro/agents/dfs-inbox.json` in the working directory, which inbox.py writes and keeps
+    # out of git status; a message arriving after the last tool call stays waiting.
+    python3 "$HERE/inbox.py" --kiro-agent "$PWD" > /dev/null
+    "${AGENT_ENV[@]}" DFS_INBOX="$RUNDIR/inbox" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
+      --agent dfs-inbox --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
@@ -1040,7 +1046,7 @@ if [ "$AGENT" = codex ]; then
 elif [ "$AGENT" = opencode ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} run --format json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = kiro ]; then
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --agent dfs-inbox --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
 else
   echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --settings <the inbox hooks> --model <opus to plan, sonnet to implement> ${PERMISSION_ARGV[*]}"
 fi
