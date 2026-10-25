@@ -34,7 +34,7 @@ import inbox  # noqa: E402
 import runs as dfs_runs  # noqa: E402
 from test_agent_models import FakeCodexModel, FakeOpenAIModel, sse  # noqa: E402
 from test_claude_chat import CLAUDE, KEY  # noqa: E402
-from test_kiro_model import FakeKiroModel  # noqa: E402
+from test_kiro_model import METERING, FakeKiroModel, event  # noqa: E402
 
 KIRO = os.environ.get("TEST_KIRO") or next(iter(sorted(glob.glob("/nix/store/*-kiro-cli-unwrapped-2.3*/bin/kiro-cli"))[::-1]), None)
 CODEX = os.environ.get("TEST_CODEX") or next(iter(sorted(glob.glob("/nix/store/*-codex-0.16*/bin/codex"))[::-1]), None) or shutil.which("codex")
@@ -46,11 +46,11 @@ class Inbox(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
         self.box = os.path.join(self.d, "inbox")
 
-    def hook(self, event):
+    def hook(self, event, stdin='{"hook_event_name": "x"}'):
         out = io.StringIO()
         old_env, old_in = os.environ.get("DFS_INBOX"), sys.stdin
         os.environ["DFS_INBOX"] = self.box
-        sys.stdin = io.StringIO('{"hook_event_name": "x"}')
+        sys.stdin = io.StringIO(stdin)
         try:
             with redirect_stdout(out):
                 self.assertEqual(inbox.main(["inbox.py", event]), 0)
@@ -116,9 +116,35 @@ class Inbox(unittest.TestCase):
         finally:
             os.environ.pop("DFS_INBOX")
 
-    def run_pre(self):
+    def test_a_hook_fired_inside_a_subagent_claims_nothing_and_the_main_sessions_does(self):
+        dfs_runs.post_message(self.d, "for the main session")
+        sub = json.dumps({"hook_event_name": "PostToolUse", "agent_id": "a1", "agent_type": "general-purpose"})
+        for event in ("post", "stop"):
+            self.assertIsNone(self.hook(event, sub))
+        self.assertEqual(self.run_pre(sub), (0, ""))
+        self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["waiting"])
+        self.assertIn("for the main session", json.dumps(self.hook("post", '{"hook_event_name": "PostToolUse"}')))
+        self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["delivered"])
+
+    def test_the_kiro_hook_refuses_this_agent_as_a_subagent_and_keeps_the_message_for_the_session(self):
+        os.environ["DFS_INBOX"] = self.box
+        try:
+            dfs_runs.post_message(self.d, "for the main session")
+            ask = lambda name: json.dumps({"tool_name": "invoke_sub_agent", "tool_input": {"name": name, "prompt": "x"}})
+            code, said = self.run_pre(ask(inbox.KIRO_AGENT))
+            self.assertEqual(code, 2)
+            self.assertIn("own work session", said)
+            self.assertNotIn("for the main session", said)
+            self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["waiting"])
+            code, said = self.run_pre(ask("someone-else"))      # another agent has no such hook, and the call is held for the message as any is
+            self.assertEqual(code, 2)
+            self.assertIn("for the main session", said)
+        finally:
+            os.environ.pop("DFS_INBOX")
+
+    def run_pre(self, stdin="{}"):
         err, old_err, old_in = io.StringIO(), sys.stderr, sys.stdin
-        sys.stderr, sys.stdin = err, io.StringIO("{}")
+        sys.stderr, sys.stdin = err, io.StringIO(stdin)
         try:
             code = inbox.main(["inbox.py", "pre"])
         finally:
@@ -168,13 +194,14 @@ class Model:
                 req = json.loads(body)
                 kind, val = "text", "side"
                 if "tools" in req:
-                    model.requests.append(req)
-                    kind, val = model.answers[min(len(model.requests), len(model.answers)) - 1]
+                    kind, val = model.pick(req)
                 self.send_header("content-type", "text/event-stream")
                 self.end_headers()
-                if kind == "tool":
-                    block = {"type": "tool_use", "id": "toolu_%d" % len(model.requests), "name": "Bash", "input": {}}
-                    delta = {"type": "input_json_delta", "partial_json": json.dumps({"command": val, "description": "wait"})}
+                if kind in ("tool", "agent"):
+                    block = {"type": "tool_use", "id": "toolu_%d" % model.calls, "name": "Bash" if kind == "tool" else "Agent", "input": {}}
+                    args = {"command": val, "description": "wait"} if kind == "tool" else {
+                        "description": "look into it", "prompt": val, "subagent_type": "general-purpose"}
+                    delta = {"type": "input_json_delta", "partial_json": json.dumps(args)}
                     stop = "tool_use"
                 else:
                     block, delta, stop = {"type": "text", "text": ""}, {"type": "text_delta", "text": val}, "end_turn"
@@ -190,16 +217,41 @@ class Model:
         self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
+    def pick(self, req):
+        """The answer to a request that offers tools, and a note of it in `requests`."""
+        self.requests.append(req)
+        self.calls = getattr(self, "calls", 0) + 1
+        return self.answers[min(len(self.requests), len(self.answers)) - 1]
+
     def close(self):
         self.server.shutdown()
 
 
+class SubagentModel(Model):
+    """`Model` for a main loop that starts a subagent: the main loop's answers are `answers` (an
+    ("agent", prompt) one starts the subagent), the subagent, told apart by `MARK` in its first
+    message, gets `inner`'s in order. `requests` are the main loop's, `inner_requests` the subagent's."""
+    MARK = "SUBAGENT-MARK"
+
+    def __init__(self, answers, inner):
+        super().__init__(answers)
+        self.inner, self.inner_requests = inner, []
+
+    def pick(self, req):
+        first = json.dumps(req["messages"][0])
+        if self.MARK in first:
+            self.inner_requests.append(req)
+            self.calls = getattr(self, "calls", 0) + 1
+            return self.inner[min(len(self.inner_requests), len(self.inner)) - 1]
+        return super().pick(req)
+
+
 @unittest.skipUnless(CLAUDE, "no claude here")
 class RealClaude(unittest.TestCase):
-    def session(self, answers, meanwhile):
+    def session(self, answers, meanwhile, model=None):
         """Run `claude -p` as run.sh does for a work session, call `meanwhile(model, run_dir)`
         while it runs, and return its result."""
-        model = Model(answers)
+        model = model or Model(answers)
         self.addCleanup(model.close)
         home = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
         self.addCleanup(shutil.rmtree, home, ignore_errors=True)
@@ -234,6 +286,20 @@ class RealClaude(unittest.TestCase):
         self.assertEqual(result, "done")
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
+    def test_a_message_sent_during_a_subagents_tool_call_waits_for_the_main_session(self):
+        def send(model, run_dir):
+            end = time.time() + 60
+            while not model.inner_requests and time.time() < end:
+                time.sleep(0.05)
+            time.sleep(1)                   # the subagent's Bash call is running; the main loop's comes after
+            dfs_runs.post_message(str(run_dir), "W104-PING for the main session")
+        model = SubagentModel([("agent", SubagentModel.MARK + " look around"), ("tool", "sleep 8"), ("text", "main done")],
+                              [("tool", "sleep 4"), ("text", "sub done")])
+        model, run_dir, result = self.session(None, send, model)
+        self.assertNotIn("W104-PING", json.dumps(model.inner_requests))
+        self.assertIn("W104-PING for the main session", json.dumps(model.requests))
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
     def test_a_message_waiting_when_the_session_would_stop_gets_one_more_turn(self):
         def send(model, run_dir):
             dfs_runs.post_message(str(run_dir), "W104-PING one more thing")
@@ -260,6 +326,39 @@ class ToolCodexModel(FakeCodexModel):
         w.write(sse(dict(type="response.created", response=dict(id="resp_1", status="in_progress", output=[])), "response.created"))
         w.write(sse(dict(type="response.output_item.done", output_index=0, item=call), "response.output_item.done"))
         w.write(sse(dict(type="response.completed", response=dict(id="resp_1", status="completed", output=[call], usage=dict(
+            input_tokens=1, output_tokens=1, total_tokens=2, input_tokens_details=dict(cached_tokens=0),
+            output_tokens_details=dict(reasoning_tokens=0)))), "response.completed"))
+        w.flush()
+
+
+class SubagentCodexModel(FakeCodexModel):
+    """A stand-in Responses model whose main loop spawns a sub-agent, then runs `sleep 8` and answers; the
+    sub-agent, told apart by `MARK` in a request that holds no `spawn_agent` call, runs `sleep 4` and answers.
+    `main` and `sub` are the bodies each was sent."""
+    MARK = "SUBAGENT-MARK"
+
+    def __init__(self):
+        super().__init__("done")
+        self.main, self.sub = [], []
+
+    def answer(self, h, request, slow):
+        body = json.dumps(request)
+        sub = self.MARK in body and '"call_id": "call_spawn"' not in body
+        (self.sub if sub else self.main).append(body)
+        n = len(self.sub if sub else self.main)
+        call = {(False, 1): ("spawn_agent", {"message": self.MARK + " look around"}), (False, 2): ("exec_command", {"cmd": "sleep 8"}),
+                (True, 1): ("exec_command", {"cmd": "sleep 4"})}.get((sub, n))
+        if not call:
+            return super().answer(h, request, slow)
+        name, args = call
+        item = dict(type="function_call", id="fc_%d" % len(self.requests), name=name, arguments=json.dumps(args), status="completed",
+                    call_id="call_spawn" if name == "spawn_agent" else "call_%d" % len(self.requests))
+        if name == "spawn_agent":
+            item["namespace"] = "multi_agent_v1"
+        w = h.wfile
+        w.write(sse(dict(type="response.created", response=dict(id="r%d" % len(self.requests), status="in_progress", output=[])), "response.created"))
+        w.write(sse(dict(type="response.output_item.done", output_index=0, item=item), "response.output_item.done"))
+        w.write(sse(dict(type="response.completed", response=dict(id="r%d" % len(self.requests), status="completed", output=[item], usage=dict(
             input_tokens=1, output_tokens=1, total_tokens=2, input_tokens_details=dict(cached_tokens=0),
             output_tokens_details=dict(reasoning_tokens=0)))), "response.completed"))
         w.flush()
@@ -329,10 +428,10 @@ class EndToEnd(unittest.TestCase):
 
 @unittest.skipUnless(CODEX, "no codex here")
 class RealCodex(unittest.TestCase):
-    def session(self, command, meanwhile):
+    def session(self, command, meanwhile, model=None):
         """Run `codex exec` as run.sh does for a work session, call `meanwhile(model, run_dir)`
         while it runs, and return the model, the run directory and codex's stream."""
-        model = ToolCodexModel(command)
+        model = model or ToolCodexModel(command)
         model.__enter__()
         self.addCleanup(model.__exit__, None, None, None)
         home = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
@@ -366,6 +465,18 @@ class RealCodex(unittest.TestCase):
         self.assertIn("W104-PING also check the README", bodies[1])
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
         self.assertIn('"done"', out)
+
+    def test_a_message_sent_during_a_subagents_tool_call_waits_for_the_main_session(self):
+        def send(model, run_dir):
+            end = time.time() + 60
+            while not model.sub and time.time() < end:
+                time.sleep(0.05)
+            time.sleep(1)                   # the sub-agent's command is running; the main loop's comes after
+            dfs_runs.post_message(str(run_dir), "W104-PING for the main session")
+        model, run_dir, out = self.session(None, send, SubagentCodexModel())
+        self.assertNotIn("W104-PING", "".join(model.sub))
+        self.assertIn("W104-PING for the main session", "".join(model.main))
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
     def test_a_message_waiting_when_the_session_would_stop_gets_one_more_turn(self):
         def send(model, run_dir):
@@ -460,12 +571,34 @@ class RealOpencode(unittest.TestCase):
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
 
+class SubagentKiroModel(FakeKiroModel):
+    """A stand-in kiro model that first asks to invoke the roadmap's own agent as a sub-agent, then, once that
+    is refused, lists a directory, asks again if that call is held back, and answers. `conversations` is the
+    id of each conversation a request belonged to: a sub-agent that ran would add a second."""
+
+    def __init__(self):
+        super().__init__()
+        self.conversations = set()
+
+    def generate(self, request):
+        self.conversations.add(request["conversationState"].get("conversationId"))
+        current = request["conversationState"]["currentMessage"]["userInputMessage"]
+        results = json.dumps(current.get("userInputMessageContext", {}).get("toolResults") or "")
+        use = lambda i, name, args: (event("assistantResponseEvent", {"content": "ok "}) + event("toolUseEvent", {
+            "toolUseId": "tu%d" % i, "name": name, "input": json.dumps(args), "stop": True}) + METERING + event("metadataEvent", {"stopReason": "tool_use"}))
+        if results == '""':
+            return use(1, "invoke_sub_agent", {"name": inbox.KIRO_AGENT, "prompt": "SUBAGENT-MARK look around", "explanation": "x"})
+        if "own work session" in results or "held back" in results:
+            return use(2 + ("held back" in results), "list_directory", {"path": "."})
+        return super().generate(request)
+
+
 @unittest.skipUnless(KIRO, "no kiro-cli 2.3x here")
 class RealKiro(unittest.TestCase):
-    def session(self, meanwhile, lag=0):
+    def session(self, meanwhile, lag=0, model=None):
         """Run `kiro-cli chat --v3` as run.sh does for a work session, under the `dfs-inbox` agent, call
         `meanwhile(model, run_dir)` while the model is slow to ask for its tool, and return the model and the run directory."""
-        model = FakeKiroModel()
+        model = model or FakeKiroModel()
         model.lag = lag
         model.__enter__()
         self.addCleanup(model.__exit__, None, None, None)
@@ -505,6 +638,32 @@ class RealKiro(unittest.TestCase):
         self.assertEqual([r["toolUseId"] for r in now], ["tu2"])
         self.assertNotIn("held back", json.dumps(now))         # asked again, the call ran
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
+    def test_the_agent_cannot_be_invoked_as_a_subagent_so_no_sub_agent_takes_the_message(self):
+        def send(model, run_dir):
+            dfs_runs.post_message(str(run_dir), "W104-PING for the main session")
+        model, run_dir, out = self.session(send, lag=1, model=SubagentKiroModel())
+        bodies = self.asked(model)
+        self.assertEqual(len(model.conversations), 1)           # no sub-agent ran
+        self.assertIn("own work session", bodies[1])
+        self.assertNotIn("W104-PING", bodies[1])                # the refused call left the message waiting
+        self.assertIn("W104-PING for the main session", bodies[2])
+        self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
+    def test_the_agent_offers_the_tools_the_default_agent_does(self):
+        names = lambda body: sorted(t["toolSpecification"]["name"] for t in json.loads(body)["conversationState"]["currentMessage"][
+            "userInputMessage"]["userInputMessageContext"]["tools"])
+        model, _, _ = self.session(lambda model, run_dir: None)
+        mine = names(self.asked(model)[0])
+        home = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, home, ignore_errors=True)
+        plain = FakeKiroModel().__enter__()
+        self.addCleanup(plain.__exit__, None, None, None)
+        env = dict(os.environ, PATH=os.path.dirname(KIRO) + ":" + os.environ["PATH"], KIRO_NO_AUTO_UPDATE="1", HOME=str(home), **plain.env())
+        subprocess.run([KIRO, "chat", "--v3", "--output-format", "stream-json", "--no-interactive", "--trust-all-tools", "use a tool please"],
+                       env=env, cwd=str(home), stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+        default = names([b for t, b in plain.requests if t.endswith("GenerateAssistantResponse")][0])
+        self.assertEqual(mine, default)
 
     def test_with_no_message_the_tool_call_runs_as_it_would_without_the_hook(self):
         model, run_dir, out = self.session(lambda model, run_dir: None)

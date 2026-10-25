@@ -32,6 +32,12 @@ a tool call or at a stop; only a preToolUse hook that exits 2 reaches it, as the
 call does not run, the model reads them, and asks for the call again. A message that arrives after
 the session's last tool call stays waiting.
 
+A message is for the session the author watches, never for a subagent it starts: claude and codex put an
+`agent_id` in the input of a hook fired inside a subagent, and all three hooks then claim nothing, so the
+message waits for the main session's next tool call or its stop. kiro's hook input has no such mark, so
+`pre` refuses an `invoke_sub_agent` call naming the `dfs-inbox` agent itself, the one sub-agent that would
+run this hook, and the agent leaves out `subagent_semantic_reviewer`, which the default agent lacks.
+
 Checked against a real claude-code 2.1.308 under `-p`: PostToolUse's
 `additionalContext` is in the very next request, and a Stop hook's `block` makes the
 session answer its `reason` (test_inbox.py).
@@ -67,6 +73,22 @@ def claim(box):
     return [t for t in texts if t]
 
 
+def hook_input(data):
+    """The hook's stdin as a dict, empty when it is not JSON."""
+    try:
+        event = json.loads(data)
+    except ValueError:
+        return {}
+    return event if isinstance(event, dict) else {}
+
+
+def from_subagent(event):
+    """Whether the hook's input says the call is a subagent's: claude 2.1.308 and codex 0.163.0 add
+    `agent_id` (and `agent_type`) to the input of a hook fired inside one, and the main loop's has neither.
+    A subagent that took a message would end with it, and the session the author wrote to never read it."""
+    return bool(event.get("agent_id"))
+
+
 def answer(event, texts):
     """The hook's JSON for `event` (`post` or `stop`), or None when there is nothing."""
     if not texts:
@@ -91,10 +113,23 @@ KIRO_AGENT = "dfs-inbox"
 
 def kiro_agent():
     """The kiro agent that installs the `pre` hook. `tools: ["*"]` keeps every tool the default agent
-    gives a work session. A hook is found only in an agent: the default one runs none."""
+    gives a work session, less `subagent_semantic_reviewer`, which only this agent would have. A hook is found
+    only in an agent: the default one runs none."""
     me = shlex.quote(os.path.abspath(__file__))
     return json.dumps({"name": KIRO_AGENT, "description": "the roadmap's work session, reading the run's inbox",
-                       "tools": ["*"], "hooks": {"preToolUse": [{"command": "python3 %s pre" % me}]}}, indent=2)
+                       "tools": ["*"], "excludedTools": ["subagent_semantic_reviewer"],
+                       "hooks": {"preToolUse": [{"command": "python3 %s pre" % me}]}}, indent=2)
+
+
+SELF_AS_SUBAGENT = ("this agent is the roadmap's own work session: as a sub-agent it would take the author's messages "
+                    "meant for the session that invoked it, since a hook cannot tell the two apart. Invoke another agent.")
+
+
+def self_as_subagent(event):
+    """Whether a kiro `invoke_sub_agent` call names this file's own agent. A sub-agent's tool calls fire the same
+    preToolUse hook with the same session id and no mark of their own (kiro-cli 2.31.1), so the one that
+    could take a held-back message is refused at the call that would start it."""
+    return event.get("tool_name") == "invoke_sub_agent" and (event.get("tool_input") or {}).get("name") == KIRO_AGENT
 
 
 def install_kiro_agent(directory):
@@ -165,11 +200,17 @@ def main(argv):
         print("usage: inbox.py post | stop | pre | --settings | --codex-args | --opencode-config | --kiro-agent DIR", file=sys.stderr)
         return 2
     try:
-        sys.stdin.read()        # the hook's own input; drained so claude's write never blocks
+        data = sys.stdin.read()     # the hook's own input; read so the agent's write never blocks
     except (OSError, ValueError):
-        pass
+        data = ""
     box = os.environ.get("DFS_INBOX")
+    event = hook_input(data)
+    if from_subagent(event):
+        return 0        # the message is for the session the author is watching, not for a subagent's call
     if argv[1] == "pre":
+        if self_as_subagent(event):
+            print(SELF_AS_SUBAGENT, file=sys.stderr)
+            return 2
         said = held(claim(box)) if box else None
         if said:
             print(said, file=sys.stderr)

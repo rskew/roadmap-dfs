@@ -169,7 +169,12 @@ lets one in, and what that is differs by agent (`scripts/inbox.py`, the hook eve
 
 A kiro run also starts under a custom agent, `dfs-inbox`, which `inbox.py --kiro-agent` writes to
 `.kiro/agents/` in the session's directory (git is told to ignore it); the agent keeps the default one's
-tools. A chat or a review session takes no message.
+tools (less one that only the custom agent had). A chat or a review session takes no message.
+
+A message is for the session you are watching, not for a subagent it starts: claude and codex mark a
+subagent's hook calls, and the hook then leaves the message waiting for the main session's next tool call
+or stop. kiro marks nothing, so the `dfs-inbox` agent cannot be invoked as a sub-agent; any other agent the
+repository defines runs without the hook.
 
 Chrome on Android offers Install only on a secure origin: https, or `localhost`. Over plain
 `http://<lan address>:8765` the page works, but there is no Install. Two ways to https:
