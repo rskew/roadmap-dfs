@@ -762,6 +762,19 @@ class Chain(unittest.TestCase):
         self.assertIn("Written again here.", mine.read_text())
         self.assertIn("The only thing.", (self.wt / ".dfs" / "items" / "W1.md").read_text())
 
+    def test_an_untracked_task_file_the_worktree_s_branch_tracks_is_not_moved_back_in(self):
+        self.untrack_task()
+        self.enter()   # the fresh cut moves W1.md into the worktree, untracked there
+        self.git("add", ".dfs/items/W1.md", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1 on its branch", cwd=self.wt)
+        (self.wt / ".dfs" / "items" / "W1.md").unlink()   # gone from the directory, tracked on the branch
+        mine = self.root / ".dfs" / "items" / "W1.md"
+        mine.write_text(TASK)
+        r = self.enter()
+        self.assertNotIn("new path(s)", r.stderr)
+        self.assertTrue(mine.exists())
+        self.assertFalse((self.wt / ".dfs" / "items" / "W1.md").exists())
+
     def chain_from_copy(self, script, code):
         """Run the chain from a copy of the scripts whose `script` starts with `code`.
         Returns (rc, meta, output)."""
