@@ -1034,6 +1034,30 @@ PY
   fi
 fi
 
+# ⚠️ AN EMPTY TASK FILE IS NOT A NEW TASK. A process killed while it rewrote the file
+# (before writes were atomic) left 0 bytes: on 2026-10-23 W118's worktree held an empty
+# W118.md over a finished 96-line tree at the branch HEAD, and `state.py` briefed it as
+# "no nodes yet — plan the task". Refused here, with the way back, rather than planned over.
+cause="$(python3 - "$ITEM" "$HERE" <<'PY'
+import subprocess, sys
+sys.path.insert(0, sys.argv[2])
+import paths as dfs_paths, tree as dfs_tree
+p = dfs_tree.part_path(sys.argv[1])
+if p.is_file() and not p.read_text().strip():
+    rel = dfs_paths.rel(p)
+    head = subprocess.run(["git", "show", "HEAD:" + rel], capture_output=True, text=True).stdout
+    if head.strip():
+        print("%s is empty, and the branch HEAD has %d lines of it: restore it with "
+              "git checkout -- %s" % (rel, head.count("\n"), rel))
+PY
+)"
+if [ -n "$cause" ]; then
+  stop_is brief
+  meta_set cause="$cause"
+  echo "dfs_run: $ITEM cannot be briefed: $cause." >&2
+  exit 2
+fi
+
 # ⚠️ THE DIRT HAS AN OWNER: the task whose chain works this checkout (its worktree's own
 # task, else the task with the last session, chains taking turns). Work in the tree that is
 # not this task's is committed or stashed by this chain's first session, whose briefing lists it.

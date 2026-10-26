@@ -718,6 +718,20 @@ class Chain(unittest.TestCase):
         self.assertIn("W1 cannot be briefed: the worktree", out)
         self.assertEqual(self.count.read_text(), before)   # no session started
 
+    def test_an_emptied_task_file_the_branch_has_stops_the_chain_with_the_way_back(self):
+        self.run_chain("work", cap=1)
+        f = self.wt / ".dfs" / "items" / "W1.md"
+        lines = self.git("show", "dfs/W1:.dfs/items/W1.md").count("\n") + 1
+        f.write_text("")   # what a kill between write_text's truncate and its write left of W118's
+        before = self.count.read_text()
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertEqual(meta.get("cause"), ".dfs/items/W1.md is empty, and the branch HEAD has %d "
+                         "lines of it: restore it with git checkout -- .dfs/items/W1.md" % lines)
+        self.assertIn("W1 cannot be briefed: .dfs/items/W1.md is empty", out)
+        self.assertEqual(self.count.read_text(), before)   # no session started
+        self.assertEqual(f.read_text(), "")                # left for the author to look at
+
     def untrack_task(self):
         """Take W1.md out of the default branch's HEAD and leave it untracked here, as a task
         written in the main checkout and never committed is."""
