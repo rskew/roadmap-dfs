@@ -676,12 +676,40 @@ def append_log(task, kind, args=(), body=""):
     return ts
 
 
+def branch_ids():
+    """The ids of tasks with a file committed on any local branch, whatever it is checked
+    out as. `task_ids` lists only what is on disk here, so a task captured on another
+    task's branch (W75's worktree holds W110.md) is invisible to it until that branch
+    merges, and its number would be handed out again."""
+    root = dfs_paths.work_root()
+    bases = [(b, b.relative_to(root).as_posix() + "/") for b in
+             (dfs_paths.items(), archived_dir() / "items", deleted_dir() / "items",
+              dfs_paths.state() / "archive" / "items")]
+    try:
+        heads = subprocess.run(["git", "for-each-ref", "--format=%(refname)", "refs/heads"],
+                               capture_output=True, text=True, cwd=root).stdout.split()
+        out = set()
+        for ref in heads:
+            names = subprocess.run(["git", "ls-tree", "-r", "--name-only", ref, "--",
+                                    *(prefix for _, prefix in bases)],
+                                   capture_output=True, text=True, cwd=root).stdout.splitlines()
+            for name in names:
+                for _, prefix in bases:
+                    got = name.startswith(prefix) and part_of(name[len(prefix):])
+                    if got:
+                        out.add(got[0])
+    except OSError:
+        return set()
+    return out
+
+
 def next_task_id():
     """The id a new task gets: one past the highest W on ANY branch this checkout can see,
-    tagged with this branch's. Raises dfs_paths.NoBranch on a detached HEAD."""
+    on disk or committed (`branch_ids`), tagged with this branch's. Raises
+    dfs_paths.NoBranch on a detached HEAD."""
     tag = dfs_paths.branch_tag()
     nums = [int(m.group(1)) for m in (re.fullmatch(r"W(\d+)(?:@.*)?", i)
-                                          for i in set(task_ids()) | retired_ids()) if m]
+                                          for i in set(task_ids()) | retired_ids() | branch_ids()) if m]
     return "W%d%s" % (max(nums, default=0) + 1, "@" + tag if tag else "")
 
 

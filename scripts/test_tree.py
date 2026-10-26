@@ -318,6 +318,18 @@ class NewTask(InARepo):
         self.assertEqual(dfs_tree.by_id(t), {})       # no first steps: nodes are added after
         self.assertEqual(dfs_tree.next_task_id(), "W3")
 
+    def test_an_id_committed_only_on_another_branch_is_not_handed_out_again(self):
+        self.write(task())
+        self.commit()
+        # a task captured on another task's branch: not on disk here, not on this branch
+        git = lambda c: subprocess.run(c, shell=True, cwd=self.root, check=True, capture_output=True)
+        git("git checkout -q -b dfs/W1")
+        (self.root / ".dfs" / "items" / "W5.md").write_text(task().replace("W1", "W5"))
+        self.commit()
+        git("git checkout -q master")
+        self.assertFalse((self.root / ".dfs" / "items" / "W5.md").exists())
+        self.assertEqual(dfs_tree.next_task_id(), "W6")
+
     def test_a_task_with_no_goal_is_still_a_task(self):
         got = dfs_tree.create_task("Just a name")
         self.assertIn("Just a name", (self.root / ".dfs" / "items" / (got + ".md")).read_text())
