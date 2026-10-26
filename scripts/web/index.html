@@ -1577,7 +1577,8 @@ function accountForm() {
     else {
       if (st.phase === "done") h += `<p style="margin:0">Signed in. Runs and chats started from now on use this account.</p>`;
       if (st.phase === "failed") h += `<p class="warn" style="margin:0" id="acct-error">${esc(st.error)}</p>`;
-      h += `<div class="row-btns"><button class="btn primary" type="button" id="acct-start">${st.account && st.account.loggedIn ? "Sign in to another account" : "Sign in"}</button></div>`;
+      if (st.enabled === false) h += `<p class="warn" style="margin:0" id="acct-off">Signing in is off: this server was started with --no-walk.</p>`;
+      else h += `<div class="row-btns"><button class="btn primary" type="button" id="acct-start">${st.account && st.account.loggedIn ? "Sign in to another account" : "Sign in"}</button></div>`;
     }
     const code = $("#acct-code", box), kept = code ? code.value : "";
     if (box.dataset.phase === st.phase && st.phase === "waiting") return poll();    // keep what is being typed

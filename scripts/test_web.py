@@ -1364,6 +1364,16 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=3))[0], 403)
         self.assertEqual(self.fake.started_chains, [])
         self.assertEqual(self.call("GET", "/api/state")[0], 200)
+        old, dfs_web.LOGIN = dfs_web.LOGIN, dfs_web.dfs_login.Login(read=lambda: dict(loggedIn=False))
+        try:
+            for act in ("start", "code", "cancel"):
+                self.assertEqual(self.call("POST", "/api/login/" + act, dict(code="x"))[0], 403, act)
+            self.assertIsNone(dfs_web.LOGIN.proc, "no sign-in was started")
+            status, st, _ = self.call("GET", "/api/login")
+            self.assertEqual((status, st["phase"], st["enabled"]), (200, "idle", False), "the account can still be read")
+            self.assertEqual(self.call("POST", "/api/login/check", {})[0], 200)
+        finally:
+            dfs_web.LOGIN = old
 
     def make_run(self, name, item="W1", console="", **meta):
         d = self.root / ".dfs" / "runs" / name
