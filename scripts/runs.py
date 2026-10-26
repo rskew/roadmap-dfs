@@ -24,6 +24,7 @@ Usage:
     python3 <scripts>/runs.py --left <item>     # what the last session wrote
 """
 import datetime
+import fcntl
 import glob
 import json
 import os
@@ -241,6 +242,31 @@ def pid_namespace():
         return ""
 
 
+LOCK = "lock"
+
+
+def chain_is_gone(d):
+    """Is the chain of run directory `d` over, whatever pid namespace it ran in?
+
+    `run.sh` holds an exclusive `flock` on `<d>/lock` for as long as it runs. A lock is on
+    the file, not on a pid, so it holds across containers of one kernel through the shared
+    mount, and a chain of a container that was restarted (a new pid namespace, its processes
+    all gone) has released it. False when there is no lock file to ask: a run from before
+    `run.sh` took one, or a box without `flock`.
+
+    ⚠️ The lock fd is inherited by what the chain starts, so a process an agent left running
+    keeps it held: that record stays open until the process ends."""
+    try:
+        with open(os.path.join(d, LOCK), "rb") as fh:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                return False
+            return True        # closing `fh` drops the lock again
+    except OSError:
+        return False
+
+
 def read_meta(d):
     try:
         meta = json.loads(Path(d, "meta.json").read_text())
@@ -323,18 +349,23 @@ def close_lost():
     open for a pid long gone. Called once as the screen starts. The run still reads
     `stopped`, since it never reached its own finish line, but it is closed only once.
 
-    ⚠️ Only a chain of THIS pid namespace is closed. `pid_is_chain` reads this namespace's
-    `/proc`, and a pid in `meta.json` is `run.sh`'s `$$` in the chain's own, so a screen on
-    the host or in another container (each `sandbox` container has its own) reads a live
-    containerised chain as gone, and closing it would turn that chain's own screen's walk off
-    and let a second chain start on its task. `run.sh` records the namespace as `pidns`; a
-    record without one is from before that and is judged as it always was."""
+    ⚠️ A pid in `meta.json` is `run.sh`'s `$$` in the chain's own pid namespace, and
+    `pid_is_chain` reads THIS namespace's `/proc`: a screen on the host or in another
+    container (each `sandbox` container has its own) reads a live containerised chain as
+    gone, and closing it would turn that chain's own screen's walk off and let a second chain
+    start on its task. So a record `run.sh` marked with another namespace (`pidns`) is not
+    judged by its pid: it is closed only when `chain_is_gone` finds its lock free, which is
+    how a chain left by a restarted container (a new namespace every start) is closed. A
+    record without a `pidns` is from before that and is judged by its pid as it always was."""
     out = []
     here = pid_namespace()
     for r in run_dirs():
-        if r["state"] != "stopped" or r["finished"]:
+        if r["finished"]:
             continue
         if r["pidns"] and r["pidns"] != here:
+            if not chain_is_gone(r["dir"]):
+                continue
+        elif r["state"] != "stopped":
             continue
         path = os.path.join(r["dir"], "meta.json")
         meta = read_meta(r["dir"]) or {}

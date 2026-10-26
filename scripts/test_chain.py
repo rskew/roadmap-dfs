@@ -210,6 +210,12 @@ class Chain(unittest.TestCase):
         # the pid namespace its pid is in, which a screen of another one must not judge it by
         if os.path.exists("/proc/self/ns/pid"):
             self.assertEqual(meta.get("pidns"), os.readlink("/proc/self/ns/pid"))
+        # and the lock it held while it ran, which a screen of another namespace asks instead
+        import fcntl
+        if shutil.which("flock"):
+            lock = next((self.root / ".dfs" / "runs").glob("*/lock"))
+            with open(lock, "rb") as fh:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)   # raises if the chain still holds it
 
     def test_a_rule_that_hides_a_roadmap_part_is_named_when_the_chain_starts(self):
         (self.root / ".gitignore").write_text(".dfs/runs/\n*.html\n")

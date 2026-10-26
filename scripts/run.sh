@@ -965,6 +965,16 @@ PY
 # the main checkout and is done with it.
 RUNDIR="$(cd "$RUNDIR" && pwd)"
 ITEM_MAIN="$(pwd)"
+# ⚠️ THE LOCK IS HELD FOR THE CHAIN'S WHOLE LIFE (fd 9, dropped by the kernel when this
+# process dies, however it dies). A screen in another pid namespace cannot tell by the pid
+# below whether the chain is alive, and a container that restarted has none of its old
+# processes; a free lock on this file is how `runs.close_lost` knows the chain is over.
+# Taken before `pid` and `pidns` are recorded, so no record names a chain that holds no lock.
+# Only when `flock` exists: a lock file nobody holds would read as a dead chain.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$RUNDIR/lock"
+  flock -n 9 || true
+fi
 meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
          started="$(date -Is)" pid="$$" pidns="$(readlink /proc/$$/ns/pid 2>/dev/null || true)"
 trap on_exit EXIT

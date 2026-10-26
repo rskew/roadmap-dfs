@@ -282,7 +282,7 @@ class CloseLost(unittest.TestCase):
         self.assertRegex(self.meta("dead")["finished"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$")
 
     def test_a_record_from_another_pid_namespace_is_left_open(self):
-        """Its pid means nothing in this namespace's /proc: the chain may be running."""
+        """Its pid means nothing in this namespace's /proc, and with no lock file to ask the chain may be running."""
         here = self.runs.pid_namespace()
         for name, ns in (("dead", "pid:[4026539999]"), ("live", "pid:[4026539999]")):
             self.metas[name]["pidns"] = ns
@@ -293,6 +293,21 @@ class CloseLost(unittest.TestCase):
         (self.rundir / "dfs_run_dead" / "meta.json").write_text(json.dumps(self.metas["dead"]))
         self.assertEqual([os.path.basename(r["dir"]) for r in self.runs.close_lost()], ["dfs_run_dead"])
         self.assertEqual(self.meta("dead")["stop"], "lost")
+
+    def test_a_chain_of_a_namespace_that_is_gone_is_closed_by_its_free_lock(self):
+        """A restarted container is a new pid namespace, and the screen that comes back in it
+        cannot read the old chains by pid: what it can read is that nothing holds their lock."""
+        import fcntl
+        for name in ("dead", "live"):
+            self.metas[name]["pidns"] = "pid:[4026539999]"
+            (self.rundir / ("dfs_run_" + name) / "meta.json").write_text(json.dumps(self.metas[name]))
+            (self.rundir / ("dfs_run_" + name) / "lock").write_text("")
+        with open(self.rundir / "dfs_run_live" / "lock", "rb") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)         # the chain that is still running there
+            closed = self.runs.close_lost()
+        self.assertEqual([os.path.basename(r["dir"]) for r in closed], ["dfs_run_dead"])
+        self.assertEqual(self.meta("dead")["stop"], "lost")
+        self.assertEqual(self.meta("live"), self.metas["live"])
 
     def test_the_walk_reads_a_lost_chain_as_a_stop_with_its_reason(self):
         import walk as dfs_walk
