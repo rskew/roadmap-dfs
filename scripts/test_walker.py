@@ -61,7 +61,7 @@ class FakeWalker(dfs_walk.HeadlessWalk):
     def agent(self, name):
         self.chosen = name
 
-    def reload(self):
+    def reload(self, data=None):     # the world is this walker's own, whatever state the page built
         self.data = dict(items=self.world_items, next_item=self.next_item,
                          contents={"W1": sorted(self.world_content)})
 
@@ -292,6 +292,24 @@ class Ago(unittest.TestCase):
         self.assertEqual([dfs_walk.ago(s) for s in (5, 90, 7200, 3 * 86400 + 5)],
                          ["just now", "1m ago", "2h ago", "3d ago"])
 
+
+
+class Snapshot(unittest.TestCase):
+    def test_a_snapshot_given_the_state_builds_none_of_its_own(self):
+        # web.state_json has just run state.full(); a second build doubled /api/state.
+        built, real = [], dfs_state.full
+        dfs_state.full = lambda: built.append(1) or dict(items=[], next_item=None, contents={})
+        try:
+            w = dfs_walk.HeadlessWalk()
+            w.refresh_chains = lambda: setattr(w, "chains", [])
+            given = dict(items=[dict(id="W1", goal="one", status="open", reachable=True)],
+                         next_item="W1", contents={})
+            self.assertEqual(w.snapshot(given)["next"], "W1")
+            self.assertEqual(built, [])
+            w.snapshot()
+            self.assertEqual(built, [1])
+        finally:
+            dfs_state.full = real
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

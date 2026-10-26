@@ -132,7 +132,7 @@ def walk_marks(data):
     """Which task a work chain is running on now (item -> its progress), and which the walk
     takes next. What the rows say beside the terminal's running and next columns."""
     if WALK["enabled"]:
-        snap = walker().snapshot()
+        snap = walker().snapshot(data)
         return {c["item"]: c["progress"] for c in snap["live"]}, snap["next"]
     return ({r["item"]: dfs_runs.progress(r) for r in dfs_runs.live_runs("work")},
             data.get("next_item"))
