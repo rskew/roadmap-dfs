@@ -1585,11 +1585,25 @@ def _git_out(cwd, *args):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
-def default_ref(cwd=None):
+_default_ref_seen = {}
+
+
+def default_ref(cwd=None, ttl=0.0):
     """The remote ref the default branch is on, as `origin/main` or `origin/master`, or
     None when there is none to compare with. Read from git: where `origin/HEAD` points,
-    else `init.defaultBranch`, else whichever of `main` and `master` origin has."""
+    else `init.defaultBranch`, else whichever of `main` and `master` origin has. Up to
+    three git processes, so a caller that asks once per task (`state.state_for`) passes a
+    `ttl` and gets the answer kept that many seconds, like `unpushed`."""
     cwd = str(cwd or dfs_paths.work_root())
+    hit = _default_ref_seen.get(cwd)
+    if ttl and hit and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    got = _default_ref(cwd)
+    _default_ref_seen[cwd] = (time.monotonic(), got)
+    return got
+
+
+def _default_ref(cwd):
     head = _git_out(cwd, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
     names = [head] if head else []
     configured = _git_out(cwd, "config", "--get", "init.defaultBranch")

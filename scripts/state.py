@@ -139,7 +139,7 @@ def state_for(task: str):
         # Node commits HEAD has and the default branch on origin (as last fetched) lacks; 0 when none
         # or when there is no such branch to say.
         ahead=((dfs_tree.unpushed() or (set(), {}))[1]).get(task, 0),
-        base=dfs_tree.default_ref() or "",
+        base=dfs_tree.default_ref(ttl=5.0) or "",
         # Edits to the task's files that are not committed: on no branch, so not on origin.
         # "edits", "log" (log entries beyond the runner's own lines) or "" for neither.
         uncommitted=dfs_tree.uncommitted().get(task, ""),
