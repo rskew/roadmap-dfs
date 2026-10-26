@@ -102,6 +102,9 @@ WALK_STOP = {
     "overbudget": "a session went past the context ceiling; the budget is not holding",
     "overturns": "a session went past the turn ceiling with no context reading",
     "brief": "a session could not be briefed",
+    # reached only when another screen closes one of THIS walk's own chains: a walk judges
+    # the chains it started, and `runs.close_lost` runs as a screen starts, before it has any
+    "lost": "the chain died with its supervisor and never finished",
     "failed": "a session failed; its console says whether the agent exited non-zero "
               "or a critic or reviewer changed code or gave no verdict",
 }
@@ -196,6 +199,14 @@ class WalkMixin:
     walk_carry_pinned = ()
     walk_stops = frozenset()
     walk_on = False
+
+    def close_lost_runs(self):
+        """Close, and say, each run record a dead supervisor left open: called once as a
+        screen starts, the terminal one and the standalone page alike."""
+        for r in dfs_runs.close_lost():
+            self.event("died", "%s's chain died with its supervisor (%s, run %s): its pid %d "
+                       "was gone and it never finished" % (
+                           r["item"], os.path.basename(r["dir"]), r["run"] or "?", r["pid"]))
 
     def walk_init(self):
         self.walk_on = False

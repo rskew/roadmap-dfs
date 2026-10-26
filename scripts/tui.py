@@ -1853,6 +1853,9 @@ class UI(WalkMixin):
         self.dirty = roadmap_dirty()
         self.hidden = dfs_paths.hidden()
         self.runs = discover_runs()
+        # A chain killed with the screen that watched it had nobody to write its died line:
+        # closed here, and said, rather than left open for a pid that is gone.
+        self.close_lost_runs()
         self.chains = dfs_runs.run_dirs()
         self.sig = watch_signature()
         self.open_run = None
@@ -2163,7 +2166,7 @@ class UI(WalkMixin):
         if before is None:
             path.unlink()
         else:
-            path.write_text(before)
+            dfs_paths.write_atomically(path, before)
         self.event("order", "undid the last move of %s" % iid)
         self.reload()
         self.msg = "undid the last move of %s" % iid

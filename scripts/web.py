@@ -571,7 +571,7 @@ def attach(body):
         ext = ".jpg"
     file = "%s%s" % (uuid.uuid4(), ext)
     try:
-        dfs_paths._write_atomically(dfs_paths.artefacts() / file, data)
+        dfs_paths.write_atomically(dfs_paths.artefacts() / file, data)
     except OSError as e:
         raise Refused("could not write %s: %s" % (file, e), 500)
     label = " ".join(re.sub(r"[\[\]]", " ", os.path.basename(name)).split()) or file
@@ -1292,6 +1292,8 @@ def main(argv=None):
         raise SystemExit("web: --cert and --key go together")
     if not dfs_paths.has_roadmap():
         raise SystemExit("web: " + dfs_paths.missing_message())
+    # the screen that comes back after a reboot closes what the reboot killed (tui.UI does the same)
+    _the_walker().close_lost_runs()
     handle = serve(args.host, args.port, walk_enabled=not args.no_walk,
                    cert=args.cert, key=args.key, allow_hosts=args.allow_host)
     print("roadmap web: " + handle.url)

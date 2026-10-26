@@ -965,8 +965,18 @@ PY
 # the main checkout and is done with it.
 RUNDIR="$(cd "$RUNDIR" && pwd)"
 ITEM_MAIN="$(pwd)"
+# ⚠️ THE LOCK IS HELD FOR THE CHAIN'S WHOLE LIFE (fd 9, dropped by the kernel when this
+# process dies, however it dies). A screen in another pid namespace cannot tell by the pid
+# below whether the chain is alive, and a container that restarted has none of its old
+# processes; a free lock on this file is how `runs.close_lost` knows the chain is over.
+# Taken before `pid` and `pidns` are recorded, so no record names a chain that holds no lock.
+# Only when `flock` exists: a lock file nobody holds would read as a dead chain.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$RUNDIR/lock"
+  flock -n 9 || true
+fi
 meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
-         started="$(date -Is)" pid="$$"
+         started="$(date -Is)" pid="$$" pidns="$(readlink /proc/$$/ns/pid 2>/dev/null || true)"
 trap on_exit EXIT
 trap on_interrupt INT TERM
 # An `enter` that fails (a BranchError, a traceback) is recorded as the stop, with its cause,
@@ -1032,6 +1042,30 @@ PY
     echo "dfs_run: $ITEM cannot be briefed: $cause." >&2
     exit 2
   fi
+fi
+
+# ⚠️ AN EMPTY TASK FILE IS NOT A NEW TASK. A process killed while it rewrote the file
+# (before writes were atomic) left 0 bytes: on 2026-10-23 W118's worktree held an empty
+# W118.md over a finished 96-line tree at the branch HEAD, and `state.py` briefed it as
+# "no nodes yet — plan the task". Refused here, with the way back, rather than planned over.
+cause="$(python3 - "$ITEM" "$HERE" <<'PY'
+import subprocess, sys
+sys.path.insert(0, sys.argv[2])
+import paths as dfs_paths, tree as dfs_tree
+p = dfs_tree.part_path(sys.argv[1])
+if p.is_file() and not p.read_text().strip():
+    rel = dfs_paths.rel(p)
+    head = subprocess.run(["git", "show", "HEAD:./" + rel], capture_output=True, text=True).stdout
+    if head.strip():
+        print("%s is empty, and the branch HEAD has %d lines of it: restore it with "
+              "git checkout -- %s" % (rel, head.count("\n"), rel))
+PY
+)"
+if [ -n "$cause" ]; then
+  stop_is brief
+  meta_set cause="$cause"
+  echo "dfs_run: $ITEM cannot be briefed: $cause." >&2
+  exit 2
 fi
 
 # ⚠️ THE DIRT HAS AN OWNER: the task whose chain works this checkout (its worktree's own

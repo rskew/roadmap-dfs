@@ -446,7 +446,7 @@ def write_order(nodes) -> None:
     """
     p = path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(header_of(read_text()) + render(nodes))
+    dfs_paths.write_atomically(p, header_of(read_text()) + render(nodes))
 
 
 def render(nodes) -> str:

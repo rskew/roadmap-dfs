@@ -207,6 +207,15 @@ class Chain(unittest.TestCase):
         # the chain's own directory stays where the screen reads it
         self.assertTrue(list((self.root / ".dfs" / "runs").glob("*/meta.json")))
         self.assertFalse((self.wt / ".dfs" / "runs").exists())
+        # the pid namespace its pid is in, which a screen of another one must not judge it by
+        if os.path.exists("/proc/self/ns/pid"):
+            self.assertEqual(meta.get("pidns"), os.readlink("/proc/self/ns/pid"))
+        # and the lock it held while it ran, which a screen of another namespace asks instead
+        import fcntl
+        if shutil.which("flock"):
+            lock = next((self.root / ".dfs" / "runs").glob("*/lock"))
+            with open(lock, "rb") as fh:
+                fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)   # raises if the chain still holds it
 
     def test_a_rule_that_hides_a_roadmap_part_is_named_when_the_chain_starts(self):
         (self.root / ".gitignore").write_text(".dfs/runs/\n*.html\n")
@@ -718,11 +727,33 @@ class Chain(unittest.TestCase):
         self.assertIn("W1 cannot be briefed: the worktree", out)
         self.assertEqual(self.count.read_text(), before)   # no session started
 
+    def test_an_emptied_task_file_the_branch_has_stops_the_chain_with_the_way_back(self):
+        self.run_chain("work", cap=1)
+        f = self.wt / ".dfs" / "items" / "W1.md"
+        lines = self.git("show", "dfs/W1:.dfs/items/W1.md").count("\n") + 1
+        f.write_text("")   # what a kill between write_text's truncate and its write left of W118's
+        before = self.count.read_text()
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (2, "brief"), out)
+        self.assertEqual(meta.get("cause"), ".dfs/items/W1.md is empty, and the branch HEAD has %d "
+                         "lines of it: restore it with git checkout -- .dfs/items/W1.md" % lines)
+        self.assertIn("W1 cannot be briefed: .dfs/items/W1.md is empty", out)
+        self.assertEqual(self.count.read_text(), before)   # no session started
+        self.assertEqual(f.read_text(), "")                # left for the author to look at
+
     def untrack_task(self):
         """Take W1.md out of the default branch's HEAD and leave it untracked here, as a task
         written in the main checkout and never committed is."""
         self.git("rm", "-q", "--cached", ".dfs/items/W1.md")
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "untrack W1")
+
+    def test_an_untracked_task_file_reaches_a_fresh_cut(self):
+        self.untrack_task()   # a task written from the screen or a chat, never committed (W127)
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
+        self.assertIn("1 uncommitted path(s) of W1 moved into .dfs/worktrees/W1", out)
+        self.assertIn("- for: look 1", (self.wt / ".dfs" / "items" / "W1.md").read_text())
+        self.assertFalse((self.root / ".dfs" / "items" / "W1.md").exists())
 
     def test_an_untracked_task_file_reaches_a_reused_branchs_worktree(self):
         self.untrack_task()

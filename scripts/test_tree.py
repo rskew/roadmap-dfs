@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -348,6 +349,67 @@ class AppendLog(InARepo):
         self.write(task())
         with self.assertRaises(ValueError):
             dfs_tree.append_log("W1", "assume")
+
+
+class AtomicWrites(InARepo):
+    """A rewrite of a task file is a temp file renamed over it, so a process killed in the
+    middle leaves the old text: on 2026-10-23 a kill between `write_text`'s truncate and
+    its write left W118's task file empty, and the briefing read it as a task to plan."""
+    LOG = ("- 2026-09-25T09:00:00Z · session · work\n"
+           "- 2026-09-25T09:03:00Z · raise · W1.1\n  which?\n"
+           "- 2026-09-25T09:04:00Z · answer · 2026-09-25T09:03:00Z\n  this\n"
+           "- 2026-09-25T09:05:00Z · session · work\n")
+
+    def files(self):
+        return {p: p.read_bytes() for p in (self.root / ".dfs").rglob("*") if p.is_file()}
+
+    def test_a_temp_file_a_killed_write_left_is_swept_by_the_next_write_once_it_is_stale(self):
+        self.write(task(node(1, "open", extra="Approach: go on\n"), self.LOG))
+        items = self.root / ".dfs" / "items"
+        old, fresh = items / ".W1.md.abcd1234", items / ".W1.md.wxyz5678"
+        other = items / ".W2.md.abcd1234"
+        for f in (old, fresh, other):
+            f.write_text("half")
+        long_ago = time.time() - 2 * dfs_paths.STALE_TEMP
+        os.utime(old, (long_ago, long_ago))
+        os.utime(other, (long_ago, long_ago))
+        dfs_tree.append_log("W1", "critic", ["ok"])
+        self.assertFalse(old.exists())      # stale, and of this file
+        self.assertTrue(fresh.exists())     # may be another writer's, still at work
+        self.assertTrue(other.exists())     # another file's
+
+    def test_a_rewrite_cut_off_before_its_rename_leaves_every_file_as_it_was(self):
+        ops = {
+            "compact": lambda: dfs_tree.compact("W1"),
+            "shelve": lambda: dfs_tree.shelve("W1"),
+            "append_log": lambda: dfs_tree.append_log("W1", "critic", ["ok"]),
+            "edit_task": lambda: dfs_tree.edit_task("W1", "renamed", "A new goal."),
+            "delete_node": lambda: dfs_tree.delete_node("W1", "W1.2"),
+            "edit_node": lambda: dfs_tree.edit_node("W1", "W1.2", "retitled", "another way"),
+            "start_node": lambda: dfs_tree.start_node("W1", "W1.2"),
+            "add_node": lambda: dfs_tree.add_node("W1", "one more"),
+        }
+        for name, op in ops.items():
+            with self.subTest(name):
+                self.write(task(node(1, "confirmed", extra="Approach: cut it\nDetermination: yes\n")
+                                + node(2, "open", extra="Approach: go on\n"), self.LOG))
+                before = self.files()
+                with mock.patch("os.replace", side_effect=OSError("killed")):
+                    with self.assertRaises(OSError):
+                        op()
+                self.assertEqual(self.files(), before)
+
+    def test_the_rewritten_file_keeps_its_mode(self):
+        p = self.root / ".dfs" / "items" / "W1.md"
+        self.write(task(node(1)))
+        p.chmod(0o640)
+        dfs_tree.append_log("W1", "critic", ["ok"])
+        self.assertEqual(p.stat().st_mode & 0o777, 0o640)
+        self.assertIn("critic", p.read_text())
+        made = dfs_tree.create_task("fresh")
+        umask = os.umask(0)
+        os.umask(umask)
+        self.assertEqual((p.parent / (made + ".md")).stat().st_mode & 0o777, 0o666 & ~umask)
 
 
 class Check(InARepo):
