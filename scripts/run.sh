@@ -1045,7 +1045,7 @@ import paths as dfs_paths, tree as dfs_tree
 p = dfs_tree.part_path(sys.argv[1])
 if p.is_file() and not p.read_text().strip():
     rel = dfs_paths.rel(p)
-    head = subprocess.run(["git", "show", "HEAD:" + rel], capture_output=True, text=True).stdout
+    head = subprocess.run(["git", "show", "HEAD:./" + rel], capture_output=True, text=True).stdout
     if head.strip():
         print("%s is empty, and the branch HEAD has %d lines of it: restore it with "
               "git checkout -- %s" % (rel, head.count("\n"), rel))

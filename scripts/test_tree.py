@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -361,6 +362,21 @@ class AtomicWrites(InARepo):
 
     def files(self):
         return {p: p.read_bytes() for p in (self.root / ".dfs").rglob("*") if p.is_file()}
+
+    def test_a_temp_file_a_killed_write_left_is_swept_by_the_next_write_once_it_is_stale(self):
+        self.write(task(node(1, "open", extra="Approach: go on\n"), self.LOG))
+        items = self.root / ".dfs" / "items"
+        old, fresh = items / ".W1.md.abcd1234", items / ".W1.md.wxyz5678"
+        other = items / ".W2.md.abcd1234"
+        for f in (old, fresh, other):
+            f.write_text("half")
+        long_ago = time.time() - 2 * dfs_paths.STALE_TEMP
+        os.utime(old, (long_ago, long_ago))
+        os.utime(other, (long_ago, long_ago))
+        dfs_tree.append_log("W1", "critic", ["ok"])
+        self.assertFalse(old.exists())      # stale, and of this file
+        self.assertTrue(fresh.exists())     # may be another writer's, still at work
+        self.assertTrue(other.exists())     # another file's
 
     def test_a_rewrite_cut_off_before_its_rename_leaves_every_file_as_it_was(self):
         ops = {

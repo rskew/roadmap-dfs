@@ -488,6 +488,8 @@ def compact(task):
         return 0
     t["log"] = [e for e in t["log"] if e["ts"] >= cut]
     a.parent.mkdir(parents=True, exist_ok=True)
+    # ⚠️ The archive first, the task file second: a kill between the two leaves the moved
+    # entries in both, and the next call moves them again (duplicated, never lost).
     dfs_paths.write_atomically(a, arc.rstrip("\n") + ("\n\n" if arc.strip() else "")
                                + ARCHIVE_LOG + "\n"
                                + "\n".join(e["text"].rstrip() for e in move) + "\n")
@@ -540,6 +542,8 @@ def shelve(task, ids=()):
     if not moved:
         return 0
     a.parent.mkdir(parents=True, exist_ok=True)
+    # ⚠️ The archive first, the task file second, as in `compact`: a kill between the two
+    # leaves the moved text in both, and the next call moves it again (duplicated, never lost).
     dfs_paths.write_atomically(a, arc.rstrip("\n") + ("\n\n" if arc.strip() else "")
                                + "\n\n".join(moved) + "\n")
     dfs_paths.write_atomically(p, render(t))

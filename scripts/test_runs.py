@@ -277,6 +277,10 @@ class CloseLost(unittest.TestCase):
         self.assertIn("W2's chain died with its supervisor (dfs_run_dead, run 5)", died[0])
         self.assertEqual((self.rundir / "activity.log").read_text().count("\tdied\t"), 1)
 
+    def test_a_closed_record_is_stamped_as_run_sh_stamps_one(self):
+        self.runs.close_lost()
+        self.assertRegex(self.meta("dead")["finished"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$")
+
     def test_a_record_from_another_pid_namespace_is_left_open(self):
         """Its pid means nothing in this namespace's /proc: the chain may be running."""
         here = self.runs.pid_namespace()

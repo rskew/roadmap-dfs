@@ -23,6 +23,7 @@ Usage:
     python3 <scripts>/runs.py --root            # where a new chain's logs go
     python3 <scripts>/runs.py --left <item>     # what the last session wrote
 """
+import datetime
 import glob
 import json
 import os
@@ -337,7 +338,8 @@ def close_lost():
             continue
         path = os.path.join(r["dir"], "meta.json")
         meta = read_meta(r["dir"]) or {}
-        meta.update(finished=time.strftime("%Y-%m-%dT%H:%M:%S%z"), stop=LOST,
+        meta.update(finished=datetime.datetime.now().astimezone().isoformat(timespec="seconds"),   # as `date -Is`
+                    stop=LOST,
                     cause="its supervisor was lost: pid %d was gone, with no finish line, "
                           "when the screen started" % r["pid"])
         dfs_paths.write_atomically(path, json.dumps(meta))

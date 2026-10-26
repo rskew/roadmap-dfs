@@ -102,6 +102,8 @@ WALK_STOP = {
     "overbudget": "a session went past the context ceiling; the budget is not holding",
     "overturns": "a session went past the turn ceiling with no context reading",
     "brief": "a session could not be briefed",
+    # reached only when another screen closes one of THIS walk's own chains: a walk judges
+    # the chains it started, and `runs.close_lost` runs as a screen starts, before it has any
     "lost": "the chain died with its supervisor and never finished",
     "failed": "a session failed; its console says whether the agent exited non-zero "
               "or a critic or reviewer changed code or gave no verdict",

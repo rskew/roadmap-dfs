@@ -28,6 +28,7 @@ down.
     python3 <this file> --require       # exit 0 if this directory has a roadmap
 """
 import colorsys
+import glob
 import hashlib
 import os
 import re
@@ -422,6 +423,7 @@ def write_atomically(path, data):
         umask = os.umask(0)
         os.umask(umask)
         mode = 0o666 & ~umask
+    _sweep_temps(path)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="." + path.name + ".")
     try:
         with os.fdopen(fd, "wb") as fh:
@@ -437,6 +439,21 @@ def write_atomically(path, data):
             pass
         raise
 
+
+STALE_TEMP = 3600   # seconds: a write takes milliseconds, so a temp file this old was killed mid-write
+
+
+def _sweep_temps(path):
+    """Remove the temp files an earlier write of `path` left when it was killed between
+    `mkstemp` and `os.replace`, where the `except` above never ran: they show as untracked
+    dirt in `.dfs/items` and nothing else removes them."""
+    for old in glob.glob(os.path.join(glob.escape(str(path.parent)),
+                                      glob.escape("." + path.name + ".") + "?" * 8)):
+        try:
+            if time.time() - os.stat(old).st_mtime > STALE_TEMP:
+                os.unlink(old)
+        except OSError:
+            pass
 
 
 def _unlink(path: Path):
