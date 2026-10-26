@@ -571,7 +571,7 @@ def attach(body):
         ext = ".jpg"
     file = "%s%s" % (uuid.uuid4(), ext)
     try:
-        dfs_paths._write_atomically(dfs_paths.artefacts() / file, data)
+        dfs_paths.write_atomically(dfs_paths.artefacts() / file, data)
     except OSError as e:
         raise Refused("could not write %s: %s" % (file, e), 500)
     label = " ".join(re.sub(r"[\[\]]", " ", os.path.basename(name)).split()) or file

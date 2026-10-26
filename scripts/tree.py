@@ -451,7 +451,7 @@ def ensure_part(task):
         if not exists(task):
             raise FileNotFoundError(part_path(task))
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(new_part(task, load(task)["name"]))
+        dfs_paths.write_atomically(p, new_part(task, load(task)["name"]))
     return p
 
 
@@ -488,9 +488,10 @@ def compact(task):
         return 0
     t["log"] = [e for e in t["log"] if e["ts"] >= cut]
     a.parent.mkdir(parents=True, exist_ok=True)
-    a.write_text(arc.rstrip("\n") + ("\n\n" if arc.strip() else "") + ARCHIVE_LOG + "\n"
-                 + "\n".join(e["text"].rstrip() for e in move) + "\n")
-    p.write_text(render(t))
+    dfs_paths.write_atomically(a, arc.rstrip("\n") + ("\n\n" if arc.strip() else "")
+                               + ARCHIVE_LOG + "\n"
+                               + "\n".join(e["text"].rstrip() for e in move) + "\n")
+    dfs_paths.write_atomically(p, render(t))
     return len(move)
 
 
@@ -539,9 +540,9 @@ def shelve(task, ids=()):
     if not moved:
         return 0
     a.parent.mkdir(parents=True, exist_ok=True)
-    a.write_text(arc.rstrip("\n") + ("\n\n" if arc.strip() else "")
-                 + "\n\n".join(moved) + "\n")
-    p.write_text(render(t))
+    dfs_paths.write_atomically(a, arc.rstrip("\n") + ("\n\n" if arc.strip() else "")
+                               + "\n\n".join(moved) + "\n")
+    dfs_paths.write_atomically(p, render(t))
     return len(moved)
 
 
@@ -653,7 +654,7 @@ def append_log(task, kind, args=(), body=""):
     if ts <= latest:
         ts = _ts_after(latest)
     t["log"].append(make_entry(ts, kind, args, body))
-    p.write_text(render(t))
+    dfs_paths.write_atomically(p, render(t))
     if kind == "accept":
         # The author taking the finished tree is as good as a passing review: the item's
         # branch, if it has one, goes into the default branch. A merge that cannot go
@@ -702,7 +703,7 @@ def create_task(name, goal="", task=None, draft=False):
     body = ["# %s · %s" % (task, name), "", "## Goal", "", (goal or "").strip() or name, "",
             "## Tree", "", "## Log", ""]
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(body).rstrip() + "\n")
+    dfs_paths.write_atomically(path, "\n".join(body).rstrip() + "\n")
     if draft:
         append_log(task, "draft")
     return task
@@ -733,7 +734,7 @@ def edit_task(task, name, goal):
         t["order"].insert(0, "Goal")
     t["sections"]["Goal"] = goal
     carry_attachments(task, goal)
-    p.write_text(render(t))
+    dfs_paths.write_atomically(p, render(t))
     return task
 
 
@@ -880,7 +881,7 @@ def delete_node(task, nid):
     if ts <= latest:
         ts = _ts_after(latest)
     t["log"].append(make_entry(ts, "delete", cut, body))
-    p.write_text(render(t))
+    dfs_paths.write_atomically(p, render(t))
     return cut
 
 
@@ -924,7 +925,7 @@ def edit_node(task, nid, title, approach=""):
     carry_attachments(task, approach)
     nd["raw"] = ["### %s · %s" % (nid, title)] + kept
     nd["title"] = title
-    p.write_text(render(t))
+    dfs_paths.write_atomically(p, render(t))
     return nid
 
 
@@ -949,7 +950,7 @@ def start_node(task, nid):
         nd["raw"].insert(at, "Status: started")
     nd["status"] = "started"
     nd["fields"]["Status"] = "started"
-    p.write_text(render(t))
+    dfs_paths.write_atomically(p, render(t))
     return nid
 
 
@@ -975,7 +976,7 @@ def add_node(task, title, parent=None, approach=""):
         raw.append("Approach: %s" % approach)
     carry_attachments(task, approach)
     t["nodes"].append(parse_nodes("\n".join(raw), task)[0])
-    p.write_text(render(t))
+    dfs_paths.write_atomically(p, render(t))
     return nid
 
 

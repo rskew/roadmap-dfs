@@ -699,7 +699,7 @@ def _put_back_shared_edits(aside):
     raise) does not overwrite what was written since."""
     while aside:
         p, data = aside.popitem()
-        (dfs_paths.work_root() / p).write_bytes(data)
+        dfs_paths.write_atomically(dfs_paths.work_root() / p, data)
 
 
 def _task_details(task):

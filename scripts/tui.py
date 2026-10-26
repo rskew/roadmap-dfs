@@ -2163,7 +2163,7 @@ class UI(WalkMixin):
         if before is None:
             path.unlink()
         else:
-            path.write_text(before)
+            dfs_paths.write_atomically(path, before)
         self.event("order", "undid the last move of %s" % iid)
         self.reload()
         self.msg = "undid the last move of %s" % iid

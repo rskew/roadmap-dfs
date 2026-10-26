@@ -35,6 +35,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -404,11 +405,38 @@ def background_image_versions() -> dict:
     return {m: background_image_version(m) for m in MODES}
 
 
-def _write_atomically(path: Path, data: bytes):
+def write_atomically(path, data):
+    """Replace `path` with `data` (text or bytes) whole: a reader, or a process killed
+    mid-write, sees the old file or the new one, never an empty or half-written one.
+
+    ⚠️ `Path.write_text` truncates first and writes after, so a kill between the two
+    leaves 0 bytes: on 2026-10-23 a W118 chain killed as its review started left
+    `.dfs/items/W118.md` empty, and the briefing read a finished tree as "no nodes yet".
+    The temp file is in the same directory, since a rename across filesystems is a copy,
+    and takes the old file's mode (a new one the umask's), since `mkstemp` makes it 0600."""
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(data)
-    tmp.replace(path)
+    try:
+        mode = path.stat().st_mode & 0o7777
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix="." + path.name + ".")
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data.encode() if isinstance(data, str) else data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+        raise
+
 
 
 def _unlink(path: Path):
@@ -434,7 +462,7 @@ def write_background_image(data, mode="") -> str:
     if mode and shared:
         for m in MODES:
             if not background_image_file(m).exists():
-                _write_atomically(background_image_file(m), shared[0])
+                write_atomically(background_image_file(m), shared[0])
         _unlink(background_image_file())
     if not mode:
         for m in MODES:
@@ -442,7 +470,7 @@ def write_background_image(data, mode="") -> str:
     if not data:
         _unlink(path)
         return ""
-    _write_atomically(path, data)
+    write_atomically(path, data)
     return background_image_version(mode)
 
 
