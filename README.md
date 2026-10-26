@@ -132,6 +132,14 @@ muted text at least 4:1 on a pure black or white pixel), and the light/dark swit
 removes one mode's. They are plain files, so a picture put there by hand works too (`.dfs/background-image`
 serves a mode that has none of its own), and they travel with the repo like the name and the colour.
 
+The project dialog also has **Claude account…**, for when the login every run and chat uses has expired or its
+account has hit the weekly limit. It says who is signed in (email and plan); Sign in shows claude's own link, you
+open it, sign in to the account you want and paste the code the page shows back into the box, and the page then says
+who is signed in now, or claude's own words if it refused the code. It runs `claude auth login` through
+`scripts/run.sh --claude-auth login` (the same pinned claude as the runs), so it replaces the one stored login, the
+terminal's and the sandbox's included, from the next run on. It does not keep several accounts or any token of its
+own. Like starting the walk, it is open to anyone who can reach the page.
+
 Each live node on a task's page carries a mark before its id, so its state does not rest on the colour
 of its left rule: a tick for a confirmed node, a filled circle for an open node a session has started, an
 empty circle for one not yet begun. A node you confirmed with a correction, which no session built, has no tick: it

@@ -55,6 +55,13 @@ CHAT (`chat.py`, a button on a task and on the list) talks about a task or the p
 with full permissions (the screen's flags: Edit, Write and Bash all work) when the page runs the turn;
 when a screen serves the page the chats are agents that screen keeps running in the background. The
 Chats tab lists them all. It starts agents, so `--no-walk` turns it off.
+THE CLAUDE ACCOUNT (`login.py`, "Claude account…" in the project dialog) signs this machine's claude in to an
+Anthropic account when a login has expired or an account has hit its limit: `GET /api/login` says who is signed in
+and where a sign-in is, `POST /api/login/start` runs claude's own `auth login` (through `run.sh --claude-auth`, the
+claude the runs start) and returns the link to open, `/code` sends it the code that page shows, `/cancel` and
+`/check` end a sign-in or re-read the account. claude writes its own store, which every run and chat reads; nothing
+here keeps a secret. Like the walk, it changes what this machine's agents run as, so it is open to whoever can reach
+the port.
 ARTEFACTS (`.dfs/artefacts`) are served sandboxed at `/artefacts/<name>` and linked from the
 text that names them. ATTACHMENTS are artefacts the author adds: POST /api/attach (base64 in JSON,
 8 MB at most, like the background picture) keeps a picture or a pdf, txt, md, csv, json or log file
