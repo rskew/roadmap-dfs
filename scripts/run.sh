@@ -59,6 +59,9 @@
 #                          stdin, CHAT_SID to resume, JSON out
 #         <scripts>/run.sh --bump-agent     pin the agents to nixpkgs now
 #                                           (tui.py does it in the background)
+#         <scripts>/run.sh --claude-auth <login|status|logout> [flags]   `claude auth`, from
+#                          the claude the runs start (CLAUDE_CMD or the pin): the web
+#                          page's sign-in (login.py)
 # Env:    CLAUDE_CMD       how claude is launched here — a nix run, not a binary on PATH
 #         CODEX_CMD        how codex is launched here — also a nix command by default
 #         KIRO_CMD         how kiro-cli is launched here — also a nix command by default,
@@ -112,12 +115,13 @@ for a in "$@"; do
     --kiro)    AGENT=kiro ;;
     --opencode) AGENT=opencode ;;
     --bump-agent) MODE=bump ;;
+    --claude-auth) MODE=auth ;;
     *)         args+=("$a") ;;
   esac
 done
 ITEM="${args[0]:-}"
 CAP="${args[1]:-5}"
-[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = chatturn ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro|--opencode] <task> [cap]  |  --review <task>  |  --open  |  [--codex|--kiro|--opencode] --chat [task|project]" >&2; exit 2; }
+[ "$MODE" = review ] || [ "$MODE" = chat ] || [ "$MODE" = chatturn ] || [ "$MODE" = open ] || [ "$MODE" = bump ] || [ "$MODE" = auth ] || [ -n "$ITEM" ] || { echo "usage: $0 [--codex|--kiro|--opencode] <task> [cap]  |  --review <task>  |  --open  |  --claude-auth <login|status|logout>  |  [--codex|--kiro|--opencode] --chat [task|project]" >&2; exit 2; }
 
 # No agent needs to be a binary on PATH: each default launcher is a Nix command
 # line, split into an argv. Override the provider's command to use a local checkout, a
@@ -145,7 +149,7 @@ fi
 # author typing, and asking nix which nixpkgs to pin put a network round trip (and, on a
 # box with no pin yet or no route out, a hang with nothing on the screen) in front of
 # `o` and `R`. A chat `--review` starts runs `--chat`, which resolves for itself.
-if { [ "$MODE" = work ] || [ "$MODE" = chat ] || [ "$MODE" = chatturn ]; } && [ -z "${AGENT_NIXPKGS_REV:-}" ] && { { [ "$AGENT" = claude ] && [ -z "${CLAUDE_CMD:-}" ]; } || { [ "$AGENT" = codex ] && [ -z "${CODEX_CMD:-}" ]; } || { [ "$AGENT" = kiro ] && [ -z "${KIRO_CMD:-}" ]; } || { [ "$AGENT" = opencode ] && [ -z "${OPENCODE_CMD:-}" ]; }; }; then
+if { [ "$MODE" = work ] || [ "$MODE" = chat ] || [ "$MODE" = chatturn ] || [ "$MODE" = auth ]; } && [ -z "${AGENT_NIXPKGS_REV:-}" ] && { { [ "$AGENT" = claude ] && [ -z "${CLAUDE_CMD:-}" ]; } || { [ "$AGENT" = codex ] && [ -z "${CODEX_CMD:-}" ]; } || { [ "$AGENT" = kiro ] && [ -z "${KIRO_CMD:-}" ]; } || { [ "$AGENT" = opencode ] && [ -z "${OPENCODE_CMD:-}" ]; }; }; then
   AGENT_NIXPKGS_REV="$(python3 "$HERE/agent.py" --rev)" || exit 2
 fi
 AGENT_NIXPKGS="github:nixos/nixpkgs/${AGENT_NIXPKGS_REV:-}"
@@ -178,6 +182,12 @@ else
 fi
 read -r -a AGENT_ARGV <<< "$AGENT_CMD"
 read -r -a PERMISSION_ARGV <<< "$PERMISSION_FLAGS"
+# The sign-in is claude's own `auth` command, from the same claude the runs start, so the
+# login it writes (~/.claude) is the one they read. claude alone: the others sign in their own way.
+if [ "$MODE" = auth ]; then
+  [ "$AGENT" = claude ] || { echo "dfs_run: --claude-auth is for claude only" >&2; exit 2; }
+  exec "${AGENT_ARGV[@]}" auth "${args[@]}"
+fi
 MAX_TURNS="${MAX_TURNS:-100}"          # Fallback only when context usage is unavailable.
 # ⚠️ CONTEXT IS WHAT THE COST MODEL IS WRITTEN IN; turns are a proxy that varies 3x.
 # The 09-06 overrun grew 532 tokens/turn against a 1,707 median, so 136 of its turns

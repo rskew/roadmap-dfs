@@ -88,6 +88,7 @@ import tui as dfs_tui       # noqa: E402  (its view functions; nothing here star
 import runs as dfs_runs     # noqa: E402
 import walk as dfs_walk      # noqa: E402
 import chat as dfs_chat      # noqa: E402
+import login as dfs_login    # noqa: E402
 
 INDEX = HERE / "web" / "index.html"
 STATIC = {"/sw.js": "text/javascript", "/design.css": "text/css", "/design": "text/html", "/icon-192.png": "image/png", "/icon-512.png": "image/png",
@@ -871,6 +872,27 @@ def act(name, body):
 WALK = {"enabled": True, "walker": None}
 
 
+LOGIN = dfs_login.Login()
+
+
+def login_act(name, body):
+    """The page's "Claude account": sign this machine's claude in (login.py)."""
+    try:
+        if name == "login/start":
+            LOGIN.start(console=bool(body.get("console")))
+        elif name == "login/code":
+            LOGIN.code(need(body, "code", "the code"))
+        elif name == "login/cancel":
+            LOGIN.cancel()
+        elif name == "login/check":
+            LOGIN.check()
+        else:
+            raise Refused("not found", 404)
+    except ValueError as e:
+        raise Refused(str(e), 409)
+    return LOGIN.state()
+
+
 def walker():
     return _the_walker()
 
@@ -1176,6 +1198,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, run_message(body))
             if name.startswith("chat/"):
                 return self.json(200, chat_act(name, body))
+            if name.startswith("login/"):
+                return self.json(200, login_act(name, body))
             if name.startswith(("walk/", "chain/")):
                 return self.json(200, walk_act(name, body))
             return self.json(200, act(name, body))
@@ -1195,6 +1219,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, chat_act("chats"))
         if path.startswith("/api/chat/"):
             return self.json(200, chat_act("chat", scope=segment(path, "/api/chat/", dfs_chat.SCOPE.pattern, "chat")))
+        if path == "/api/login":
+            return self.json(200, LOGIN.state())
         if path == "/api/state":
             return self.json(200, state_json())
         if path == "/api/assumptions":

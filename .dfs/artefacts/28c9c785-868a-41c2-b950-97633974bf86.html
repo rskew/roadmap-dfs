@@ -1,0 +1,268 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W115: what "log in to Claude from the dfs page" signs in</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 760px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+  .tabs button { min-height: 44px; padding: 8px 12px; font: inherit; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; margin: 0 0 12px; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333;
+         border-radius: 6px; background: #fff; }
+  .box b { display: block; font-size: 16px; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  .box.new { border-color: #1f6f3f; background: #eef8f1; }
+  .box.gone { border-style: dashed; color: #777; }
+  .link { display: flex; flex-direction: column; align-items: center; padding: 2px 0;
+          color: #555; font-size: 13px; }
+  .link::after { content: "\2193"; font-size: 22px; line-height: 1; }
+  @media (min-width: 720px) {
+    .dg { flex-direction: row; align-items: center; }
+    .box { flex: 1 1 0; }
+    .link { padding: 0 8px; }
+    .link::after { content: "\2192"; }
+  }
+  ol.steps { padding-left: 22px; margin: 6px 0; }
+  .follows { border-left: 4px solid #1f6f3f; padding: 4px 0 4px 12px; margin: 10px 0; }
+  .follows.no { border-left-color: #a33; }
+  .ev { font-size: 14px; color: #333; }
+  code { font-size: 14px; }
+  summary { min-height: 44px; padding: 10px 0; box-sizing: border-box; cursor: pointer; }
+</style>
+
+<h1>Which login the page should make</h1>
+<p>Every run and chat on this machine is the <code>claude</code> CLI, and it reads one stored
+  login: <code>~/.claude/.credentials.json</code>. Pick a reading to see what the page would change.</p>
+
+<div class="tabs" role="group" aria-label="Reading of the Goal">
+  <button type="button" data-r="a" aria-pressed="true">Sign this machine's CLI in (chosen)</button>
+  <button type="button" data-r="b" aria-pressed="false">Keep several accounts, switch</button>
+  <button type="button" data-r="c" aria-pressed="false">An API key</button>
+</div>
+
+<div class="dg" id="wiring">
+  <div class="box" data-node="page"><b>dfs page</b><span id="w-page">"Claude account": Sign in, a link, a box for the code</span></div>
+  <div class="link"></div>
+  <div class="box new" data-node="server"><b>web.py</b><span id="w-server">runs <code>claude auth login</code>, pipes the code in</span></div>
+  <div class="link"></div>
+  <div class="box" data-node="store"><b>~/.claude login</b><span id="w-store">replaced by the account just signed in</span></div>
+  <div class="link"></div>
+  <div class="box" data-node="runs"><b>runs, chats</b><span id="w-runs">use it from their next start</span></div>
+</div>
+
+<div class="follows" id="follows"></div>
+
+<h2>The sign-in, on the phone</h2>
+<ol class="steps" id="steps"></ol>
+
+<h2>What was seen</h2>
+<details>
+  <summary>The pinned claude-code 2.1.308 signs in with no terminal</summary>
+  <p class="ev">With stdin a pipe, <code>claude auth login</code> printed
+    "If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&amp;…" and
+    "Paste code here if prompted &gt;". A code piped in eight seconds later was sent: "Login failed:
+    Request failed with status code 400" for a made-up one. <code>claude auth status</code> prints
+    JSON with <code>loggedIn</code>, <code>email</code> and <code>subscriptionType</code>.</p>
+</details>
+<details>
+  <summary>Why this task, now</summary>
+  <p class="ev">The two sessions before this one stopped on "You've hit your weekly limit · resets
+    8pm (UTC)" (<code>api_error: usage_limit_reached</code>), which signing in to another account
+    gets past. That is a guess at the motive, not something the author said.</p>
+</details>
+
+<script>
+  var R = {
+    a: { page: '"Claude account": Sign in, a link, a box for the code',
+         server: 'runs claude auth login, pipes the code in',
+         store: 'replaced by the account just signed in',
+         runs: 'use it from their next start',
+         ok: true,
+         follows: 'Small: one process at a time, and nothing secret kept by dfs. The CLI writes its own store, so the terminal, the sandbox (which mounts ~/.claude) and the page agree. The old login is gone until you sign in to it again.',
+         steps: ['Tap Sign in under "Claude account".', 'Open the link it shows, sign in to the account at claude.ai.', 'Copy the code that page shows, paste it into the box, tap Send.', 'The page says who is signed in now (email, plan).'] },
+    b: { page: 'a list of accounts, one marked in use',
+         server: 'keeps a login per account, swaps the store',
+         store: 'swapped for the chosen account, the others kept by dfs',
+         runs: 'could switch by themselves on a limit',
+         ok: false,
+         follows: 'Bigger: dfs would hold several accounts\' credentials and their refresh, and the walk would pick between them. Choose this if what you want is to move to another account without signing in each time.',
+         steps: ['Sign each account in once.', 'Pick the one to use, or let a limit move the walk to the next.'] },
+    c: { page: 'a field for an API key',
+         server: 'stores the key, passes ANTHROPIC_API_KEY to runs',
+         store: 'not used: the key wins over it',
+         runs: 'billed to the Console, not the subscription',
+         ok: false,
+         follows: 'Not a login: a key pasted once, paid per token. Choose this if you meant Console billing.',
+         steps: ['Make a key in the Console.', 'Paste it into the page.'] }
+  };
+  var current = 'a';
+  function show(r) {
+    current = r;
+    var d = R[r];
+    document.querySelectorAll('.tabs button').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.r === r ? 'true' : 'false');
+    });
+    ['page', 'server', 'store', 'runs'].forEach(function (k) {
+      document.getElementById('w-' + k).textContent = d[k];
+    });
+    var f = document.getElementById('follows');
+    f.textContent = d.follows;
+    f.className = 'follows' + (d.ok ? '' : ' no');
+    var ol = document.getElementById('steps');
+    ol.innerHTML = '';
+    d.steps.forEach(function (s) { var li = document.createElement('li'); li.textContent = s; ol.appendChild(li); });
+  }
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () { show(b.dataset.r); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return { reading: current }; };
+  addEventListener('dfs-state', function (e) { if (e.detail && R[e.detail.reading]) show(e.detail.reading); });
+  show('a');
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Yes: the page signs this machine's claude CLI in to one account, replacing its login."> Sign this machine's CLI in</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="No: keep several accounts and switch between them (say whether the walk should switch on a limit)."> Keep several accounts, switch</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="No: I meant an API key, billed to the Console."> An API key</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
