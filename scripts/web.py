@@ -892,7 +892,7 @@ def login_act(name, body):
         elif name == "login/cancel":
             LOGIN.cancel()
         elif name == "login/check":
-            LOGIN.check()
+            LOGIN.refresh()
         else:
             raise Refused("not found", 404)
     except ValueError as e:

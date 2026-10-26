@@ -1593,7 +1593,7 @@ function accountForm() {
     if (busy || st.phase === "waiting") poll();
   };
   const poll = () => { clearTimeout(ACCT_T); ACCT_T = setTimeout(async () => { try { draw(await api("/api/login")); } catch (e) { toast(e.message, true); } }, 1000); };
-  api("/api/login").then(draw, e => { box.innerHTML = `<p class="warn" style="margin:0">${esc(e.message)}</p>`; });
+  api("/api/login/check", {}).then(draw, e => { box.innerHTML = `<p class="warn" style="margin:0">${esc(e.message)}</p>`; });
 }
 function newTaskForm() {
   form(`<h3>Add a task</h3>

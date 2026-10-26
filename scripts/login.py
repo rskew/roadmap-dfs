@@ -15,7 +15,8 @@ the author pastes on the page:
     cancel()    ->  idle
 
 One sign-in at a time: a second `start` while one is going returns that one. `account` is
-`claude auth status --json`, read on the first ask and after each sign-in, never on every
+`claude auth status --json`, read on the first ask, after each sign-in and by refresh() (the page
+calls it each time the dialog opens, since the login can change outside the page), never on every
 poll (each read is a nix run). Nothing here keeps a secret: claude writes its own store.
 
 Usage:  login.py status   print the account as the page gets it
@@ -92,6 +93,14 @@ class Login:
             self.check()
         with self.lock:
             return dict(phase=self.phase, url=self.url, error=self.error, account=self.account)
+
+    def refresh(self):
+        """Read the account again, unless a sign-in is going: the login can change outside the
+        page (the terminal, another container, a lapse), and a failed read should not stick."""
+        with self.lock:
+            if self.phase in ("starting", "waiting", "checking"):
+                return self.account
+        return self.check()
 
     def check(self):
         """Read the account. A read that began before the newest one stored is dropped, so

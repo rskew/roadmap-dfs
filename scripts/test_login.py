@@ -108,6 +108,18 @@ class Login(unittest.TestCase):
         self.assertEqual(sorted(self.argv()), ["auth login --claudeai", "auth status --json", "auth status --json"],
                          "one login, and the account read again after it")
 
+    def test_opening_the_dialog_again_reads_who_is_signed_in_now(self):
+        answers = iter([dict(loggedIn=False, error="claude auth status: timed out"),
+                        dict(loggedIn=True, email="a@example.com"), dict(loggedIn=True, email="b@example.com")])
+        login = dfs_login.Login(read=lambda: next(answers))
+        self.assertEqual(login.refresh()["error"], "claude auth status: timed out")
+        self.assertEqual(login.refresh()["email"], "a@example.com", "a failed first read does not stick")
+        self.assertEqual(login.state()["account"]["email"], "a@example.com", "a poll does not read")
+        login.phase = "waiting"
+        self.assertEqual(login.refresh()["email"], "a@example.com", "no read while a sign-in is going")
+        login.phase = "idle"
+        self.assertEqual(login.refresh()["email"], "b@example.com", "the login changed outside the page")
+
     def test_a_read_that_began_first_and_ended_last_does_not_win(self):
         import threading
         go = threading.Event()
