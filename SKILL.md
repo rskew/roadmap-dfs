@@ -118,13 +118,12 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   evidence lines may MOVE, verbatim, into `.dfs/archive/items/<task>.md` (leaving
   `Evidence: archived.`), which is how a task file over its budget shrinks; append
   them at the archive's END under a `**<id> Evidence**:` heading, since nothing
-  already there may move, and stage the archive in the same commit. Its Approach and
-  Hypothesis may move too, by `tree.py shelve <task> [<ids>]`, which appends
+  already there may move, and stage the archive in the same commit. Its Approach,
+  Hypothesis and Determination may move too, by `tree.py shelve <task> [<ids>]`, which appends
   each verbatim to the archive's end as `**<id> Approach**: <text>` and leaves
-  `Approach: archived.`; `dfs_tree.load` and the TUI put the words back, and the
+  `Approach: archived.` (a Determination leaves its first clause and `(archived.)`); `dfs_tree.load` and the TUI put the words back, and the
   critic finds them in the archive with the evidence. (`Plan:`, the Approach's old
-  name, is still read as it.) Status, Parent and
-  Determination never move.
+  name, is still read as it.) Status and Parent never move.
 - **The log only grows, but its past may move.** `tree.py compact <task>` moves
   every entry older than the author's last answer, correction or accept, verbatim, to
   the archive's end under `**Log**:`. Every count is read through `dfs_tree.load`,

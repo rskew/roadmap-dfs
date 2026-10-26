@@ -58,11 +58,13 @@ and `load` merges them back. So every count read off `load` (sessions since the
 author, the critic's cadence, open raises) is the same after a move as before it; a
 reader that parses the task FILE alone sees only the log since the author spoke.
 
-A determined node's Approach and Hypothesis are bounded the same way: `shelve` moves
-each, verbatim, to the archive's end as a `**<id> Approach**: <text>` line and leaves
-`Approach: archived.` in the file, and `load` puts the words back. `Plan` is the
-Approach's old name, read as it wherever it appears, in a task file or an archive. Status, Parent and
-Determination never move, so the tree reads the same from the file alone.
+A determined node's Approach, Hypothesis and Determination are bounded the same way:
+`shelve` moves each, verbatim, to the archive's end as a `**<id> Approach**: <text>` line
+and leaves `Approach: archived.` in the file, and `load` puts the words back. A
+Determination leaves its first clause, `Confirmed: the washes are tinted (archived.)`, so a
+reader of the file alone still sees what it settled. `Plan` is the Approach's old name,
+read as it wherever it appears, in a task file or an archive. Status and Parent never
+move, so the tree reads the same from the file alone.
 
 A raise is only for what needs the author: a decision, a fact, or access only they
 have. What a critic or a reviewer FINDS is work, so it lands in the tree, not in a
@@ -76,8 +78,8 @@ Usage:
     tree.py add <task> <parent|-> <title> [< approach]   add an open node
     tree.py start <task> <node>                  mark an open node started (uncommitted)
     tree.py compact <task>                       move the log's past to the archive
-    tree.py shelve <task> [<ids>]                move determined nodes' Approach
-                                                     and Hypothesis to the archive
+    tree.py shelve <task> [<ids>]                move determined nodes' Approach,
+                                                     Hypothesis and Determination to the archive
 """
 import calendar
 import os
@@ -368,8 +370,32 @@ def archived_log(archive):
 
 
 # The fields a determined node may move to the archive, and what it leaves behind.
-SHELVED = ("Approach", "Hypothesis")
+SHELVED = ("Approach", "Hypothesis", "Determination")
 SHELF_STUB = "archived."
+# A Determination is read from the task file alone by anything that skips `load`, so what
+# it leaves behind keeps its first clause: `<clause> (archived.)`.
+DET_TAIL = " (%s)" % SHELF_STUB
+DET_CLAUSE = 100
+
+
+def shelf_stub(field, text):
+    """What `field` leaves in the task file when `text` moves to the archive: `archived.`,
+    and for a Determination its first clause (up to a `;`, a `,` or the first sentence's
+    end, at most DET_CLAUSE characters cut at a word) then `(archived.)`. The same text
+    always gives the same stub, which is how `check.py` knows one is honest."""
+    if field != "Determination":
+        return SHELF_STUB
+    flat = " ".join((text or "").split())
+    clause = re.match(r"(.*?)(?:[;,]|\.(?:\s|$)|$)", flat).group(1).rstrip(" :")
+    if len(clause) > DET_CLAUSE:
+        clause = clause[:DET_CLAUSE].rsplit(" ", 1)[0]
+    return clause + DET_TAIL
+
+
+def is_stub(field, value):
+    """Whether a task file's `value` for `field` is what `shelf_stub` leaves."""
+    v = (value or "").strip()
+    return v == SHELF_STUB or (field == "Determination" and v.endswith(DET_TAIL))
 ARCHIVE_FIELD = re.compile(r"^\*\*(%s) (%s)\*\*: (.*)$"
                            % (NODE_RE, "|".join(SHELVED + tuple(RENAMED))))
 
@@ -392,7 +418,7 @@ def with_archive(t, archive):
     held = archived_fields(archive)
     for nd in t["nodes"]:
         for k, v in held.get(nd["id"], {}).items():
-            if nd["fields"].get(k) == SHELF_STUB:
+            if is_stub(k, nd["fields"].get(k)):
                 nd["fields"][k] = v
                 nd.setdefault("from_archive", set()).add(k)
     have = {e["text"].rstrip() for e in t["log"]}
@@ -497,7 +523,7 @@ def compact(task):
     return len(move)
 
 
-def _unfield(raw, key):
+def _unfield(raw, key, stub=SHELF_STUB):
     """`raw` with the `key:` line and its continuation lines replaced by the stub."""
     out, skipping = [], False
     for line in raw:
@@ -505,7 +531,7 @@ def _unfield(raw, key):
         if fm:
             skipping = field_name(fm.group(1)) == key
             if skipping:
-                out.append("%s: %s" % (key, SHELF_STUB))
+                out.append("%s: %s" % (key, stub))
                 continue
         elif skipping and line.strip():
             continue
@@ -514,9 +540,10 @@ def _unfield(raw, key):
 
 
 def shelve(task, ids=()):
-    """Move the Approach and Hypothesis of determined nodes (all of them, or `ids`) to the
-    END of the archive, verbatim, each as one `**<id> <field>**: <text>` line, and leave
-    `<field>: archived.` in the task file. Returns how many fields moved."""
+    """Move the Approach, Hypothesis and Determination of determined nodes (all of them, or
+    `ids`) to the END of the archive, verbatim, each as one `**<id> <field>**: <text>` line,
+    and leave `<field>: archived.` in the task file (`shelf_stub`: a Determination keeps its
+    first clause). Returns how many fields moved."""
     p, a = path_for(task), archive_path(task)
     t = parse(p.read_text() if p.exists() else "", task)
     arc = a.read_text() if a.exists() else ""
@@ -536,9 +563,11 @@ def shelve(task, ids=()):
             continue
         for k in SHELVED:
             v = nd["fields"].get(k)
-            if v and v != SHELF_STUB:
+            stub = shelf_stub(k, v)
+            # A Determination no longer than its stub saves nothing: left in place.
+            if v and not is_stub(k, v) and (k != "Determination" or len(stub) < len(" ".join(v.split()))):
                 moved.append("**%s %s**: %s" % (nd["id"], k, v))
-                nd["raw"] = _unfield(nd["raw"], k)
+                nd["raw"] = _unfield(nd["raw"], k, stub)
     if not moved:
         return 0
     a.parent.mkdir(parents=True, exist_ok=True)

@@ -1222,6 +1222,38 @@ class Check(InARepo):
         with self.assertRaises(ValueError):
             dfs_tree.shelve("W1", ("W1.2",))
 
+    def test_shelve_moves_a_determination_leaving_its_first_clause_and_the_check_holds_it_to_that(self):
+        det = ("Confirmed: the washes are now clearly tinted in dark, every rule applies in all four "
+               "theme combinations and the text colours keep their contrast on them.")
+        self.write(task(node(1, "confirmed", extra="Approach: cut it\nDetermination: %s\n" % det)
+                        + node(2, "confirmed", extra="Determination: Confirmed: ok.\n"), self.LOG))
+        self.commit()
+        before = (self.counts(), dfs_state.content(dfs_tree.load("W1")))
+        self.assertEqual(dfs_tree.shelve("W1"), 2, "the Approach and the long Determination; the short one saves nothing")
+        text = (self.root / ".dfs/items/W1.md").read_text()
+        stub = "Determination: Confirmed: the washes are now clearly tinted in dark (archived.)\n"
+        self.assertIn(stub, text)
+        self.assertNotIn("contrast", text)
+        self.assertIn("Determination: Confirmed: ok.\n", text)
+        t = dfs_tree.load("W1")
+        self.assertEqual(dfs_tree.by_id(t)["W1.1"]["fields"]["Determination"], det)
+        self.assertEqual((self.counts(), dfs_state.content(t)), before)
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.commit()
+        self.assertEqual(dfs_tree.shelve("W1"), 0, "a second shelve moves nothing")
+        # a stub the archive does not back, or one with a clause of its own, is an edit of history
+        path = self.root / ".dfs/items/W1.md"
+        for edit in (lambda x: x.replace("tinted in dark (archived.)", "tinted (archived.)"),
+                     lambda x: x.replace("Confirmed: ok.", "Confirmed: nothing.")):
+            path.write_text(edit(text))
+            subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+            code, out = self.run_check("--staged")
+            self.assertNotEqual(code, 0, out)
+            self.assertIn("Determination", out)
+            subprocess.run("git checkout -q -- .dfs && git reset -q", shell=True, cwd=self.root, check=True)
+
     def test_an_added_node_is_open_numbered_next_and_passes_the_check(self):
         self.write(task(node(1), self.LOG))
         self.commit()

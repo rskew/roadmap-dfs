@@ -251,8 +251,8 @@ def tree_entries(t, folded=(), flagged=False):
 def archived_fields(text, nid):
     """A node's Approach and Hypothesis as `.dfs/archive/items/<task>.md` holds them.
 
-    A session over the task file's budget moves a determined node's Approach
-    and Hypothesis there (`tree.py shelve`) and leaves `archived.`; the review should
+    A session over the task file's budget moves a determined node's Approach,
+    Hypothesis and Determination there (`tree.py shelve`) and leaves `archived.`; the review should
     read the words the work was judged against, not the stub. `dfs_tree.load` already
     puts them back, so this is for a node parsed from the file alone."""
     return dfs_tree.archived_fields(text).get(nid, {})

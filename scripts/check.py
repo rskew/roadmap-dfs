@@ -28,9 +28,9 @@ edited log line or a rewritten determination erases what the author reviews. So:
       never an edit. Two exceptions, which are how a file over its budget shrinks:
       an evidence line may LEAVE the task file when the task's archive
       (`.dfs/archive/items/<task>.md`) holds it verbatim, as one whole item under
-      that node's own heading; and an Approach or Hypothesis may become `archived.`
-      when the archive's latest `**<id> <field>**:` line holds it verbatim
-      (`tree.py shelve`). The archive is then the only copy, so it only grows,
+      that node's own heading; and an Approach or Hypothesis may become `archived.`, a
+      Determination its first clause and `(archived.)`, when the archive's latest
+      `**<id> <field>**:` line holds it verbatim (`tree.py shelve`). The archive is then the only copy, so it only grows,
       at its end: HEAD's nonblank lines must open it, in order, since a line's
       heading is the nearest one above it
     - a node, new in this commit or with its Ask changed, that states an `Ask:`
@@ -365,13 +365,15 @@ def check_history(task, text, head, archive=""):
     `archived_evidence`). The author's answer to W13's raise of 2026-09-27 chose
     this over exempting the runner's log lines or committing with --no-verify:
     without it a task file over its budget can neither shrink nor grow, so no node
-    on it has a legal commit. Status, Parent and Determination stay immutable; they
-    are what the tree and the critic read.
+    on it has a legal commit. Status and Parent stay immutable; they are what the
+    tree and the critic read.
 
     A determined node's Approach and Hypothesis move the same way, by the author's answer
     to W19's raise of 2026-09-28: the field becomes `archived.` only when the
     archive's latest `**<id> <field>**:` line holds HEAD's wording verbatim, which is
-    what `dfs_tree.load` puts back. Any other change to either is an edit of history."""
+    what `dfs_tree.load` puts back. So does its Determination (W115), which becomes
+    `dfs_tree.shelf_stub`: its first clause then `(archived.)`. Any other change to
+    either is an edit of history."""
     bad = []
     held = archived_evidence(archive)
     now, was = dfs_tree.parse(text, task), dfs_tree.parse(head, task)
@@ -402,7 +404,7 @@ def check_history(task, text, head, archive=""):
             continue
         if nd["status"] not in dfs_tree.DETERMINED:
             continue
-        for k in ("Status", "Determination", "Parent"):
+        for k in ("Status", "Parent"):
             if (cur["fields"].get(k) or "") != (nd["fields"].get(k) or ""):
                 bad.append("%s was %s at HEAD and this commit changed its %s. A determined "
                            "node is history; a later view of it is a correction in the log"
@@ -412,13 +414,13 @@ def check_history(task, text, head, archive=""):
             was_v, now_v = nd["fields"].get(k) or "", cur["fields"].get(k) or ""
             if now_v == was_v:
                 continue
-            if now_v == dfs_tree.SHELF_STUB and \
+            if now_v == dfs_tree.shelf_stub(k, was_v) and \
                     " ".join(shelf.get(k, "").split()) == " ".join(was_v.split()):
                 continue
             bad.append("%s was %s at HEAD and this commit changed its %s. A determined "
                        "node's %s may only become `%s`, with the archive's latest "
                        "`**%s %s**:` line holding it verbatim (`tree.py shelve %s`)"
-                       % (nd["id"], nd["status"], k, k, dfs_tree.SHELF_STUB,
+                       % (nd["id"], nd["status"], k, k, dfs_tree.shelf_stub(k, was_v),
                           nd["id"], k, task))
         missing = [ev for ev in nd["evidence"] if ev not in cur["evidence"]
                    and " ".join(ev.split()) not in held.get(nd["id"], ())]
