@@ -15,13 +15,16 @@ therefore visible as the wrong path in the answer, not merely as a missing one.
 
 Run:  python3 roadmap-dfs/scripts/test_runs.py
 """
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -266,8 +269,13 @@ class CloseLost(unittest.TestCase):
         import web as WEB
         saved = WEB.WALK["walker"]
         WEB.WALK["walker"] = walker = dfs_walk.HeadlessWalk()
+        handle = mock.Mock(url="http://127.0.0.1:1/", public=False)
+        handle.thread.is_alive.return_value = False
         try:
-            WEB._the_walker().close_lost_runs()
+            with mock.patch.object(WEB, "serve", return_value=handle) as serve, \
+                    contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(WEB.main(["--port", "0"]), 0)
+            serve.assert_called_once()
         finally:
             WEB.WALK["walker"] = saved
         self.assertEqual(self.meta("dead")["stop"], "lost")
