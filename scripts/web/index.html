@@ -1520,6 +1520,7 @@ function renameForm() {
   form(`<h3>Project name</h3>
     <p class="muted" style="margin:0">Shown on this page and under the installed app's icon. Kept in <code>.dfs/title</code>, so it travels with the repo.</p>${isSecureContext ? "" : `<p class="muted" style="margin:0">${esc(NO_INSTALL)}</p>`}
     <div><label for="pn">Name</label>${line("pn", "title", PROJECT, ' maxlength="80"')}</div>
+    <div><button class="btn" type="button" data-act="account">Claude account…</button></div>
     <div><label for="pc">Colour</label><input type="color" id="pc" name="colour" value="${COLOUR}"></div>
     <label><input type="checkbox" id="pa" name="auto"${CHOSEN ? "" : " checked"}> Take the colour from the name</label>
     ${["light", "dark"].map(m => `<div><label for="pb-${m}">Background, ${m} mode</label><input type="color" id="pb-${m}" name="${m}" value="${BACKGROUND[m] || (m === "dark" ? "#171a1d" : "#f5f4ef")}"></div>
@@ -1550,6 +1551,50 @@ function renameForm() {
     $("#pb-" + m).addEventListener("input", () => { $("#pd-" + m).checked = false; });
     $("#pi-" + m).addEventListener("change", () => { $("#pr-" + m).disabled = false; $("#pr-" + m).checked = false; });
   }
+}
+/* The Claude account: who this machine's claude is signed in as, and signing it in to another, through
+   claude's own `auth login` on the server (login.py). The server prints no secret: the page shows the link
+   claude gives, the author signs in there, and pastes back the code that page shows. Polled while one runs. */
+let ACCT_T;
+function accountForm() {
+  form(`<h3>Claude account</h3>
+    <p class="muted" style="margin:0">Every run and chat on this machine is claude, signed in to one account. Signing in here replaces it, from the next run on.</p>
+    <div id="acct" aria-live="polite"><p class="muted" style="margin:0">Reading who is signed in…</p></div>
+    <div class="row-btns"><button class="btn" value="cancel" formnovalidate>Close</button></div>`, async () => {});
+  const d = $("#form"), box = $("#acct", d);
+  d.addEventListener("close", () => clearTimeout(ACCT_T), { once: true });
+  const who = a => !a ? "" : a.loggedIn ? `Signed in as <b>${esc(a.email || "an account")}</b>${a.subscriptionType ? ", " + esc(a.subscriptionType) + " plan" : a.authMethod ? " (" + esc(a.authMethod) + ")" : ""}.`
+    : a.error ? `claude could not say who is signed in: <span class="warn">${esc(a.error)}</span>` : "Not signed in.";
+  const draw = st => {
+    if (!d.open) return;
+    const busy = st.phase === "starting" || st.phase === "checking";
+    let h = `<p style="margin:0" id="acct-who">${who(st.account)}</p>`;
+    if (st.phase === "starting") h += `<p class="muted" style="margin:0">Starting claude's sign-in…</p>`;
+    else if (st.phase === "waiting") h += `<p style="margin:0">1. <a href="${esc(st.url)}" target="_blank" rel="noopener noreferrer" id="acct-link">Open the sign-in page</a> and sign in to the account to use.</p>
+      <div><label for="acct-code">2. Paste the code it shows</label><input type="text" id="acct-code" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="row-btns"><button class="btn" type="button" id="acct-cancel">Cancel</button><button class="btn primary" type="button" id="acct-send">Send code</button></div>`;
+    else if (st.phase === "checking") h += `<p class="muted" style="margin:0">Checking the code…</p>`;
+    else {
+      if (st.phase === "done") h += `<p style="margin:0">Signed in. Runs and chats started from now on use this account.</p>`;
+      if (st.phase === "failed") h += `<p class="warn" style="margin:0" id="acct-error">${esc(st.error)}</p>`;
+      if (st.enabled === false) h += `<p class="warn" style="margin:0" id="acct-off">Signing in is off: this server was started with --no-walk.</p>`;
+      else h += `<div class="row-btns"><button class="btn primary" type="button" id="acct-start">${st.account && st.account.loggedIn ? "Sign in to another account" : "Sign in"}</button></div>`;
+    }
+    const code = $("#acct-code", box), kept = code ? code.value : "";
+    if (box.dataset.phase === st.phase && st.phase === "waiting") return poll();    // keep what is being typed
+    box.innerHTML = h; box.dataset.phase = st.phase;
+    if ($("#acct-code", box)) $("#acct-code", box).value = kept;
+    const on = (id, f) => { const el = $("#" + id, box); if (el) el.addEventListener("click", async () => {
+      el.disabled = true; try { draw(await f()); } catch (e) { toast(e.message, true); el.disabled = false; } }); };
+    on("acct-start", () => api("/api/login/start", {}));
+    on("acct-cancel", () => api("/api/login/cancel", {}));
+    on("acct-send", () => api("/api/login/code", { code: $("#acct-code", box).value }));
+    const c = $("#acct-code", box);
+    if (c) c.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); $("#acct-send", box).click(); } });
+    if (busy || st.phase === "waiting") poll();
+  };
+  const poll = () => { clearTimeout(ACCT_T); ACCT_T = setTimeout(async () => { try { draw(await api("/api/login")); } catch (e) { toast(e.message, true); } }, 1000); };
+  api("/api/login/check", {}).then(draw, e => { box.innerHTML = `<p class="warn" style="margin:0">${esc(e.message)}</p>`; });
 }
 function newTaskForm() {
   form(`<h3>Add a task</h3>
@@ -1639,7 +1684,9 @@ document.addEventListener("click", e => {
     fold: () => { const s = S.folded[S.task.id] ||= new Set(); s.has(d.id) ? s.delete(d.id) : s.add(d.id); S.sig = ""; render(true); },
     close: () => leave(`t/${S.task.id}`), up,
     prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
-    answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
+    answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm,
+    // from the project's dialog: its close (which empties the dialog) runs before this one opens
+    account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chattop: chatTop, chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
     chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,

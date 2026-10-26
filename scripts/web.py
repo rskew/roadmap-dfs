@@ -27,7 +27,9 @@ session budget, stop it, choose where it goes next, interrupt a chain.
 otherwise. `--host 0.0.0.0` (or DFS_WEB_HOST) opens it to the network, and then anyone on
 that network can read the roadmap, answer, correct and accept, and, unless `--no-walk`,
 START AGENTS (the walk, the chat), which run with their permission prompts off: that is
-remote code execution on this machine, for whoever can reach the port. Do it on a network
+remote code execution on this machine, for whoever can reach the port. The same goes for
+signing this machine's claude in to another account (the Claude account), which `--no-walk`
+also refuses. Do it on a network
 you trust. Bound to loopback, a request whose `Host` is not a loopback name is refused (a
 page on another site can point its own name at 127.0.0.1: DNS rebinding), a write from
 another website is refused (it must be JSON, which a page elsewhere cannot send without a
@@ -55,6 +57,13 @@ CHAT (`chat.py`, a button on a task and on the list) talks about a task or the p
 with full permissions (the screen's flags: Edit, Write and Bash all work) when the page runs the turn;
 when a screen serves the page the chats are agents that screen keeps running in the background. The
 Chats tab lists them all. It starts agents, so `--no-walk` turns it off.
+THE CLAUDE ACCOUNT (`login.py`, "Claude account…" in the project dialog) signs this machine's claude in to an
+Anthropic account when a login has expired or an account has hit its limit: `GET /api/login` says who is signed in
+and where a sign-in is, `POST /api/login/start` runs claude's own `auth login` (through `run.sh --claude-auth`, the
+claude the runs start) and returns the link to open, `/code` sends it the code that page shows, `/cancel` and
+`/check` end a sign-in or re-read the account. claude writes its own store, which every run and chat reads; nothing
+here keeps a secret. It changes what this machine's agents run as, so like the walk it is open to whoever can reach
+the port, and `--no-walk` refuses its writes (403; the account can still be read).
 ARTEFACTS (`.dfs/artefacts`) are served sandboxed at `/artefacts/<name>` and linked from the
 text that names them. ATTACHMENTS are artefacts the author adds: POST /api/attach (base64 in JSON,
 8 MB at most, like the background picture) keeps a picture or a pdf, txt, md, csv, json or log file
@@ -88,6 +97,7 @@ import tui as dfs_tui       # noqa: E402  (its view functions; nothing here star
 import runs as dfs_runs     # noqa: E402
 import walk as dfs_walk      # noqa: E402
 import chat as dfs_chat      # noqa: E402
+import login as dfs_login    # noqa: E402
 
 INDEX = HERE / "web" / "index.html"
 STATIC = {"/sw.js": "text/javascript", "/design.css": "text/css", "/design": "text/html", "/icon-192.png": "image/png", "/icon-512.png": "image/png",
@@ -871,6 +881,34 @@ def act(name, body):
 WALK = {"enabled": True, "walker": None}
 
 
+LOGIN = dfs_login.Login()
+
+
+def login_act(name, body):
+    """The page's "Claude account": sign this machine's claude in (login.py). It replaces the login
+    every run and chat uses, so it is off with the walk; reading the account is not."""
+    if not WALK["enabled"] and name != "login/check":
+        raise Refused("signing in is off: this server was started with --no-walk", 403)
+    try:
+        if name == "login/start":
+            LOGIN.start(console=bool(body.get("console")))
+        elif name == "login/code":
+            LOGIN.code(need(body, "code", "the code"))
+        elif name == "login/cancel":
+            LOGIN.cancel()
+        elif name == "login/check":
+            LOGIN.refresh()
+        else:
+            raise Refused("not found", 404)
+    except ValueError as e:
+        raise Refused(str(e), 409)
+    return login_state()
+
+
+def login_state():
+    return dict(LOGIN.state(), enabled=WALK["enabled"])
+
+
 def walker():
     return _the_walker()
 
@@ -1176,6 +1214,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, run_message(body))
             if name.startswith("chat/"):
                 return self.json(200, chat_act(name, body))
+            if name.startswith("login/"):
+                return self.json(200, login_act(name, body))
             if name.startswith(("walk/", "chain/")):
                 return self.json(200, walk_act(name, body))
             return self.json(200, act(name, body))
@@ -1195,6 +1235,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, chat_act("chats"))
         if path.startswith("/api/chat/"):
             return self.json(200, chat_act("chat", scope=segment(path, "/api/chat/", dfs_chat.SCOPE.pattern, "chat")))
+        if path == "/api/login":
+            return self.json(200, login_state())
         if path == "/api/state":
             return self.json(200, state_json())
         if path == "/api/assumptions":
@@ -1276,11 +1318,13 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--host", default=default_host(),
                     help="127.0.0.1 (this machine only, the default) or 0.0.0.0 (the network: "
-                         "no login, and the walk and the chat start agents)")
+                         "no login, and the walk and the chat start agents, and the page can sign "
+                         "this machine's claude in to another account)")
     ap.add_argument("--port", type=int, default=int(os.environ.get("DFS_WEB_PORT", 8765)))
     ap.add_argument("--no-walk", action="store_true",
                     help="no walk controls: the page can read and write the roadmap but "
-                         "cannot start an agent (the chat is off too)")
+                         "cannot start an agent or sign claude in to another account (the chat is "
+                         "off too)")
     ap.add_argument("--allow-host", action="append", default=[], metavar="NAME",
                     help="a hostname a TLS proxy in front of this loopback server forwards "
                          "(e.g. the ts.net name `tailscale serve` gives); repeatable, or "
@@ -1306,7 +1350,7 @@ def main(argv=None):
     if handle.public:
         print("  no login: anyone on this network can answer, correct and accept"
               + (", and start agents (the walk, the chat), which run with their permission "
-                 "prompts off. --no-walk removes that; --host 127.0.0.1 keeps it to "
+                 "prompts off, or sign claude in to another account. --no-walk removes that; --host 127.0.0.1 keeps it to "
                  "this machine."
                  if WALK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
     try:

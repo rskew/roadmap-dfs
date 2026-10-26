@@ -169,6 +169,49 @@ class Web(unittest.TestCase):
             if saved is not None:
                 os.environ["DFS_WEB_ALLOW_HOST"] = saved
 
+    def test_the_claude_account_is_signed_in_through_the_page(self):
+        import stat
+        import time as _t
+        import test_login
+        stub = self.root / "claude-stub"
+        stub.write_text(test_login.STUB)
+        stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+        saved = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "LOGIN_STUB_DIR")}
+        os.environ.update(CLAUDE_CMD=str(stub), LOGIN_STUB_DIR=str(self.root))
+        old, dfs_web.LOGIN = dfs_web.LOGIN, dfs_web.dfs_login.Login()
+        try:
+            status, st, _ = self.call("GET", "/api/login")
+            self.assertEqual((status, st["phase"], st["account"]["loggedIn"]), (200, "idle", False))
+            self.assertEqual(self.call("POST", "/api/login/code", dict(code="good#code"))[0], 409, "nothing waits for one")
+            self.assertEqual(self.call("POST", "/api/login/start", {})[0], 200)
+            for _ in range(200):
+                st = self.call("GET", "/api/login")[1]
+                if st["phase"] != "starting":
+                    break
+                _t.sleep(0.05)
+            self.assertEqual((st["phase"], st["url"]), ("waiting", test_login.URL))
+            self.assertEqual(self.call("POST", "/api/login/code", dict(code=""))[0], 400)
+            self.assertEqual(self.call("POST", "/api/login/code", dict(code="good#code"))[0], 200)
+            for _ in range(200):
+                st = self.call("GET", "/api/login")[1]
+                if st["phase"] != "checking":
+                    break
+                _t.sleep(0.05)
+            self.assertEqual((st["phase"], st["account"]["email"]), ("done", "a@example.com"))
+            self.assertEqual(self.call("POST", "/api/login/nope", {})[0], 404)
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+            conn.request("POST", "/api/login/start", "{}", {"Content-Type": "application/json",
+                                                            "Origin": "http://evil.example"})
+            self.assertEqual(conn.getresponse().status, 403, "another site cannot start a sign-in")
+        finally:
+            dfs_web.LOGIN.cancel()
+            dfs_web.LOGIN = old
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
     def test_chat_goes_through_the_page_and_is_off_with_the_walk(self):
         import stat
         import time as _t
@@ -1321,6 +1364,16 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=3))[0], 403)
         self.assertEqual(self.fake.started_chains, [])
         self.assertEqual(self.call("GET", "/api/state")[0], 200)
+        old, dfs_web.LOGIN = dfs_web.LOGIN, dfs_web.dfs_login.Login(read=lambda: dict(loggedIn=False))
+        try:
+            for act in ("start", "code", "cancel"):
+                self.assertEqual(self.call("POST", "/api/login/" + act, dict(code="x"))[0], 403, act)
+            self.assertIsNone(dfs_web.LOGIN.proc, "no sign-in was started")
+            status, st, _ = self.call("GET", "/api/login")
+            self.assertEqual((status, st["phase"], st["enabled"]), (200, "idle", False), "the account can still be read")
+            self.assertEqual(self.call("POST", "/api/login/check", {})[0], 200)
+        finally:
+            dfs_web.LOGIN = old
 
     def make_run(self, name, item="W1", console="", **meta):
         d = self.root / ".dfs" / "runs" / name
