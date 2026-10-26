@@ -902,8 +902,10 @@ class HeadlessWalk(WalkMixin):
     def items(self):
         return self.data.get("items", [])
 
-    def reload(self):
-        self.data = dfs_state.full()
+    def reload(self, data=None):
+        """`data` is a `state.full()` the caller has just built, used instead of a
+        second build: each takes a third of a second on a hundred tasks."""
+        self.data = dfs_state.full() if data is None else data
 
     def refresh_chains(self):
         self.chains = dfs_runs.run_dirs()
@@ -960,7 +962,7 @@ class HeadlessWalk(WalkMixin):
     def snapshot(self, data=None):
         with self.lock:
             self.refresh_chains()
-            self.reload()
+            self.reload(data)
             return self.walk_snapshot()
 
     def loop(self, stop, interval=TICK):
@@ -968,8 +970,11 @@ class HeadlessWalk(WalkMixin):
             with self.lock:
                 try:
                     self.refresh_chains()
-                    self.reload()
-                    self.walk_tick()
+                    # Off, the tick does nothing, and a state build every TICK is a
+                    # core's worth of work nobody reads: the page builds its own.
+                    if self.walk_on:
+                        self.reload()
+                        self.walk_tick()
                 except Exception as e:          # a thread that dies stops a walk silently
                     if self.walk_on:
                         self.walk_off("the walk failed: %s" % e)

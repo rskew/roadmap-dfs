@@ -68,6 +68,17 @@ class Unpushed(unittest.TestCase):
         self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
         self.assertEqual(dfs_tree.default_ref(self.root), "origin/trunk")
 
+    def test_a_ttl_keeps_the_answer_without_asking_git(self):
+        # state.state_for asks once per task: with a ttl, only the first call runs git.
+        self.git("init", "-q")
+        self.commit("W1.1: pushed")
+        self.git("update-ref", "refs/remotes/origin/main", "HEAD")
+        self.assertEqual(dfs_tree.default_ref(self.root, ttl=60), "origin/main")
+        self.git("update-ref", "refs/remotes/origin/trunk", "HEAD")
+        self.git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+        self.assertEqual(dfs_tree.default_ref(self.root, ttl=60), "origin/main")
+        self.assertEqual(dfs_tree.default_ref(self.root), "origin/trunk")
+
     def test_init_default_branch_names_it(self):
         self.git("init", "-q")
         self.commit("W1.1: pushed")

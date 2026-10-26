@@ -66,6 +66,7 @@ import base64
 import html
 import subprocess
 import json
+import glob
 import os
 import queue
 import re
@@ -132,7 +133,7 @@ def walk_marks(data):
     """Which task a work chain is running on now (item -> its progress), and which the walk
     takes next. What the rows say beside the terminal's running and next columns."""
     if WALK["enabled"]:
-        snap = walker().snapshot()
+        snap = walker().snapshot(data)
         return {c["item"]: c["progress"] for c in snap["live"]}, snap["next"]
     return ({r["item"]: dfs_runs.progress(r) for r in dfs_runs.live_runs("work")},
             data.get("next_item"))
@@ -1001,15 +1002,15 @@ def roadmap_signature():
     except OSError:
         pass
     # A chain's progress (`run 2 of 5`) is its meta.json; its console is not watched, it
-    # changes every line.
+    # changes every line. Only the run directories `runs.run_dirs` reads: one root is the
+    # temp directory, and walking all of it every second was most of an idle server's work.
     for root in dfs_runs.run_roots():
-        for dirpath, _dirs, files in os.walk(root):
-            if "meta.json" in files:
-                p = os.path.join(dirpath, "meta.json")
-                try:
-                    sig.append((p, os.stat(p).st_mtime_ns))
-                except OSError:
-                    pass
+        for d in glob.glob(os.path.join(root, dfs_runs.GLOB)):
+            p = os.path.join(d, "meta.json")
+            try:
+                sig.append((p, os.stat(p).st_mtime_ns))
+            except OSError:
+                pass
     return sorted(sig)
 
 
