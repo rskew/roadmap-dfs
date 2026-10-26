@@ -311,5 +311,20 @@ class Snapshot(unittest.TestCase):
         finally:
             dfs_state.full = real
 
+    def test_the_loop_builds_no_state_while_the_walk_is_off(self):
+        # Every TICK, nobody reading it: 40% of a core on a hundred tasks.
+        import threading
+        built, real = [], dfs_state.full
+        dfs_state.full = lambda: built.append(1) or dict(items=[], next_item=None, contents={})
+        try:
+            w = dfs_walk.HeadlessWalk()
+            w.refresh_chains = lambda: setattr(w, "chains", [])
+            stop = threading.Event()
+            stop.set()                      # one pass, then out
+            w.loop(stop)
+            self.assertEqual(built, [])
+        finally:
+            dfs_state.full = real
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
