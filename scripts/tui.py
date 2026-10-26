@@ -1853,6 +1853,12 @@ class UI(WalkMixin):
         self.dirty = roadmap_dirty()
         self.hidden = dfs_paths.hidden()
         self.runs = discover_runs()
+        # A chain killed with the screen that watched it had nobody to write its died line:
+        # closed here, and said, rather than left open for a pid that is gone.
+        for r in dfs_runs.close_lost():
+            self.event("died", "%s's chain died with its supervisor (%s, run %s): its pid %d "
+                       "was gone and it never finished" % (
+                           r["item"], os.path.basename(r["dir"]), r["run"] or "?", r["pid"]))
         self.chains = dfs_runs.run_dirs()
         self.sig = watch_signature()
         self.open_run = None

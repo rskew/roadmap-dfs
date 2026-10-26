@@ -190,5 +190,82 @@ class CodexWrites(unittest.TestCase):
         self.assertEqual(info["scratch"], ["/elsewhere/b.md"])
 
 
+class CloseLost(unittest.TestCase):
+    """A chain killed together with the screen that watched it has nobody to write its died
+    line (W118 on 2026-10-23): the next screen to start closes its record and says so."""
+
+    def setUp(self):
+        import shutil
+        import subprocess
+        import paths as dfs_paths
+        import runs as dfs_runs
+        import tui as TUI
+        self.shutil, self.paths, self.runs, self.TUI = shutil, dfs_paths, dfs_runs, TUI
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / ".dfs" / "items").mkdir(parents=True)
+        (self.root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
+        (self.root / ".dfs" / "items" / "W2.md").write_text(
+            "# W2 · two\n\n## Goal\n\ntwo\n\n## Tree\n\n## Log\n")
+        for cmd in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t",
+                                                   "commit", "-qm", "init"]):
+            subprocess.run(["git"] + cmd, cwd=self.root, check=True)
+        self.saved = (dfs_paths.work_root, TUI.ROOT, TUI.STATE, os.environ.get("DFS_RUN_DIR"))
+        dfs_paths.work_root = lambda: self.root
+        TUI.ROOT, TUI.STATE = self.root, self.root / ".dfs"
+        self.rundir = self.root / "runs"
+        self.rundir.mkdir()
+        os.environ["DFS_RUN_DIR"] = str(self.rundir)
+        gone = subprocess.Popen(["true"])
+        gone.wait()
+        self.live = subprocess.Popen(["sh", "-c", "sleep 60; :", "run.sh"])   # `; :` keeps sh from exec-ing sleep
+        self.metas = dict(
+            dead=dict(item="W2", pid=str(gone.pid), run="5", started="2026-10-23T11:50:00+00:00"),
+            live=dict(item="W2", pid=str(self.live.pid), run="1"),
+            done=dict(item="W2", pid=str(gone.pid), run="2", finished="2026-10-22T10:00:00+00:00",
+                      rc="0", stop="cap"))
+        for name, meta in self.metas.items():
+            (self.rundir / ("dfs_run_" + name)).mkdir()
+            (self.rundir / ("dfs_run_" + name) / "meta.json").write_text(json.dumps(meta))
+
+    def tearDown(self):
+        self.live.kill()
+        self.live.wait()
+        wr, root, state, run_dir = self.saved
+        self.paths.work_root, self.TUI.ROOT, self.TUI.STATE = wr, root, state
+        if run_dir is None:
+            os.environ.pop("DFS_RUN_DIR", None)
+        else:
+            os.environ["DFS_RUN_DIR"] = run_dir
+        self.shutil.rmtree(self.root, ignore_errors=True)
+
+    def meta(self, name):
+        return json.loads((self.rundir / ("dfs_run_" + name) / "meta.json").read_text())
+
+    def test_the_screen_closes_a_dead_chain_s_open_record_once_and_says_so(self):
+        ui = self.TUI.UI(None)
+        dead = self.meta("dead")
+        self.assertEqual(dead["stop"], "lost")
+        self.assertTrue(dead["finished"])
+        self.assertIn("its supervisor was lost: pid %s was gone" % self.metas["dead"]["pid"],
+                      dead["cause"])
+        self.assertEqual(self.meta("live"), self.metas["live"])
+        self.assertEqual(self.meta("done"), self.metas["done"])
+        died = [text for _, kind, text in ui.events if kind == "died"]
+        self.assertEqual(died, ["W2's chain died with its supervisor (dfs_run_dead, run 5): its "
+                                "pid %s was gone and it never finished" % self.metas["dead"]["pid"]])
+        self.assertEqual({os.path.basename(r["dir"]): r["state"] for r in ui.chains},
+                         {"dfs_run_dead": "stopped", "dfs_run_live": "live",
+                          "dfs_run_done": "finished"})
+        self.TUI.UI(None)
+        log = (self.rundir / "activity.log").read_text()
+        self.assertEqual(log.count("\tdied\t"), 1, log)
+        self.assertEqual(self.meta("dead"), dead)
+
+    def test_the_walk_reads_a_lost_chain_as_a_stop_with_its_reason(self):
+        import walk as dfs_walk
+        self.assertEqual(dfs_walk.walk_decide("lost", True, "W2"),
+                         ("stop", "the chain died with its supervisor and never finished"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

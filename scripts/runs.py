@@ -265,7 +265,7 @@ def run_dirs():
         # that means a chain died on its feet.
         if live:
             state = "live"
-        elif finished:
+        elif finished and meta.get("stop") != LOST:   # closed by `close_lost`: it never finished
             state = "finished"
         elif pid:
             state = "stopped"
@@ -297,6 +297,33 @@ def run_dirs():
             mtime=started,
         ))
     out.sort(key=lambda r: r["mtime"], reverse=True)
+    return out
+
+
+LOST = "lost"
+
+
+def close_lost():
+    """Close the record of every chain that started, never finished and whose process is
+    gone: `finished`, `stop` `lost` and a `cause` go into its `meta.json`. Returns those runs.
+
+    ⚠️ The died line for such a chain comes from the screen that watched it end, so a
+    chain killed together with its screen has no end anywhere: on 2026-10-23 W118's chain
+    died with its supervisor, and the screen started on 2026-10-24 found `meta.json` still
+    open for a pid long gone. Called once as the screen starts. The run still reads
+    `stopped`, since it never reached its own finish line, but it is closed only once."""
+    out = []
+    for r in run_dirs():
+        if r["state"] != "stopped" or r["finished"]:
+            continue
+        path = os.path.join(r["dir"], "meta.json")
+        meta = read_meta(r["dir"]) or {}
+        meta.update(finished=time.strftime("%Y-%m-%dT%H:%M:%S%z"), stop=LOST,
+                    cause="its supervisor was lost: pid %d was gone, with no finish line, "
+                          "when the screen started" % r["pid"])
+        dfs_paths.write_atomically(path, json.dumps(meta))
+        r.update(stop=LOST, cause=meta["cause"], finished=meta["finished"])
+        out.append(r)
     return out
 
 
