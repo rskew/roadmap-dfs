@@ -89,6 +89,7 @@ class Login:
         """What the page shows. The first ask reads the account; later ones say what is known."""
         with self.lock:
             first = self.account is None and not self.reading
+            self.reading = self.reading or first    # claimed here, so a second ask at once does not start another read
         if first:
             self.check()
         with self.lock:
@@ -164,6 +165,7 @@ class Login:
             if proc is not self.proc or self.phase == "idle":
                 return
             said = tail(self.output.split("Paste code here if prompted >")[-1]) or tail(self.output)
+            checking = self.phase == "checking"
         if rc == 0:
             self.check()
             with self.lock:
@@ -173,7 +175,9 @@ class Login:
             with self.lock:
                 if proc is self.proc:
                     self.phase, self.error = "failed", (
-                        "no code came in %d minutes, so the sign-in was ended: start again" % (LOGIN_TIMEOUT // 60)
+                        ("claude did not answer the code in %d minutes, so the sign-in was ended: start again"
+                         if checking else
+                         "no code came in %d minutes, so the sign-in was ended: start again") % (LOGIN_TIMEOUT // 60)
                         if proc is self.expired else said or "claude auth login exited %d" % rc)
 
     def expire(self, proc):

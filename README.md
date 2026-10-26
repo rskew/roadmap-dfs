@@ -137,8 +137,12 @@ account has hit the weekly limit. It says who is signed in (email and plan); Sig
 open it, sign in to the account you want and paste the code the page shows back into the box, and the page then says
 who is signed in now, or claude's own words if it refused the code. It runs `claude auth login` through
 `scripts/run.sh --claude-auth login` (the same pinned claude as the runs), so it replaces the one stored login, the
-terminal's and the sandbox's included, from the next run on. It does not keep several accounts or any token of its
-own. Like starting the walk, it is open to anyone who can reach the page.
+terminal's and the sandbox's included, from the next run on. In the sandbox that holds when the host's `~/.claude` and
+`~/.claude.json` existed when `sandbox.sh` started the container (it mounts them only if present); with no host login
+yet, a sign-in from the page lands in the container's own home and is lost when it restarts. It does not keep several
+accounts or any token of its own. Like starting the walk, it is open to anyone who can reach the page, and `--no-walk`
+turns it off. The code exchange itself, a valid code signing claude in, has only been tried against claude's refusal of
+a made-up one, so your first real sign-in is its first full run.
 
 Each live node on a task's page carries a mark before its id, so its state does not rest on the colour
 of its left rule: a tick for a confirmed node, a filled circle for an open node a session has started, an

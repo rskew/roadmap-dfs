@@ -120,6 +120,23 @@ class Login(unittest.TestCase):
         login.phase = "idle"
         self.assertEqual(login.refresh()["email"], "b@example.com", "the login changed outside the page")
 
+    def test_two_first_asks_at_once_read_the_account_once(self):
+        import threading
+        go, reads = threading.Event(), []
+
+        def read():
+            reads.append(1)
+            go.wait(5)
+            return dict(loggedIn=False)
+        login = dfs_login.Login(read=read)
+        first = threading.Thread(target=login.state)
+        first.start()
+        until(lambda: reads, "the first read")
+        login.state()       # a second tab, while the first read is out
+        go.set()
+        first.join()
+        self.assertEqual(len(reads), 1)
+
     def test_a_read_that_began_first_and_ended_last_does_not_win(self):
         import threading
         go = threading.Event()

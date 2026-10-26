@@ -612,8 +612,6 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
-  // A name longer than the field wraps, so a phone's text never scrolls sideways away from the caret; Enter
-  // saves it and a pasted line break is a space.
   // The Claude account, from the project's dialog: the link claude gives, a code it refuses in its own words,
   // then one it takes, and who is signed in now (the server runs test_login's stub of `claude auth`).
   async account(b) {
@@ -637,6 +635,8 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A name longer than the field wraps, so a phone's text never scrolls sideways away from the caret; Enter
+  // saves it and a pasted line break is a space.
   async namefield(b) {
     const { page, errors } = await open(b, PHONE);
     await task(page, "W3");
