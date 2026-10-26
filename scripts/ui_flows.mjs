@@ -1131,6 +1131,10 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.reload(); await page.waitForSelector(".item");
     assert(await page.evaluate(() => document.documentElement.hasAttribute("data-picture")), "it survives a reload");
     await page.click("[data-act=rename]"); await dialog(page);
+    const [over, fixed, fill] = await page.evaluate(() => { const c = getComputedStyle(document.querySelector("dialog[open]")); return [c.backgroundImage, c.backgroundAttachment, c.backgroundColor]; });
+    assert(over.includes("linear-gradient") && over.includes("/background-image?mode=light&v="), "a dialog shows the picture under its veil, got " + over);
+    same(fixed, "fixed, fixed", "fixed to the viewport, so it lines up with the page's picture");
+    assert(fill !== "rgba(0, 0, 0, 0)", "a picture with clear pixels shows the panel, not the rows, got " + fill);
     assert(!(await page.isDisabled("#pr-light")) && !(await page.isDisabled("#pr-dark")), "now each can be removed");
     await page.check("#pr-light");
     await page.click("dialog button[value=ok]");
