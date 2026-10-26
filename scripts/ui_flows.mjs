@@ -614,6 +614,29 @@ const FLOWS = {
 
   // A name longer than the field wraps, so a phone's text never scrolls sideways away from the caret; Enter
   // saves it and a pasted line break is a space.
+  // The Claude account, from the project's dialog: the link claude gives, a code it refuses in its own words,
+  // then one it takes, and who is signed in now (the server runs test_login's stub of `claude auth`).
+  async account(b) {
+    const { page, errors } = await open(b, PHONE);
+    await page.click("[data-act=rename]"); await dialog(page);
+    await page.click("[data-act=account]");
+    await page.waitForSelector("#acct-start");
+    assert(/Not signed in/.test(await page.textContent("#acct-who")), "it says nobody is signed in");
+    await page.click("#acct-start");
+    await page.waitForSelector("#acct-link");
+    assert(/\/oauth\/authorize\?/.test(await page.getAttribute("#acct-link", "href")), "the link is claude's own");
+    if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "account.png") });
+    await page.fill("#acct-code", "made#up"); await page.click("#acct-send");
+    await page.waitForSelector("#acct-error");
+    assert(/Login failed/.test(await page.textContent("#acct-error")), "claude's refusal is shown");
+    await page.click("#acct-start");
+    await page.waitForSelector("#acct-code");
+    await page.fill("#acct-code", "good#code"); await page.press("#acct-code", "Enter");
+    await page.waitForFunction(() => /Signed in as a@example.com, max plan/.test(document.querySelector("#acct-who")?.textContent || ""));
+    assert(await page.$("dialog[open]"), "the dialog stays open on what it did");
+    same(errors, [], "no page errors");
+  },
+
   async namefield(b) {
     const { page, errors } = await open(b, PHONE);
     await task(page, "W3");

@@ -147,6 +147,26 @@ class Flows(unittest.TestCase):
     def log(self, task):
         return dfs_tree.load(task)["log"]
 
+    def test_the_claude_account_is_signed_in_from_the_project_dialog(self):
+        import stat
+        import test_login
+        stub = self.root / "login-stub"
+        stub.write_text(test_login.STUB)
+        stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
+        saved = {k: os.environ.get(k) for k in ("CLAUDE_CMD", "LOGIN_STUB_DIR")}
+        os.environ.update(CLAUDE_CMD=str(stub), LOGIN_STUB_DIR=str(self.root))
+        old, dfs_web.LOGIN = dfs_web.LOGIN, dfs_web.dfs_login.Login()
+        try:
+            self.flow("account")
+        finally:
+            dfs_web.LOGIN.cancel()
+            dfs_web.LOGIN = old
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
     def test_the_list_the_filter_and_the_project_name(self):
         self.flow("list")
 
