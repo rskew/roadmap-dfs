@@ -232,6 +232,14 @@ def pid_is_chain(pid):
         return False
 
 
+def pid_namespace():
+    """This process's pid namespace, as `/proc/self/ns/pid` names it: empty when there is none to read."""
+    try:
+        return os.readlink("/proc/self/ns/pid")
+    except OSError:
+        return ""
+
+
 def read_meta(d):
     try:
         meta = json.loads(Path(d, "meta.json").read_text())
@@ -278,6 +286,7 @@ def run_dirs():
             started = 0
         out.append(dict(
             dir=d, pid=pid, live=live, state=state,
+            pidns=str(meta.get("pidns") or ""),   # the namespace `pid` means something in
             item=str(meta.get("item") or ""), agent=str(meta.get("agent") or ""),
             mode=str(meta.get("mode") or ""), cap=str(meta.get("cap") or ""),
             run=str(meta.get("run") or ""), rc=str(meta.get("rc") or ""),
@@ -311,10 +320,20 @@ def close_lost():
     chain killed together with its screen has no end anywhere: on 2026-10-23 W118's chain
     died with its supervisor, and the screen started on 2026-10-24 found `meta.json` still
     open for a pid long gone. Called once as the screen starts. The run still reads
-    `stopped`, since it never reached its own finish line, but it is closed only once."""
+    `stopped`, since it never reached its own finish line, but it is closed only once.
+
+    ⚠️ Only a chain of THIS pid namespace is closed. `pid_is_chain` reads this namespace's
+    `/proc`, and a pid in `meta.json` is `run.sh`'s `$$` in the chain's own, so a screen on
+    the host or in another container (each `sandbox` container has its own) reads a live
+    containerised chain as gone, and closing it would turn that chain's own screen's walk off
+    and let a second chain start on its task. `run.sh` records the namespace as `pidns`; a
+    record without one is from before that and is judged as it always was."""
     out = []
+    here = pid_namespace()
     for r in run_dirs():
         if r["state"] != "stopped" or r["finished"]:
+            continue
+        if r["pidns"] and r["pidns"] != here:
             continue
         path = os.path.join(r["dir"], "meta.json")
         meta = read_meta(r["dir"]) or {}

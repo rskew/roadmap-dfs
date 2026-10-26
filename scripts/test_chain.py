@@ -207,6 +207,9 @@ class Chain(unittest.TestCase):
         # the chain's own directory stays where the screen reads it
         self.assertTrue(list((self.root / ".dfs" / "runs").glob("*/meta.json")))
         self.assertFalse((self.wt / ".dfs" / "runs").exists())
+        # the pid namespace its pid is in, which a screen of another one must not judge it by
+        if os.path.exists("/proc/self/ns/pid"):
+            self.assertEqual(meta.get("pidns"), os.readlink("/proc/self/ns/pid"))
 
     def test_a_rule_that_hides_a_roadmap_part_is_named_when_the_chain_starts(self):
         (self.root / ".gitignore").write_text(".dfs/runs/\n*.html\n")

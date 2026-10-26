@@ -261,6 +261,35 @@ class CloseLost(unittest.TestCase):
         self.assertEqual(log.count("\tdied\t"), 1, log)
         self.assertEqual(self.meta("dead"), dead)
 
+    def test_the_standalone_page_closes_a_dead_chain_s_record_as_its_walk_starts(self):
+        import walk as dfs_walk
+        import web as WEB
+        saved = WEB.WALK["walker"]
+        WEB.WALK["walker"] = walker = dfs_walk.HeadlessWalk()
+        try:
+            WEB._the_walker().close_lost_runs()
+        finally:
+            WEB.WALK["walker"] = saved
+        self.assertEqual(self.meta("dead")["stop"], "lost")
+        self.assertEqual(self.meta("live"), self.metas["live"])
+        died = [text for _, kind, text in walker.events if kind == "died"]
+        self.assertEqual(len(died), 1, died)
+        self.assertIn("W2's chain died with its supervisor (dfs_run_dead, run 5)", died[0])
+        self.assertEqual((self.rundir / "activity.log").read_text().count("\tdied\t"), 1)
+
+    def test_a_record_from_another_pid_namespace_is_left_open(self):
+        """Its pid means nothing in this namespace's /proc: the chain may be running."""
+        here = self.runs.pid_namespace()
+        for name, ns in (("dead", "pid:[4026539999]"), ("live", "pid:[4026539999]")):
+            self.metas[name]["pidns"] = ns
+            (self.rundir / ("dfs_run_" + name) / "meta.json").write_text(json.dumps(self.metas[name]))
+        self.assertEqual(self.runs.close_lost(), [])
+        self.assertEqual(self.meta("dead"), self.metas["dead"])
+        self.metas["dead"]["pidns"] = here
+        (self.rundir / "dfs_run_dead" / "meta.json").write_text(json.dumps(self.metas["dead"]))
+        self.assertEqual([os.path.basename(r["dir"]) for r in self.runs.close_lost()], ["dfs_run_dead"])
+        self.assertEqual(self.meta("dead")["stop"], "lost")
+
     def test_the_walk_reads_a_lost_chain_as_a_stop_with_its_reason(self):
         import walk as dfs_walk
         self.assertEqual(dfs_walk.walk_decide("lost", True, "W2"),

@@ -198,6 +198,14 @@ class WalkMixin:
     walk_stops = frozenset()
     walk_on = False
 
+    def close_lost_runs(self):
+        """Close, and say, each run record a dead supervisor left open: called once as a
+        screen starts, the terminal one and the standalone page alike."""
+        for r in dfs_runs.close_lost():
+            self.event("died", "%s's chain died with its supervisor (%s, run %s): its pid %d "
+                       "was gone and it never finished" % (
+                           r["item"], os.path.basename(r["dir"]), r["run"] or "?", r["pid"]))
+
     def walk_init(self):
         self.walk_on = False
         self.walk_budget = 20       # SESSIONS, over the whole walk — see walk_toggle

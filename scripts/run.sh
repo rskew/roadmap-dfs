@@ -966,7 +966,7 @@ PY
 RUNDIR="$(cd "$RUNDIR" && pwd)"
 ITEM_MAIN="$(pwd)"
 meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
-         started="$(date -Is)" pid="$$"
+         started="$(date -Is)" pid="$$" pidns="$(readlink /proc/$$/ns/pid 2>/dev/null || true)"
 trap on_exit EXIT
 trap on_interrupt INT TERM
 # An `enter` that fails (a BranchError, a traceback) is recorded as the stop, with its cause,
