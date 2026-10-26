@@ -738,6 +738,14 @@ class Chain(unittest.TestCase):
         self.git("rm", "-q", "--cached", ".dfs/items/W1.md")
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "untrack W1")
 
+    def test_an_untracked_task_file_reaches_a_fresh_cut(self):
+        self.untrack_task()   # a task written from the screen or a chat, never committed (W127)
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
+        self.assertIn("1 uncommitted path(s) of W1 moved into .dfs/worktrees/W1", out)
+        self.assertIn("- for: look 1", (self.wt / ".dfs" / "items" / "W1.md").read_text())
+        self.assertFalse((self.root / ".dfs" / "items" / "W1.md").exists())
+
     def test_an_untracked_task_file_reaches_a_reused_branchs_worktree(self):
         self.untrack_task()
         self.git("branch", "dfs/W1")   # cut by an earlier attempt, before the file was written
