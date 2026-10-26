@@ -35,6 +35,10 @@ paintBackground();
 /* The picture behind the page, under a veil of the page's own paper at 90% so text keeps its contrast on any picture. */
 :root[data-picture] body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(color-mix(in srgb, var(--paper) 90%, transparent), color-mix(in srgb, var(--paper) 90%, transparent)), var(--picture) center / cover no-repeat; }
+/* What is laid over the page (a dialog, the node's sheet) shows the same picture under a veil of its panel, fixed to
+   the viewport so it lines up with the picture around it: the picture shows through, and the rows under it do not. */
+:root[data-picture] :is(dialog, #sheet, #form .row-btns) {
+  background: linear-gradient(color-mix(in srgb, var(--panel) 90%, transparent), color-mix(in srgb, var(--panel) 90%, transparent)) fixed, var(--picture) center / cover no-repeat fixed var(--panel); }
 /* The page's own layout. What things ARE (type, colour, buttons, tags, fields, cards,
    dialogs) is the design system, /design.css; what is here is where they go. */
 :root { --bar: calc(56px * var(--z)); --tabs: calc(52px * var(--z)); --col: calc(880px * var(--z)); --page: calc(1180px * var(--z)); }
