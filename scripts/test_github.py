@@ -128,6 +128,21 @@ class Watch(unittest.TestCase):
             LINES.pop()
         self.assertEqual(dfs_github.watch("W1"), [])
 
+    def test_line_comments_on_every_page_become_nodes(self):
+        # `gh api --paginate` prints one array per page, back to back
+        page2 = [{"id": 90 + i, "user": {"login": "cy"}, "body": "More %d." % i, "path": "app.py",
+                  "line": i + 1} for i in range(2)]
+        (self.root / "lines.json").write_text(json.dumps(LINES) + json.dumps(page2) + "\n")
+        added = dfs_github.watch("W1")
+        self.assertEqual(len(added), 5)
+        self.assertIn("--paginate", self.calls.read_text())
+        approaches = " ".join(nd["fields"].get("Approach", "") for nd in dfs_tree.load("W1")["nodes"])
+        self.assertIn("(github line 91)", approaches)
+        self.assertEqual(dfs_github.watch("W1"), [])
+        self.assertEqual(dfs_github._paged('[{"a": 1}]\n[[{"a": 2}], {"a": 3}]{"a": 4}'),
+                         [{"a": 1}, {"a": 2}, {"a": 3}, {"a": 4}])
+        self.assertEqual(dfs_github._paged(""), [])
+
     def test_the_open_pr_mark_applies_only_to_a_held_task_with_no_pull_request(self):
         t = dfs_tree.load("W1")
         self.assertEqual(dfs_tree.pr_url(t), "https://github.com/o/r/pull/7")

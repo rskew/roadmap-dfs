@@ -91,16 +91,34 @@ def open_pr(task):
     return url
 
 
+def _paged(text):
+    """The items of what `gh api --paginate` printed: one JSON array per page back to back
+    (`[..][..]`), or whatever mix of arrays, nested arrays and objects a gh version prints."""
+    out, dec, i, text = [], json.JSONDecoder(), 0, text.strip()
+    while i < len(text):
+        value, i = dec.raw_decode(text, i)
+        while i < len(text) and text[i].isspace():
+            i += 1
+        stack = [value]
+        while stack:
+            v = stack.pop(0)
+            if isinstance(v, list):
+                stack = v + stack
+            else:
+                out.append(v)
+    return out
+
+
 def _pull(url):
     """The pull request at `url` as (state, comments): its state (OPEN, MERGED or CLOSED), and
     every comment on it that asks something of the work, oldest first, as (kind, id, who, text,
     where, link): its conversation comments and reviews with a body (`gh pr view`) and its line
-    comments (`gh api .../pulls/<n>/comments`)."""
+    comments (`gh api .../pulls/<n>/comments`, every page of them)."""
     m = re.fullmatch(r"https://[^/]+/([^/]+)/([^/]+)/pull/(\d+)/?", url)
     if not m:
         raise GithubError("%s is not a pull request's url" % url)
     view = json.loads(gh("pr", "view", url, "--json", "comments,reviews,state") or "{}")
-    lines = json.loads(gh("api", "repos/%s/%s/pulls/%s/comments" % m.groups()) or "[]")
+    lines = _paged(gh("api", "repos/%s/%s/pulls/%s/comments" % m.groups(), "--paginate"))
     who = lambda c, key="author": "@" + ((c.get(key) or {}).get("login") or "someone")
     out = [("comment", c.get("id"), who(c), c.get("body"), "", c.get("url") or url)
            for c in view.get("comments") or []]
