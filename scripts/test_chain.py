@@ -300,6 +300,24 @@ class Chain(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("already has its pull request", r.stderr)
         self.assertEqual(len(calls.read_text().splitlines()), len(args))
+        # the fix for a comment, finished anew, is pushed to the pull request by the hold
+        self.commit_in_worktree()
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.git("rev-parse", "dfs/W1", cwd=self.wt), self.git("rev-parse", "dfs/W1", cwd=bare))
+        # the branch moved on GitHub: the push is rejected and the task reopens with a node
+        other = self.aside / "other"
+        self.git("clone", "-q", "-b", "dfs/W1", str(bare), str(other))
+        (other / "gh.txt").write_text("a suggestion committed on GitHub\n")
+        self.git("add", "gh.txt", cwd=other)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "suggestion", cwd=other)
+        self.git("push", "-q", "origin", "dfs/W1", cwd=other)
+        (self.wt / "app.txt").write_text("worked again\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "W1.2: again", cwd=self.wt)
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 3, r.stderr)
+        self.assertIn("moved on GitHub", r.stderr)
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "open")
 
     def test_a_merge_that_conflicts_reopens_the_item_and_the_fix_is_reviewed_and_merged(self):
         main = self.git("symbolic-ref", "--short", "HEAD")

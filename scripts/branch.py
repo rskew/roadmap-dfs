@@ -41,7 +41,7 @@ class BranchError(Exception):
 # GitHub mode, or nothing to merge), 3 it
 # was not merged and the tree has an open node again, 4 it is blocked on a raise.
 # Every result that is not a merge is 3 or 4, so a chain never takes an unmerged item for done.
-MERGE_EXIT = {"merged": 0, "none": 0, "held": 0, "dirty": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
+MERGE_EXIT = {"merged": 0, "none": 0, "held": 0, "dirty": 3, "pushed-over": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
 
 
 def _git(*args, cwd=None):
@@ -784,6 +784,25 @@ def _task_details(task):
     return "\n".join(out)
 
 
+def _push_held(task, wt, name):
+    """Push a held item's branch to its open pull request, "held" when it went (or there is no
+    pull request yet); a rejected push reopens the item with a node and is "pushed-over"."""
+    import tree as dfs_tree
+    if not any(e["kind"] == "pr" for e in dfs_tree.load(task)["log"]):
+        return "held"
+    remote = dfs_paths.read_github()
+    r = _git("push", remote, name, cwd=wt)
+    if r.returncode == 0:
+        return "held"
+    _reopen_with(task, wt, "Rebase %s onto its pull request's branch on %s and push" % (name, remote),
+                 "The push of the finished fixes to the pull request was rejected: %s The branch "
+                 "moved on GitHub. Run `git pull --rebase %s %s` in this worktree, resolve any "
+                 "conflicts, run the tests and commit, and the next finish pushes again."
+                 % (_gist(out_of(r)), remote, name),
+                 "the push to the pull request was rejected")
+    return "pushed-over"
+
+
 @one_at_a_time
 def merge(task):
     """Merge `dfs/<task>` into the default branch, from the main checkout, and remove the
@@ -793,7 +812,8 @@ def merge(task):
     an accept) are committed onto the branch, since the merge carries only commits; then the
     branch is rebased onto the default branch (`_rebase`). Returns
     "held" in GitHub mode (`.dfs/github`), once the task's files are committed and the worktree
-    is clean: the branch and worktree are kept for the pull request the author opens. Else
+    is clean: the branch and worktree are kept for the pull request the author opens, and pushed
+    to it when it is open ("pushed-over" when GitHub refuses the push, `_push_held`). Else
     "none" when the task has no branch (one whose worktree was removed by hand is checked out
     again, `_restore`), "merged", "dirty" when the worktree holds
     uncommitted work that is not the task's (left in place, nothing merged; an open node
@@ -849,7 +869,8 @@ def merge(task):
     if dfs_paths.read_github():
         # GitHub mode: the finished item waits, branch and worktree kept, for the author to
         # open its pull request (README, "GitHub mode"); nothing reaches the default branch here.
-        return "held"
+        # One whose pull request is open already has worked its comments: push the reviewed fix.
+        return _push_held(task, wt, name)
     if not _rebase(task, wt, name):
         return "conflict"
     aside = {}
@@ -940,6 +961,7 @@ def main(argv):
             "refused": "not merged: git would overwrite uncommitted edits here, raised for the author",
             "held": "not merged: GitHub mode holds dfs/%s, with its worktree, until you open its pull request"
                     % argv[2],
+            "pushed-over": "not pushed: its pull request's branch moved on GitHub, so a node asks to rebase onto it",
             "none": "no branch, nothing to merge"}[result]), file=sys.stderr)
         return MERGE_EXIT[result]
     if len(argv) == 3 and argv[1] == "enter":
