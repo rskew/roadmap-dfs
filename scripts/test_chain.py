@@ -622,6 +622,38 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.assertIn("W1.9: never pushed", self.git("log", "--format=%s", "dfs-merged/W1"))
 
+    def test_a_squash_merged_pull_request_whose_head_branch_was_pruned_is_not_kept_as_lacking_work(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        head = self.git("rev-parse", "dfs/W1")
+        other = self.aside / "squasher"      # GitHub squashes, deletes the head branch; the author's fetch prunes
+        self.git("clone", "-q", str(bare), str(other))
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "--squash", "-q", "origin/dfs/W1", cwd=other)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1 (#7)", cwd=other)
+        self.git("push", "-q", "origin", self.git("symbolic-ref", "--short", "HEAD"), cwd=other)
+        self.git("branch", "-D", "dfs/W1", cwd=bare)
+        self.git("fetch", "--prune", "hub")
+        view.write_text(json.dumps({"state": "MERGED", "headRefOid": head}))
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("kept as", r.stdout)
+        self.assertEqual(self.git("branch", "--list", "dfs*/*"), "")
+
+    def test_a_second_branch_kept_as_dfs_merged_takes_a_free_name(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        self.git("branch", "dfs-merged/W1", "HEAD")      # an earlier landing's keep
+        (self.wt / "app.txt").write_text("worked, never pushed\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "W1.9: never pushed", cwd=self.wt)
+        self.merge_on_github(bare)
+        view.write_text('{"state": "MERGED"}')
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("kept as dfs-merged/W1-2", r.stdout)
+        self.assertNotIn("could not be removed", r.stderr)
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+        self.assertIn("W1.9: never pushed", self.git("log", "--format=%s", "dfs-merged/W1-2"))
+
     def test_a_merge_that_conflicts_reopens_the_item_and_the_fix_is_reviewed_and_merged(self):
         main = self.git("symbolic-ref", "--short", "HEAD")
         rc, meta, out = self.run_chain("code,confirm", cap=2)

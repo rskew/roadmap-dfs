@@ -171,8 +171,8 @@ def land(task, url):
     it with no merge or rebase of the author's in progress, else it is a raise asking them to
     pull (once). The task's files are carried from the worktree, which holds the log entries no
     commit does, and left uncommitted in the checkout. A branch holding commits that never
-    reached the pull request, or a worktree holding changes beyond the task's files, is kept as
-    `dfs-merged/<task>`, not deleted."""
+    reached the pull request's head, or a worktree holding changes beyond the task's files, is
+    kept as `dfs-merged/<task>` (`-2`, `-3` … when that name is taken), not deleted."""
     remote = dfs_paths.read_github()
     name, wt, default = dfs_paths.item_branch(task), dfs_paths.worktree(task), dfs_paths.branch()
     tag = "merged PR " + url
@@ -207,7 +207,15 @@ def land(task, url):
         mine = dfs_branch.task_paths(task)
         stray = [l[3:] for l in dfs_branch._git("status", "--porcelain", cwd=wt).stdout.splitlines()
                  if not any(l[3:].strip('"') == p or l[3:].startswith(p.rstrip("/") + "/") for p in mine)]
-        gone = dfs_branch._git("rev-list", name, "--not", default, "refs/remotes/%s/%s" % (remote, name))
+        # the work the pull request lacks: against its head as GitHub reports it, which a squash
+        # merge and a pruned remote-tracking branch leave intact; else against what we pushed
+        try:
+            head = json.loads(gh("pr", "view", url, "--json", "headRefOid") or "{}").get("headRefOid") or ""
+        except (GithubError, ValueError):
+            head = ""
+        if not head or dfs_branch._git("cat-file", "-e", head + "^{commit}").returncode != 0:
+            head = "refs/remotes/%s/%s" % (remote, name)
+        gone = dfs_branch._git("rev-list", name, "--not", default, head)
         for p in dfs_branch._tracked_task_paths(task, wt):
             src, dst = wt / p, dfs_paths.work_root() / p
             if src.is_dir():
@@ -216,11 +224,16 @@ def land(task, url):
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
         keep = bool(stray) or gone.returncode != 0 or bool(gone.stdout.split())
+        keep_as = "dfs-merged/" + task
+        n = 1
+        while keep and dfs_branch._git("rev-parse", "-q", "--verify", "refs/heads/" + keep_as).returncode == 0:
+            n += 1
+            keep_as = "dfs-merged/%s-%d" % (task, n)
         if keep:
             dfs_branch.keep_leftover_work(task, "merged")
-            kept = "; %s holds work the pull request lacks, kept as dfs-merged/%s" % (name, task)
+            kept = "; %s holds work the pull request lacks, kept as %s" % (name, keep_as)
         steps = [("its worktree", dfs_branch._git("worktree", "remove", "--force", str(wt))),
-                 ("its branch", dfs_branch._git("branch", "-m", name, "dfs-merged/" + task) if keep
+                 ("its branch", dfs_branch._git("branch", "-m", name, keep_as) if keep
                   else dfs_branch._git("branch", "-D", name))]
         for what, r in steps:   # not `release`, which takes the lock `land` holds
             if r.returncode != 0:
