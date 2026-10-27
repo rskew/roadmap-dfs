@@ -85,7 +85,9 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   on the default branch with no tracked change and no merge or rebase of yours unfinished; otherwise it
   raises once, asking you to `git pull --ff-only <remote> <default>`, and lands on the watch after that. A
   branch holding commits the pull request never got, or a worktree holding changes beyond the task's files, is
-  kept as `dfs-merged/<task>` and not deleted. A pull request **closed unmerged** is a raise (logged once as
+  kept as `dfs-merged/<task>` and not deleted. Comments still open when it merges are worked on a fresh branch
+  cut from the updated default branch, and their finished fix is held for a new pull request: the Open PR mark
+  applies again, as the merged one no longer counts as the task's pull request. A pull request **closed unmerged** is a raise (logged once as
   `pr <url> closed`): reopen it on GitHub and the watch carries on, or tell the walk to drop the task.
 
 ## Parallel walks

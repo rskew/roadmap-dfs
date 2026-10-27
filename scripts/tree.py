@@ -1250,14 +1250,18 @@ def is_draft(t):
 
 
 def pr_url(t):
-    """The url of the task's pull request, from its last `pr` entry; "" when none is open."""
+    """The url of the task's open pull request, from its last `pr` entry; "" when it has none,
+    or its last was merged (work finished after a merge is held for a new one)."""
     marks = [e for e in t["log"] if e["kind"] == "pr"]
-    return marks[-1]["args"][0] if marks and marks[-1]["args"] else ""
+    if not marks or not marks[-1]["args"] or pr_merged(t):
+        return ""
+    return marks[-1]["args"][0]
 
 
 def pr_merged(t):
-    """Whether the task's pull request is logged as merged (`pr <url> merged`)."""
-    return any(e["kind"] == "pr" and e["args"][1:2] == ["merged"] for e in t["log"])
+    """Whether the task's last pull request is logged as merged (`pr <url> merged`)."""
+    marks = [e for e in t["log"] if e["kind"] == "pr"]
+    return bool(marks) and marks[-1]["args"][1:2] == ["merged"]
 
 
 def pr_ready(t):

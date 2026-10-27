@@ -212,7 +212,7 @@ def watch(task):
     raise (`closed`), and add nothing."""
     t = dfs_tree.load(task)
     url = pr_url(t)
-    if not url or dfs_tree.pr_merged(t):
+    if not url:
         return []
     state, comments = _pull(url)
     if state == "MERGED":
@@ -240,13 +240,13 @@ def watch(task):
 
 
 def watched():
-    """The tasks GitHub mode watches: each with a `pr` entry whose pull request is not merged."""
+    """The tasks GitHub mode watches: each with an open pull request (a `pr` entry not merged)."""
     if not dfs_paths.read_github():
         return []
     out = []
     for task in dfs_tree.task_ids():
         t = dfs_tree.load(task)
-        if pr_url(t) and not dfs_tree.pr_merged(t):
+        if pr_url(t):
             out.append(task)
     return out
 

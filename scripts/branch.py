@@ -788,7 +788,7 @@ def _push_held(task, wt, name):
     """Push a held item's branch to its open pull request, "held" when it went (or there is no
     pull request yet); a rejected push reopens the item with a node and is "pushed-over"."""
     import tree as dfs_tree
-    if not any(e["kind"] == "pr" for e in dfs_tree.load(task)["log"]):
+    if not dfs_tree.pr_url(dfs_tree.load(task)):
         return "held"
     remote = dfs_paths.read_github()
     r = _git("push", remote, name, cwd=wt)

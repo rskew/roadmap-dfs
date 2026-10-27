@@ -176,6 +176,16 @@ class Chain(unittest.TestCase):
         finally:
             dfs_tree.dfs_paths.work_root = old
 
+    def status(self):
+        """(status_of, pr_ready) of W1 as the main checkout sees it, worktree and all."""
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            t = dfs_tree.load("W1")
+            return dfs_tree.status_of(t), dfs_tree.pr_ready(t)
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+
     def kinds_run(self):
         return self.kinds.read_text().split()
 
@@ -348,6 +358,7 @@ class Chain(unittest.TestCase):
         in the remote."""
         default = self.git("symbolic-ref", "--short", "HEAD")
         other = self.aside / "merger"
+        shutil.rmtree(other, ignore_errors=True)
         self.git("clone", "-q", str(bare), str(other))
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "-m", "Merge pull request #7",
                  "origin/dfs/W1", cwd=other)
@@ -397,6 +408,40 @@ class Chain(unittest.TestCase):
         self.assertEqual(status[0], "done")
         self.assertIn("pull request is merged", status[1])
         self.assertEqual(gh("watch").stdout, "")                 # nothing left to watch
+
+    def test_work_finished_after_the_pull_request_merged_goes_to_a_new_pull_request(self):
+        bare, view, gh = self.github_task()
+        url = self.PR
+        gh("pr", "W1")
+        view.write_text(json.dumps({"state": "OPEN", "comments": [
+            {"id": "IC_1", "author": {"login": "rev"}, "body": "rename the step", "url": url + "#c1"}]}))
+        self.assertIn("W1.2 from its pull request", gh("watch").stdout)
+        # the pull request is merged on GitHub while that comment's node is still open
+        default = self.merge_on_github(bare)
+        view.write_text('{"state": "MERGED"}')
+        self.assertEqual(gh("watch").returncode, 0)
+        status, _ = self.status()
+        self.assertEqual(status[0], "open")                    # the node is still to do, not "merged"
+        self.assertNotIn("W1.2: fixed", self.git("log", "--format=%s", default))
+        # its fix is held for a new pull request, not pushed to the merged one
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("fixn,rok", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertNotIn("W1.2: fixed", self.git("log", "--format=%s", "dfs/W1", cwd=bare))
+        status, ready = self.status()
+        self.assertEqual(status[0], "done")
+        self.assertIn("held unmerged", status[1])
+        self.assertTrue(ready)
+        self.assertEqual(gh("watch").stdout, "")                # no pull request to look at
+        r = gh("pr", "W1")                                      # the author's mark opens the new one
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, url), r.stderr)
+        self.assertIn("W1.2: fixed", self.git("log", "--format=%s", "dfs/W1", cwd=bare))
+        self.merge_on_github(bare)
+        r = gh("watch")
+        self.assertIn("merged on GitHub", r.stdout)
+        self.assertIn("W1.2: fixed", self.git("log", "--format=%s", default))
+        self.assertIn("pull request is merged", self.status()[0][1])
+        self.assertFalse(self.wt.exists())
 
     def test_a_pull_request_closed_unmerged_is_one_raise_and_reopening_it_resumes_the_watch(self):
         bare, view, gh = self.github_task()
