@@ -246,6 +246,41 @@ def write_theme(value: str) -> str:
     return v
 
 
+_REMOTE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def github_file() -> Path:
+    return state() / "github"
+
+
+def read_github() -> str:
+    """GitHub mode's remote: the name `.dfs/github` holds, `origin` when the file is empty,
+    "" when there is no file and the roadmap merges a finished task locally. In GitHub mode a
+    finished task is held unmerged until the author opens its PR (README, "GitHub mode")."""
+    try:
+        v = (github_file().read_text().strip().splitlines() or [""])[0].strip()
+    except OSError:
+        return ""
+    return v if _REMOTE.fullmatch(v) else "origin"
+
+
+def write_github(remote) -> str:
+    """Turn GitHub mode on, pushing to `remote` (`origin` when it is ""), or off with None.
+    Returns the remote now in force, "" when off."""
+    if remote is None:
+        try:
+            github_file().unlink()
+        except FileNotFoundError:
+            pass
+        return ""
+    v = str(remote).strip() or "origin"
+    if not _REMOTE.fullmatch(v):
+        raise ValueError("a remote is a git remote's name, such as origin")
+    github_file().parent.mkdir(parents=True, exist_ok=True)
+    github_file().write_text(v + "\n")
+    return v
+
+
 def background_file() -> Path:
     return state() / "background"
 
@@ -645,7 +680,7 @@ def ignored() -> bool:
 def roadmap_parts():
     """What the roadmap is made of, as git should hold it when `.dfs` is committed."""
     return (roadmap(), order(), items(), state() / "archive", artefacts(), title_file(),
-            theme_file())
+            theme_file(), github_file())
 
 
 def hidden() -> list:
