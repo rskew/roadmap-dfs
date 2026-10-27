@@ -482,6 +482,90 @@ class Chain(unittest.TestCase):
         self.assertIn("the author's unpushed commit", self.git("log", "--format=%s", default))
         self.assertFalse(self.wt.exists())
 
+    def second_pull_request_squashed(self, gh, bare, view, app=None):
+        """Land the first pull request, finish the comment's fix and open a second, which GitHub
+        squash-merges, leaving `app.txt` as `app` when given. Returns the default branch."""
+        default = self.git("symbolic-ref", "--short", "HEAD")
+        gh("pr", "W1")
+        view.write_text(json.dumps({"state": "OPEN", "comments": [
+            {"id": "IC_1", "author": {"login": "rev"}, "body": "rename the step", "url": self.PR + "#c1"}]}))
+        self.assertIn("W1.2 from its pull request", gh("watch").stdout)
+        self.merge_on_github(bare)
+        view.write_text('{"state": "MERGED"}')
+        self.assertEqual(gh("watch").returncode, 0)
+        return default
+
+    def squash_on_github(self, bare, default, app=None):
+        """The second pull request, squash-merged on GitHub: its roadmap file gains a log line
+        where the first landing's commit (only here) appended its own, so they clash, and
+        `app.txt` becomes `app` when given."""
+        other = self.aside / "squasher"
+        shutil.rmtree(other, ignore_errors=True)
+        self.git("clone", "-q", str(bare), str(other))
+        with (other / ".dfs" / "items" / "W1.md").open("a") as f:
+            f.write("- 2026-01-01T00:00:00Z · note · the squashed pull request's own log line\n")
+        if app:
+            (other / "app.txt").write_text(app)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "W1 (#7)", cwd=other)
+        self.git("push", "-q", "origin", default, cwd=other)
+
+    def finish_fix_and_open_second(self, gh):
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("fixn,rok", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(gh("pr", "W1").returncode, 0)
+
+    def test_a_clash_in_an_earlier_landings_log_alone_is_settled_and_the_pull_request_lands(self):
+        bare, view, gh = self.github_task()
+        default = self.second_pull_request_squashed(gh, bare, view)
+        self.finish_fix_and_open_second(gh)
+        self.squash_on_github(bare, default)
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.log("raise"), [])
+        self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
+        self.git("merge-base", "--is-ancestor", "hub/" + default, default)
+        self.assertEqual(self.git("log", "--format=%s", default).count("W1: the pull request is merged"), 1)
+
+    def test_a_landing_never_drops_the_authors_unpushed_code_when_a_landing_log_clashes_too(self):
+        bare, view, gh = self.github_task()
+        default = self.second_pull_request_squashed(gh, bare, view)
+        (self.root / "app.txt").write_text("app changed by the author\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "author edits app.txt")
+        mine = self.git("rev-parse", default)
+        self.finish_fix_and_open_second(gh)
+        self.squash_on_github(bare, default, app="app changed on GitHub\n")
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.log("raise")), 1, r.stdout)
+        self.assertIn("git pull --rebase hub %s" % default, self.log("raise")[0]["body"])
+        self.assertNotEqual(self.log("pr")[-1]["args"][-1:], ["merged"])
+        self.assertEqual(self.git("rev-parse", default), mine)
+        self.assertEqual((self.root / "app.txt").read_text(), "app changed by the author\n")
+        self.assertIn("author edits app.txt", self.git("log", "--format=%s", default))
+        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no"), "")
+        self.assertFalse((self.root / ".git" / "rebase-merge").exists())
+
+    def test_a_landing_never_drops_the_authors_unpushed_edit_of_another_roadmap_file(self):
+        bare, view, gh = self.github_task()
+        default = self.second_pull_request_squashed(gh, bare, view)
+        (self.root / ".dfs" / "order.md").write_text("the author's order\n")
+        self.git("add", ".dfs/order.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "author edits order.md")
+        self.finish_fix_and_open_second(gh)
+        other = self.aside / "squasher"
+        self.git("clone", "-q", str(bare), str(other))
+        (other / ".dfs").mkdir(exist_ok=True)
+        (other / ".dfs" / "order.md").write_text("the order on GitHub\n")
+        self.git("add", ".dfs/order.md", cwd=other)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1 (#7)", cwd=other)
+        self.git("push", "-q", "origin", default, cwd=other)
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.log("raise")), 1, r.stdout)
+        self.assertIn("author edits order.md", self.git("log", "--format=%s", default))
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "the author's order\n")
+
     def test_a_pull_request_closed_unmerged_is_one_raise_and_reopening_it_resumes_the_watch(self):
         bare, view, gh = self.github_task()
         gh("pr", "W1")

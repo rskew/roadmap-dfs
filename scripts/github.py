@@ -28,6 +28,8 @@ import branch as dfs_branch  # noqa: E402
 import paths as dfs_paths    # noqa: E402
 import tree as dfs_tree      # noqa: E402
 
+LANDED = "the pull request is merged"   # the subject `land` commits the task's log under
+
 
 class GithubError(Exception):
     pass
@@ -160,6 +162,39 @@ def closed(task, url):
 
 
 @dfs_branch.one_at_a_time
+def _landing_commit(sha):
+    """Is `sha` an earlier landing's log commit (`<task>: the pull request is merged`, which
+    `land` makes), touching nothing but roadmap files?"""
+    subject = dfs_branch._git("log", "-1", "--format=%s", sha).stdout.strip()
+    files = dfs_branch._git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).stdout.split()
+    return bool(files) and subject.endswith(LANDED) and all(f.startswith(".dfs/") for f in files)
+
+
+def _replay(upstream):
+    """Replay the commits only here on `upstream` (`git rebase --rebase-merges`). A clash in an
+    earlier landing's log commit is settled for the remote's side of its files, since the pull
+    request brought the task's file with that log; a clash in any other commit (the author's
+    code, their other roadmap files) aborts the whole rebase, so nothing of theirs is dropped
+    or rewritten. Returns the last git result: failed when the rebase was given up."""
+    r = dfs_branch._git(*dfs_branch._identity(), "rebase", "--rebase-merges", upstream)
+    for _ in range(100):
+        if r.returncode == 0:
+            return r
+        stopped = dfs_branch._git("rev-parse", "-q", "--verify", "REBASE_HEAD")
+        clash = dfs_branch._git("diff", "--name-only", "--diff-filter=U").stdout.split()
+        if stopped.returncode != 0 or not clash or not _landing_commit(stopped.stdout.strip()):
+            break
+        for f in clash:   # while rebasing, `ours` is the branch being rebased onto
+            dfs_branch._git("checkout", "--ours", "--", f)
+            dfs_branch._git("add", "--", f)
+        if dfs_branch._git("diff", "--cached", "--quiet").returncode == 0:
+            r = dfs_branch._git(*dfs_branch._identity(), "rebase", "--skip")   # nothing of it was left
+        else:
+            r = dfs_branch._git(*dfs_branch._identity(), "-c", "core.editor=true", "rebase", "--continue")
+    dfs_branch._git("rebase", "--abort")
+    return r
+
+
 def land(task, url):
     """The pull request of `task` was merged on GitHub: bring the default branch up to it, then
     let go of the worktree and `dfs/<task>` and log `pr <url> merged`, so the task is done and
@@ -191,18 +226,8 @@ def land(task, url):
     if r.returncode != 0:
         # Commits only here (an earlier landing's log, the author's unpushed edits) sit in the way
         # when GitHub merged without them: replay them on the remote's default branch, as a
-        # `git pull --rebase` would. A conflict is left for the author, the rebase aborted.
-        rebase = ["rebase", "--rebase-merges", "%s/%s" % (remote, default)]
-        r = dfs_branch._git(*dfs_branch._identity(), *rebase)
-        if r.returncode != 0:
-            clash = dfs_branch._git("diff", "--name-only", "--diff-filter=U").stdout.split()
-            dfs_branch._git("rebase", "--abort")
-            if clash and all(f.startswith(".dfs/") for f in clash):
-                # an earlier landing's log against the roadmap files the pull request brought:
-                # the remote's side wins, and the landing below writes this task's log afresh
-                r = dfs_branch._git(*dfs_branch._identity(), "rebase", "-X", "ours", *rebase[1:])
-                if r.returncode != 0:
-                    dfs_branch._git("rebase", "--abort")
+        # `git pull --rebase` would.
+        r = _replay("%s/%s" % (remote, default))
     if r.returncode != 0:
         return pull_by_hand("it cannot be fast-forwarded to %s/%s (%s)" % (
             remote, default, " ".join(dfs_branch.out_of(r).split())[:200]))
@@ -232,7 +257,7 @@ def land(task, url):
                       % (task, what, " ".join(dfs_branch.out_of(r).split())), file=sys.stderr)
     dfs_tree.append_log(task, "pr", [url, "merged"])
     try:
-        dfs_branch._commit_task_files(task, dfs_paths.work_root(), "the pull request is merged")
+        dfs_branch._commit_task_files(task, dfs_paths.work_root(), LANDED)
     except dfs_branch.BranchError as e:
         print("dfs_github: %s: the log is left uncommitted: %s" % (task, e), file=sys.stderr)
     print("dfs_github: %s: %s merged on GitHub; %s is at %s/%s%s" % (task, url, default, remote, default, kept))
