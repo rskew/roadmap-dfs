@@ -484,9 +484,9 @@ class Chain(unittest.TestCase):
         self.assertIn("the author's unpushed commit", self.git("log", "--format=%s", default))
         self.assertFalse(self.wt.exists())
 
-    def second_pull_request_squashed(self, gh, bare, view, app=None):
-        """Land the first pull request, finish the comment's fix and open a second, which GitHub
-        squash-merges, leaving `app.txt` as `app` when given. Returns the default branch."""
+    def second_pull_request_squashed(self, gh, bare, view):
+        """Open the first pull request, comment on it, merge it on GitHub and land it, leaving
+        the comment's node open. Returns the default branch."""
         default = self.git("symbolic-ref", "--short", "HEAD")
         gh("pr", "W1")
         view.write_text(json.dumps({"state": "OPEN", "comments": [
@@ -516,6 +516,31 @@ class Chain(unittest.TestCase):
         rc, meta, out = self.run_chain("fixn,rok", cap=2)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
         self.assertEqual(gh("pr", "W1").returncode, 0)
+
+    def test_a_landing_waits_for_a_chain_holding_the_lock(self):
+        # `land` rewrites the main checkout (fetch, fast-forward or rebase, worktree removal,
+        # commit): it holds the lock a chain's enter and merge hold, or a chain starting
+        # during its rebase would be worked in place in the main checkout.
+        import fcntl
+        import time
+        import branch as dfs_branch
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        self.merge_on_github(bare)
+        view.write_text('{"state": "MERGED"}')
+        with open(self.root / ".git" / dfs_branch.LOCK_NAME, "a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            p = subprocess.Popen([sys.executable, str(HERE / "github.py"), "watch"], cwd=self.root,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL,
+                                 text=True, env=dict(os.environ, DFS_GH=str(self.aside / "gh")))
+            time.sleep(1.5)
+            self.assertIsNone(p.poll(), "the landing ran while another held the lock")
+            self.assertTrue(self.wt.exists())
+            fcntl.flock(held, fcntl.LOCK_UN)
+        out, err = p.communicate(timeout=60)
+        self.assertEqual(p.returncode, 0, err)
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
 
     def test_a_clash_in_an_earlier_landings_log_alone_is_settled_and_the_pull_request_lands(self):
         bare, view, gh = self.github_task()

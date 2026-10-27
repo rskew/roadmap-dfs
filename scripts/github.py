@@ -164,7 +164,6 @@ def closed(task, url):
                         % (url, task))
 
 
-@dfs_branch.one_at_a_time
 def _landing_commit(sha):
     """Is `sha` an earlier landing's log commit (`<task>: the pull request is merged`, which
     `land` makes), touching nothing but roadmap files?"""
@@ -198,6 +197,7 @@ def _replay(upstream):
     return r
 
 
+@dfs_branch.one_at_a_time
 def land(task, url):
     """The pull request of `task` was merged on GitHub: bring the default branch up to it, then
     let go of the worktree and `dfs/<task>` and log `pr <url> merged`, so the task is done and

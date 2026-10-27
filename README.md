@@ -69,9 +69,11 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   request link). It is not the draft/ready mark, which only says whether the walk may pick a task up. A
   second mark is refused.
 - **The watch** reads each open pull request every five minutes while a walk runs (it stops when the
-  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand). Each new conversation comment, review with a body and line comment becomes one open
-  node at the root of the task, as a reviewer's finding does: who wrote it, the text, the file and line, its
-  link, and `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing; every other comment does, your own replies and bots' included.
+  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand). Each new
+  conversation comment, review with a body and line comment becomes one open node at the root of the
+  task, as a reviewer's finding does: who wrote it, the text, the file and line, its link, and
+  `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing; every
+  other comment does, your own replies and bots' included.
   The task is open again, so the walk works and raises on the node as on any other; nothing is posted back
   to GitHub.
 - **The push**: when that task is finished anew (the fix reviewed, or accepted) the hold pushes `dfs/<task>` to
@@ -90,8 +92,8 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   branch holding commits the pull request never got, or a worktree holding changes beyond the task's files, is
   kept as `dfs-merged/<task>` and not deleted. Comments still open when it merges are worked on a fresh branch
   cut from the updated default branch, and their finished fix is held for a new pull request: the Open PR mark
-  applies again, as the merged one no longer counts as the task's pull request. A pull request **closed unmerged** is a raise (logged once as
-  `pr <url> closed`): reopen it on GitHub and the watch carries on, or tell the walk to drop the task.
+  applies again, as the merged one no longer counts as the task's pull request. A pull request
+  **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it on GitHub and the watch carries on, or tell the walk to drop the task.
 
 ## Parallel walks
 
