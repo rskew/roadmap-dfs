@@ -37,10 +37,11 @@ class BranchError(Exception):
     pass
 
 
-# `branch.py merge`'s exit status: 0 the item is settled (merged, or nothing to merge), 3 it
+# `branch.py merge`'s exit status: 0 the item is settled (merged, held for its pull request in
+# GitHub mode, or nothing to merge), 3 it
 # was not merged and the tree has an open node again, 4 it is blocked on a raise.
 # Every result that is not a merge is 3 or 4, so a chain never takes an unmerged item for done.
-MERGE_EXIT = {"merged": 0, "none": 0, "dirty": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
+MERGE_EXIT = {"merged": 0, "none": 0, "held": 0, "dirty": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
 
 
 def _git(*args, cwd=None):
@@ -791,6 +792,8 @@ def merge(task):
     First the task's own files left uncommitted in the worktree (the runner's log entries,
     an accept) are committed onto the branch, since the merge carries only commits; then the
     branch is rebased onto the default branch (`_rebase`). Returns
+    "held" in GitHub mode (`.dfs/github`), once the task's files are committed and the worktree
+    is clean: the branch and worktree are kept for the pull request the author opens. Else
     "none" when the task has no branch (one whose worktree was removed by hand is checked out
     again, `_restore`), "merged", "dirty" when the worktree holds
     uncommitted work that is not the task's (left in place, nothing merged; an open node
@@ -843,6 +846,10 @@ def merge(task):
                      % (name, dfs_paths.rel(wt), ", ".join(stray[:12])),
                      "uncommitted changes stopped the merge")
         return "dirty"
+    if dfs_paths.read_github():
+        # GitHub mode: the finished item waits, branch and worktree kept, for the author to
+        # open its pull request (README, "GitHub mode"); nothing reaches the default branch here.
+        return "held"
     if not _rebase(task, wt, name):
         return "conflict"
     aside = {}
@@ -931,6 +938,8 @@ def main(argv):
             "conflict": "not merged: it conflicts with %s, so a node asks for the branch to be rebased onto it" %
                         dfs_paths.branch(),
             "refused": "not merged: git would overwrite uncommitted edits here, raised for the author",
+            "held": "not merged: GitHub mode holds dfs/%s, with its worktree, until you open its pull request"
+                    % argv[2],
             "none": "no branch, nothing to merge"}[result]), file=sys.stderr)
         return MERGE_EXIT[result]
     if len(argv) == 3 and argv[1] == "enter":

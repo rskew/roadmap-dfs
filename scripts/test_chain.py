@@ -249,6 +249,26 @@ class Chain(unittest.TestCase):
         self.assertEqual([e["args"][:2] for e in self.log("end")][-1], ["review", "ok"])
         self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
 
+    def test_in_github_mode_a_passing_review_holds_the_branch_unmerged(self):
+        (self.root / ".dfs" / "github").write_text("origin\n")
+        before = self.git("rev-parse", "HEAD")
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertIn("GitHub mode holds dfs/W1", out)
+        self.assertEqual(self.git("rev-parse", "HEAD"), before)
+        self.assertTrue(self.wt.exists())
+        self.assertEqual(self.git("branch", "--list", "dfs/W1").strip(" *+"), "dfs/W1")
+        # the runner's log is committed onto the branch, so the held worktree is clean
+        self.assertEqual(self.git("status", "--porcelain", cwd=self.wt), "")
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            status = dfs_tree.status_of(dfs_tree.load("W1"))
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+        self.assertEqual(status[0], "done")
+        self.assertIn("held unmerged for its pull request", status[1])
+
     def test_a_merge_that_conflicts_reopens_the_item_and_the_fix_is_reviewed_and_merged(self):
         main = self.git("symbolic-ref", "--short", "HEAD")
         rc, meta, out = self.run_chain("code,confirm", cap=2)

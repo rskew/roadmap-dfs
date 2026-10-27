@@ -696,7 +696,7 @@ def append_log(task, kind, args=(), body=""):
         import branch as dfs_branch
         try:
             result = dfs_branch.merge(task)
-            if result not in ("merged", "none"):
+            if result not in ("merged", "held", "none"):
                 print("dfs_tree: %s was accepted but not merged (%s); see its tree" % (task, result),
                       file=sys.stderr)
         except dfs_branch.BranchError as e:
@@ -1327,11 +1327,13 @@ def status_of(t):
         # The author's `accept` is what takes the code as it is instead.
         return "open", "the implementation review found issues; fix them in new nodes"
     last_acc = max((e["ts"] for e in t["log"] if e["kind"] == "accept"), default="")
+    held = ("; held unmerged for its pull request" if dfs_paths.read_github()
+            and dfs_paths.worktree(t["task"]) else "")
     if last_acc and (not rv or last_acc > rv["ts"]):
-        return "done", "every live node confirmed, and accepted by the author"
+        return "done", "every live node confirmed, and accepted by the author" + held
     if rv:
-        return "done", "every live node confirmed, and the implementation reviewed"
-    return "done", "every live node confirmed"
+        return "done", "every live node confirmed, and the implementation reviewed" + held
+    return "done", "every live node confirmed" + held
 
 
 def incomplete(t):
