@@ -83,7 +83,9 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   no commit holds) across and commits it there, removes the worktree and `dfs/<task>`, and logs
   `pr <url> merged`, so the task reads done and merged and is no longer watched. That needs the main checkout
   on the default branch with no tracked change and no merge or rebase of yours unfinished; otherwise it
-  raises once, asking you to `git pull --ff-only <remote> <default>`, and lands on the watch after that. A
+  raises once, asking you to `git pull --rebase <remote> <default>`, and lands on the watch after that. Commits
+  only here (an earlier landing's log, your unpushed work) are replayed on the remote's default branch first,
+  nothing is pushed, and a clash beyond `.dfs` files is that raise. A
   branch holding commits the pull request never got, or a worktree holding changes beyond the task's files, is
   kept as `dfs-merged/<task>` and not deleted. Comments still open when it merges are worked on a fresh branch
   cut from the updated default branch, and their finished fix is held for a new pull request: the Open PR mark

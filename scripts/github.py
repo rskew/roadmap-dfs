@@ -174,7 +174,7 @@ def land(task, url):
 
     def pull_by_hand(why):
         _raise_once(task, tag, "The pull request %s was merged on GitHub, but %s was not brought "
-                    "up to it: %s. Run `git pull --ff-only %s %s` in the main checkout and the "
+                    "up to it: %s. Run `git pull --rebase %s %s` in the main checkout and the "
                     "next watch lands %s." % (url, default, why, remote, default, task))
 
     if default not in dfs_paths.DEFAULT_BRANCHES:
@@ -187,6 +187,21 @@ def land(task, url):
     if r.returncode != 0:
         raise GithubError("git fetch %s failed: %s" % (remote, " ".join(dfs_branch.out_of(r).split())[:400]))
     r = dfs_branch._git("merge", "--ff-only", "%s/%s" % (remote, default))
+    if r.returncode != 0:
+        # Commits only here (an earlier landing's log, the author's unpushed edits) sit in the way
+        # when GitHub merged without them: replay them on the remote's default branch, as a
+        # `git pull --rebase` would. A conflict is left for the author, the rebase aborted.
+        rebase = ["rebase", "--rebase-merges", "%s/%s" % (remote, default)]
+        r = dfs_branch._git(*dfs_branch._identity(), *rebase)
+        if r.returncode != 0:
+            clash = dfs_branch._git("diff", "--name-only", "--diff-filter=U").stdout.split()
+            dfs_branch._git("rebase", "--abort")
+            if clash and all(f.startswith(".dfs/") for f in clash):
+                # an earlier landing's log against the roadmap files the pull request brought:
+                # the remote's side wins, and the landing below writes this task's log afresh
+                r = dfs_branch._git(*dfs_branch._identity(), "rebase", "-X", "ours", *rebase[1:])
+                if r.returncode != 0:
+                    dfs_branch._git("rebase", "--abort")
     if r.returncode != 0:
         return pull_by_hand("it cannot be fast-forwarded to %s/%s (%s)" % (
             remote, default, " ".join(dfs_branch.out_of(r).split())[:200]))

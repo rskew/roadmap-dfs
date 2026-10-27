@@ -443,6 +443,45 @@ class Chain(unittest.TestCase):
         self.assertIn("pull request is merged", self.status()[0][1])
         self.assertFalse(self.wt.exists())
 
+    def test_two_pull_requests_land_in_turn_though_the_first_landing_and_the_authors_commit_are_unpushed(self):
+        bare, view, gh = self.github_task()
+        default = self.git("symbolic-ref", "--short", "HEAD")
+        (self.root / "mine.txt").write_text("the author's own commit\n")
+        self.git("add", "mine.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "the author's unpushed commit")
+        gh("pr", "W1")
+        view.write_text(json.dumps({"state": "OPEN", "comments": [
+            {"id": "IC_1", "author": {"login": "rev"}, "body": "rename the step", "url": self.PR + "#c1"}]}))
+        self.assertIn("W1.2 from its pull request", gh("watch").stdout)
+        self.merge_on_github(bare)      # without the author's commit: main and the remote diverge
+        view.write_text('{"state": "MERGED"}')
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("merged on GitHub", r.stdout)
+        self.assertEqual(self.log("raise"), [])
+        self.git("merge-base", "--is-ancestor", "hub/" + default, default)
+        self.assertIn("the author's unpushed commit", self.git("log", "--format=%s", default))
+        # the comment's fix goes to a second pull request, squash-merged on GitHub; the first
+        # landing's commit is still only here, and the second lands too
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("fixn,rok", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        r = gh("pr", "W1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        other = self.aside / "squasher"
+        self.git("clone", "-q", str(bare), str(other))
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "--squash", "-q", "origin/dfs/W1", cwd=other)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1 (#7)", cwd=other)
+        self.git("push", "-q", "origin", default, cwd=other)
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.log("raise"), [])
+        self.assertIn("merged on GitHub", r.stdout)
+        self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
+        self.assertIn("W1 (#7)", self.git("log", "--format=%s", default))
+        self.assertIn("the author's unpushed commit", self.git("log", "--format=%s", default))
+        self.assertFalse(self.wt.exists())
+
     def test_a_pull_request_closed_unmerged_is_one_raise_and_reopening_it_resumes_the_watch(self):
         bare, view, gh = self.github_task()
         gh("pr", "W1")
@@ -474,7 +513,7 @@ class Chain(unittest.TestCase):
         raised = self.log("raise")
         self.assertEqual(len(raised), 1)
         self.assertIn("uncommitted changes to tracked files", raised[0]["body"])
-        self.assertIn("git pull --ff-only hub %s" % default, raised[0]["body"])
+        self.assertIn("git pull --rebase hub %s" % default, raised[0]["body"])
         self.assertFalse(any(e["args"][1:2] == ["merged"] for e in self.log("pr")))
         # put right, the next watch lands it
         (self.root / "app.txt").write_text("app\n")
