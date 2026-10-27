@@ -26,6 +26,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -396,6 +397,72 @@ def catch_up(name, wt):
     return moved
 
 
+# ⚠️ `git worktree add` CAN LOSE A RACE FOR ITS OWN NEW INDEX. Four first runs (W98, W110,
+# W115, W116: 2026-10-24 to 26), each seconds after the previous item merged, failed with
+# `Unable to create '.git/worktrees/<task>/index.lock': File exists`: a directory git had
+# made a few milliseconds before, so some other process took the lock in it, and by the time
+# anyone looked there was nothing stale left. The failed add leaves the branch it cut, which
+# is why a second try always worked, and the failure ended the whole walk for a race of
+# milliseconds. So a lock failure is cleaned up and tried again, and each failure writes down
+# who else was running git, to name the process when it next happens.
+ADD_ATTEMPTS = 5
+ADD_BACKOFF = 0.25      # seconds, times the attempt's number
+
+
+def _lock_failure(stderr):
+    return ".lock': File exists" in stderr
+
+
+def _git_neighbours(limit=20):
+    """`pid cwd: command` of the other processes running git or standing inside the repository,
+    for the log of a failure; best effort, none where /proc is not there."""
+    root = os.fspath(dfs_paths.work_root())
+    out = []
+    for d in sorted(Path("/proc").glob("[0-9]*"), key=lambda d: int(d.name)):
+        if d.name == str(os.getpid()):
+            continue
+        try:
+            cmd = (d / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+            cwd = os.readlink(d / "cwd")
+        except OSError:
+            continue
+        argv = cmd.split()[:3]
+        if cwd.startswith(root) or any(os.path.basename(a) == "git" for a in argv):
+            out.append("  %s %s: %s" % (d.name, cwd, cmd[:160]))
+    return out[:limit]
+
+
+def _undo_add(wt, name, cut_from):
+    """What a failed `git worktree add` left, cleared so the same add can be made again: a
+    registration, a directory, and the branch if this call cut it and nothing is on it."""
+    _git("worktree", "remove", "--force", str(wt))
+    shutil.rmtree(wt, ignore_errors=True)
+    _git("worktree", "prune")
+    if cut_from and _git("rev-parse", "--verify", "--quiet", "refs/heads/" + name).stdout.strip() == cut_from:
+        _git("branch", "-D", name)
+
+
+def _add_worktree(task, wt, name, fresh):
+    """`git worktree add` for `task`, made again when it loses a lock race (see ADD_ATTEMPTS)."""
+    cut_from = _git("rev-parse", "HEAD").stdout.strip() if fresh else None
+    args = ["worktree", "add", str(wt)] + (["-b", name, "HEAD"] if fresh else [name])
+    for attempt in range(1, ADD_ATTEMPTS + 1):
+        r = _git(*args)
+        if r.returncode == 0:
+            return
+        if not _lock_failure(r.stderr):
+            raise BranchError("cannot work %s in a worktree on %s: %s" % (task, name, r.stderr.strip()))
+        seen = _git_neighbours()
+        print("dfs_branch: the worktree of %s lost a lock race (attempt %d of %d): %s\n"
+              "dfs_branch: running git or inside the repository now:\n%s" %
+              (task, attempt, ADD_ATTEMPTS, " ".join(r.stderr.split()), "\n".join(seen) or "  (none seen)"),
+              file=sys.stderr)
+        _undo_add(wt, name, cut_from)
+        if attempt == ADD_ATTEMPTS:
+            raise BranchError("cannot work %s in a worktree on %s: %s" % (task, name, r.stderr.strip()))
+        time.sleep(ADD_BACKOFF * attempt)
+
+
 @one_at_a_time
 def enter(task):
     """The worktree `task` is worked in, cut on the first call; None to work where we are:
@@ -420,10 +487,7 @@ def enter(task):
     _git("worktree", "prune")   # a worktree deleted by hand stays registered, and blocks the add
     keep_worktrees_untracked()
     wt.parent.mkdir(parents=True, exist_ok=True)
-    args = ["worktree", "add", str(wt)] + (["-b", name, "HEAD"] if fresh else [name])
-    r = _git(*args)
-    if r.returncode != 0:
-        raise BranchError("cannot work %s in a worktree on %s: %s" % (task, name, r.stderr.strip()))
+    _add_worktree(task, wt, name, fresh)
     if ignored:
         share_ignored_state(wt)
     if fresh:

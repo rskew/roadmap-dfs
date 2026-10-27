@@ -673,6 +673,43 @@ class Chain(unittest.TestCase):
         self.assertTrue((self.wt / ".git").exists())
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s", cwd=self.wt))
 
+    def git_that_loses_the_lock_race(self, times):
+        """A `git` ahead of the real one on PATH whose first `times` `worktree add -b` cut the
+        branch as git does, then fail on the new worktree's index lock; returns the PATH."""
+        bindir = self.aside / "bin"
+        bindir.mkdir()
+        real = shutil.which("git")
+        (bindir / "git").write_text(
+            "#!/bin/bash\nn=$(cat %(c)s 2>/dev/null || echo 0)\n"
+            'if [ "$1 $2" = "worktree add" ] && [ "$4" = "-b" ] && [ "$n" -lt %(t)d ]; then\n'
+            "  echo $((n+1)) > %(c)s\n  %(g)s branch \"$5\" HEAD\n"
+            "  echo \"Preparing worktree (new branch '$5')\" >&2\n"
+            "  echo \"fatal: Unable to create '$PWD/.git/worktrees/W1/index.lock': File exists.\" >&2\n"
+            "  exit 128\nfi\nexec %(g)s \"$@\"\n" % {"c": self.aside / "races", "t": times, "g": real})
+        (bindir / "git").chmod(0o755)
+        return "%s:%s" % (bindir, os.environ["PATH"])
+
+    def enter_on(self, path):
+        return subprocess.run([sys.executable, str(HERE / "branch.py"), "enter", "W1"], cwd=self.root,
+                              env=dict(os.environ, PATH=path), capture_output=True, text=True)
+
+    def test_a_worktree_that_loses_the_lock_race_is_cut_again_and_the_race_is_logged(self):
+        r = self.enter_on(self.git_that_loses_the_lock_race(2))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue((self.wt / ".git").exists())
+        self.assertEqual(self.git("rev-parse", "dfs/W1"), self.git("rev-parse", "HEAD"))
+        self.assertEqual(r.stderr.count("lost a lock race"), 2, r.stderr)
+        self.assertIn("running git or inside the repository now:", r.stderr)
+        self.assertNotIn("existed; reused", r.stderr)
+
+    def test_a_worktree_that_keeps_losing_the_lock_race_stops_with_git_s_words_and_no_leftover_branch(self):
+        r = self.enter_on(self.git_that_loses_the_lock_race(99))
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertEqual(r.stderr.count("lost a lock race"), 5, r.stderr)
+        self.assertIn("index.lock': File exists", r.stderr.strip().splitlines()[-1] + r.stderr)
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+        self.assertFalse(self.wt.exists())
+
     def test_a_worktree_git_will_not_remove_is_said_so_not_claimed_removed(self):
         self.run_chain("work,confirm", cap=2)
         self.git("worktree", "lock", str(self.wt))
