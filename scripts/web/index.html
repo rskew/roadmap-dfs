@@ -932,7 +932,7 @@ function drawTasks(push) {
     const inner = `<span class="iid">${iidHtml(it.id)}</span>
       <span class="body">${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
-          ${walkTags(it)}${it.draft ? `<span class="tag">draft</span>` : ""}
+          ${walkTags(it)}${it.draft ? `<span class="tag">draft</span>` : ""}${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}
           ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}
@@ -1126,6 +1126,8 @@ function drawTask() {
       <button class="btn" data-act="add" data-parent="">Add a node</button>
       <button class="btn" data-act="edittask">Edit task</button>
       ${t.status !== "done" ? `<button class="btn" data-act="draft" data-draft="${t.draft ? "0" : "1"}" aria-pressed="${t.draft}" title="${t.draft ? "The walk passes it over; Ready puts it back in its turn" : "Mark it a draft: the walk passes it over until it is ready"}">${t.draft ? "Draft: mark ready" : "Mark as draft"}</button>` : ""}
+      ${t.pr_ready ? `<button class="btn primary" data-act="openpr" title="Push the branch and open its pull request with gh">Open PR</button>` : ""}
+      ${t.pr ? `<a class="btn" href="${esc(t.pr)}" target="_blank" rel="noopener">Pull request</a>` : ""}
       <button class="btn" data-act="deletetask">Delete task</button>
       <button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button>
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
@@ -1693,6 +1695,7 @@ document.addEventListener("click", e => {
     walkstart: walkStartForm, walkstop: async () => { try { S.walk = await api("/api/walk/stop", {}); toast("Walk stopped; its chain ends after this run."); drawTasks(); } catch (e) { toast(e.message, true); } },
     chainstop: () => chainStopForm(d.item),
     draft: async () => { try { const on = d.draft === "1"; wrote(await api("/api/draft", { task: S.task.id, draft: on }), on ? S.task.id + " is a draft: the walk passes it over." : S.task.id + " is ready: the walk takes it in its turn."); } catch (e) { toast(e.message, true); } },
+    openpr: async () => { if (!confirm("Push dfs/" + S.task.id + " and open its pull request with gh?")) return; try { wrote(await api("/api/open_pr", { task: S.task.id }), "Opened the pull request for " + S.task.id + "."); } catch (e) { toast(e.message, true); } },
     walkhere: async () => { try { S.walk = await api("/api/walk/pin", { item: d.item }); toast(S.walk.pinned ? "The walk goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
   }[d.act] || (() => {}))();
 });

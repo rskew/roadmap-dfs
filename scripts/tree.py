@@ -1249,6 +1249,24 @@ def is_draft(t):
     return bool(marks) and marks[-1]["kind"] == "draft"
 
 
+def pr_url(t):
+    """The url of the task's pull request, from its last `pr` entry; "" when none is open."""
+    marks = [e for e in t["log"] if e["kind"] == "pr"]
+    return marks[-1]["args"][0] if marks and marks[-1]["args"] else ""
+
+
+def pr_merged(t):
+    """Whether the task's pull request is logged as merged (`pr <url> merged`)."""
+    return any(e["kind"] == "pr" and e["args"][1:2] == ["merged"] for e in t["log"])
+
+
+def pr_ready(t):
+    """Whether the author's Open PR mark applies: GitHub mode is on, the task is done and its
+    branch is held in a worktree, and no pull request has been opened for it yet."""
+    return bool(dfs_paths.read_github() and not pr_url(t) and status_of(t)[0] == "done"
+                and dfs_paths.worktree(t["task"]))
+
+
 def author_marks(t):
     return [e for e in t["log"] if e["kind"] in ("answer", "correct", "accept")]
 
@@ -1327,8 +1345,8 @@ def status_of(t):
         # The author's `accept` is what takes the code as it is instead.
         return "open", "the implementation review found issues; fix them in new nodes"
     last_acc = max((e["ts"] for e in t["log"] if e["kind"] == "accept"), default="")
-    held = ("; held unmerged for its pull request" if dfs_paths.read_github()
-            and dfs_paths.worktree(t["task"]) else "")
+    held = (("; its pull request is open" if pr_url(t) else "; held unmerged for its pull request")
+            if dfs_paths.read_github() and dfs_paths.worktree(t["task"]) else "")
     if last_acc and (not rv or last_acc > rv["ts"]):
         return "done", "every live node confirmed, and accepted by the author" + held
     if rv:

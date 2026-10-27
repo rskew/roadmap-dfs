@@ -326,5 +326,53 @@ class Snapshot(unittest.TestCase):
         finally:
             dfs_state.full = real
 
+class PullRequests(unittest.TestCase):
+    """GitHub mode: the walk looks at the open pull requests every PR_POLL seconds."""
+
+    def setUp(self):
+        self.w = FakeWalker()
+        self.w.walk_pr_sync = True
+        self.looked = []
+        self.real = (dfs_walk.dfs_paths.read_github, dfs_walk.dfs_github.watched,
+                     dfs_walk.dfs_github.watch)
+        dfs_walk.dfs_paths.read_github = lambda: "origin"
+        dfs_walk.dfs_github.watched = lambda: ["W1", "W2"]
+        dfs_walk.dfs_github.watch = lambda task: (self.looked.append(task) or
+                                                  (["%s.9" % task] if task == "W2" else []))
+
+    def tearDown(self):
+        (dfs_walk.dfs_paths.read_github, dfs_walk.dfs_github.watched,
+         dfs_walk.dfs_github.watch) = self.real
+
+    def test_it_looks_at_each_pull_request_then_waits_out_the_interval(self):
+        self.w.start(4)
+        self.assertEqual(self.looked, ["W1", "W2"])
+        self.assertTrue(any("1 new comment on its pull request" in e[2] and "W2.9" in e[2]
+                            for e in self.w.events))
+        self.w.walk_tick()
+        self.assertEqual(self.looked, ["W1", "W2"])
+        self.w.walk_pr_next = time.time() - 1
+        self.w.walk_tick()          # the walk has a chain on W1 by now: only W2 is looked at
+        self.assertEqual(self.looked, ["W1", "W2", "W2"])
+
+    def test_a_task_with_a_chain_on_it_is_passed_over(self):
+        self.w.walk_pr_next = 0.0
+        self.w.walk_look_at_prs({"W1"})
+        self.assertEqual(self.looked, ["W2"])
+
+    def test_nothing_is_asked_of_github_with_the_mode_off(self):
+        dfs_walk.dfs_paths.read_github = lambda: ""
+        self.w.start(4)
+        self.assertEqual(self.looked, [])
+
+    def test_a_failed_look_is_said_and_the_walk_goes_on(self):
+        def boom(task):
+            raise dfs_walk.dfs_github.GithubError("gh is not logged in")
+        dfs_walk.dfs_github.watch = boom
+        self.w.start(4)
+        self.assertTrue(self.w.walk_on)
+        self.assertTrue(any("could not be read: gh is not logged in" in e[2] for e in self.w.events))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

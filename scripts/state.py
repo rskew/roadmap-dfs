@@ -150,6 +150,9 @@ def state_for(task: str):
         review_rounds=dfs_tree.review_rounds_unsettled(t),
         # Marked a draft: the walk never picks it, but a pin or a run by hand works it.
         draft=int(dfs_tree.is_draft(t)),
+        # GitHub mode: the pull request's url once opened ("" before), and whether the
+        # Open PR mark applies now (a finished task held for it).
+        pr=dfs_tree.pr_url(t), pr_ready=int(dfs_tree.pr_ready(t)),
         # No node yet: the work session's job is to lay the tree out, not to build.
         plan=int(not t["nodes"]),
         open_raises=[r["ts"] for r in raises],

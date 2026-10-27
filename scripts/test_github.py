@@ -128,6 +128,25 @@ class Watch(unittest.TestCase):
             LINES.pop()
         self.assertEqual(dfs_github.watch("W1"), [])
 
+    def test_the_open_pr_mark_applies_only_to_a_held_task_with_no_pull_request(self):
+        t = dfs_tree.load("W1")
+        self.assertEqual(dfs_tree.pr_url(t), "https://github.com/o/r/pull/7")
+        self.assertFalse(dfs_tree.pr_ready(t))
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK.split("- 2026")[0])
+        t = dfs_tree.load("W1")
+        real = dfs_paths.worktree
+        dfs_paths.worktree = lambda task: self.root
+        try:
+            self.assertTrue(dfs_tree.pr_ready(t))
+            dfs_paths.write_github(None)
+            self.assertFalse(dfs_tree.pr_ready(t))
+        finally:
+            dfs_paths.worktree = real
+        self.assertFalse(dfs_tree.pr_ready(t))      # no worktree held: nothing to push
+        merged = TASK + "- 2026-10-27T02:00:00Z · pr · https://github.com/o/r/pull/7 · merged\n"
+        (self.root / ".dfs" / "items" / "W1.md").write_text(merged)
+        self.assertTrue(dfs_tree.pr_merged(dfs_tree.load("W1")))
+
     def test_nothing_is_watched_with_github_mode_off_or_no_pull_request(self):
         dfs_paths.write_github(None)
         self.assertEqual(dfs_github.watched(), [])

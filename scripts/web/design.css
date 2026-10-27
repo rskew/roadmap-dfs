@@ -104,6 +104,7 @@ code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-si
 
 /* ── button: outlined, square, lowercase. primary is the one thing the screen wants done ───── */
 .btn { min-height: var(--hit); padding: 0 var(--s4); border: var(--rule) solid var(--ink); font-size: var(--fs-control); font-weight: 500; letter-spacing: var(--track-control); text-align: center; display: inline-flex; align-items: center; justify-content: center; }
+a.btn { color: var(--ink); text-decoration: none; }
 .btn.primary { background: var(--ink); color: var(--paper); }
 .btn.danger { border-color: var(--attention); color: var(--attention); }
 .btn:disabled { opacity: .45; }

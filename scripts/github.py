@@ -45,10 +45,7 @@ def gh(*args, cwd=None):
     return r.stdout
 
 
-def pr_url(t):
-    """The url of the task's pull request, from its last `pr` entry; "" when none is open."""
-    marks = [e for e in t["log"] if e["kind"] == "pr"]
-    return marks[-1]["args"][0] if marks and marks[-1]["args"] else ""
+pr_url = dfs_tree.pr_url
 
 
 @dfs_branch.one_at_a_time
@@ -118,7 +115,7 @@ def watch(task):
     is known by the `(github <kind> <id>)` its node's Approach ends with. Returns the new ids."""
     t = dfs_tree.load(task)
     url = pr_url(t)
-    if not url or any(e["kind"] == "pr" and e["args"][1:2] == ["merged"] for e in t["log"]):
+    if not url or dfs_tree.pr_merged(t):
         return []
     known = " ".join(nd["fields"].get("Approach", "") for nd in t["nodes"])
     added = []
@@ -143,7 +140,7 @@ def watched():
     out = []
     for task in dfs_tree.task_ids():
         t = dfs_tree.load(task)
-        if pr_url(t) and not any(e["kind"] == "pr" and e["args"][1:2] == ["merged"] for e in t["log"]):
+        if pr_url(t) and not dfs_tree.pr_merged(t):
             out.append(task)
     return out
 

@@ -1273,6 +1273,27 @@ class Web(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/draft", dict(task=task))[0], 400)
         self.assertEqual(self.call("POST", "/api/draft", dict(task="W99", draft=True))[0], 404)
 
+    def test_open_pr_is_refused_unless_github_mode_holds_the_task_and_carries_the_link(self):
+        task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
+        data = self.call("GET", "/api/task/" + task)[1]
+        self.assertEqual((data["pr"], data["pr_ready"]), ("", False))
+        status, data, _ = self.call("POST", "/api/open_pr", dict(task=task))
+        self.assertEqual(status, 409)
+        self.assertIn("GitHub mode is off", data["error"])
+        dfs_tree.append_log(task, "pr", ["https://github.com/o/r/pull/9"])
+        self.assertEqual(self.call("GET", "/api/task/" + task)[1]["pr"], "https://github.com/o/r/pull/9")
+        row = {i["id"]: i for i in self.call("GET", "/api/state")[1]["items"]}[task]
+        self.assertEqual((row["pr"], row["pr_ready"]), ("https://github.com/o/r/pull/9", False))
+
+    def test_open_pr_runs_github_open_pr_and_answers_with_the_task(self):
+        opened = []
+        real = dfs_web.dfs_github.open_pr
+        dfs_web.dfs_github.open_pr = lambda t: opened.append(t) or "https://github.com/o/r/pull/9"
+        self.addCleanup(setattr, dfs_web.dfs_github, "open_pr", real)
+        task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
+        status, data, _ = self.call("POST", "/api/open_pr", dict(task=task))
+        self.assertEqual((status, opened, data["task"]["id"]), (200, [task], task))
+
     def test_marking_a_draft_tells_the_walk_only_when_it_becomes_one(self):
         told = []
         dfs_web.WALK["walker"] = type("W", (), {"draft_marked": lambda self, t: told.append(t)})()

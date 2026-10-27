@@ -94,6 +94,7 @@ import order as dfs_order   # noqa: E402
 import state as dfs_state   # noqa: E402
 import tree as dfs_tree     # noqa: E402
 import tui as dfs_tui       # noqa: E402  (its view functions; nothing here starts curses)
+import github as dfs_github   # noqa: E402
 import runs as dfs_runs     # noqa: E402
 import walk as dfs_walk      # noqa: E402
 import chat as dfs_chat      # noqa: E402
@@ -164,7 +165,7 @@ def state_json():
             waiting_on=it.get("waiting_on") or "", blocked_by=it.get("blocked_by") or "",
             segment=it.get("segment", 0), stop=bool(it.get("stop")), ahead=it.get("ahead", 0), base=it.get("base") or "origin/main",
             uncommitted=it.get("uncommitted") or "", archivable=bool(it.get("archivable")),
-            draft=bool(it.get("draft")),
+            draft=bool(it.get("draft")), pr=it.get("pr") or "", pr_ready=bool(it.get("pr_ready")),
             running=running.get(it["id"], ""), next=it["id"] == nxt))
     return dict(items=items, next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
@@ -375,7 +376,8 @@ def task_json(task):
                 notes=[dict(kind=g["kind"], heading=dfs_tui.note_heading(g),
                             body="\n\n".join(b for _ts, _v, b in g["notes"]))
                        for g in dfs_tree.note_sessions(t)],
-                sessions=dfs_tree.sessions_since_author(t), draft=dfs_tree.is_draft(t))
+                sessions=dfs_tree.sessions_since_author(t), draft=dfs_tree.is_draft(t),
+                pr=dfs_tree.pr_url(t), pr_ready=dfs_tree.pr_ready(t))
 
 
 RUN_LISTED = 12             # the newest chains a task page lists
@@ -835,6 +837,14 @@ def act(name, body):
                 # a walk chain already on it would work it to the end
                 if want and WALK["walker"] is not None:
                     WALK["walker"].draft_marked(task)
+        elif name == "open_pr":
+            # as the terminal's `P`: GitHub mode's Open PR mark, which pushes the held branch
+            # and runs `gh pr create`; the url is in the log entry it writes
+            try:
+                dfs_github.open_pr(task)
+            except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError,
+                    OSError, dfs_paths.NoBranch) as e:
+                raise Refused(str(e), 409)
         elif name == "delete_task":
             try:
                 dfs_tree.delete_task(task)
