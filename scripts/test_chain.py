@@ -269,6 +269,38 @@ class Chain(unittest.TestCase):
         self.assertEqual(status[0], "done")
         self.assertIn("held unmerged for its pull request", status[1])
 
+    def test_in_github_mode_open_pr_pushes_the_held_branch_and_logs_the_pull_request(self):
+        (self.root / ".dfs" / "github").write_text("hub\n")
+        bare = self.aside / "hub.git"
+        self.git("init", "-q", "--bare", str(bare))
+        self.git("remote", "add", "hub", str(bare))
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        (self.root / "main.txt").write_text("main moved\n")
+        self.git("add", "main.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "main moves")
+        calls = self.aside / "gh-calls"
+        fake = self.aside / "gh"
+        fake.write_text('#!/bin/sh\nprintf "%%s\\n" "$@" >> %s\necho https://github.com/o/r/pull/7\n' % calls)
+        fake.chmod(0o755)
+        pr = lambda: subprocess.run([sys.executable, str(HERE / "github.py"), "pr", "W1"], cwd=self.root,
+                                    capture_output=True, text=True, env=dict(os.environ, DFS_GH=str(fake)))
+        r = pr()
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "https://github.com/o/r/pull/7"), r.stderr)
+        # rebased onto the moved main, then pushed as it is
+        self.assertEqual(self.git("rev-parse", "dfs/W1", cwd=self.wt), self.git("rev-parse", "dfs/W1", cwd=bare))
+        default = self.git("symbolic-ref", "--short", "HEAD")
+        self.assertEqual(self.git("merge-base", "--is-ancestor", default, "dfs/W1", cwd=self.wt), "")
+        args = calls.read_text().splitlines()
+        self.assertEqual(args[:6], ["pr", "create", "--base", default, "--head", "dfs/W1"])
+        self.assertIn("W1: the only thing", args)
+        self.assertEqual([e["args"] for e in self.log("pr")], [["https://github.com/o/r/pull/7"]])
+        # a second mark is refused: the task has its pull request
+        r = pr()
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("already has its pull request", r.stderr)
+        self.assertEqual(len(calls.read_text().splitlines()), len(args))
+
     def test_a_merge_that_conflicts_reopens_the_item_and_the_fix_is_reviewed_and_merged(self):
         main = self.git("symbolic-ref", "--short", "HEAD")
         rc, meta, out = self.run_chain("code,confirm", cap=2)
