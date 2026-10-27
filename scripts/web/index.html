@@ -70,6 +70,13 @@ html[data-loading] #stripe { opacity: 1; }
 @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 @media (prefers-reduced-motion: reduce) { #stripe::before { animation: none; width: 100%; } }
 #view .wait { color: var(--muted); }
+/* pulling down on the bar of the task list (pullDraw): a strip under the bar that grows with the finger, and a downward
+   drag that starts on the bar is the page's, never the browser's scroll */
+#bar.pulls { touch-action: pan-x pan-down; }
+#pull { position: absolute; left: 0; right: 0; top: 100%; display: flex; align-items: flex-end; justify-content: center; overflow: hidden;
+  padding-bottom: var(--s2); box-sizing: border-box; background: var(--paper); border-bottom: var(--rule) solid var(--line); font-size: var(--fs-label); letter-spacing: .08em; color: var(--muted); pointer-events: none; }
+#pull[hidden] { display: none; }
+#pull.ready { color: var(--ink); border-bottom-color: var(--ink); }
 
 #layout { max-width: var(--page); margin: 0 auto; }
 #view { padding: var(--s3) var(--s4) 28px; min-width: 0; }
@@ -369,6 +376,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 <body>
 <header id="bar">
   <div id="stripe" aria-hidden="true"></div>
+  <div id="pull" role="status" hidden></div>
   <svg class="mark" viewBox="110 110 300 300" role="img" aria-label="dfs"><path d="M150 140H256V236H362V336M256 236V318" fill="none" stroke="currentColor" stroke-width="26"/><rect x="128" y="118" width="44" height="44"/><circle cx="256" cy="236" r="30"/><rect x="208" y="318" width="96" height="30"/><circle cx="362" cy="352" r="40"/></svg>
   <button class="textbtn" id="back" hidden>Back</button>
   <h1 id="title">{{project}}</h1>
@@ -689,6 +697,7 @@ function drawBar(r) {
 function chrome(r) {
   drawBar(r);
   $("#back").hidden = r.view === "tasks" || r.view === "chats";
+  $("#bar").classList.toggle("pulls", r.view === "tasks");
   const t = $("#title");
   if (r.view === "task" && S.task) t.innerHTML = `${esc(S.task.id)}<small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
   else if (r.view === "artefact") { const a = artefactOf(r); t.innerHTML = `${esc(a ? a.title : r.name)}<small>${esc(r.task)}, artefact</small>`; }
@@ -1785,6 +1794,39 @@ document.addEventListener("focusout", e => setTimeout(function catchUp() {
 document.addEventListener("input", e => { if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = { budget: $("#bud").value, parallel: $("#par").value }; });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStartForm(); } });
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
+
+/* ── pulling down on the bar reloads the task list ──────────────────────────────────────────────────────────────────────
+   The installed page (`display: standalone`) gets no pull-to-refresh from Chrome or Safari, so the page makes its own: on
+   the task list, a finger that lands on the bar and drags down PULL.at or more reloads the page when it lets go, as the
+   browser's own pull would (the list comes back where it was scrolled, from `sessionStorage`). The bar stays pinned, so it
+   works wherever the list is scrolled. Only on the list: elsewhere a reload could lose a form or a chat being written. */
+const PULL = { y0: null, dy: 0, at: 72 };
+function pullDraw(going) {
+  const p = $("#pull"), ready = going || PULL.dy >= PULL.at;
+  p.hidden = !going && !PULL.dy;
+  p.style.height = Math.max(28, Math.min(PULL.dy, PULL.at)) + "px";
+  p.classList.toggle("ready", ready);
+  p.textContent = going ? "refreshing" : ready ? "release to refresh" : "pull to refresh";
+}
+$("#bar").addEventListener("touchstart", e => {
+  PULL.y0 = e.touches.length === 1 && route().view === "tasks" && !document.querySelector("dialog[open]") ? e.touches[0].clientY : null;
+  PULL.dy = 0;
+}, { passive: true });
+$("#bar").addEventListener("touchmove", e => {
+  if (PULL.y0 == null) return;
+  if (e.touches.length !== 1) { PULL.y0 = null; PULL.dy = 0; return pullDraw(); }
+  const dy = e.touches[0].clientY - PULL.y0;
+  if (dy <= 0 && !PULL.dy) return;                     // a drag up scrolls the list as ever
+  if (e.cancelable) e.preventDefault();                // and a drag down is the pull's, not the browser's
+  PULL.dy = Math.max(0, dy); pullDraw();
+}, { passive: false });
+$("#bar").addEventListener("touchend", () => {
+  if (PULL.y0 == null) return;
+  const go = PULL.dy >= PULL.at && route().view === "tasks";
+  PULL.y0 = null; PULL.dy = 0; pullDraw(go);
+  if (go) location.reload();
+});
+$("#bar").addEventListener("touchcancel", () => { PULL.y0 = null; PULL.dy = 0; pullDraw(); });
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
 let pushT;

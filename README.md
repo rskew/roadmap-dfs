@@ -164,6 +164,8 @@ working, or a node an unanswered raise names, is refused until that is settled.
 
 `python3 scripts/web.py` serves the roadmap as a phone-sized page and an installable app.
 There is no login, so it listens on this machine only until you say otherwise.
+Installed, the page gets no pull-to-refresh from the browser, so it has its own: on the task list, drag down
+from the top bar and let go once it says "release to refresh" to reload the page.
 
 Each project can look its own way, set in the project dialog (tap the project's name): a colour for the top
 of the page (`.dfs/theme`), a background colour for light mode and another for dark (`.dfs/background`), and

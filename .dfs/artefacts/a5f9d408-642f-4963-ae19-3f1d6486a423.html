@@ -1,0 +1,213 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W117.1: pulling down on the task list's top bar reloads the page</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .tabs button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #999; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { border-color: #1a1a1a; font-weight: 600; }
+  .phone { border: 2px solid #1a1a1a; border-radius: 14px; overflow: hidden; background: #fff; max-width: 340px; }
+  .bar { display: flex; gap: 8px; align-items: center; min-height: 48px; padding: 0 12px; border-bottom: 2px solid #1a1a1a; font-weight: 600; }
+  .bar .hand { margin-left: auto; font-weight: 400; color: #555; font-size: 14px; }
+  .pull { text-align: center; font-size: 14px; color: #555; background: #f1efe8; padding: 8px; border-bottom: 1px solid #ddd; }
+  .pull[hidden] { display: none; }
+  .row { padding: 10px 12px; border-bottom: 1px solid #ddd; }
+  .row.faint { color: #aaa; }
+  .says { margin: 12px 0 0; padding: 10px 12px; border-left: 4px solid #1a1a1a; background: #fff; }
+  .says.bad { border-left-color: #b3261e; }
+  ul { padding-left: 20px; margin: 6px 0; }
+</style>
+
+<h1>Pulling down on the task list's top bar reloads the page</h1>
+<p>The page installs as an app (<code>display: standalone</code>), and an installed page gets no pull-to-refresh from Chrome or Safari, so the page makes the gesture itself. Switch between what happens now and what each reading of the Goal would build.</p>
+
+<div class="tabs" role="group" aria-label="Which reading">
+  <button type="button" data-k="now" aria-pressed="false">Now</button>
+  <button type="button" data-k="this" aria-pressed="true">This node</button>
+  <button type="button" data-k="tab" aria-pressed="false">Browser's own</button>
+  <button type="button" data-k="reread" aria-pressed="false">Re-read only</button>
+</div>
+
+<div class="phone" aria-label="The task list on a phone, scrolled part way down">
+  <div class="bar">dfs · project <span class="hand" id="hand">finger drags down here</span></div>
+  <div class="pull" id="pull">Release to refresh</div>
+  <div class="row faint">W12 · (scrolled past)</div>
+  <div class="row">W13 · a task</div>
+  <div class="row">W14 · a task</div>
+  <div class="row">W15 · a task</div>
+</div>
+<div class="says" id="says"></div>
+
+<h2>What would show it wrong</h2>
+<ul>
+  <li>You pull in a browser tab, not the installed page, and the browser's own pull is what fails there.</li>
+  <li>You wanted the list re-read in place (the walk box's half-typed numbers kept), not a reload.</li>
+  <li>You wanted it only at the top of the list, not wherever it is scrolled.</li>
+</ul>
+
+<script>
+const SAYS = {
+  now: ["bad", "Now: the drag scrolls the list up if it is scrolled, and at the top nothing happens: the installed page has no pull-to-refresh, and the page adds none."],
+  this: ["", "This node: a drag down that starts on the bar shows “Pull to refresh” under it, then “Release to refresh” past the threshold, and letting go reloads the page, as the browser's own pull would (new page code too); the list comes back where it was scrolled. It works wherever the list is scrolled, since the bar stays pinned, and only on the task list: elsewhere a reload could lose a half-written form or chat."],
+  tab: ["bad", "Browser's own: nothing to build in an installed page, which has none. In a browser tab it already starts from the bar at the top of the list, since the page blocks no overscroll there."],
+  reread: ["", "Re-read only: the same gesture, but letting go re-reads the list from the server instead of reloading. It keeps what is typed in the walk box, but never picks up a newer page after the server is updated, which a reload does."]
+};
+function show(k) {
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === k)));
+  const [cls, text] = SAYS[k];
+  const s = document.getElementById("says"); s.className = "says" + (cls ? " " + cls : ""); s.textContent = text;
+  document.getElementById("pull").hidden = k === "now" || k === "tab";
+  document.getElementById("pull").textContent = k === "reread" ? "Release to re-read the list" : "Release to refresh";
+  if (window.dfsAnswer) dfsAnswer.keep();
+}
+let CUR = "this";
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => { CUR = b.dataset.k; show(CUR); }));
+window.dfsPageState = () => ({ k: CUR });
+addEventListener("dfs-state", e => { if (e.detail && SAYS[e.detail.k]) { CUR = e.detail.k; show(CUR); } });
+show(CUR);
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Pulling down on the bar reloads the page, wherever the list is scrolled, on the task list only."> As this node builds it</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Pulling down on the bar re-reads the list in place, without reloading the page."> Re-read the list, no reload</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

@@ -230,6 +230,45 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // On the task list a finger that drags down from the bar reloads the page once it has come far enough, wherever the
+  // list is scrolled, and the list comes back where it was; a short drag, or one on another screen, reloads nothing.
+  async pullrefresh(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true, isMobile: true });
+    const cdp = await page.context().newCDPSession(page);
+    const y = () => page.evaluate(() => Math.round(window.scrollY));
+    const mark = () => page.evaluate(() => { window.__notReloaded = 1; });
+    const marked = () => page.evaluate(() => window.__notReloaded === 1);
+    const pullText = () => page.evaluate(() => { const p = document.querySelector("#pull"); return p.hidden ? "" : p.textContent; });
+    // a finger lands on the bar, beside the title, and drags `by` pixels down in steps; `held` runs before it lets go
+    async function drag(by, held) {
+      const bar = await boxOf(page, "#bar"), x = bar.x + 40, y0 = bar.y + bar.height / 2;
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y: y0 }] });
+      for (let d = 10; d <= by; d += 10) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y0 + d }] });
+      if (held) await held();
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    }
+    await page.evaluate(() => window.scrollTo(0, 120)); await page.waitForTimeout(400);
+    same(await y(), 120, "the list scrolled");
+    await mark();
+    await drag(40, async () => same(await pullText(), "pull to refresh", "a short pull shows under the bar"));
+    await page.waitForTimeout(500);
+    assert(await marked(), "a short pull does not reload");
+    same(await pullText(), "", "and lets the strip go");
+    same(await y(), 120, "a drag down on the bar does not scroll the list");
+    const loaded = page.waitForEvent("load");
+    await drag(120, async () => { same(await pullText(), "release to refresh", "a long pull says to let go"); same(await y(), 120, "the list stays put while pulling"); });
+    await loaded; await page.waitForSelector(".item"); await page.waitForTimeout(400);
+    assert(!(await marked()), "letting go of a long pull reloads the page");
+    same(await y(), 120, "and the list comes back where it was");
+    await page.evaluate(() => document.querySelector(".item[data-id=W9]").click());
+    await page.waitForSelector(".row"); await mark();
+    await drag(120);
+    await page.waitForTimeout(500);
+    assert(await marked(), "a pull on a task's screen does not reload");
+    same(await pullText(), "", "nor shows the strip");
+    same(errors, [], "no page errors");
+  },
+
   // The chat log and the node sheet are scroll areas of their own, and each is remembered too.
   async scroll_memory_areas(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true });
