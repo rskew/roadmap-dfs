@@ -8,11 +8,15 @@ holds a finished item, its branch and worktree kept. The author's Open PR mark i
                                             # the default branch, push it, open its pull
                                             # request with `gh`, and log a `pr` entry with
                                             # the request's url
+    python3 <scripts>/github.py watch [<task>]  # each new comment or review on an open pull
+                                                # request becomes an open node
 
 `gh` must be logged in (`gh auth login`); `DFS_GH` names another command to run as it
 (the tests' fake). See README, "GitHub mode".
 """
+import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -89,6 +93,61 @@ def open_pr(task):
     return url
 
 
+def _comments(url):
+    """Every comment on the pull request at `url` that asks something of the work, oldest first,
+    as (kind, id, who, text, where, link): its conversation comments and reviews with a body
+    (`gh pr view`) and its line comments (`gh api .../pulls/<n>/comments`)."""
+    m = re.fullmatch(r"https://[^/]+/([^/]+)/([^/]+)/pull/(\d+)/?", url)
+    if not m:
+        raise GithubError("%s is not a pull request's url" % url)
+    view = json.loads(gh("pr", "view", url, "--json", "comments,reviews") or "{}")
+    lines = json.loads(gh("api", "repos/%s/%s/pulls/%s/comments" % m.groups()) or "[]")
+    who = lambda c, key="author": "@" + ((c.get(key) or {}).get("login") or "someone")
+    out = [("comment", c.get("id"), who(c), c.get("body"), "", c.get("url") or url)
+           for c in view.get("comments") or []]
+    out += [("review", c.get("id"), who(c), c.get("body"), "", url) for c in view.get("reviews") or []]
+    out += [("line", c.get("id"), who(c, "user"), c.get("body"),
+             "%s:%s" % (c.get("path"), c.get("line") or c.get("original_line") or "?"),
+             c.get("html_url") or url) for c in lines]
+    return [c for c in out if c[1] and (c[3] or "").strip()]
+
+
+def watch(task):
+    """Turn each comment on `task`'s pull request that the tree does not hold yet into an open
+    node, at the root as a review's finding is, which reopens the task for the walk. A comment
+    is known by the `(github <kind> <id>)` its node's Approach ends with. Returns the new ids."""
+    t = dfs_tree.load(task)
+    url = pr_url(t)
+    if not url or any(e["kind"] == "pr" and e["args"][1:2] == ["merged"] for e in t["log"]):
+        return []
+    known = " ".join(nd["fields"].get("Approach", "") for nd in t["nodes"])
+    added = []
+    for kind, cid, who, text, where, link in _comments(url):
+        mark = "(github %s %s)" % (kind, cid)
+        if mark in known:
+            continue
+        gist = " ".join(text.split())
+        added.append(dfs_tree.add_node(
+            task, "PR %s from %s: %s" % ("review" if kind == "review" else "comment", who,
+                                         gist[:60] + ("…" if len(gist) > 60 else "")),
+            approach="%s commented on the pull request%s (%s): %s Act on it as a reviewer's "
+                     "finding: change the work, or raise if only the author can settle it. %s"
+                     % (who, " at " + where if where else "", link, gist, mark)))
+    return added
+
+
+def watched():
+    """The tasks GitHub mode watches: each with a `pr` entry whose pull request is not merged."""
+    if not dfs_paths.read_github():
+        return []
+    out = []
+    for task in dfs_tree.task_ids():
+        t = dfs_tree.load(task)
+        if pr_url(t) and not any(e["kind"] == "pr" and e["args"][1:2] == ["merged"] for e in t["log"]):
+            out.append(task)
+    return out
+
+
 def main(argv):
     if len(argv) == 3 and argv[1] == "pr":
         try:
@@ -98,6 +157,16 @@ def main(argv):
             return 1
         print(url)
         return 0
+    if len(argv) in (2, 3) and argv[1] == "watch":
+        rc = 0
+        for task in argv[2:] or watched():
+            try:
+                for nid in watch(task):
+                    print("dfs_github: %s: %s from its pull request" % (task, nid))
+            except (GithubError, ValueError) as e:
+                print("dfs_github: %s: %s" % (task, e), file=sys.stderr)
+                rc = 1
+        return rc
     print(__doc__, file=sys.stderr)
     return 2
 
