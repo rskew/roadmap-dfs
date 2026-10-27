@@ -227,11 +227,18 @@ def walk(items):
         it["blocked_by"] = stack[-1][1] if stack else None
         it["waiting_on"] = gate
         it["reachable"] = not stack and gate is None
-        if it["status"] == "blocked":
+        if it["status"] == "blocked" or unmerged(it):
             stack.append((it["depth"], it["id"]))
         if it["status"] != "done" and not it.get("draft") and pending is None:
             pending = it["id"]
     return items
+
+
+def unmerged(it):
+    """Whether `it` is finished but not yet in the default branch, GitHub mode's hold: it
+    waits for its pull request (`pr_ready`) or has it open (`pr`). A child cut now would
+    start from a default branch without its code, so the subtree waits for the merge."""
+    return it.get("status") == "done" and bool(it.get("pr") or it.get("pr_ready"))
 
 
 def next_item(items):
@@ -251,7 +258,7 @@ def held_by_parent(by, it, busy=()):
     draft, or one in `busy`, a chain still on it (see `next_items`)."""
     up = by.get(it.get("parent"))
     while up is not None:
-        if up["id"] in busy or (up["status"] == "open" and not up.get("draft")):
+        if up["id"] in busy or unmerged(up) or (up["status"] == "open" and not up.get("draft")):
             return True
         up = by.get(up.get("parent"))
     return False

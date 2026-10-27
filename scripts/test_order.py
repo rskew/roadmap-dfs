@@ -415,6 +415,19 @@ class Walking(unittest.TestCase):
         t = self.tree(("A", 0, "done"), ("B", 1, "done"), ("C", 2, "open"))
         self.assertEqual(dfs_state.next_items(t, 2, busy={"A"}), [])
 
+    def test_a_task_held_unmerged_for_its_pull_request_holds_its_children(self):
+        def held(**kw):
+            return dfs_state.walk([dict(id="A", depth=0, status="done", **kw),
+                                   dict(id="B", depth=1, status="open"),
+                                   dict(id="C", depth=0, status="open")])
+        for kw in (dict(pr_ready=1), dict(pr="https://github.com/o/r/pull/7")):
+            t = held(**kw)
+            self.assertEqual([i["reachable"] for i in t], [True, False, True])
+            self.assertEqual(dfs_state.next_item(t), "C")
+            self.assertEqual(dfs_state.next_items(t, 2), ["C"])
+        t = held()          # merged on GitHub: no pull request left, the child may start
+        self.assertEqual(dfs_state.next_items(t, 2), ["B", "C"])
+
     def test_the_walks_continuation_goes_first_unless_a_chain_is_on_it(self):
         t = self.tree(("A", 0, "open"), ("B", 0, "open"), ("C", 0, "open"))
         self.assertEqual(dfs_state.next_items(t, 2, first="C"), ["C", "A"])
