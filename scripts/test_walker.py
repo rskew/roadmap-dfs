@@ -365,6 +365,13 @@ class PullRequests(unittest.TestCase):
         self.w.start(4)
         self.assertEqual(self.looked, [])
 
+    def test_a_branch_error_from_a_landing_is_said_not_raised(self):
+        def boom(task):
+            raise dfs_walk.dfs_github.dfs_branch.BranchError("a rebase of yours is unfinished")
+        dfs_walk.dfs_github.watch = boom
+        self.w.walk_look_at_prs(set())
+        self.assertTrue(any("a rebase of yours is unfinished" in e[2] for e in self.w.events))
+
     def test_a_failed_look_is_said_and_the_walk_goes_on(self):
         def boom(task):
             raise dfs_walk.dfs_github.GithubError("gh is not logged in")

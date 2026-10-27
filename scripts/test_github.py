@@ -162,6 +162,18 @@ class Watch(unittest.TestCase):
         (self.root / ".dfs" / "items" / "W1.md").write_text(merged)
         self.assertTrue(dfs_tree.pr_merged(dfs_tree.load("W1")))
 
+    def test_a_pull_request_closed_unmerged_is_not_called_open(self):
+        closed = TASK.split("- 2026")[0] + "- 2026-10-27T02:00:00Z · pr · https://github.com/o/r/pull/7 · closed\n"
+        (self.root / ".dfs" / "items" / "W1.md").write_text(closed)
+        real = dfs_paths.worktree
+        dfs_paths.worktree = lambda task: self.root
+        try:
+            why = dfs_tree.status_of(dfs_tree.load("W1"))[1]
+        finally:
+            dfs_paths.worktree = real
+        self.assertIn("closed unmerged", why)
+        self.assertNotIn("is open", why)
+
     def test_nothing_is_watched_with_github_mode_off_or_no_pull_request(self):
         dfs_paths.write_github(None)
         self.assertEqual(dfs_github.watched(), [])

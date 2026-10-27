@@ -114,11 +114,12 @@ def _pull(url):
     every comment on it that asks something of the work, oldest first, as (kind, id, who, text,
     where, link): its conversation comments and reviews with a body (`gh pr view`) and its line
     comments (`gh api .../pulls/<n>/comments`, every page of them)."""
-    m = re.fullmatch(r"https://[^/]+/([^/]+)/([^/]+)/pull/(\d+)/?", url)
+    m = re.fullmatch(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)/?", url)
     if not m:
         raise GithubError("%s is not a pull request's url" % url)
     view = json.loads(gh("pr", "view", url, "--json", "comments,reviews,state") or "{}")
-    lines = _paged(gh("api", "repos/%s/%s/pulls/%s/comments" % m.groups(), "--paginate"))
+    lines = _paged(gh("api", "repos/%s/%s/pulls/%s/comments" % m.groups()[1:], "--paginate",
+                      "--hostname", m.group(1)))
     who = lambda c, key="author": "@" + ((c.get(key) or {}).get("login") or "someone")
     out = [("comment", c.get("id"), who(c), c.get("body"), "", c.get("url") or url)
            for c in view.get("comments") or []]
@@ -299,7 +300,7 @@ def main(argv):
             try:
                 for nid in watch(task):
                     print("dfs_github: %s: %s from its pull request" % (task, nid))
-            except (GithubError, ValueError) as e:
+            except (GithubError, dfs_branch.BranchError, ValueError) as e:
                 print("dfs_github: %s: %s" % (task, e), file=sys.stderr)
                 rc = 1
         return rc

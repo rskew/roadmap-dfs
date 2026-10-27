@@ -38,8 +38,8 @@ class BranchError(Exception):
 
 
 # `branch.py merge`'s exit status: 0 the item is settled (merged, held for its pull request in
-# GitHub mode, or nothing to merge), 3 it
-# was not merged and the tree has an open node again, 4 it is blocked on a raise.
+# GitHub mode, or nothing to merge), 3 it was not merged and the tree has an open node again,
+# 4 it is blocked on a raise.
 # Every result that is not a merge is 3 or 4, so a chain never takes an unmerged item for done.
 MERGE_EXIT = {"merged": 0, "none": 0, "held": 0, "dirty": 3, "pushed-over": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
 

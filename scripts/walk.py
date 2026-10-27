@@ -508,11 +508,13 @@ class WalkMixin:
 
     def walk_look_at_prs(self, busy):
         for task in dfs_github.watched():
-            if task in busy:
+            # `busy` is as of the tick; a chain the same tick (or a later one) started since
+            # is on the list now, and its tree is not ours to write beside it
+            if task in busy or task in {c["item"] for c in self.walk_chains}:
                 continue
             try:
                 added = dfs_github.watch(task)
-            except (dfs_github.GithubError, ValueError, OSError) as e:
+            except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError, OSError) as e:
                 self.event("github", "%s: its pull request could not be read: %s" % (task, e))
                 continue
             if added:

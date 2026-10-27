@@ -4630,6 +4630,7 @@ class UI(WalkMixin):
             self.msg = "%s kept" % item
             return
         self.msg = "opening the pull request for %s…" % item
+        self.draw()         # the push and `gh` block the key handler: show the message first
         try:
             url = dfs_github.open_pr(item)
         except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError, OSError) as e:

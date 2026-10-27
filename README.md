@@ -68,10 +68,10 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   request's url is logged as a `pr` entry and shown on the task (the screen's tree pane, the page's Pull
   request link). It is not the draft/ready mark, which only says whether the walk may pick a task up. A
   second mark is refused.
-- **The watch** reads each open pull request every five minutes while a walk runs (or `github.py watch
-  [<task>]` by hand). Each new conversation comment, review with a body and line comment becomes one open
+- **The watch** reads each open pull request every five minutes while a walk runs (it stops when the
+  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand). Each new conversation comment, review with a body and line comment becomes one open
   node at the root of the task, as a reviewer's finding does: who wrote it, the text, the file and line, its
-  link, and `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing.
+  link, and `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing; every other comment does, your own replies and bots' included.
   The task is open again, so the walk works and raises on the node as on any other; nothing is posted back
   to GitHub.
 - **The push**: when that task is finished anew (the fix reviewed, or accepted) the hold pushes `dfs/<task>` to

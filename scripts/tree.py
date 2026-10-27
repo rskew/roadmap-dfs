@@ -1349,7 +1349,10 @@ def status_of(t):
         # The author's `accept` is what takes the code as it is instead.
         return "open", "the implementation review found issues; fix them in new nodes"
     last_acc = max((e["ts"] for e in t["log"] if e["kind"] == "accept"), default="")
-    held = (("; its pull request is open" if pr_url(t) else "; held unmerged for its pull request")
+    marks = [e for e in t["log"] if e["kind"] == "pr"]
+    shut = bool(marks) and marks[-1]["args"][1:2] == ["closed"]
+    held = (("; its pull request is closed unmerged" if shut else "; its pull request is open"
+             if pr_url(t) else "; held unmerged for its pull request")
             if dfs_paths.read_github() and dfs_paths.worktree(t["task"]) else
             "; its pull request is merged" if pr_merged(t) else "")
     if last_acc and (not rv or last_acc > rv["ts"]):
