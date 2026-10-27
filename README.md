@@ -53,6 +53,48 @@ the item is worked in place, on whatever is checked out, and nothing is merged. 
 already has a worktree stays in it off `main`/`master`, and its merge raises until you are
 back on the default branch.
 
+## GitHub mode
+
+Write the git remote to push to into `.dfs/github` (an empty file means `origin`) and a finished task is
+no longer merged: a passing review, or your accept, **holds** it, its branch `dfs/<task>` and worktree kept
+and `main` untouched, and the task reads done, "held unmerged for its pull request". Remove the file for
+today's local merge. The mode needs `.dfs` committed (a gitignored roadmap has no task file on the branch
+to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another command to run as `gh`.
+
+- **Open PR** is your mark that the held task is ready: `P` on the screen's item list, the Open PR button on
+  the task's page on the web, or `python3 scripts/github.py pr <task>` from the main checkout. It rebases
+  `dfs/<task>` onto the default branch (a conflict reopens the task with a node, as a merge's does), pushes it
+  with `--force-with-lease` and runs `gh pr create` with the task's title, Summary and nodes as the body. The
+  request's url is logged as a `pr` entry and shown on the task (the screen's tree pane, the page's Pull
+  request link). It is not the draft/ready mark, which only says whether the walk may pick a task up. A
+  second mark is refused.
+- **The watch** reads each open pull request every five minutes while a walk runs (it stops when the
+  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand). Each new
+  conversation comment, review with a body and line comment becomes one open node at the root of the
+  task, as a reviewer's finding does: who wrote it, the text, the file and line, its link, and
+  `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing; every
+  other comment does, your own replies and bots' included.
+  The task is open again, so the walk works and raises on the node as on any other; nothing is posted back
+  to GitHub.
+- **The push**: when that task is finished anew (the fix reviewed, or accepted) the hold pushes `dfs/<task>` to
+  the pull request, so it shows reviewed work and not a half-done node. If the branch moved on GitHub (a
+  suggestion committed there) the push is refused, and the task reopens with a node asking for a rebase onto
+  the remote branch.
+- **Merged or closed on GitHub**: the watch also reads the pull request's state. When it is merged, the watch
+  fetches the remote and fast-forwards the default branch to it, carries the task's file (with the log entries
+  no commit holds) across and commits it there, removes the worktree and `dfs/<task>`, and logs
+  `pr <url> merged`, so the task reads done and merged and is no longer watched. That needs the main checkout
+  on the default branch with no tracked change and no merge or rebase of yours unfinished; otherwise it
+  raises once, asking you to `git pull --rebase <remote> <default>`, and lands on the watch after that. Commits
+  only here (an earlier landing's log, your unpushed work) are replayed on the remote's default branch first and
+  nothing is pushed; only a clash in an earlier landing's own log is settled for the remote's side, and a clash
+  in anything of yours is that raise, with the replay aborted and your commits untouched. A
+  branch holding commits the pull request never got, or a worktree holding changes beyond the task's files, is
+  kept as `dfs-merged/<task>` and not deleted. Comments still open when it merges are worked on a fresh branch
+  cut from the updated default branch, and their finished fix is held for a new pull request: the Open PR mark
+  applies again, as the merged one no longer counts as the task's pull request. A pull request
+  **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it on GitHub and the watch carries on, or tell the walk to drop the task.
+
 ## Parallel walks
 
 A walk takes a budget of sessions and, optionally, a number of chains to run at once: `w` on the

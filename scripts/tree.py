@@ -104,7 +104,7 @@ DETERMINED = ("confirmed", "refuted")
 # Who writes each kind is a convention the checker enforces only by shape; the
 # runner, the agent, the critic and the author's passes each append their own.
 KINDS = ("session", "end", "raise", "answer", "critic", "review", "correct", "backtrack",
-         "accept", "delete", "draft", "ready")
+         "accept", "delete", "draft", "ready", "pr")
 FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determination",
           "Ask", "Corrects")
 # Old names still read, as the field they became: determined nodes are history, so
@@ -696,7 +696,7 @@ def append_log(task, kind, args=(), body=""):
         import branch as dfs_branch
         try:
             result = dfs_branch.merge(task)
-            if result not in ("merged", "none"):
+            if result not in ("merged", "held", "none"):
                 print("dfs_tree: %s was accepted but not merged (%s); see its tree" % (task, result),
                       file=sys.stderr)
         except dfs_branch.BranchError as e:
@@ -1249,6 +1249,28 @@ def is_draft(t):
     return bool(marks) and marks[-1]["kind"] == "draft"
 
 
+def pr_url(t):
+    """The url of the task's open pull request, from its last `pr` entry; "" when it has none,
+    or its last was merged (work finished after a merge is held for a new one)."""
+    marks = [e for e in t["log"] if e["kind"] == "pr"]
+    if not marks or not marks[-1]["args"] or pr_merged(t):
+        return ""
+    return marks[-1]["args"][0]
+
+
+def pr_merged(t):
+    """Whether the task's last pull request is logged as merged (`pr <url> merged`)."""
+    marks = [e for e in t["log"] if e["kind"] == "pr"]
+    return bool(marks) and marks[-1]["args"][1:2] == ["merged"]
+
+
+def pr_ready(t):
+    """Whether the author's Open PR mark applies: GitHub mode is on, the task is done and its
+    branch is held in a worktree, and no pull request has been opened for it yet."""
+    return bool(dfs_paths.read_github() and not pr_url(t) and status_of(t)[0] == "done"
+                and dfs_paths.worktree(t["task"]))
+
+
 def author_marks(t):
     return [e for e in t["log"] if e["kind"] in ("answer", "correct", "accept")]
 
@@ -1327,11 +1349,17 @@ def status_of(t):
         # The author's `accept` is what takes the code as it is instead.
         return "open", "the implementation review found issues; fix them in new nodes"
     last_acc = max((e["ts"] for e in t["log"] if e["kind"] == "accept"), default="")
+    marks = [e for e in t["log"] if e["kind"] == "pr"]
+    shut = bool(marks) and marks[-1]["args"][1:2] == ["closed"]
+    held = (("; its pull request is closed unmerged" if shut else "; its pull request is open"
+             if pr_url(t) else "; held unmerged for its pull request")
+            if dfs_paths.read_github() and dfs_paths.worktree(t["task"]) else
+            "; its pull request is merged" if pr_merged(t) else "")
     if last_acc and (not rv or last_acc > rv["ts"]):
-        return "done", "every live node confirmed, and accepted by the author"
+        return "done", "every live node confirmed, and accepted by the author" + held
     if rv:
-        return "done", "every live node confirmed, and the implementation reviewed"
-    return "done", "every live node confirmed"
+        return "done", "every live node confirmed, and the implementation reviewed" + held
+    return "done", "every live node confirmed" + held
 
 
 def incomplete(t):

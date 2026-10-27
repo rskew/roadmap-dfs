@@ -77,6 +77,7 @@ import limit as dfs_limit              # noqa: E402  (the same)
 from walk import (AGENTS, MAX_PARALLEL, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
                   WALK_STOP, WalkMixin, agent_file, read_agent, walk_decide, walk_held_for)
 import tree as dfs_tree               # noqa: E402  (the same)
+import github as dfs_github             # noqa: E402  (the same)
 
 # ⚠️ TWO ROOTS. `ROOT` is the repo being worked on — the CWD, and where everything is
 # launched — and `STATE` is that repo's own `.dfs`. `paths.py` is the one
@@ -720,6 +721,7 @@ KEYS = [
     ("items", "w", ord("w"), "walk", "walk the roadmap depth-first, or stop the walk"),
     ("items", "n", ord("n"), "pin", "pin this item as where the walk goes next (again: unpin)"),
     ("items", "s", ord("s"), "draft", "mark it a draft, which the walk passes over (again: ready); n still pins it"),
+    ("items", "P", ord("P"), "open-pr", "GitHub mode: push this finished item's branch and open its pull request (asks first)"),
     ("items", "K", ord("K"), "stop", "stop this item's running chain (asks first)"),
     ("items", "D", ord("D"), "delete", "delete this item; its files are kept under .dfs/archive/deleted (asks first)"),
     ("items", "r", ord("r"), "review", "review: open the tree to answer and correct"),
@@ -3786,6 +3788,10 @@ class UI(WalkMixin):
         self.tree_sel = max(0, min(self.tree_sel, len(rows) - 1))
         para("%s — %s" % (it["id"], it["goal"]), curses.A_BOLD)
         out.append((it["why"], self.status_attr(it["status"])))
+        if it.get("pr"):
+            out.append(("pull request: %s" % it["pr"], look("accent")))
+        elif it.get("pr_ready"):
+            out.append(("held for its pull request · P opens it", look("accent")))
         if it.get("corrections"):
             out.append(("corrected, not yet carried out: %s"
                         % ", ".join(it["corrections"]), curses.A_BOLD))
@@ -4607,6 +4613,32 @@ class UI(WalkMixin):
         if on:
             self.walk_draft_marked(item)
 
+    def open_pr(self, item):
+        """`P`: GitHub mode's Open PR mark. After a yes, push the held branch and open its
+        pull request (`github.open_pr`, the same call as `github.py pr`), and say its url."""
+        if item is None:
+            return
+        row = next((i for i in self.items if i["id"] == item), None) or {}
+        if row.get("pr"):
+            self.msg = "%s already has its pull request: %s" % (item, row["pr"])
+            return
+        if not row.get("pr_ready"):
+            self.msg = ("%s is not held for a pull request: GitHub mode (.dfs/github) must be "
+                        "on and the task finished" % item)
+            return
+        if self.prompt("push dfs/%s and open its pull request? [y/N]:" % item)[:1].lower() != "y":
+            self.msg = "%s kept" % item
+            return
+        self.msg = "opening the pull request for %s…" % item
+        self.draw()         # the push and `gh` block the key handler: show the message first
+        try:
+            url = dfs_github.open_pr(item)
+        except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError, OSError) as e:
+            self.msg = "no pull request: %s" % e
+            return
+        self.reload()
+        self.msg = self.event("github", "%s: pull request opened, %s" % (item, url))
+
     def delete_item(self, item):
         """Retire `item` to `.dfs/archive/deleted` after a yes, then land the cursor on
         the item that took its row (`reload` falls back to the row once it is gone)."""
@@ -5035,6 +5067,8 @@ class UI(WalkMixin):
                 self.delete_item(item)
         elif ch == ord("s") and not self.tree_focused():
             self.toggle_draft(item)
+        elif ch == ord("P") and not self.tree_focused():
+            self.open_pr(item)
         elif ch == ord("K"):
             # Capital, and it asks: a chain is an hour of somebody's subscription and
             # there is no undo for stopping one halfway.

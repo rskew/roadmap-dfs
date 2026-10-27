@@ -1111,5 +1111,53 @@ class AMessageToTheRunningSession(unittest.TestCase):
         self.assertEqual(self.send("").msg, "sent nothing")
         self.assertEqual(TUI.dfs_runs.messages(self.d), [])
 
+class OpeningAPullRequest(unittest.TestCase):
+    """`P`: GitHub mode's Open PR mark on a finished item held for its pull request."""
+
+    def setUp(self):
+        self.real = TUI.dfs_github.open_pr
+        self.opened = []
+        TUI.dfs_github.open_pr = lambda t: self.opened.append(t) or "https://github.com/o/r/pull/3"
+        self.addCleanup(setattr, TUI.dfs_github, "open_pr", self.real)
+
+    def screen(self, answer="y", **kw):
+        ui = a_screen([dict(item("W7", status="done"), **kw)])
+        ui.prompt = lambda q: answer
+        ui.reload = lambda: None
+        ui.event = lambda kind, text: text
+        return ui
+
+    def test_it_opens_after_a_yes_and_says_the_url(self):
+        ui = self.screen(pr_ready=1)
+        ui.open_pr("W7")
+        self.assertEqual(self.opened, ["W7"])
+        self.assertIn("https://github.com/o/r/pull/3", ui.msg)
+
+    def test_it_does_nothing_on_a_no_or_on_an_item_not_held_or_already_open(self):
+        for ui in (self.screen("n", pr_ready=1), self.screen(), self.screen(pr="https://github.com/o/r/pull/2")):
+            ui.open_pr("W7")
+        self.assertEqual(self.opened, [])
+
+    def test_a_failure_is_said_and_nothing_is_logged(self):
+        def refuse(task):
+            raise TUI.dfs_github.GithubError("gh is not logged in")
+        TUI.dfs_github.open_pr = refuse
+        ui = self.screen(pr_ready=1)
+        ui.open_pr("W7")
+        self.assertEqual(ui.msg, "no pull request: gh is not logged in")
+
+    def test_the_tree_pane_shows_the_link_or_the_key(self):
+        for row, want in ((dict(pr="https://github.com/o/r/pull/2"), "pull request: https://github.com/o/r/pull/2"),
+                          (dict(pr_ready=1), "P opens it")):
+            ui = self.screen(**row)
+            ui.tree_of = lambda t: ({"nodes": [], "task": "W7"}, None, {})
+            TUI.tree_entries, real = (lambda *a: []), TUI.tree_entries
+            try:
+                text = "\n".join(t for t, _ in ui.lines_tree(100))
+            finally:
+                TUI.tree_entries = real
+            self.assertIn(want, text)
+
+
 if __name__ == "__main__":
     unittest.main()

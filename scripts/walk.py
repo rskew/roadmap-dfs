@@ -31,6 +31,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import github as dfs_github  # noqa: E402
 import limit as dfs_limit    # noqa: E402
 import paths as dfs_paths    # noqa: E402
 import runs as dfs_runs      # noqa: E402
@@ -120,6 +121,7 @@ WALK_HOLD = 3600                # the fallback when the reset time is unparseabl
 # own chain was absent from the list the walk then judged it by. This is how long it
 # may stay absent before that is read as a chain that DIED rather than one that has
 # not spoken yet.
+PR_POLL = 300                   # seconds between looks at the open pull requests (GitHub mode)
 WALK_START_GRACE = 15           # seconds — see `walk_tick`
 
 
@@ -199,6 +201,9 @@ class WalkMixin:
     walk_carry_pinned = ()
     walk_stops = frozenset()
     walk_on = False
+    walk_pr_next = 0.0          # epoch before which the pull requests are not polled again
+    walk_pr_thread = None       # the poll in flight: `gh` is slow and must not stall the tick
+    walk_pr_sync = False        # the tests poll in the tick's own thread
 
     def close_lost_runs(self):
         """Close, and say, each run record a dead supervisor left open: called once as a
@@ -398,6 +403,7 @@ class WalkMixin:
         # no free slot: a walk whose slots a hand-started chain filled still waits at
         # the break, and must end there rather than go past it once that chain is done.
         stop = self.walk_stop_at()
+        self.walk_poll_prs()
         if time.time() < self.walk_until:
             return
 
@@ -479,6 +485,41 @@ class WalkMixin:
                 return
             self.walk_chains = self.walk_chains + [dict(
                 dir=rundir, item=item, started=started, content=content, pin=pin, cap=cap)]
+
+    def walk_poll_prs(self):
+        """GitHub mode: every PR_POLL seconds, look at each open pull request for comments and
+        reviews (`github.watch`), each new one an open node the walk then takes like any other.
+        The look runs in a thread, since `gh` takes seconds and the tick runs on the screen's
+        poll; a task with a chain on it is passed over until the next look, as its tree is
+        being written."""
+        now = time.time()
+        if now < self.walk_pr_next or not dfs_paths.read_github():
+            return
+        if self.walk_pr_thread is not None and self.walk_pr_thread.is_alive():
+            return
+        self.walk_pr_next = now + PR_POLL
+        busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in self.walk_foreign()}
+        if self.walk_pr_sync:
+            self.walk_look_at_prs(busy)
+            return
+        self.walk_pr_thread = threading.Thread(target=self.walk_look_at_prs, args=(busy,),
+                                               daemon=True)
+        self.walk_pr_thread.start()
+
+    def walk_look_at_prs(self, busy):
+        for task in dfs_github.watched():
+            # `busy` is as of the tick; a chain the same tick (or a later one) started since
+            # is on the list now, and its tree is not ours to write beside it
+            if task in busy or task in {c["item"] for c in self.walk_chains}:
+                continue
+            try:
+                added = dfs_github.watch(task)
+            except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError, OSError) as e:
+                self.event("github", "%s: its pull request could not be read: %s" % (task, e))
+                continue
+            if added:
+                self.event("github", "%s: %d new comment%s on its pull request, now open: %s" % (
+                    task, len(added), "" if len(added) == 1 else "s", ", ".join(added)))
 
     def walk_stop_at(self, keep=True):
         """The segment this walk takes nothing from, or None: the first one a STOP BREAK
