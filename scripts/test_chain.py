@@ -353,7 +353,7 @@ class Chain(unittest.TestCase):
 
     PR = "https://github.com/o/r/pull/7"
 
-    def merge_on_github(self, bare):
+    def merge_on_github(self, bare, delete_branch=False):
         """What GitHub does for a merged pull request: merge `dfs/W1` into the default branch
         in the remote."""
         default = self.git("symbolic-ref", "--short", "HEAD")
@@ -363,6 +363,8 @@ class Chain(unittest.TestCase):
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "-q", "--no-ff", "-m", "Merge pull request #7",
                  "origin/dfs/W1", cwd=other)
         self.git("push", "-q", "origin", default, cwd=other)
+        if delete_branch:   # the repository's "Automatically delete head branches"
+            self.git("branch", "-D", "dfs/W1", cwd=bare)
         return default
 
     def test_github_mode_end_to_end_hold_open_pr_comment_fix_push_and_merge(self):
@@ -417,7 +419,7 @@ class Chain(unittest.TestCase):
             {"id": "IC_1", "author": {"login": "rev"}, "body": "rename the step", "url": url + "#c1"}]}))
         self.assertIn("W1.2 from its pull request", gh("watch").stdout)
         # the pull request is merged on GitHub while that comment's node is still open
-        default = self.merge_on_github(bare)
+        default = self.merge_on_github(bare, delete_branch=True)
         view.write_text('{"state": "MERGED"}')
         self.assertEqual(gh("watch").returncode, 0)
         status, _ = self.status()
@@ -427,7 +429,7 @@ class Chain(unittest.TestCase):
         self.count.write_text("0")
         rc, meta, out = self.run_chain("fixn,rok", cap=2)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
-        self.assertNotIn("W1.2: fixed", self.git("log", "--format=%s", "dfs/W1", cwd=bare))
+        self.assertEqual(self.git("branch", "--list", "dfs/W1", cwd=bare), "")   # nothing pushed to the merged one
         status, ready = self.status()
         self.assertEqual(status[0], "done")
         self.assertIn("held unmerged", status[1])

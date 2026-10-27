@@ -80,6 +80,9 @@ def open_pr(task):
     if not dfs_branch._rebase(task, wt, name):
         raise GithubError("%s could not be rebased onto %s; its tree has a node to settle that"
                           % (name, default))
+    # The lease is checked against the remote-tracking ref, which a pull request merged earlier
+    # leaves behind once GitHub deletes its head branch; a failed fetch shows in the push.
+    dfs_branch._git("fetch", "--prune", remote, cwd=wt)
     r = dfs_branch._git("push", "--force-with-lease", "-u", remote, name, cwd=wt)
     if r.returncode != 0:
         raise GithubError("git push %s %s failed: %s" % (remote, name, " ".join(dfs_branch.out_of(r).split())[:400]))
