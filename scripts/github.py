@@ -177,12 +177,15 @@ def land(task, url):
     name, wt, default = dfs_paths.item_branch(task), dfs_paths.worktree(task), dfs_paths.branch()
     tag = "merged PR " + url
 
-    def pull_by_hand(why):
+    def pull_by_hand(why, edits=False):
         _raise_once(task, tag, "The pull request %s was merged on GitHub, but %s was not brought "
-                    "up to it: %s. %s must match %s/%s, so nothing is committed to it here: move "
-                    "anything of yours that sits on it to a branch for a pull request, then run "
+                    "up to it: %s. %s must match %s/%s, so nothing is committed to it here: %s, then run "
                     "`git pull --ff-only %s %s` in the main checkout and the next watch lands %s."
-                    % (url, default, why, default, remote, default, remote, default, task))
+                    % (url, default, why, default, remote, default,
+                       "commit or stash your uncommitted edits (to a branch for a pull request if "
+                       "they should be kept)" if edits else
+                       "move anything of yours that sits on it to a branch for a pull request",
+                       remote, default, task))
 
     if default not in dfs_paths.DEFAULT_BRANCHES:
         return pull_by_hand("the checkout is on %s" % default)
@@ -191,10 +194,10 @@ def land(task, url):
     r = dfs_branch._git("fetch", remote)
     if r.returncode != 0:
         raise GithubError("git fetch %s failed: %s" % (remote, " ".join(dfs_branch.out_of(r).split())[:400]))
-    if wt is not None:   # the carry below overwrites them; an earlier landing's log is not in the way
-        for p in dfs_branch._tracked_task_paths(task, wt):
-            if dfs_branch._git("ls-tree", "-r", "--name-only", "HEAD", "--", p).stdout.strip():
-                dfs_branch._git("checkout", "HEAD", "--", p)
+    mine_dirty = [p for _, p in dfs_branch._dirty(dfs_branch.task_paths(task))] if wt is not None else []
+    if mine_dirty:   # the carry below would overwrite an edit of the author's: keep it, land nothing
+        return pull_by_hand("you have uncommitted edits to %s, which the landing would overwrite"
+                            % ", ".join(mine_dirty[:5]), edits=True)
     r = dfs_branch._git("merge", "--ff-only", "%s/%s" % (remote, default))
     if r.returncode != 0:
         return pull_by_hand("it cannot be fast-forwarded to %s/%s (%s)" % (

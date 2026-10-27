@@ -586,6 +586,29 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.git("merge-base", "--is-ancestor", self.git("rev-parse", default, cwd=bare), default)
 
+    def test_a_landing_keeps_the_authors_uncommitted_edit_of_the_tasks_file_and_asks_once(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        default = self.merge_on_github(bare)
+        view.write_text('{"state": "MERGED"}')
+        note = self.root / ".dfs" / "items" / "W1.md"
+        note.write_text(note.read_text() + "\nAUTHOR NOTE\n")
+        before = self.git("rev-parse", default)
+        for _ in range(2):
+            self.assertEqual(gh("watch").returncode, 0)
+        self.assertIn("AUTHOR NOTE", note.read_text())
+        self.assertEqual(self.git("rev-parse", default), before)
+        self.assertTrue(self.wt.exists())
+        raised = self.log("raise")
+        self.assertEqual(len(raised), 1)
+        self.assertIn("uncommitted edits to .dfs/items/W1.md", raised[0]["body"])
+        self.assertIn("commit or stash", raised[0]["body"])
+        self.assertFalse(any(e["args"][1:2] == ["merged"] for e in self.log("pr")))
+        self.git("checkout", "HEAD", "--", ".dfs/items/W1.md")   # put right, the next watch lands it
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(self.wt.exists())
+
     def test_work_a_merged_pull_request_lacks_keeps_its_branch_as_dfs_merged(self):
         bare, view, gh = self.github_task()
         gh("pr", "W1")
