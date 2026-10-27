@@ -78,6 +78,15 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   the pull request, so it shows reviewed work and not a half-done node. If the branch moved on GitHub (a
   suggestion committed there) the push is refused, and the task reopens with a node asking for a rebase onto
   the remote branch.
+- **Merged or closed on GitHub**: the watch also reads the pull request's state. When it is merged, the watch
+  fetches the remote and fast-forwards the default branch to it, carries the task's file (with the log entries
+  no commit holds) across and commits it there, removes the worktree and `dfs/<task>`, and logs
+  `pr <url> merged`, so the task reads done and merged and is no longer watched. That needs the main checkout
+  on the default branch with no tracked change and no merge or rebase of yours unfinished; otherwise it
+  raises once, asking you to `git pull --ff-only <remote> <default>`, and lands on the watch after that. A
+  branch holding commits the pull request never got, or a worktree holding changes beyond the task's files, is
+  kept as `dfs-merged/<task>` and not deleted. A pull request **closed unmerged** is a raise (logged once as
+  `pr <url> closed`): reopen it on GitHub and the watch carries on, or tell the walk to drop the task.
 
 ## Parallel walks
 

@@ -18,6 +18,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -90,14 +91,15 @@ def open_pr(task):
     return url
 
 
-def _comments(url):
-    """Every comment on the pull request at `url` that asks something of the work, oldest first,
-    as (kind, id, who, text, where, link): its conversation comments and reviews with a body
-    (`gh pr view`) and its line comments (`gh api .../pulls/<n>/comments`)."""
+def _pull(url):
+    """The pull request at `url` as (state, comments): its state (OPEN, MERGED or CLOSED), and
+    every comment on it that asks something of the work, oldest first, as (kind, id, who, text,
+    where, link): its conversation comments and reviews with a body (`gh pr view`) and its line
+    comments (`gh api .../pulls/<n>/comments`)."""
     m = re.fullmatch(r"https://[^/]+/([^/]+)/([^/]+)/pull/(\d+)/?", url)
     if not m:
         raise GithubError("%s is not a pull request's url" % url)
-    view = json.loads(gh("pr", "view", url, "--json", "comments,reviews") or "{}")
+    view = json.loads(gh("pr", "view", url, "--json", "comments,reviews,state") or "{}")
     lines = json.loads(gh("api", "repos/%s/%s/pulls/%s/comments" % m.groups()) or "[]")
     who = lambda c, key="author": "@" + ((c.get(key) or {}).get("login") or "someone")
     out = [("comment", c.get("id"), who(c), c.get("body"), "", c.get("url") or url)
@@ -106,20 +108,124 @@ def _comments(url):
     out += [("line", c.get("id"), who(c, "user"), c.get("body"),
              "%s:%s" % (c.get("path"), c.get("line") or c.get("original_line") or "?"),
              c.get("html_url") or url) for c in lines]
-    return [c for c in out if c[1] and (c[3] or "").strip()]
+    return view.get("state") or "OPEN", [c for c in out if c[1] and (c[3] or "").strip()]
+
+
+def _pr_marks(t):
+    return [e["args"] for e in t["log"] if e["kind"] == "pr"]
+
+
+def _raise_once(task, tag, text):
+    """Raise `text` unless the task already holds an unanswered raise carrying `tag`, which a
+    watch repeating every few minutes would otherwise log again."""
+    t = dfs_tree.load(task)
+    for e in reversed(t["log"]):
+        if e["kind"] == "answer":
+            break
+        if e["kind"] == "raise" and tag in e.get("body", ""):
+            return
+    dfs_tree.append_log(task, "raise", [], "%s\n(%s)" % (text, tag))
+
+
+def closed(task, url):
+    """A pull request closed without merging is the author's to settle: log it once as
+    `pr <url> closed` and raise, asking whether to reopen it or drop the task."""
+    if _pr_marks(dfs_tree.load(task))[-1:] == [[url, "closed"]]:
+        return
+    dfs_tree.append_log(task, "pr", [url, "closed"])
+    dfs_tree.append_log(task, "raise", [], "The pull request %s was closed on GitHub without being "
+                        "merged, so %s's branch is not in the default branch. Reopen the pull "
+                        "request on GitHub and the watch carries on with it, or tell me to drop "
+                        "the task (its worktree and branch are left as they are until then)."
+                        % (url, task))
+
+
+@dfs_branch.one_at_a_time
+def land(task, url):
+    """The pull request of `task` was merged on GitHub: bring the default branch up to it, then
+    let go of the worktree and `dfs/<task>` and log `pr <url> merged`, so the task is done and
+    merged. Fetches the remote and fast-forwards the default branch; that needs the checkout on
+    it with no tracked change and no merge or rebase of the author's in progress, else it is a
+    raise asking them to pull (once). The task's files are carried from the worktree, which holds
+    the log entries no commit does, and committed on the default branch. A branch holding
+    commits that never reached the pull request, or a worktree holding changes beyond the task's
+    files, is kept as `dfs-merged/<task>`, not deleted."""
+    remote = dfs_paths.read_github()
+    name, wt, default = dfs_paths.item_branch(task), dfs_paths.worktree(task), dfs_paths.branch()
+    tag = "merged PR " + url
+
+    def pull_by_hand(why):
+        _raise_once(task, tag, "The pull request %s was merged on GitHub, but %s was not brought "
+                    "up to it: %s. Run `git pull --ff-only %s %s` in the main checkout and the "
+                    "next watch lands %s." % (url, default, why, remote, default, task))
+
+    if default not in dfs_paths.DEFAULT_BRANCHES:
+        return pull_by_hand("the checkout is on %s" % default)
+    if dfs_branch._in_progress():
+        return pull_by_hand("a %s of yours is unfinished in the checkout" % dfs_branch._in_progress())
+    if dfs_branch._git("status", "--porcelain", "--untracked-files=no").stdout.strip():
+        return pull_by_hand("the checkout has uncommitted changes to tracked files")
+    r = dfs_branch._git("fetch", remote)
+    if r.returncode != 0:
+        raise GithubError("git fetch %s failed: %s" % (remote, " ".join(dfs_branch.out_of(r).split())[:400]))
+    r = dfs_branch._git("merge", "--ff-only", "%s/%s" % (remote, default))
+    if r.returncode != 0:
+        return pull_by_hand("it cannot be fast-forwarded to %s/%s (%s)" % (
+            remote, default, " ".join(dfs_branch.out_of(r).split())[:200]))
+    kept = ""
+    if wt is not None:
+        mine = dfs_branch.task_paths(task)
+        stray = [l[3:] for l in dfs_branch._git("status", "--porcelain", cwd=wt).stdout.splitlines()
+                 if not any(l[3:].strip('"') == p or l[3:].startswith(p.rstrip("/") + "/") for p in mine)]
+        gone = dfs_branch._git("rev-list", name, "--not", default, "refs/remotes/%s/%s" % (remote, name))
+        for p in dfs_branch._tracked_task_paths(task, wt):
+            src, dst = wt / p, dfs_paths.work_root() / p
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+        keep = bool(stray) or gone.returncode != 0 or bool(gone.stdout.split())
+        if keep:
+            dfs_branch.keep_leftover_work(task, "merged")
+            kept = "; %s holds work the pull request lacks, kept as dfs-merged/%s" % (name, task)
+        steps = [("its worktree", dfs_branch._git("worktree", "remove", "--force", str(wt))),
+                 ("its branch", dfs_branch._git("branch", "-m", name, "dfs-merged/" + task) if keep
+                  else dfs_branch._git("branch", "-D", name))]
+        for what, r in steps:   # not `release`, which takes the lock `land` holds
+            if r.returncode != 0:
+                print("dfs_github: %s merged, but %s could not be removed: %s"
+                      % (task, what, " ".join(dfs_branch.out_of(r).split())), file=sys.stderr)
+    dfs_tree.append_log(task, "pr", [url, "merged"])
+    try:
+        dfs_branch._commit_task_files(task, dfs_paths.work_root(), "the pull request is merged")
+    except dfs_branch.BranchError as e:
+        print("dfs_github: %s: the log is left uncommitted: %s" % (task, e), file=sys.stderr)
+    print("dfs_github: %s: %s merged on GitHub; %s is at %s/%s%s" % (task, url, default, remote, default, kept))
 
 
 def watch(task):
     """Turn each comment on `task`'s pull request that the tree does not hold yet into an open
     node, at the root as a review's finding is, which reopens the task for the walk. A comment
-    is known by the `(github <kind> <id>)` its node's Approach ends with. Returns the new ids."""
+    is known by the `(github <kind> <id>)` its node's Approach ends with. Returns the new ids.
+    A pull request merged on GitHub is landed locally (`land`) and one closed unmerged is a
+    raise (`closed`), and add nothing."""
     t = dfs_tree.load(task)
     url = pr_url(t)
     if not url or dfs_tree.pr_merged(t):
         return []
+    state, comments = _pull(url)
+    if state == "MERGED":
+        land(task, url)
+        return []
+    if state == "CLOSED":
+        closed(task, url)
+        return []
+    if _pr_marks(t)[-1:] == [[url, "closed"]]:
+        dfs_tree.append_log(task, "pr", [url])   # reopened on GitHub: watched as before
     known = " ".join(nd["fields"].get("Approach", "") for nd in t["nodes"])
     added = []
-    for kind, cid, who, text, where, link in _comments(url):
+    for kind, cid, who, text, where, link in comments:
         mark = "(github %s %s)" % (kind, cid)
         if mark in known:
             continue

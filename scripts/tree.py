@@ -1346,7 +1346,8 @@ def status_of(t):
         return "open", "the implementation review found issues; fix them in new nodes"
     last_acc = max((e["ts"] for e in t["log"] if e["kind"] == "accept"), default="")
     held = (("; its pull request is open" if pr_url(t) else "; held unmerged for its pull request")
-            if dfs_paths.read_github() and dfs_paths.worktree(t["task"]) else "")
+            if dfs_paths.read_github() and dfs_paths.worktree(t["task"]) else
+            "; its pull request is merged" if pr_merged(t) else "")
     if last_acc and (not rv or last_acc > rv["ts"]):
         return "done", "every live node confirmed, and accepted by the author" + held
     if rv:
