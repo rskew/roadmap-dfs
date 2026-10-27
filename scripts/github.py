@@ -28,8 +28,6 @@ import branch as dfs_branch  # noqa: E402
 import paths as dfs_paths    # noqa: E402
 import tree as dfs_tree      # noqa: E402
 
-LANDED = "the pull request is merged"   # the subject `land` commits the task's log under
-
 
 class GithubError(Exception):
     pass
@@ -164,73 +162,40 @@ def closed(task, url):
                         % (url, task))
 
 
-def _landing_commit(sha):
-    """Is `sha` an earlier landing's log commit (`<task>: the pull request is merged`, which
-    `land` makes), touching nothing but roadmap files?"""
-    subject = dfs_branch._git("log", "-1", "--format=%s", sha).stdout.strip()
-    files = dfs_branch._git("diff-tree", "--no-commit-id", "--name-only", "-r", sha).stdout.split()
-    return bool(files) and subject.endswith(LANDED) and all(f.startswith(".dfs/") for f in files)
-
-
-def _replay(upstream):
-    """Replay the commits only here on `upstream` (`git rebase --rebase-merges`). A clash in an
-    earlier landing's log commit is settled for the remote's side of its files, since the pull
-    request brought the task's file with that log; a clash in any other commit (the author's
-    code, their other roadmap files) aborts the whole rebase, so nothing of theirs is dropped
-    or rewritten. Returns the last git result: failed when the rebase was given up."""
-    r = dfs_branch._git(*dfs_branch._identity(), "rebase", "--rebase-merges", upstream)
-    for _ in range(100):
-        if r.returncode == 0:
-            return r
-        stopped = dfs_branch._git("rev-parse", "-q", "--verify", "REBASE_HEAD")
-        clash = dfs_branch._git("diff", "--name-only", "--diff-filter=U").stdout.split()
-        if stopped.returncode != 0 or not clash or not _landing_commit(stopped.stdout.strip()):
-            break
-        for f in clash:   # while rebasing, `ours` is the branch being rebased onto
-            dfs_branch._git("checkout", "--ours", "--", f)
-            dfs_branch._git("add", "--", f)
-        if dfs_branch._git("diff", "--cached", "--quiet").returncode == 0:
-            r = dfs_branch._git(*dfs_branch._identity(), "rebase", "--skip")   # nothing of it was left
-        else:
-            r = dfs_branch._git(*dfs_branch._identity(), "-c", "core.editor=true", "rebase", "--continue")
-    dfs_branch._git("rebase", "--abort")
-    return r
-
-
 @dfs_branch.one_at_a_time
 def land(task, url):
     """The pull request of `task` was merged on GitHub: bring the default branch up to it, then
     let go of the worktree and `dfs/<task>` and log `pr <url> merged`, so the task is done and
-    merged. Fetches the remote and fast-forwards the default branch; that needs the checkout on
-    it with no tracked change and no merge or rebase of the author's in progress, else it is a
-    raise asking them to pull (once). The task's files are carried from the worktree, which holds
-    the log entries no commit does, and committed on the default branch. A branch holding
-    commits that never reached the pull request, or a worktree holding changes beyond the task's
-    files, is kept as `dfs-merged/<task>`, not deleted."""
+    merged. Fetches the remote and fast-forwards the default branch, and nothing else: the default
+    branch must match its upstream, so no commit is added to it here. That needs the checkout on
+    it with no merge or rebase of the author's in progress, else it is a raise asking them to
+    pull (once). The task's files are carried from the worktree, which holds the log entries no
+    commit does, and left uncommitted in the checkout. A branch holding commits that never
+    reached the pull request, or a worktree holding changes beyond the task's files, is kept as
+    `dfs-merged/<task>`, not deleted."""
     remote = dfs_paths.read_github()
     name, wt, default = dfs_paths.item_branch(task), dfs_paths.worktree(task), dfs_paths.branch()
     tag = "merged PR " + url
 
     def pull_by_hand(why):
         _raise_once(task, tag, "The pull request %s was merged on GitHub, but %s was not brought "
-                    "up to it: %s. Run `git pull --rebase %s %s` in the main checkout and the "
-                    "next watch lands %s." % (url, default, why, remote, default, task))
+                    "up to it: %s. %s must match %s/%s, so nothing is committed to it here: move "
+                    "anything of yours that sits on it to a branch for a pull request, then run "
+                    "`git pull --ff-only %s %s` in the main checkout and the next watch lands %s."
+                    % (url, default, why, default, remote, default, remote, default, task))
 
     if default not in dfs_paths.DEFAULT_BRANCHES:
         return pull_by_hand("the checkout is on %s" % default)
     if dfs_branch._in_progress():
         return pull_by_hand("a %s of yours is unfinished in the checkout" % dfs_branch._in_progress())
-    if dfs_branch._git("status", "--porcelain", "--untracked-files=no").stdout.strip():
-        return pull_by_hand("the checkout has uncommitted changes to tracked files")
     r = dfs_branch._git("fetch", remote)
     if r.returncode != 0:
         raise GithubError("git fetch %s failed: %s" % (remote, " ".join(dfs_branch.out_of(r).split())[:400]))
+    if wt is not None:   # the carry below overwrites them; an earlier landing's log is not in the way
+        for p in dfs_branch._tracked_task_paths(task, wt):
+            if dfs_branch._git("ls-tree", "-r", "--name-only", "HEAD", "--", p).stdout.strip():
+                dfs_branch._git("checkout", "HEAD", "--", p)
     r = dfs_branch._git("merge", "--ff-only", "%s/%s" % (remote, default))
-    if r.returncode != 0:
-        # Commits only here (an earlier landing's log, the author's unpushed edits) sit in the way
-        # when GitHub merged without them: replay them on the remote's default branch, as a
-        # `git pull --rebase` would.
-        r = _replay("%s/%s" % (remote, default))
     if r.returncode != 0:
         return pull_by_hand("it cannot be fast-forwarded to %s/%s (%s)" % (
             remote, default, " ".join(dfs_branch.out_of(r).split())[:200]))
@@ -259,10 +224,6 @@ def land(task, url):
                 print("dfs_github: %s merged, but %s could not be removed: %s"
                       % (task, what, " ".join(dfs_branch.out_of(r).split())), file=sys.stderr)
     dfs_tree.append_log(task, "pr", [url, "merged"])
-    try:
-        dfs_branch._commit_task_files(task, dfs_paths.work_root(), LANDED)
-    except dfs_branch.BranchError as e:
-        print("dfs_github: %s: the log is left uncommitted: %s" % (task, e), file=sys.stderr)
     print("dfs_github: %s: %s merged on GitHub; %s is at %s/%s%s" % (task, url, default, remote, default, kept))
 
 

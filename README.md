@@ -82,18 +82,19 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   the remote branch.
 - **Merged or closed on GitHub**: the watch also reads the pull request's state. When it is merged, the watch
   fetches the remote and fast-forwards the default branch to it, carries the task's file (with the log entries
-  no commit holds) across and commits it there, removes the worktree and `dfs/<task>`, and logs
-  `pr <url> merged`, so the task reads done and merged and is no longer watched. That needs the main checkout
-  on the default branch with no tracked change and no merge or rebase of yours unfinished; otherwise it
-  raises once, asking you to `git pull --rebase <remote> <default>`, and lands on the watch after that. Commits
-  only here (an earlier landing's log, your unpushed work) are replayed on the remote's default branch first and
-  nothing is pushed; only a clash in an earlier landing's own log is settled for the remote's side, and a clash
-  in anything of yours is that raise, with the replay aborted and your commits untouched. A
-  branch holding commits the pull request never got, or a worktree holding changes beyond the task's files, is
-  kept as `dfs-merged/<task>` and not deleted. Comments still open when it merges are worked on a fresh branch
-  cut from the updated default branch, and their finished fix is held for a new pull request: the Open PR mark
-  applies again, as the merged one no longer counts as the task's pull request. A pull request
-  **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it on GitHub and the watch carries on, or tell the walk to drop the task.
+  no commit holds) across, removes the worktree and `dfs/<task>`, and logs `pr <url> merged`, so the task
+  reads done and merged and is no longer watched. The default branch must match its upstream, so the landing
+  commits nothing to it: the task's file is left modified and uncommitted in the main checkout, and the
+  fast-forward is all it does to the branch. That needs the main checkout on the default branch with no merge
+  or rebase of yours unfinished, and nothing of yours that the pull request overwrites; if the branch cannot
+  be fast-forwarded (a commit only here, an edit in the way) it raises once, asking you to move your commits
+  to a branch for a pull request and `git pull --ff-only <remote> <default>`, and lands on the watch after
+  that. A branch holding commits the pull request never got, or a worktree holding changes beyond the task's
+  files, is kept as `dfs-merged/<task>` and not deleted. Comments still open when it merges are worked on a
+  fresh branch cut from the updated default branch, and their finished fix is held for a new pull request:
+  the Open PR mark applies again, as the merged one no longer counts as the task's pull request. A pull
+  request **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it on GitHub and the
+  watch carries on, or tell the walk to drop the task.
 
 ## Parallel walks
 
