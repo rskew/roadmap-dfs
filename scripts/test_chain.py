@@ -319,6 +319,49 @@ class Chain(unittest.TestCase):
         self.assertIn("moved on GitHub", r.stderr)
         self.assertEqual(dfs_tree.status_of(self.tree())[0], "open")
 
+    def test_github_mode_end_to_end_hold_open_pr_comment_fix_and_push(self):
+        (self.root / ".dfs" / "github").write_text("hub\n")
+        bare = self.aside / "hub.git"
+        self.git("init", "-q", "--bare", str(bare))
+        self.git("remote", "add", "hub", str(bare))
+        url = "https://github.com/o/r/pull/7"
+        view, api = self.aside / "view.json", self.aside / "api.json"
+        view.write_text("{}")
+        api.write_text("[]")
+        fake = self.aside / "gh"
+        fake.write_text('#!/bin/sh\ncase "$1" in\n  api) cat %s;;\n  pr) case "$2" in create) echo %s;; view) cat %s;; esac;;\nesac\n'
+                        % (api, url, view))
+        fake.chmod(0o755)
+        gh = lambda *a: subprocess.run([sys.executable, str(HERE / "github.py"), *a], cwd=self.root,
+                                       capture_output=True, text=True, env=dict(os.environ, DFS_GH=str(fake)))
+        # the finished task is held: nothing pushed, no pull request
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.git("branch", "--list", "dfs/*", cwd=bare), "")
+        self.assertEqual(self.log("pr"), [])
+        # the author's Open PR mark pushes the branch and logs the pull request
+        r = gh("pr", "W1")
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, url), r.stderr)
+        self.assertEqual(self.git("rev-parse", "dfs/W1", cwd=bare), self.git("rev-parse", "dfs/W1"))
+        # a comment on it becomes an open node and reopens the task
+        view.write_text(json.dumps({"comments": [{"id": "IC_1", "author": {"login": "rev"},
+                                                  "body": "please rename the step", "url": url + "#c1"}],
+                                    "reviews": []}))
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("W1.2 from its pull request", r.stdout)
+        self.assertIn("(github comment IC_1)", (self.wt / ".dfs" / "items" / "W1.md").read_text())
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "open")
+        self.assertEqual(gh("watch").stdout, "")                 # a second look adds nothing
+        # a session fixes the node, the review passes and the hold pushes the fix to the pull request
+        self.count.write_text("0")
+        rc, meta, out = self.run_chain("fixn,rok", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.git("rev-parse", "dfs/W1", cwd=bare), self.git("rev-parse", "dfs/W1"))
+        self.assertIn("W1.2: fixed", self.git("log", "--format=%s", "dfs/W1", cwd=bare))
+        self.assertEqual(len(self.log("pr")), 1)
+        self.assertEqual(self.git("branch", "--list", "dfs/W1").strip(" *+"), "dfs/W1")   # still held
+
     def test_a_merge_that_conflicts_reopens_the_item_and_the_fix_is_reviewed_and_merged(self):
         main = self.git("symbolic-ref", "--short", "HEAD")
         rc, meta, out = self.run_chain("code,confirm", cap=2)

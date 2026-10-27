@@ -53,6 +53,32 @@ the item is worked in place, on whatever is checked out, and nothing is merged. 
 already has a worktree stays in it off `main`/`master`, and its merge raises until you are
 back on the default branch.
 
+## GitHub mode
+
+Write the git remote to push to into `.dfs/github` (an empty file means `origin`) and a finished task is
+no longer merged: a passing review, or your accept, **holds** it, its branch `dfs/<task>` and worktree kept
+and `main` untouched, and the task reads done, "held unmerged for its pull request". Remove the file for
+today's local merge. The mode needs `.dfs` committed (a gitignored roadmap has no task file on the branch
+to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another command to run as `gh`.
+
+- **Open PR** is your mark that the held task is ready: `P` on the screen's item list, the Open PR button on
+  the task's page on the web, or `python3 scripts/github.py pr <task>` from the main checkout. It rebases
+  `dfs/<task>` onto the default branch (a conflict reopens the task with a node, as a merge's does), pushes it
+  with `--force-with-lease` and runs `gh pr create` with the task's title, Summary and nodes as the body. The
+  request's url is logged as a `pr` entry and shown on the task (the screen's tree pane, the page's Pull
+  request link). It is not the draft/ready mark, which only says whether the walk may pick a task up. A
+  second mark is refused.
+- **The watch** reads each open pull request every five minutes while a walk runs (or `github.py watch
+  [<task>]` by hand). Each new conversation comment, review with a body and line comment becomes one open
+  node at the root of the task, as a reviewer's finding does: who wrote it, the text, the file and line, its
+  link, and `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing.
+  The task is open again, so the walk works and raises on the node as on any other; nothing is posted back
+  to GitHub.
+- **The push**: when that task is finished anew (the fix reviewed, or accepted) the hold pushes `dfs/<task>` to
+  the pull request, so it shows reviewed work and not a half-done node. If the branch moved on GitHub (a
+  suggestion committed there) the push is refused, and the task reopens with a node asking for a rebase onto
+  the remote branch.
+
 ## Parallel walks
 
 A walk takes a budget of sessions and, optionally, a number of chains to run at once: `w` on the
