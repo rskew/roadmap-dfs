@@ -321,7 +321,8 @@ def copy_private(src, dst):
 
 def kiro_sign_in(home, box_home):
     """kiro-cli's sign-in in the box: its settings, and a copy of its database with the
-    conversation and history tables emptied, so no earlier session of the author's comes along."""
+    conversation and history tables emptied, so no earlier session of the author's comes along.
+    The copy is made once: a box that already has the database keeps what it was given."""
     import sqlite3
     db = Path(home) / ".local" / "share" / "kiro-cli" / "data.sqlite3"
     out = box_home / ".local" / "share" / "kiro-cli" / "data.sqlite3"

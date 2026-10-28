@@ -258,6 +258,16 @@ What the proof does not show, and what a comparison has to allow for:
   opencode's logs are other shapes, and no replay under either has been run here to read one
   against. A kiro
   replay refreshing its copied token may sign the author out of the live one, as for claude.
+  The kiro box rests on choices made on one install (kiro-cli 2.31.1) and not tested on a
+  second: that the history, conversations and conversations_v2 tables are all of `data.sqlite3`
+  that holds earlier sessions (table names are guesses at kiro's schema; a table of earlier
+  sessions under another name would come along, so list the copy's tables with a row count
+  before trusting a new kiro version), that the engine files listed are program and not data,
+  that binding the host's `/usr/lib`, `/usr/lib64` and `/lib64` for kiro alone shows the sessions
+  libraries and no data of the author's, and that `.dfs/runs/agent` is where the screen keeps its
+  choice. A re-used box (`make_box` on a DEST that already has one) keeps the database it was
+  given the first time. Scoring covers claude and kiro; the node that added kiro's scoring set
+  out to cover codex and opencode too and stopped at those two, which is the author's call.
   A task whose Goal sends its sessions to evidence outside the repo gets nothing from the
   box now and has to work from the repo, so it is a poorer replay of that task, not a leak.
 
