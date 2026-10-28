@@ -92,6 +92,9 @@ python3 - "$sid" "$prompt" "${CHAT_STUB_SAY:-Fine.}" <<'PY'
 import json, os, sqlite3, sys, time
 sid, prompt, say = sys.argv[1:4]
 d = os.path.join(os.environ["HOME"], ".local", "share", "opencode"); os.makedirs(d, exist_ok=True)
+heal = os.environ.get("CHAT_STUB_CRASH_AFTER_ANSWER")
+if os.environ.get("CHAT_STUB_HEAL") and heal and not os.path.exists(heal) and os.path.exists(os.path.join(d, "opencode.db")):
+    os.remove(os.path.join(d, "opencode.db"))       # the lock or the damage that made the store unreadable is gone
 db = sqlite3.connect(os.path.join(d, "opencode.db"))
 db.execute("create table if not exists session_v2 (id text primary key, time_updated integer not null)")
 db.execute("create table if not exists session_message (id text primary key, session_id text not null, type text not null, seq integer not null, time_created integer not null, time_updated integer not null, data text not null)")
@@ -708,6 +711,20 @@ class Chat(unittest.TestCase):
         self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "the second turn was run once: its answer was in the store")
         self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["first", "second"])
         self.assertEqual([m["role"] for m in st["messages"]][-3:], ["you", "agent", "error"], "the answer is there, and the page says the run ended in an error")
+
+    def test_an_opencode_store_that_could_not_be_read_before_the_turn_does_not_hide_a_crash_that_needs_a_retry(self):
+        self.use_opencode()
+        db = Path(os.environ["HOME"]) / ".local" / "share" / "opencode" / "opencode.db"
+        db.parent.mkdir(parents=True)
+        db.write_text("not a database")
+        self.assertIsNone(dfs_chat.opencode_answers("ses_a"), "a store that is there and cannot be read is not a store with no answers")
+        self.log.write_text("")
+        # the store is unreadable before the run; the run stores its answer, then its server crashes ("Transport:")
+        r = subprocess.run([str(HERE / "run.sh"), "--opencode", "--chat-turn", "W1"], cwd=self.root, input="again", text=True,
+                           capture_output=True, env=dict(os.environ, CHAT_SID="ses_a", CHAT_RESUME="1", CHAT_STUB_HEAL="1",
+                                                         CHAT_STUB_CRASH_AFTER_ANSWER=str(self.root / "crashed")))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "the read before the run said nothing, so the run is run again")
 
     def test_the_screens_opencode_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
         self.use_opencode()

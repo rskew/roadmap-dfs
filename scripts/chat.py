@@ -203,9 +203,9 @@ def opencode_db():
     return os.path.join(data, "opencode", "opencode.db")
 
 
-def opencode_query(sql, args=()):
+def opencode_query(sql, args=(), unreadable=()):
     """Rows from opencode's store, opened read-only (it is opencode's, and may be in use);
-    none if there is no store or it cannot be read."""
+    none if there is no store, and `unreadable` (none, unless a caller asks) if it cannot be read."""
     db = opencode_db()
     if not os.path.exists(db):
         return []
@@ -216,7 +216,7 @@ def opencode_query(sql, args=()):
         finally:
             con.close()
     except sqlite3.Error:
-        return []
+        return unreadable
 
 
 def opencode_turns(sid):
@@ -254,8 +254,12 @@ def opencode_turns(sid):
 
 
 def opencode_answers(sid):
-    """How many answers (assistant messages) opencode's store holds for the session."""
-    rows = opencode_query("select count(*) from session_message where session_id = ? and type = 'assistant'", (sid,))
+    """How many answers (assistant messages) opencode's store holds for the session: 0 with no store,
+    None when the store is there and cannot be read (locked, corrupt), which is not the same as none."""
+    rows = opencode_query("select count(*) from session_message where session_id = ? and type = 'assistant'", (sid,),
+                          unreadable=None)
+    if rows is None:
+        return None
     return rows[0][0] if rows else 0
 
 
@@ -815,7 +819,8 @@ def save(scope, sid, agent):
 def main(argv):
     """`--codex-result [sid]`, `--opencode-result [sid]`, `--kiro-result [sid]`: that agent's
     JSON stream of a turn on stdin, the turn's one JSON line on stdout (exit 1 if it failed).
-    `--opencode-answers sid`: how many answers opencode's store holds for a session.
+    `--opencode-answers sid`: how many answers opencode's store holds for a session (`unreadable`
+    when it cannot be read).
     `--save scope sid agent`: record a scope's conversation."""
     results = {"--codex-result": codex_result, "--opencode-result": opencode_result, "--kiro-result": kiro_result}
     if argv[:1] and argv[0] in results:
@@ -823,7 +828,8 @@ def main(argv):
         print(json.dumps(out))
         return 1 if out["is_error"] else 0
     if argv[:1] == ["--opencode-answers"] and len(argv) == 2:
-        print(opencode_answers(argv[1]))
+        answers = opencode_answers(argv[1])
+        print("unreadable" if answers is None else answers)
         return 0
     if argv[:1] == ["--save"] and len(argv) == 4:
         save(*argv[1:])

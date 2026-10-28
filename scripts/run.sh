@@ -280,8 +280,9 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
 # loaded machine half the starts crash). A stream that began a step is never run again,
 # nor is a turn of a session whose store gained an answer meanwhile: the crashed attempt may have
 # stored the message (the page reads a message stored twice once) but not an answer to be asked for twice.
+# A store that could not be read (`unreadable`) on either side shows nothing, so the turn is run again.
 opencode_turn() {
-  local prompt tries=0 out err sid="" answers="" a
+  local prompt tries=0 out err sid="" answers="" now a
   prompt="$(cat; echo x)"; prompt="${prompt%x}"
   for a in "$@"; do [ "$sid" = "?" ] && sid="$a"; [ "$a" = --session ] && sid="?"; done
   [ "$sid" = "?" ] && sid=""
@@ -296,7 +297,8 @@ opencode_turn() {
     tries=$((tries + 1))
     if [ "$tries" -ge 5 ] || grep -q '"type":"step_start"' "$out"; then break; fi
     if ! grep -q '"type":"error".*Transport:' "$out" && { [ -s "$out" ] || ! grep -q 'exited before reporting readiness' "$err"; }; then break; fi
-    if [ -n "$sid" ] && [ "$(python3 "$HERE/chat.py" --opencode-answers "$sid")" != "$answers" ]; then break; fi
+    if [ -n "$sid" ] && now="$(python3 "$HERE/chat.py" --opencode-answers "$sid")" && [ "$now" != "$answers" ] \
+       && [ "$now" != unreadable ] && [ "$answers" != unreadable ]; then break; fi
     echo "dfs_run: opencode ended before it began the turn; running it again" >&2
   done
   cat "$err" >&2; cat "$out"; rm -f "$out" "$err"
