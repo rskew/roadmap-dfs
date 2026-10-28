@@ -430,6 +430,20 @@ class IssuesNameAFinding(InARepo):
         dfs_tree.append_log("W1", "review", ["issues"], "W1@fx.3 · Fix: on a branch.")
 
 
+class CompactNote(InARepo):
+    """The briefing says how much Log could move to the archive, once it is worth a line."""
+
+    def test_old_log_is_offered_for_compaction_and_a_short_one_is_not(self):
+        old = "".join("- 2026-09-25T09:%02d:00Z · raise · W1.1\n  %s\n" % (i, "q" * 600)
+                      for i in range(20))
+        late = "- 2026-09-26T09:00:00Z · answer · 2026-09-25T09:00:00Z\n  go\n"
+        self.write(task(node(1), old + late))
+        note = dfs_state._size_note("W1", dfs_paths.items() / "W1.md")
+        self.assertIn("`tree.py compact W1`", note)
+        self.write(task(node(1), "- 2026-09-25T09:00:00Z · raise · W1.1\n  q\n" + late))
+        self.assertNotIn("compact", dfs_state._size_note("W1", dfs_paths.items() / "W1.md"))
+
+
 class AtomicWrites(InARepo):
     """A rewrite of a task file is a temp file renamed over it, so a process killed in the
     middle leaves the old text: on 2026-10-23 a kill between `write_text`'s truncate and
