@@ -735,6 +735,7 @@ function walkHtml() {
     <p class="line2">${line2}</p>
     <div class="row2"><label for="nextsel">Next</label><select id="nextsel">${options}</select></div>
     <div class="row2"><label for="agentsel">Agent</label><select id="agentsel">${agents}</select></div>
+    ${modelFields(w)}
     ${w.on ? "" : walkFields()}
     <div class="row2 act"><span></span>${w.on ? `<button class="btn" data-act="walkstop">Stop walk</button>` : `<button class="btn primary" data-act="walkstart">Start walk</button>`}</div>
     ${w.on ? "" : `<p class="line2" id="walkhow">The budget is sessions over the whole walk, shared by the chains that run at once on separate branches.</p>`}
@@ -742,6 +743,18 @@ function walkHtml() {
 }
 async function setAgent(agent) {
   try { S.walk = await api("/api/walk/agent", { agent }); toast("The next chain uses " + agent + "."); drawTasks(); }
+  catch (e) { toast(e.message, true); render(true); }
+}
+/* The model a claude session runs on, per role: plan (the first session on a task, the critic and the review)
+   and implement (every other). Empty keeps the runner's own opus and sonnet; "default" is claude's own default.
+   It applies to the next chain; the other agents read their model from their own config. */
+function modelFields(w) {
+  const m = Object.assign({}, w.models, S.walkDraft && S.walkDraft.models);   // typed, not yet kept
+  const field = (role, label, hint) => `<div class="row2"><label for="model-${role}">${label}</label><input type="text" id="model-${role}" data-role="${role}" value="${esc(m[role] || "")}" placeholder="${hint}" maxlength="64" autocapitalize="none" autocomplete="off" spellcheck="false"></div>`;
+  return field("plan", "Plan model", "opus") + field("implement", "Implement model", "sonnet");
+}
+async function setModel(role, model) {
+  try { S.walk = await api("/api/walk/model", { role, model: model.trim() }); if (S.walkDraft && S.walkDraft.models) delete S.walkDraft.models[role]; toast(model.trim() ? "The next chain " + role + "s on " + model.trim() + "." : "The " + role + " model is the runner's own."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
 async function setNext(item) {
@@ -1782,9 +1795,13 @@ document.addEventListener("focusout", e => setTimeout(function catchUp() {
   S.boxHeld = false; box.outerHTML = walkHtml();
   if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
 }, 0));
-document.addEventListener("input", e => { if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = { budget: $("#bud").value, parallel: $("#par").value }; });
+document.addEventListener("input", e => {
+  const role = e.target.dataset && e.target.dataset.role;
+  if (role) { S.walkDraft = Object.assign({}, S.walkDraft); S.walkDraft.models = Object.assign({}, S.walkDraft.models, { [role]: e.target.value }); }
+});
+document.addEventListener("input", e => { if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value }); });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStartForm(); } });
-document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); });
+document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.role) setModel(e.target.dataset.role, e.target.value); });
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
 let pushT;

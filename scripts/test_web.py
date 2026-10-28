@@ -14,6 +14,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -633,7 +634,7 @@ class Web(unittest.TestCase):
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's walkHtml()")
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("function walkHtml() {"):src.index("async function setAgent")]
+        body = src[src.index("function walkHtml() {"):src.index("async function setNext")]
         js = ("const esc = s => String(s); let S;" + body +
               "const walk = on => ({enabled: true, on, hold: 0, used: 1, budget: 5, chain: null, live: [],"
               " candidates: [], agents: ['claude'], agent: 'claude', events: [], auto: 'W1', pinned: null});"
@@ -1377,6 +1378,15 @@ class Web(unittest.TestCase):
         status, snap, _ = self.call("POST", "/api/walk/agent", dict(agent="codex"))
         self.assertEqual((status, snap["agent"]), (200, "codex"))
         self.assertEqual(self.call("POST", "/api/walk/agent", dict(agent="bash"))[0], 409)
+
+    def test_the_models_are_chosen_per_role_for_the_next_chain(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
+            status, snap, _ = self.call("POST", "/api/walk/model", dict(role="plan", model="haiku"))
+            self.assertEqual((status, snap["models"]), (200, dict(plan="haiku", implement="")))
+            status, snap, _ = self.call("POST", "/api/walk/model", dict(role="plan", model=""))
+            self.assertEqual(snap["models"]["plan"], "")
+            self.assertEqual(self.call("POST", "/api/walk/model", dict(role="review", model="opus"))[0], 409)
+            self.assertEqual(self.call("POST", "/api/walk/model", dict(role="plan", model="--help"))[0], 409)
 
     def test_stopping_the_walk_ends_its_chain(self):
         self.call("POST", "/api/walk/start", dict(budget=6))
