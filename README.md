@@ -196,10 +196,10 @@ There is no login, so it listens on this machine only until you say otherwise.
 Installed, the page gets the browser's own pull-to-refresh, on the task list too: the page cancels no touch and sets
 no `overscroll-behavior` or `touch-action` on the page or the bar, so it has no gesture of its own.
 
-On a screen 900px wide or more, the task list has a **Table** button above it (the choice is kept in the browser). It
+On a screen 1012px wide or more (not counting a scrollbar), the task list has a **Table** button above it (the choice is kept in the browser). It
 draws one line per task, with a column each for status, review, branch and run, in place of the two-line card; a
 task that is blocked or running keeps its reason on a line under it. The phone, Reorder and the archived tasks
-always draw the card, and so does the list when a task is open beside it and the column is under 820px.
+always draw the card, as does a screen under that.
 
 Each project can look its own way, set in the project dialog (tap the project's name): a colour for the top
 of the page (`.dfs/theme`), a background colour for light mode and another for dark (`.dfs/background`), and

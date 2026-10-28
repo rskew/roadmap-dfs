@@ -168,6 +168,7 @@ pre.runlog .r-err { color: var(--attention); }
 .item.tbl .cell .tag { white-space: normal; overflow-wrap: anywhere; }
 .item.tbl.done .goal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @container tasks (min-width: 980px) {
+  .item.tbl.tint { margin: 0; width: 100%; --gx: 0px; padding-right: 0; }   /* a tinted row lines up with the header and the other rows ids */
   .item.tbl, .tblhead { grid-template-columns: calc(5rem * var(--z)) minmax(0, 1fr) calc(11.5rem * var(--z)) calc(4.5rem * var(--z)) calc(10rem * var(--z)) calc(9.5rem * var(--z)); align-items: center; gap: 0 var(--s3); }
   .tblhead { display: grid; box-sizing: border-box; width: 100%; min-height: calc(36px * var(--z)); padding-left: 2.2rem; border-bottom: var(--rule-strong) solid var(--ink); font-size: var(--fs-label); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .item.tbl, .item.tbl.done { padding-block: 0; min-height: var(--hit); }
@@ -451,7 +452,7 @@ const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only:
 /* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
 const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
-const tableWide = () => matchMedia("(min-width: 1020px)").matches;   // the table needs a list column of 980px (below), which a 1020px screen gives
+const tableWide = () => matchMedia("(min-width: 1012px)").matches && document.documentElement.clientWidth >= 1012;   // the table needs a list column of 980px (below) inside the 16px gutters; clientWidth leaves out a classic scrollbar, which a media query does not
 /* The list style: `card` (a two-line card per task, the phone's only one) or `table` (one line per task with columns, on a wide screen). Kept in localStorage. */
 const listStyle = () => { try { return localStorage.getItem("listStyle") === "table" ? "table" : "card"; } catch (e) { return "card"; } };
 
@@ -1930,8 +1931,8 @@ $("#chat-log").addEventListener("scroll", e => {
   const l = e.target; if (!CHAT.scope || CHAT.fresh) return;
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
-matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
-matchMedia("(min-width: 1020px)").addEventListener("change", () => render(true));
+matchMedia("(min-width: 1012px)").addEventListener("change", () => render(true));
+{ let tw = tableWide(); new ResizeObserver(() => { const n = tableWide(); if (n !== tw) { tw = n; render(true); } }).observe(document.documentElement); }   // a scrollbar appearing or going changes the room without changing the media query
 addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
