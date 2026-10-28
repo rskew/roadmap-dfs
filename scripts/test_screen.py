@@ -974,6 +974,27 @@ class ADoneTaskRecedesInTheList(unittest.TestCase):
         self.assertTrue(lines[0].startswith("── stop break · above is done "), lines)
         self.assertTrue(lines[1].startswith("── break · waiting on W2 "), lines)
 
+    def test_a_draft_status_is_bold_amber_and_an_open_one_is_plain(self):
+        items = [dict(item("W1"), draft=1), item("W2"), item("W3")]
+        ui = a_screen(items, sel=2, list_scroll=0)
+        ui.scr = self.Rec()
+        ui.run_tag = lambda iid: ("", 0)
+        ui.list_rows = lambda: [("item", n) for n in range(3)]
+        ui.status_attr = lambda status: 0
+        saved = dict(TUI.LOOK)
+        TUI.LOOK.clear()
+        TUI.LOOK.update(chrome=curses.A_DIM, amber=curses.A_UNDERLINE)
+        try:
+            ui.draw_list(0, 10)
+        finally:
+            TUI.LOOK.clear()
+            TUI.LOOK.update(saved)
+        cell = lambda y, word: [p for p in ui.scr.puts if p[0] == y and p[2].strip() == word][-1]
+        draft, plain = cell(0, "draft"), cell(1, "open")
+        self.assertTrue(draft[3] & curses.A_BOLD and draft[3] & curses.A_UNDERLINE, "a draft is bold amber")
+        self.assertFalse(draft[3] & curses.A_DIM, "and not the grey it was")
+        self.assertEqual(plain[3], 0, "an open task's status stays plain")
+
     def test_the_whole_row_is_dim_and_the_status_says_done_with_a_tick(self):
         puts = self.draw()
         row = lambda y: [p for p in puts if p[0] == y]
