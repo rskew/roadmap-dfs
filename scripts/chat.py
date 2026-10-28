@@ -182,7 +182,8 @@ def codex_turns(rec):
     `item_completed` events: a `UserMessage` is what was typed, without the environment and
     instructions codex sends beside it as user messages of its own, and an `AgentMessage`
     is what it said (a `commentary` phase between tool calls as well as the final answer).
-    Read from codex-cli 0.162.0's rollout, `exec` and `exec resume` both appending to one file."""
+    Read from codex-cli 0.162.0's rollout (and found to read the same under 0.163.0), `exec`
+    and `exec resume` both appending to one file."""
     payload = rec.get("payload") if rec.get("type") == "event_msg" else None
     if not isinstance(payload, dict) or payload.get("type") != "item_completed":
         return []
@@ -202,9 +203,9 @@ def opencode_db():
     return os.path.join(data, "opencode", "opencode.db")
 
 
-def opencode_query(sql, args=()):
+def opencode_query(sql, args=(), unreadable=()):
     """Rows from opencode's store, opened read-only (it is opencode's, and may be in use);
-    none if there is no store or it cannot be read."""
+    none if there is no store, and `unreadable` (none, unless a caller asks) if it cannot be read."""
     db = opencode_db()
     if not os.path.exists(db):
         return []
@@ -215,30 +216,51 @@ def opencode_query(sql, args=()):
         finally:
             con.close()
     except sqlite3.Error:
-        return []
+        return unreadable
 
 
 def opencode_turns(sid):
-    """(role, text, message id) for an opencode session, from its `message` and `part`
-    tables (opencode 1.18.35): a message's `data` holds its role, and its text is its `text`
-    parts in order. Tool, patch and step parts are not words, and a `synthetic` or `ignored`
-    text is opencode's own note to the model."""
+    """(role, text, message id) for an opencode session, from its `session_message` table
+    (opencode 2.1.1): a row's `type` is `user`, `assistant` or `idle` (a turn marker), and its
+    `data` holds the words, a user's as `text` and an assistant's as the `text` items of
+    `content`, in order. Tool and reasoning items are not words, and a `synthetic` or
+    `ignored` text is opencode's own note to the model. A user message repeated with no answer
+    between is read once: run.sh runs a turn again when opencode's server crashes as it starts
+    (a Bun bug), and the crashed attempt may already have stored the message the new one stores.
+    The rows alone cannot tell that from an author who sends the same words again after a turn
+    that stored no answer (an error, or Stop): that is read once too."""
     rows = opencode_query(
-        "select m.id, m.data, p.data from message m join part p on p.message_id = m.id "
-        "where m.session_id = ? order by m.time_created, m.id, p.time_created, p.id", (sid,))
-    out = []
-    for mid, mdata, pdata in rows:
+        "select id, type, data from session_message where session_id = ? and type in ('user', 'assistant') "
+        "order by seq, id", (sid,))
+    out, last = [], None        # last: the (type, text) of the row before, to see a repeated message
+    for mid, kind, data in rows:
         try:
-            role = json.loads(mdata).get("role")
-            part = json.loads(pdata)
-        except (ValueError, AttributeError):
+            body = json.loads(data)
+        except (ValueError, TypeError):
             continue
-        if role not in ("user", "assistant") or not isinstance(part, dict) or part.get("type") != "text":
+        if not isinstance(body, dict):
             continue
-        if part.get("synthetic") or part.get("ignored") or not isinstance(part.get("text"), str):
-            continue
-        out.append(("you" if role == "user" else "agent", part["text"], mid))
+        before, last = last, (kind, body.get("text") if kind == "user" else None)
+        if kind == "user":
+            if before == last:
+                continue
+            items = [body]
+        else:
+            items = [i for i in body.get("content") or [] if isinstance(i, dict) and i.get("type") == "text"]
+        for item in items:
+            if isinstance(item.get("text"), str) and not item.get("synthetic") and not item.get("ignored"):
+                out.append(("you" if kind == "user" else "agent", item["text"], mid))
     return out
+
+
+def opencode_answers(sid):
+    """How many answers (assistant messages) opencode's store holds for the session: 0 with no store,
+    None when the store is there and cannot be read (locked, corrupt), which is not the same as none."""
+    rows = opencode_query("select count(*) from session_message where session_id = ? and type = 'assistant'", (sid,),
+                          unreadable=None)
+    if rows is None:
+        return None
+    return rows[0][0] if rows else 0
 
 
 def kiro_home():
@@ -247,9 +269,10 @@ def kiro_home():
 
 
 def kiro_messages(sid):
-    """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions are
-    `sess_<uuid>` directories (`session.json`, `messages.jsonl`) under `.kiro/sessions/`, in a
-    bucket per workspace (as a real run writes them); its sqlite database holds only auth and history."""
+    """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions
+    (read the same under 2.31.1) are `sess_<uuid>` directories (`session.json`,
+    `messages.jsonl`) under `.kiro/sessions/`, in a bucket per workspace (as a real run
+    writes them); its sqlite database holds only auth and history."""
     if not sid or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}", sid) or ".." in sid:
         return None
     root = os.path.join(kiro_home(), ".kiro", "sessions")
@@ -300,7 +323,7 @@ def has_transcript(sid, agent):
     if not sid:
         return False
     if agent in STORES:
-        return bool(opencode_query("select 1 from session where id = ?", (sid,)))
+        return bool(opencode_query("select 1 from session_v2 where id = ?", (sid,)))
     p = transcript_file(sid, agent)
     return bool(p and os.path.exists(p))
 
@@ -308,7 +331,7 @@ def has_transcript(sid, agent):
 def transcript_mtime(sid, agent):
     """When the conversation last changed, or None."""
     if agent in STORES:
-        rows = opencode_query("select time_updated from session where id = ?", (sid,))
+        rows = opencode_query("select time_updated from session_v2 where id = ?", (sid,))
         return rows[0][0] / 1000 if rows else None
     p = transcript_file(sid, agent)
     try:
@@ -353,9 +376,11 @@ def opencode_result(lines, sid=""):
     """One turn of `opencode run --format json` as the single JSON line a turn is read from
     ({session_id, is_error, result}, as codex_result). Every event carries the `sessionID`
     (opencode mints it, on a resumed turn too). The answer is the `text` of the last step,
-    after its tool calls; a failure is an `error` event (its `error.data.message`), and a
-    stream that never finished a step on `stop` is one too."""
-    answer, error, done = [], "", False
+    after its tool calls; a failure is an `error` event (its `error.data.message`), a last step
+    that ended on anything but `stop`, or one with no words. opencode 2.1.1 often ends the stream
+    without the last step's `step_finish` (the process exits first), so a last step that said
+    something and was not stopped is a finished one."""
+    answer, error, finish = [], "", ""
     for line in lines:
         try:
             rec = json.loads(line)
@@ -366,16 +391,16 @@ def opencode_result(lines, sid=""):
         sid = rec.get("sessionID") or sid
         kind, part = rec.get("type"), rec.get("part") if isinstance(rec.get("part"), dict) else {}
         if kind == "step_start":
-            answer = []
+            answer, finish = [], ""
         elif kind == "text" and isinstance(part.get("text"), str):
             answer.append(part["text"])
         elif kind == "step_finish":
-            done = part.get("reason") == "stop"
+            finish = part.get("reason") or "stop"
         elif kind == "error":
             err = rec.get("error") if isinstance(rec.get("error"), dict) else {}
             error = (err.get("data") or {}).get("message") or err.get("message") or err.get("name") or error or "the turn failed"
     text = "".join(answer).strip()
-    failed = bool(error) or not done
+    failed = bool(error) or not text or finish not in ("", "stop")
     return dict(type="result", session_id=sid, is_error=failed, result=(error or text) if failed else text)
 
 
@@ -792,18 +817,25 @@ def save(scope, sid, agent):
 
 
 def main(argv):
-    """`--codex-result [sid]`, `--opencode-result [sid]`, `--kiro-result [sid]`: that agent's JSON stream of a turn on
-    stdin, the turn's one JSON line on stdout (exit 1 if it failed). `--save scope sid agent`:
-    record a scope's conversation."""
+    """`--codex-result [sid]`, `--opencode-result [sid]`, `--kiro-result [sid]`: that agent's
+    JSON stream of a turn on stdin, the turn's one JSON line on stdout (exit 1 if it failed).
+    `--opencode-answers sid`: how many answers opencode's store holds for a session (`unreadable`
+    when it cannot be read).
+    `--save scope sid agent`: record a scope's conversation."""
     results = {"--codex-result": codex_result, "--opencode-result": opencode_result, "--kiro-result": kiro_result}
     if argv[:1] and argv[0] in results:
         out = results[argv[0]](sys.stdin, argv[1] if len(argv) > 1 else "")
         print(json.dumps(out))
         return 1 if out["is_error"] else 0
+    if argv[:1] == ["--opencode-answers"] and len(argv) == 2:
+        answers = opencode_answers(argv[1])
+        print("unreadable" if answers is None else answers)
+        return 0
     if argv[:1] == ["--save"] and len(argv) == 4:
         save(*argv[1:])
         return 0
-    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --kiro-result [sid] | --save scope sid agent", file=sys.stderr)
+    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --kiro-result [sid]"
+          " | --opencode-answers sid | --save scope sid agent", file=sys.stderr)
     return 2
 
 

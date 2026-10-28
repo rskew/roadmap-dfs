@@ -174,6 +174,14 @@ elif [ "$AGENT" = opencode ]; then
   AGENT_CMD_ENV=OPENCODE_CMD
   AGENT_CMD="${OPENCODE_CMD:-nix shell $NIX_AGENT_FLAGS $AGENT_NIXPKGS#opencode -c opencode}"
   CHAT_PROMPT_FLAG=(--prompt)
+  # `--standalone`: the screen's chat, like every headless turn, runs on a private server. opencode's
+  # shared background service (`serve --service`, one fixed port) outlives the terminal and belongs to
+  # whichever HOME started it first, so a second HOME's run exits "port already in use" (and a TUI
+  # hangs at "Starting background server..."). Under one HOME the shared service works too (the screen,
+  # the page's turns and the screen again kept one session; tried with opencode 2.1.1), so this is for
+  # isolation: the service keeps the config and environment of whichever process started it (a later
+  # client given another model url hung on the first one's), and it is left running after the terminal.
+  AGENT_SUB=(--standalone)
   PERMISSION_FLAGS="${PERMISSION_FLAGS---auto}"
 else
   AGENT_CMD_ENV=CLAUDE_CMD
@@ -267,6 +275,39 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
            BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-3600000}"
            BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS:-21600000}")
 
+# One headless opencode turn, its `--format json` stream on stdout: the prompt is stdin, the rest
+# is `run`'s arguments. opencode 2.1.1's private server (`serve --stdio`) sometimes crashes in Bun
+# as it starts ("Bus error"), and the run then ends before any step began: in a `Transport:` `error`, or
+# (when the server went before it was ready, 25s to 38s later on a loaded machine) with nothing on stdout and
+# "Standalone server exited before reporting readiness" on stderr. The turn is then run again (five runs at most: on a
+# loaded machine half the starts crash). A stream that began a step is never run again,
+# nor is a turn of a session whose store gained an answer meanwhile: the crashed attempt may have
+# stored the message (the page reads a message stored twice once) but not an answer to be asked for twice.
+# A store that could not be read (`unreadable`) on either side shows nothing, so the turn is run again.
+opencode_turn() {
+  local prompt tries=0 out err sid="" answers="" now a
+  prompt="$(cat; echo x)"; prompt="${prompt%x}"
+  for a in "$@"; do [ "$sid" = "?" ] && sid="$a"; [ "$a" = --session ] && sid="?"; done
+  [ "$sid" = "?" ] && sid=""
+  [ -z "$sid" ] || answers="$(python3 "$HERE/chat.py" --opencode-answers "$sid")"
+  out="$(mktemp)"; err="$(mktemp)"
+  # A Stop or a timeout signals the turn's whole process group, this function with it: the files hold
+  # the conversation's text, so they go with it. (bash runs a trap once the foreground `run` has ended.)
+  trap 'rm -f "$out" "$err"' EXIT
+  trap 'exit 143' TERM INT HUP
+  while :; do
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" 2> "$err" || true
+    tries=$((tries + 1))
+    if [ "$tries" -ge 5 ] || grep -q '"type":"step_start"' "$out"; then break; fi
+    if ! grep -q '"type":"error".*Transport:' "$out" && { [ -s "$out" ] || ! grep -q 'exited before reporting readiness' "$err"; }; then break; fi
+    if [ -n "$sid" ] && now="$(python3 "$HERE/chat.py" --opencode-answers "$sid")" && [ "$now" != "$answers" ] \
+       && [ "$now" != unreadable ] && [ "$answers" != unreadable ]; then break; fi
+    echo "dfs_run: opencode ended before it began the turn; running it again" >&2
+  done
+  cat "$err" >&2; cat "$out"; rm -f "$out" "$err"
+  trap - EXIT TERM INT HUP
+}
+
 # What an item's chat opens with, here and on the web page (--chat-turn's opening): short, in
 # this order, then the question. Concise on purpose: the author is often reading it on a phone.
 TREE_SUMMARY_ASK="Start with a concise summary, in short lines and no more than you need: (1) the tree, where the work is and what was refuted and why; (2) each assumption it rests on, in plain words, and what would make it wrong; (3) each open raise, what it asks of the author and the options with your recommendation. Say plainly if there are no assumptions or no raises. Then ask what the author wants to talk about."
@@ -332,7 +373,7 @@ if [ "$MODE" = chat ]; then
         "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json --no-interactive "${PERMISSION_ARGV[@]}" -- "$CHAT_PROMPT" 2>&1 < /dev/null \
           | python3 "$HERE/chat.py" --kiro-result > "$opening_json" || true
       else
-        printf '%s' "$CHAT_PROMPT" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --format json "${PERMISSION_ARGV[@]}" \
+        printf '%s' "$CHAT_PROMPT" | opencode_turn "${PERMISSION_ARGV[@]}" \
           | python3 "$HERE/chat.py" --opencode-result > "$opening_json" || true
       fi
       opening_field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$opening_json" "$1" 2>/dev/null || true; }
@@ -407,7 +448,7 @@ if [ "$MODE" = chatturn ]; then
   if [ "$AGENT" = opencode ]; then
     # The prompt is on stdin here too: as an argument opencode wraps a message with spaces in
     # quotes, which the page would show; on stdin it is kept as written.
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --format json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" \
+    printf '%s' "$prompt" | opencode_turn "${PERMISSION_ARGV[@]}" "${session_flag[@]}" \
       | python3 "$HERE/chat.py" --opencode-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
   fi
@@ -1102,7 +1143,7 @@ echo "dfs_run: task $ITEM, cap $CAP, agent $AGENT, logs in $RUNDIR"
 if [ "$AGENT" = codex ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} exec --json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = opencode ]; then
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} run --format json ${PERMISSION_ARGV[*]} <prompt>"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} run --standalone --format json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = kiro ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --agent dfs-inbox --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
 else
