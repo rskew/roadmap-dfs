@@ -160,6 +160,7 @@ const FLOWS = {
     await page.focus(`#view .main[data-id="${parent}"]`);
     const count = () => page.$$eval("#view .row", a => a.length);
     const before = await count();
+    await page.evaluate(() => { window.__dp = []; addEventListener("keydown", e => window.__dp.push([e.key, e.defaultPrevented])); });      // added after the page's handler, so it sees what that did
     await page.keyboard.press("ArrowLeft");
     await wait("step 6",n => document.querySelectorAll("#view .row").length < n, before);
     await wait("Left gives focus back", p => document.activeElement.dataset.id === p, parent);
@@ -168,6 +169,7 @@ const FLOWS = {
     await wait("step 7",n => document.querySelectorAll("#view .row").length === n, before);
     await wait("Right gives focus back", p => document.activeElement.dataset.id === p, parent);
     same(await page.evaluate(() => document.activeElement.dataset.id), parent, "Right keeps focus on the unfolded row");
+    same(await page.evaluate(() => window.__dp.filter(([k]) => /^Arrow(Left|Right)$/.test(k))), [["ArrowLeft", true], ["ArrowRight", true]], "Left and Right that fold or unfold do not also scroll the page");
     // A select on the list keeps its own arrow keys and type-ahead: they change its option, not the focused task.
     await page.goto(URL_); await page.waitForSelector(".item");
     await openWalk(page);
@@ -222,10 +224,24 @@ const FLOWS = {
     await page.waitForFunction(i => [...document.querySelectorAll("#view .row .main")].some(e => e.dataset.id === i), hidden);
     assert((await shown("#view .row .main")).includes(hidden), "a node under a folded one is found");
     assert(await focusedField(), "typing in a task's field keeps focus through the redraw");
+    // A key typed mid-word redraws the task and the caret stays where it was (a typed key fires `input` the same way; the keyboard cannot type here).
+    const caret = await page.evaluate(() => { const f = FIND.input; f.setSelectionRange(2, 2); f.dispatchEvent(new Event("input")); return [document.activeElement === f, f.selectionStart, f.selectionEnd]; });
+    same(caret, [true, 2, 2], "an input event in the middle of the query keeps focus and the caret through the redraw");
     await page.keyboard.press("Escape");
     await page.waitForFunction(n => document.querySelectorAll("#view .row").length === n, (await page.$$("#view .row")).length);
     same((await page.$$("#view .row")).length < ids.length, true, "Esc restores the fold");
     assert(/#\/t\/W9$/.test(await page.evaluate(() => location.hash)), "and stays on the task");
+    // Leaving the task for another view clears the search: coming back to the task starts with nothing typed.
+    const whole = (await page.$$("#view .row")).length;      // the fold from above is still in place
+    await page.keyboard.press("/"); await page.fill("#find-q", hidden);
+    await page.waitForFunction(q => S.q === q, hidden);
+    await page.evaluate(() => { location.hash = "#/chats"; });
+    await page.waitForFunction(() => lastView === "chats:" && !document.querySelector("#view .row"));
+    await page.evaluate(() => { location.hash = "#/t/W9"; });
+    await page.waitForSelector("#view .row");
+    same(await page.inputValue("#find-q"), "", "coming back to the task finds the search field empty");
+    same(await page.evaluate(() => S.q), "", "and no query set");
+    same((await page.$$("#view .row")).length, whole, "and the task drawn whole, not filtered");
     same(errors, [], "no page errors");
     await ctx.close();
   },

@@ -671,6 +671,7 @@ async function renderDraw(force) {
   const r = route();
   const where = r.view + ":" + (r.task || "");
   const arrived = where !== lastView;
+  if (r.view !== "task" && r.view !== "tasks") FIND.scope = "";      // any other view leaves the search: coming back starts with nothing typed
   if (arrived) { lastView = where; SCROLL.ready = false; window.scrollTo(0, 0); S.sig = ""; }
   try {
     if (r.view === "task") {
@@ -1958,6 +1959,7 @@ addEventListener("keydown", e => {
   else if (is("flag", e)) nextFlag();
   else if (is("back", e)) up();                       // a node back to its task, a task back to the list
   else if ((is("fold", e) || is("unfold", e)) && onRow && cur && cur.kids && !S.flagged && !S.q) {
+    e.preventDefault();                                // the arrow would also scroll a page that overflows sideways
     const s = S.folded[S.task.id] ||= new Set(), folded = s.has(cur.id);
     if (is("fold", e) ? !folded : folded) { folded ? s.delete(cur.id) : s.add(cur.id); S.focusId = cur.id; S.sig = ""; render(true); }
   }
