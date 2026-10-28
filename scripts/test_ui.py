@@ -345,6 +345,9 @@ class Flows(unittest.TestCase):
     def test_the_walk_controls_stay_under_the_bar_as_the_list_scrolls(self):
         self.flow("walkpin")
 
+    def test_esc_backs_out_of_a_node_then_the_task_and_closes_only_a_form(self):
+        self.flow("escape")
+
     def test_navigation_is_under_the_thumbs(self):
         self.flow("thumbs")
 

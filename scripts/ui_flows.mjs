@@ -101,6 +101,24 @@ async function openWalk(page) {
 }
 
 const FLOWS = {
+  // Esc backs out one level at a time on a wide screen: node, task, list; and in a form it closes the form only.
+  escape: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const hash = () => page.evaluate(() => location.hash);
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => location.hash === "#/t/W9" && !S.node);
+    await page.keyboard.press("Escape"); await page.waitForSelector(".item");
+    assert(!/#\/t\//.test(await hash()), `Esc on the task left it for the list, at ${await hash()}`);
+    await page.keyboard.press("Escape"); await page.waitForTimeout(150);
+    assert(!/#\/t\//.test(await hash()), "Esc on the list stays on the list");
+    await task(page, "W9"); await page.click("[data-act=add]"); await dialog(page);
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    assert(/#\/t\/W9$/.test(await hash()), `Esc in a form closed only the form, at ${await hash()}`);
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // The list, its filter, the project's name, and nothing in the console.
   async list(b) {
     const { page, errors } = await open(b, PHONE);
