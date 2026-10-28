@@ -169,6 +169,36 @@ What the proof does not show, and what a comparison has to allow for:
 - **The tool is the current one**, not the original's, so the control arm is the current
   tool; the original column is the history, not a control.
 
+### Run once under a changed tool (the changed-arm path)
+
+The three replays above all ran the current tool, so the path that makes an arm differ
+(`--tool-ref REV`: `export_tool`, then `prepare` and `run` using the exported tool) had
+never run. It is tested now (`ChangedToolTest` in `scripts/test_replay.py`: the tool is
+the exported revision and not the checkout, the clone's `pre-commit` names it, an earlier
+revision exports its own text, an unknown revision fails instead of falling back to the
+current tool, and `run` launches `run.sh` from it with `DFS_TOOL` set; the tests go red
+when `export_tool` archives the wrong revision or `prepare` ignores the exported tool).
+It was also run once: a branch of this repo (`w97-arm-1`) differing from the tool of that
+day in one line of `SKILL.md`, a marker (`Arm marker W97-ARM-1: ...`) that changes nothing
+about how a session works, replayed on W55 as `dfs-replay-W55-arm1`.
+
+- The five work sessions were told to follow `dfs-replay-W55-arm1-tool/SKILL.md`, and the
+  marker is in the Read or `cat` result of each of them (5 of the 9 sessions; the review
+  and critic sessions are briefed by the runner and do not read the skill).
+- The clone's `pre-commit` names the exported tool; no commit failed for a skipped hook or
+  an unknown identity, and none ran `grep -r /` (searched in its transcripts).
+- `replay.py score` read the replay's transcripts: 9 sessions (5 work, 3 review, 1
+  critic), $4.82 against $1.30, 5 nodes on `main` as the clone's log holds, first review
+  `issues` (2 reviews with issues of 3), merged. The $4.82 includes a session cut off when
+  the shell call running the chain hit its 30-minute limit; the chain was resumed with
+  `replay.py run`, as for the usage limit above.
+
+That is one replay of one arm, and the marker changes nothing a review would judge, so it
+says only that the changed-arm path runs end to end and that the session reads the
+changed text; it says nothing about whether any change helps. `replay.py score` now
+refuses a DEST that is not a prepared replay of that task, and a replay whose transcripts
+hold no session of the task, where it used to print a table of dashes.
+
 ## 4. What to try, and how to find out
 
 ### The measure
@@ -194,7 +224,7 @@ it). Each names the file it changes and the replay that tests it.
 
 | # | Change | Evidence | Where | Test replay |
 |---|---|---|---|---|
-| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 101 of 207 review finding lines are defects; 40.9% of spend follows an issues review; 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
+| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 40.9% of spend follows an issues review; 101 of 207 review finding lines are defects, but only 2 of them say a test or check is absent. Of the 23 defects whose review says it reproduced the fault (`docs/dfs-break-it-cases.tsv`; one reading by one session, so a reader can disagree row by row), 8 are in the cases this node names (4 repeated, 2 interrupted, 2 empty, none a short screen), 6 more only if "interrupted" is stretched to a failure path or a race, and 9 are not (an unusual starting state, two checkouts out of step, a different branch). So 8 of the 101 defects are shown to be ones this node would have looked for, 14 on the widest reading; the other 78 do not say they were reproduced and cannot be placed, so 8 is a floor. 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. The rank above 2 is kept because neither is stronger on this evidence (2's 28 lines repeat across rounds) and the order is not moved by it. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 28 of 207 review finding lines are unmarked assumptions (some repeat across rounds). | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `audit.py findings`, rows of class `assumption` in `docs/dfs-review-findings.tsv`) |
 | 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (22 tasks; 26 have two or more issues reviews), 3 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 20 name code the fixes changed (either could hold), 13 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 3 to 23 present ones; the three are in W75, W88 and W91 |
 | 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,043 sessions hit a refusal, 304 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
@@ -289,5 +319,5 @@ rule's last clause, evidence inside the repo, is not decidable from the history;
 each task file for it, and taking four, is the first step. Then
 run the control (the current tool) twice on those four tasks, to see whether two
 control arms differ by four or more of twelve; then candidate 1 on the same four tasks,
-the first real run of the loop. It needs `claude` (from nixpkgs) and a DEST that can run
+the first real run of the loop (its changed-arm path ran once, in section 3). It needs `claude` (from nixpkgs) and a DEST that can run
 scripts (inside the repo's ignored `.dfs/runs` works on the box used here).

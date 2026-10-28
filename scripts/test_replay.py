@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -152,6 +153,89 @@ class StartingPointTest(unittest.TestCase):
         self.assertEqual((out / ".dfs" / "ROADMAP.md").read_text(), "a changed law\n")
 
 
+class ChangedToolTest(unittest.TestCase):
+    """The changed arm: `--tool-ref REV` runs a replay under the tool as REV had it."""
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        if not can_exec(self.tmp.name):
+            patch = mock.patch.object(replay, "hooks_can_run", return_value=True)
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-q", "-b", "main")
+        (self.repo / ".dfs" / "items").mkdir(parents=True)
+        (self.repo / ".dfs" / "ROADMAP.md").write_text("law\n")
+        # The repo is a roadmap-dfs of its own: this checkout's tool files (not the tests or
+        # fixtures), as they are at the commit the task starts from.
+        files = git(self.ROOT, "ls-files", "SKILL.md", "scripts", "templates").split("\n")
+        for rel in files:
+            if "fixtures" in rel or Path(rel).name.startswith("test_") or not (self.ROOT / rel).is_file():
+                continue
+            (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(self.ROOT / rel, self.repo / rel)
+        (self.repo / "SKILL.md").write_text("# skill\n\nTHE OLD LINE\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "before the task")
+        self.old = git(self.repo, "rev-parse", "HEAD")
+        (self.repo / ".dfs" / "items" / "W5.md").write_text(TASK_FILE)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "W5.1: do it")
+        # a later revision whose SKILL.md differs: the change an arm would carry
+        (self.repo / "SKILL.md").write_text("# skill\n\nTHE CHANGED LINE\n")
+        git(self.repo, "commit", "-qam", "W5.2: change the skill")
+        self.changed = git(self.repo, "rev-parse", "HEAD")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_tool_is_the_exported_revision_not_the_checkout_and_the_hooks_name_it(self):
+        out, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-x", tool_ref=self.changed)
+        self.assertEqual(tool, Path(self.tmp.name) / "dfs-replay-W5-x-tool")
+        self.assertIn("THE CHANGED LINE", (tool / "SKILL.md").read_text())
+        self.assertNotIn("THE OLD LINE", (tool / "SKILL.md").read_text())
+        self.assertEqual(json.loads((out / ".git" / "replay.json").read_text())["tool"], str(tool))
+        self.assertTrue((tool / "scripts" / "hook.sh").is_file())
+        # init.py ran from the exported tool, so the hook the clone commits under is the REV's guard
+        hook = (out / ".git" / "hooks" / "pre-commit").read_text()
+        self.assertIn('dfs_tool="${DFS_TOOL:-%s}"' % tool, hook)
+
+    def test_an_earlier_revision_exports_the_earlier_text(self):
+        _, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-y", tool_ref=self.old)
+        self.assertIn("THE OLD LINE", (tool / "SKILL.md").read_text())
+
+    def test_without_a_tool_ref_the_arm_is_the_given_tool_and_nothing_is_exported(self):
+        out, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-z", tool=self.ROOT)
+        self.assertEqual(tool, self.ROOT)
+        self.assertFalse((Path(self.tmp.name) / "dfs-replay-W5-z-tool").exists())
+
+    def test_an_unknown_revision_fails_instead_of_running_the_current_tool(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-bad", tool_ref="no-such-rev")
+
+    def test_run_launches_the_chain_from_the_prepared_tool_with_it_in_the_environment(self):
+        out, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-r", tool_ref=self.changed)
+        seen = {}
+
+        class Fake:
+            returncode = 0
+            stdout = io.StringIO("dfs_run: DONE\n")
+            def __init__(self, cmd, **kw):
+                seen["cmd"], seen["env"], seen["cwd"] = cmd, kw["env"], kw["cwd"]
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        with mock.patch.object(replay.subprocess, "Popen", Fake), redirect_stdout(io.StringIO()):
+            replay.run(out, "W5", cap=3)
+        self.assertEqual(seen["cmd"], ["bash", str(tool / "scripts" / "run.sh"), "W5", "3"])
+        self.assertEqual(seen["env"]["DFS_TOOL"], str(tool))
+        self.assertEqual(Path(seen["cwd"]), out)
+
+
 class ScoreTest(unittest.TestCase):
     def test_a_replay_bounds_one_bash_call(self):
         b = replay.bash_bound(15)
@@ -167,6 +251,25 @@ class ScoreTest(unittest.TestCase):
             self.assertEqual(replay.stopped_on(tmp), "DONE")
             (Path(tmp) / ".git" / "replay.out").write_text("dfs_run: it fell over\n")
             self.assertEqual(replay.stopped_on(tmp), "other")
+
+    def test_score_fails_loudly_on_swapped_arguments_a_wrong_task_or_no_transcripts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "dfs-replay-W5-a"
+            (dest / ".git").mkdir(parents=True)
+            with self.assertRaises(SystemExit) as e:   # not a prepared replay
+                replay.score(dest, "W5")
+            self.assertIn("not a prepared replay", str(e.exception))
+            with self.assertRaises(SystemExit) as e:   # swapped: the task where DEST goes
+                replay.score("W5", str(dest))
+            self.assertIn("not a prepared replay", str(e.exception))
+            (dest / ".git" / "replay.json").write_text(json.dumps({"task": "W5"}))
+            with self.assertRaises(SystemExit) as e:   # another task's replay
+                replay.score(dest, "W9")
+            self.assertIn("replays W5, not W9", str(e.exception))
+            with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+                with self.assertRaises(SystemExit) as e:   # prepared, but no session of it
+                    replay.score(dest, "W5")
+                self.assertIn("no session of W5", str(e.exception))
 
     def test_the_comparison_names_both_columns(self):
         t = {"sessions": {"work": 2, "review": 1}, "usd": 1.5, "nodes": 3, "first_review": "issues",

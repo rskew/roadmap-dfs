@@ -240,14 +240,27 @@ def stopped_on(dest):
 
 
 def score(dest, task):
+    """The replay's score. Fails loudly on a DEST that is not this task's prepared replay
+    (arguments swapped, a typo) or that has no transcript of the task, since a table of
+    dashes reads as a replay that did nothing."""
     dest = Path(dest).resolve()
+    try:
+        info = json.loads((dest / ".git" / "replay.json").read_text())
+    except (OSError, ValueError):
+        raise SystemExit(f"replay: {dest} is not a prepared replay (no .git/replay.json); "
+                         "usage: replay.py score DEST TASK")
+    if info.get("task") != task:
+        raise SystemExit(f"replay: {dest} replays {info.get('task')}, not {task}; "
+                         "usage: replay.py score DEST TASK")
     enc = re.sub(r"[/.]", "-", str(dest))
     repos = {enc: str(dest)}
     sessions, tasks, _, _ = history.load(transcripts(dest), repos, replays=True)
     t = next((t for (p, n), t in tasks.items() if n == task), None)
-    if t:
-        t["stopped"] = stopped_on(dest)
-        t["finished"] = merged(dest, task)
+    if t is None:
+        raise SystemExit(f"replay: no session of {task} in the transcripts of {dest} "
+                         f"({len(sessions)} sessions found under {', '.join(transcripts(dest))})")
+    t["stopped"] = stopped_on(dest)
+    t["finished"] = merged(dest, task)
     return t
 
 
