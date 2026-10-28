@@ -120,10 +120,11 @@ every other work session (sonnet). The walk can choose both: `:model plan opus` 
 `:model implement sonnet[1m]` on the screen, the walk box's "Plan model" and "Implement model" fields
 on the web page. `:model plan default` leaves claude to its own default, `:model plan none` takes the
 choice away (the runner's opus and sonnet again), and `:model` alone shows the choices. They are kept in
-`.dfs/runs/models`, shared by the screen and the page, and reach every chain the walk starts afterwards
+the run root's `models` file, shared by the screen and the page, and reach every chain the walk starts afterwards
 as `PLAN_MODEL` and `IMPLEMENT_MODEL`, the variables `run.sh` reads (set them yourself for a run by
 hand). A name is letters, digits and `. _ : [ ] -`, not starting with `-`. They apply to claude only:
-codex, kiro and opencode read their model from their own config.
+codex, kiro and opencode read their model from their own config. The walk header does not show the
+choices (it has no room); `:model` alone does.
 
 ## Running the sandbox as a daemon
 

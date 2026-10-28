@@ -1798,8 +1798,8 @@ document.addEventListener("focusout", e => setTimeout(function catchUp() {
 document.addEventListener("input", e => {
   const role = e.target.dataset && e.target.dataset.role;
   if (role) { S.walkDraft = Object.assign({}, S.walkDraft); S.walkDraft.models = Object.assign({}, S.walkDraft.models, { [role]: e.target.value }); }
+  else if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value });
 });
-document.addEventListener("input", e => { if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value }); });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStartForm(); } });
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.role) setModel(e.target.dataset.role, e.target.value); });
 
