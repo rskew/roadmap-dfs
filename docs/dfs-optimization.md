@@ -196,16 +196,21 @@ What the proof does not show, and what a comparison has to allow for:
   `a` spent 28 minutes in tool calls.
 - **From here a replay runs in a sandbox that hides the box.** `replay.py run` and `replay`
   start the chain through proot (nix: `pkgs.proot`, no privileges; chroot, bwrap and user
-  namespaces are refused on this box). The sessions see an empty root holding `/nix`,
-  `/proc`, `/dev`, the network files of `/etc`, DEST at its own path, the tool's own
+  namespaces are refused on this box). The sessions see an empty root holding the store
+  paths the chain runs from (`store_closure`: the agent, proot, bash, git, python and the
+  sessions' other `PATH` entries and everything they refer to, about 140 paths bound one by
+  one; not `/nix` whole, which holds 107,000 entries on this box, 4,166 of them flake
+  `*-source` copies of repos made when nix built them, 18 of those the original W55 task
+  file with its Determinations), `/proc`, `/dev`, the network files of `/etc`, DEST at its own path, the tool's own
   entries (`SKILL.md`, `scripts`, `templates`, `docs`; never the tool as a whole, which
   when it is the live checkout holds its `.dfs/`), and a fresh home (`DEST-box/home`, at
   `/home/replay`) with a copy of the sign-in and `settings.json` and nothing else: no
   `~/.claude/projects`, no `~/.codex`, no history. Their environment is rebuilt (no
   `DFS_*`, no `XDG_*`). Of the live checkout they see the path down to DEST and nothing
   beside it. `SandboxTest` runs a real proot and finds the live runs, the tool's own
-  `.dfs/` and a `DFS_RUNS` in the host environment all absent (red when the tool's `.dfs`
-  is bound or the environment passes through); `claude` runs under it with network and
+  `.dfs/`, a `DFS_RUNS` in the host environment and every `*-source` directory of the store
+  all absent (red when the tool's `.dfs` is bound, the environment passes through or the
+  store is bound whole); `claude` runs under it with network and
   sign-in, and the chain (`run.sh`) runs to its first session. DEST stays inside the live
   checkout's ignored `.dfs/runs`, the one mount here that runs scripts (git skips a hook
   elsewhere).
@@ -216,7 +221,9 @@ What the proof does not show, and what a comparison has to allow for:
   or an error: an attempt, which a task whose text sends the sessions to the run logs makes
   as a matter of course) and "answered output" (which a reader opens: a command can name a
   live path and print only what its in-sandbox part found), and "original's nodes shown in
-  a result". A replay with any call answered with live output, or any of the original's
+  a result". A call that names a `*-source` directory or the store as a whole
+  (`ls /nix/store`, `grep -r x /nix/store/*-source/`) counts as a call naming a live path too
+  (`STORE_LOOK`), since that is where a flake source of the repo would be. A replay with any call answered with live output, or any of the original's
   conclusions shown, is void: it is dropped from the count and a Fix node is opened to
   close the hole. The sandbox copies the sign-in, so after the access token's hours the
   replay's `claude` refreshes its own copy; whether that signs out the author's login is
@@ -244,13 +251,20 @@ What the proof does not show, and what a comparison has to allow for:
 `dfs-replay-W55-p1` (2026-10-28, the store's tool, claude 2.1.308, run once the account's
 five-hour limit had reset): 2 sessions (1 work, 1 review), $2.36 against $1.30, 1 node
 commit, first review `ok`, merged. `score` prints 0 of the original's nodes shown in a
-result and 5 calls naming a live path: 2 answered nothing (greps of `/workspace/roadmap-dfs/.dfs`
-and `~/.codex` for the usage-limit logs, which the task is about) and 3 answered with
+result and 7 calls naming a live path (5 before the store counted): 2 answered nothing (greps of `/workspace/roadmap-dfs/.dfs`
+and `~/.codex` for the usage-limit logs, which the task is about) and 5 answered with
 output, which were read in the box's transcripts: lines from the clone's own
 `scripts/test_limit.py`; `worktrees`, the path down to DEST and a `which: command not found`
 (an error result, exit 127, that an earlier version of `score` counted as nothing); and
-`replays` (the path down to DEST) with a listing of the nix store. Nothing of the live checkout in any. So the sandbox held on this replay. It is one sample and
-counts as a first-review pass of one.
+`replays` (the path down to DEST) with a listing of the nix store. Two more calls count since the
+store became a path to look for: `ls -d /nix/store/*codex*` (the codex package names), and a
+`find /nix/store -name "*source*"` that listed three `*-source` names, and a
+`grep -rl format_retry_timestamp /nix/store/*-source/` that ran into the 900 s bound and was
+stopped with no output read. That last call is the reason the store is no longer bound whole:
+`p1` ran with the whole store visible and searched its flake sources, where the original's task
+file is, and held because that grep timed out. Nothing of the live checkout in any result. So the
+sandbox held on this replay, which ran under the old binds, is one sample and counts as a
+first-review pass of one.
 
 - **The starting point keeps only the title, Goal and Background.** Any nodes the author
   wrote into the task before work began are dropped, so a task that began with

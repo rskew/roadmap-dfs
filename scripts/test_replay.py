@@ -233,11 +233,14 @@ class ChangedToolTest(unittest.TestCase):
                 return False
 
         with mock.patch.object(replay.subprocess, "Popen", Fake), mock.patch.object(replay, "tool_bins", return_value=bins), \
+                mock.patch.object(replay, "store_closure", return_value=["/nix/store/c", "/nix/store/p"]), \
                 mock.patch.object(replay, "config_dir", return_value=str(Path(self.tmp.name) / "no-config")), \
                 redirect_stdout(io.StringIO()):
             replay.run(out, "W5", cap=3, repo=self.repo)
         cmd = seen["cmd"]
         self.assertEqual(cmd[0], "/nix/store/p/bin/proot")
+        self.assertNotIn("/nix", [cmd[i + 1] for i, c in enumerate(cmd) if c == "-b"])   # not the whole store
+        self.assertIn("/nix/store/c", cmd)
         self.assertEqual(cmd[cmd.index("-r") + 1], str(replay.box_of(out) / "root"))
         self.assertEqual(cmd[-4:], ["bash", str(tool / "scripts" / "run.sh"), "W5", "3"])
         self.assertIn("DFS_TOOL=" + str(tool), cmd)
@@ -324,6 +327,33 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
             self.assertNotIn(leaked, env_out)
         self.assertIn("HOME=/home/replay", env_out)
         self.assertIn("DFS_TOOL=" + str(self.tool), env_out)
+
+    def sandbox_out(self, script, bins):
+        env = replay.sandbox_env(self.tool, bins)
+        argv = replay.sandbox_argv(self.dest, self.tool, ["sh", "-c", script], bins, env)
+        r = subprocess.run(argv, cwd=self.dest, env={"PROOT_TMP_DIR": str(replay.box_of(self.dest) / "tmp"),
+                                                     "PATH": os.environ["PATH"]},
+                           capture_output=True, text=True, timeout=120)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r.stdout
+
+    def test_the_store_is_not_bound_whole_so_the_flake_sources_with_task_files_are_not_there(self):
+        bins = self.bins()
+        with mock.patch.object(replay, "config_dir", return_value=str(self.cfg)):
+            replay.make_box(self.dest)
+        host_sources = sorted(Path("/nix/store").glob("*-source"))[:3]
+        if not host_sources:
+            self.skipTest("this store holds no *-source directory to hide")
+        out = self.sandbox_out("echo '[sources]'; ls -d /nix/store/*-source 2>&1; echo '[count]'; ls /nix/store | wc -l; "
+                               "echo '[items]'; find /nix/store -maxdepth 4 -path '*/.dfs/items/*' 2>/dev/null | head -3", bins)
+        part = lambda name: out.split(f"[{name}]\n")[1].split("\n[")[0]
+        self.assertIn("No such file", part("sources"))
+        for source in host_sources:
+            self.assertNotIn(source.name, out)
+        self.assertEqual(part("items").strip(), "")
+        needed = replay.store_closure([*bins.values(), *replay.sandbox_env(self.tool, bins)["PATH"].split(":")])
+        self.assertLessEqual(int(part("count")), len(needed))        # the closure and no more
+        self.assertLess(len(needed), 1000)                           # a bind each: it stays a short list
 
     def test_a_tool_in_the_store_is_not_bound_and_the_box_keeps_to_its_own_directories(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
@@ -690,6 +720,19 @@ class ReachOutsideDestTest(unittest.TestCase):
         self.assertTrue(nothing("Exit code 1"))
         self.assertTrue(nothing("", is_error=True))
         self.assertTrue(nothing("(Bash completed with no output)", is_error=False))
+
+    def test_a_call_that_looks_through_the_nix_store_for_flake_sources_is_counted(self):
+        store_calls = ["ls /nix/store | grep codex", "grep -rl 'try again at' /nix/store/*", "find /nix/store -name W55.md",
+                       "cat /nix/store/abc123-source/.dfs/items/W55.md", "ls -d /nix/store/*-source"]
+        fine = ["bash /nix/store/abc123-roadmap-dfs-1/share/roadmap-dfs/scripts/run.sh W5",
+                "/nix/store/abc-git-2/bin/git status", "ls /nix/store-notes.txt"]
+        rows = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": f"t{i}", "name": "Bash", "input": {"command": c}}]}}
+            for i, c in enumerate(store_calls + fine)]
+        path = Path(self.tmp.name) / "store.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        got = [text for _, _, text, _ in replay.reached(self.dest, self.live, [str(path)])]
+        self.assertEqual(got, store_calls)
 
     def test_a_result_that_prints_the_originals_conclusion_is_the_answer_seen(self):
         (self.live / ".dfs" / "items" / "W5.md").write_text(

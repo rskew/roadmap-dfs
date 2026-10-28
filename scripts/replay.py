@@ -394,15 +394,39 @@ def sandbox_env(tool, bins, bash_minutes=BASH_MINUTES, agent="claude"):
     return env
 
 
-def sandbox_argv(dest, tool, inner, bins, env, agent="claude"):
-    """The command that runs `inner` in a proot of DEST: an empty root, /nix, /proc and /dev, the
+STORE_ROOT = re.compile(r"^(/nix/store/[^/]+)")
+
+
+def store_closure(paths):
+    """The store paths the sandbox needs: each of `paths` that is in the store and exists, and
+    everything they refer to (`nix-store -qR`). The store as a whole holds the flake sources nix
+    copied when it built this repo, which include the original task files, so it is never bound."""
+    roots = sorted({m.group(1) for p in paths if (m := STORE_ROOT.match(str(p))) and os.path.exists(m.group(1))})
+    if not roots:
+        return []
+    r = subprocess.run(["nix-store", "-qR", *roots], capture_output=True, text=True)
+    if r.returncode:
+        raise SystemExit(f"replay: nix-store -qR could not list what the sandbox needs from the store "
+                         f"({r.stderr.strip()[-200:]}); it binds those paths and not all of /nix")
+    return sorted(set(r.stdout.split()))
+
+
+def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None):
+    """The command that runs `inner` in a proot of DEST: an empty root, the store paths it runs from
+    (`store_closure`; the rest of /nix/store, with its `*-source` copies of task files, is not there), /proc and /dev, the
     nix `bash` as /bin/sh and `env` as /usr/bin/env, the network files of /etc, the box's home as
     HOME, DEST at its own path, and (unless the tool is in the store) the tool's own entries at
     theirs: never the tool as a whole, which when it is the live checkout holds its `.dfs/`.
     The sessions see the host's `/workspace/...` only as the path down to DEST."""
     dest, tool, box = Path(dest).resolve(), Path(tool).resolve(), box_of(dest)
-    cmd = [bins["proot"], "-r", str(box / "root"), "-b", "/nix", "-b", "/proc", "-b", "/dev",
-           "-b", f"{bins['bash']}:/bin/sh", "-b", f"{bins['env']}:/usr/bin/env"]
+    # The store paths the chain runs from (the bins, the tool when it is in the store, and the
+    # store entries of the sessions' PATH) and their closure, one bind each: never `-b /nix`.
+    if store is None:
+        store = store_closure([*bins.values(), tool, *env.get("PATH", "").split(":")])
+    cmd = [bins["proot"], "-r", str(box / "root")]
+    for path in store:
+        cmd += ["-b", path]
+    cmd += ["-b", "/proc", "-b", "/dev", "-b", f"{bins['bash']}:/bin/sh", "-b", f"{bins['env']}:/usr/bin/env"]
     for e in ETC:
         if os.path.exists(e):
             cmd += ["-b", e]
@@ -478,6 +502,13 @@ def live_paths(repo):
     return paths + [p.replace(home, h, 1) for p in paths[1:] if p.startswith(home) for h in ("~", "$HOME")]
 
 
+# The store holds copies of repos' `.dfs/items` (the flake sources nix made when it built them), so a
+# call that names a `*-source` directory, or the store as a whole (`ls /nix/store`, `grep -r x /nix/store/*`,
+# `find /nix/store`), is looking where the original's task file may be. The sandbox binds only the
+# chain's closure, so such a call finds nothing; it is counted all the same.
+STORE_LOOK = r"/nix/store/[^/\s\"']*-source|/nix/store(?:/\*|/?(?=[\s\"'|;)&]|$))"
+
+
 def result_text(block):
     c = block.get("content")
     if isinstance(c, list):
@@ -502,7 +533,8 @@ def answered_nothing(block):
 
 
 def reached(dest, repo, files, tool=None):
-    """The tool calls in `files` (transcripts) that name a live path outside `dest`, as
+    """The tool calls in `files` (transcripts) that name a live path outside `dest` (or look in the
+    nix store for flake sources: `STORE_LOOK`), as
     (session id, tool, text, answered nothing). DEST, its exported tool and what the tool the
     replay runs under is for (its SKILL.md, scripts, templates and docs) are cut out first,
     so a replay kept inside the live checkout, or run under it, does not count reading its own
@@ -516,7 +548,7 @@ def reached(dest, repo, files, tool=None):
         base = re.escape(str(Path(tool).resolve()))
         cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|(?:scripts|templates|docs)(?![\w-]))")
     own = re.compile("(?:" + "|".join(cut) + ")")
-    live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + r")(?![\w-])")
+    live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + "|" + STORE_LOOK + r")(?![\w-])")
     found = []
     for f in files:
         sid = os.path.basename(f)[:-6]
