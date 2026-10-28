@@ -113,7 +113,10 @@ PY
 EMIT = """import json, sys
 sys.path.insert(0, %r)
 import test_kiro as t
+import os
 for rec in t.stream(sys.argv[1]):
+    if os.environ.get("NO_USAGE") and "usage_update" in json.dumps(rec):
+        continue
     print(json.dumps(rec))
 """ % str(HERE)
 
@@ -163,6 +166,12 @@ class Chain(unittest.TestCase):
         self.assertEqual(meta.get("peak"), str(52002), out)
         self.assertEqual(meta.get("turns"), "2", out)
         self.assertIn("W1.1 [confirmed]", out)
+
+    def test_a_session_with_no_usage_and_too_many_turns_stops_the_chain(self):
+        # Five tool calls, no usage reading: peak is unmeasured, so MAX_TURNS=3 must trip.
+        rc, meta, out = self.run_chain(cap=3, NO_USAGE="1", MAX_TURNS="3")
+        self.assertEqual((rc, meta.get("stop")), (1, "overturns"), out)
+        self.assertEqual((meta.get("peak"), meta.get("turns")), ("-1", "5"), out)
 
     def test_the_parent_s_session_is_not_handed_down(self):
         self.run_chain(cap=1)
@@ -225,6 +234,18 @@ class Reading(unittest.TestCase):
                                   content={"type": "text", "text": "hi"})])
         out = subprocess.run([sys.executable, str(HERE / "context.py"), "--measure", path, "kiro"],
                              capture_output=True, text=True).stdout.split()
+        self.assertEqual(out, ["-1", "0"])
+
+    def test_an_unmeasured_stream_still_counts_its_turns_for_the_fallback_ceiling(self):
+        # run.sh stops on `peak -1 && turns > MAX_TURNS`; a turn count of -1 never could.
+        recs = [r for r in stream(1) if "usage_update" not in json.dumps(r)]
+        out = subprocess.run([sys.executable, str(HERE / "context.py"), "--measure",
+                              self.write(recs), "kiro"], capture_output=True, text=True).stdout.split()
+        self.assertEqual(out, ["-1", "5"])
+
+    def test_no_transcript_is_unmeasured_with_no_turns(self):
+        out = subprocess.run([sys.executable, str(HERE / "context.py"), "--measure",
+                              "/nonexistent/run.json", "kiro"], capture_output=True, text=True).stdout.split()
         self.assertEqual(out, ["-1", "-1"])
 
     def test_a_session_in_a_worktree_finds_the_main_checkout_s_run_log(self):

@@ -552,6 +552,36 @@ def peak_and_turns(path, provider):
     return best, len(seen)
 
 
+def unmeasured_turns(path, provider):
+    """Responses in a stream that carries no context reading, counted without one.
+
+    ⚠ The runner's fallback ceiling (`MAX_TURNS`, in run.sh) is for exactly these
+    streams, and it reads `$turns` beside `peak -1`. A turn count of -1 there made
+    `-1 -gt 100` false, so a session with no reading had no ceiling at all. A kiro
+    response is not marked in its stream, so its tool calls (each its own request to
+    the model) stand for it; opencode writes a `step_finish` per response, tokens or
+    not; claude's assistant message ids are counted as `peak_and_turns` dedupes them.
+    Codex has no response marker without its token count, so it counts none."""
+    seen = set()
+    with open(path, errors="replace") as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if provider == "kiro":
+                for u in acp_updates(rec):
+                    if u["sessionUpdate"] == "tool_call":
+                        seen.add(u.get("toolCallId") or len(seen))
+            elif provider == "opencode":
+                if isinstance(rec, dict) and rec.get("type") == "step_finish":
+                    seen.add(len(seen))
+            elif provider == "claude" and rec.get("type") == "assistant":
+                msg = rec.get("message") or {}
+                seen.add(msg.get("id") or len(seen))
+    return len(seen)
+
+
 def _is_verdict_call(text):
     """Whether a tool call is the session logging its own verdict (`tree.py log ...`):
     that is how a critic ENDS, so it cannot be what shows it looked."""
@@ -647,8 +677,14 @@ def main(argv):
             peak, turns = -1, -1
         # ⚠ No reading is not a reading of 0: a transcript with no usage in it was
         # logged `peak 0` for a whole day, and 0 looked measured. -1 is "unavailable".
+        # The turns stay a count: run.sh's fallback ceiling reads them beside peak -1,
+        # and a -1 there can never exceed it.
         if peak == 0 and turns == 0:
-            peak, turns = -1, -1
+            peak = -1
+            try:
+                turns = unmeasured_turns(argv[1], argv[2])
+            except OSError:
+                turns = -1
         print(peak, turns)
         return 0
     if argv[:1] == ["--tool-uses"]:

@@ -596,8 +596,10 @@ dfs_state() {
 # first draft of this arithmetic already differed from it by 2 tokens on a 238-response
 # transcript. Claude writes one line per content block, so its records are deduped on
 # message.id; Codex writes one token_count event per API response. Both count model
-# responses rather than JSONL records. -1 means no transcript, which is itself worth
-# seeing, and is what the ceilings below read as "unavailable".
+# responses rather than JSONL records. A peak of -1 means no reading (no transcript, or
+# a stream with no usage in it), which is itself worth seeing, and is what the ceilings
+# below read as "unavailable". The turns beside it are then counted without usage
+# (-1 only when there is no transcript), since the MAX_TURNS fallback reads them.
 transcript_measure() {  # transcript -> "<peak> <turns>"
   python3 "$HERE/context.py" --measure "$1" "$AGENT"
 }
