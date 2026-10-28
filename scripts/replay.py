@@ -225,10 +225,12 @@ def bash_bound(minutes):
 
 
 TOOL_ENTRIES = ("SKILL.md", "README.md", "LICENCE.txt", "scripts", "templates")   # what a tool is for
-# `docs` holds every task's review findings (`dfs-review-findings.tsv`, `dfs-rounds.tsv`), the
-# original's first-review defects among them, so the sessions see a `docs` of the box's own with
-# only the file the tool uses at run time (SKILL.md names it).
-TOOL_DOCS = ("artefacts.md",)
+# `docs` holds every task's review findings (`dfs-review-findings.tsv`, `dfs-rounds.tsv`,
+# `dfs-break-it-cases.tsv`, `dfs-optimization.md`), the original's first-review defects among them,
+# so the sessions see a `docs` of the box's own: everything in the tool's `docs` except the files
+# named `dfs-*`, which are this workshop's mining of past runs. A changed tool that adds a doc (a
+# checklist its SKILL.md points at) finds it there; the one that names a hidden file is warned.
+HIDDEN_DOCS = "dfs-"
 SANDBOX_HOME = "/home/replay"
 ETC = ("/etc/resolv.conf", "/etc/ssl", "/etc/hosts", "/etc/nsswitch.conf", "/etc/passwd", "/etc/group")
 # kiro unpacks a generic Linux `node` that wants the host's dynamic loader at /lib64 and its libraries;
@@ -419,19 +421,38 @@ def store_closure(paths):
 
 
 def tool_docs(dest, tool):
-    """The box's `docs`: a directory holding only `TOOL_DOCS` of the tool's docs (none of the
-    findings, rounds, break-it or optimization files, which name the original run's defects),
-    or None when the tool has no docs. Built afresh each launch."""
+    """The box's `docs`: a copy of every entry of the tool's `docs` except the hidden ones
+    (`HIDDEN_DOCS`: the findings, rounds, break-it and optimization files, which name the original
+    run's defects), or None when the tool has no docs. Built afresh each launch."""
     src = Path(tool) / "docs"
     if not src.is_dir():
         return None
     out = box_of(dest) / "docs"
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
-    for name in TOOL_DOCS:
-        if (src / name).is_file():
-            shutil.copy(src / name, out / name)
+    for entry in sorted(src.iterdir()):
+        if entry.name.startswith(HIDDEN_DOCS):
+            continue
+        if entry.is_dir():
+            shutil.copytree(entry, out / entry.name, symlinks=True)
+        else:
+            shutil.copy(entry, out / entry.name)
     return out
+
+
+def hidden_docs_named(tool):
+    """The hidden docs (`HIDDEN_DOCS`) that the tool's `SKILL.md` or templates point a session at,
+    as `dfs-x.md` names that exist in its `docs`: a session of that tool would look for them and
+    find nothing. (Its scripts name them as outputs of the workshop, which is not a use.)"""
+    tool = Path(tool)
+    texts = [tool / "SKILL.md", *sorted((tool / "templates").glob("*"))]
+    named = set()
+    for f in texts:
+        try:
+            named.update(re.findall(r"docs/(" + re.escape(HIDDEN_DOCS) + r"[\w.-]*[\w-])", f.read_text(errors="replace")))
+        except OSError:
+            pass
+    return sorted(n for n in named if (tool / "docs" / n).exists())
 
 
 def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None):
@@ -462,7 +483,8 @@ def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None):
             if (tool / entry).exists():
                 cmd += ["-b", f"{tool / entry}:{tool / entry}"]
     # a tool in the store is bound whole above (its bin and libexec are on the sessions' PATH),
-    # a live checkout's entries one by one: either way its docs are the box's trimmed copy
+    # a live checkout's entries one by one: either way its docs are the box's copy without the
+    # hidden ones
     docs = tool_docs(dest, tool)
     if docs:
         cmd += ["-b", f"{docs}:{tool / 'docs'}"]
@@ -474,6 +496,9 @@ def launch(dest, task, cap, tool, bash_minutes, repo=None, agent="claude"):
     to run (`--kiro`, `--codex`, `--opencode`; none for claude, run.sh's default)."""
     dest = Path(dest).resolve()
     make_box(dest, agent)
+    for name in hidden_docs_named(tool):
+        print(f"replay: warning: {tool}'s SKILL.md or templates point at docs/{name}, which the sandbox "
+              f"hides (files named {HIDDEN_DOCS}* name other tasks' findings); its sessions will not find it", file=sys.stderr)
     bins = tool_bins(repo or main_checkout(), agent)
     flag = [] if agent == "claude" else [f"--{agent}"]
     inner = ["bash", str(tool / "scripts" / "run.sh"), *flag, task, str(cap or 6)]
@@ -616,7 +641,7 @@ def reached(dest, repo, files, tool=None, agent="claude"):
     cut = [re.escape(dest + "-tool"), re.escape(dest) + r"(?![\w-])"]
     if tool:
         base = re.escape(str(Path(tool).resolve()))
-        cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|docs/artefacts\.md|(?:scripts|templates)(?![\w-]))")
+        cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|docs/(?!" + re.escape(HIDDEN_DOCS) + r")|(?:scripts|templates)(?![\w-]))")
     own = re.compile("(?:" + "|".join(cut) + ")")
     live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + "|" + STORE_LOOK + r")(?![\w-])")
     found = []

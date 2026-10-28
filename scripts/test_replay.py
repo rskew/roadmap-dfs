@@ -355,9 +355,10 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertLessEqual(int(part("count")), len(needed))        # the closure and no more
         self.assertLess(len(needed), 1000)                           # a bind each: it stays a short list
 
-    def test_the_tools_docs_in_the_sandbox_hold_artefacts_md_and_not_the_findings_of_other_tasks(self):
+    def test_the_tools_docs_in_the_sandbox_hold_every_doc_but_the_findings_of_other_tasks(self):
         """docs/dfs-review-findings.tsv holds the original's first-review defects; a tool bound
-        with its docs whole (a live checkout's entries, or a tool in the store) shows them."""
+        with its docs whole (a live checkout's entries, or a tool in the store) shows them. A doc a
+        changed tool adds (its SKILL.md points at it) is there, a `dfs-*.bak` copy is not."""
         bins = self.bins()
         with mock.patch.object(replay, "config_dir", return_value=str(self.cfg)):
             replay.make_box(self.dest)
@@ -365,14 +366,35 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         (self.tool / "docs" / "artefacts.md").write_text("how to write a page\n")
         (self.tool / "docs" / "dfs-review-findings.tsv").write_text("W5\tdefect\tW5.2 added: the original's first-review defect\n")
         (self.tool / "docs" / "dfs-optimization.md").write_text("W5 first review failed\n")
-        out = self.sandbox_out(f"echo '[ls]'; ls {self.tool}/docs; echo '[cat]'; cat {self.tool}/docs/artefacts.md; "
+        (self.tool / "docs" / "dfs-review-findings.tsv.bak").write_text("W5 first-review defect, copied\n")
+        (self.tool / "docs" / "checklist.md").write_text("a procedure the changed SKILL.md points at\n")
+        (self.tool / "docs" / "more").mkdir()
+        (self.tool / "docs" / "more" / "steps.md").write_text("nested step\n")
+        out = self.sandbox_out(f"echo '[ls]'; ls {self.tool}/docs; echo '[cat]'; cat {self.tool}/docs/artefacts.md "
+                               f"{self.tool}/docs/checklist.md {self.tool}/docs/more/steps.md; "
                                f"cat {self.tool}/docs/dfs-review-findings.tsv 2>&1; true", bins)
         part = lambda name: out.split(f"[{name}]\n")[1].split("\n[")[0]
-        self.assertEqual(part("ls").split(), ["artefacts.md"])
+        self.assertEqual(part("ls").split(), ["artefacts.md", "checklist.md", "more"])
         self.assertIn("how to write a page", part("cat"))
+        self.assertIn("a procedure the changed SKILL.md points at", part("cat"))
+        self.assertIn("nested step", part("cat"))
         self.assertIn("No such file", part("cat"))
         self.assertNotIn("first-review defect", out)
-        self.assertEqual(sorted(p.name for p in (replay.box_of(self.dest) / "docs").iterdir()), ["artefacts.md"])
+        self.assertEqual(sorted(p.name for p in (replay.box_of(self.dest) / "docs").iterdir()),
+                         ["artefacts.md", "checklist.md", "more"])
+
+    def test_a_hidden_doc_that_skill_md_or_a_template_points_at_is_named_for_the_warning(self):
+        tool = Path(self.tmp.name) / "changed"
+        (tool / "docs").mkdir(parents=True)
+        (tool / "templates").mkdir()
+        for name in ("dfs-rounds.tsv", "dfs-optimization.md", "checklist.md"):
+            (tool / "docs" / name).write_text("x\n")
+        (tool / "SKILL.md").write_text("Read `docs/checklist.md`, then `docs/dfs-rounds.tsv`.\n")
+        (tool / "templates" / "t.html").write_text("<!-- docs/dfs-optimization.md. -->")
+        (tool / "scripts").mkdir()
+        (tool / "scripts" / "audit.py").write_text("# writes docs/dfs-review-findings.tsv\n")   # an output, not a use
+        self.assertEqual(replay.hidden_docs_named(tool), ["dfs-optimization.md", "dfs-rounds.tsv"])
+        self.assertEqual(replay.hidden_docs_named(self.tool), [])
 
     def test_a_tool_in_the_store_keeps_its_bin_and_libexec_but_gets_the_trimmed_docs(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
@@ -718,13 +740,15 @@ class ReachOutsideDestTest(unittest.TestCase):
         got = self.reached(calls, tool=self.live)
         self.assertEqual([n for n, _ in got], ["Bash", "Read", "Glob", "Bash"])
 
-    def test_a_read_of_the_tools_findings_in_a_live_checkout_tool_counts_and_artefacts_md_does_not(self):
+    def test_a_read_of_the_tools_findings_in_a_live_checkout_tool_counts_and_its_other_docs_do_not(self):
         live = str(self.live)
         calls = [("Bash", {"command": f"cat {live}/docs/artefacts.md"}),                  # the tool's own use of docs
+                 ("Bash", {"command": f"cat {live}/docs/checklist.md {live}/docs/more/steps.md"}),   # a doc a changed tool adds
                  ("Bash", {"command": f"cat {live}/docs/dfs-review-findings.tsv"}),       # every task's findings
+                 ("Bash", {"command": f"cat {live}/docs/dfs-review-findings.tsv.bak"}),   # a copy of them
                  ("Bash", {"command": f"ls {live}/docs"})]
         got = self.reached(calls, tool=self.live)
-        self.assertEqual([t.split("/")[-1] for _, t in got], ["dfs-review-findings.tsv", "docs"])
+        self.assertEqual([t.split("/")[-1] for _, t in got], ["dfs-review-findings.tsv", "dfs-review-findings.tsv.bak", "docs"])
 
     def test_a_call_the_sandbox_answered_with_nothing_is_told_from_one_that_got_output(self):
         live = str(self.live)
