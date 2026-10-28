@@ -141,6 +141,21 @@ class Controls(unittest.TestCase):
         self.ui.drain_commands()
         self.assertEqual(ran, [])
 
+    def test_a_command_the_screen_has_begun_is_waited_for_not_called_busy(self):
+        # The screen takes the command before the caller's timeout, then spends longer than
+        # the timeout inside it (a walk's Start spawns the runner and reloads the roadmap).
+        ran = []
+
+        def slow():
+            time.sleep(0.4)
+            ran.append(1)
+            return "started"
+        drainer = threading.Thread(target=lambda: (time.sleep(0.05), self.ui.drain_commands()))
+        drainer.start()
+        self.assertEqual(self.ui.call_soon(slow, timeout=0.2), "started")
+        drainer.join()
+        self.assertEqual(ran, [1])
+
     def test_the_snapshot_is_the_screens_state(self):
         with Screening(self.ui):
             self.w.start(5)

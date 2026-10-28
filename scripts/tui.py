@@ -1920,8 +1920,15 @@ class UI(WalkMixin):
         call = _Call(fn)
         self.commands.put(call)
         if not call.done.wait(timeout):
-            call.cancelled = True
-            raise ValueError("the terminal screen is busy (a prompt is open): try again in a moment")
+            with call.lock:
+                if not call.started:
+                    call.cancelled = True
+            if call.cancelled:
+                raise ValueError("the terminal screen is busy (a prompt is open): try again in a moment")
+            # The screen began it before the timeout and is still inside it (a walk's Start
+            # spawns the runner and reloads the roadmap). It can no longer be called off, so
+            # report what it does rather than "busy" for a command that took effect.
+            call.done.wait()
         if call.error is not None:
             raise call.error
         return call.result
@@ -1932,8 +1939,10 @@ class UI(WalkMixin):
                 call = self.commands.get_nowait()
             except queue.Empty:
                 return
-            if call.cancelled:
-                continue
+            with call.lock:
+                if call.cancelled:
+                    continue
+                call.started = True
             try:
                 call.result = call.fn()
             except Exception as e:      # the caller's to report, not the screen's to die of
@@ -5167,6 +5176,8 @@ class _Call:
         self.fn, self.done = fn, threading.Event()
         self.result = self.error = None
         self.cancelled = False
+        self.started = False
+        self.lock = threading.Lock()    # decides, once, between "cancelled" and "started"
 
 
 class UiWalker:
