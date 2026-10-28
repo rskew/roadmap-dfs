@@ -60,6 +60,43 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(rec["verdicts"], [("review", "issues")])
         self.assertAlmostEqual(rec["units"], 3 * 2 + 160_000 * 0.1 + 3_000 * 2 + 600 * 5)
 
+    def commits(self, *outputs):
+        """The `ok` of each commit, one per (command, result) pair."""
+        recs = []
+        for i, (cmd, text, error) in enumerate(outputs):
+            recs += [assistant(f"m{i}", [bash(f"t{i}", cmd)], f"2026-10-01T00:0{i}:00Z"),
+                     user([result(f"t{i}", text, error)], f"2026-10-01T00:0{i}:30Z")]
+        rec = self.record([user("Follow /x/SKILL.md. Work task W13. Everything", "2026-10-01T00:00:00Z")] + recs)
+        return [c["ok"] for c in rec["commits"]]
+
+    def test_a_commit_that_failed_under_a_later_step_that_succeeded_is_not_made(self):
+        who = "Author identity unknown\n\n*** Please tell me who you are.\nfatal: unable to auto-detect email address"
+        self.assertEqual(self.commits(
+            ("git commit -q -m 'W13.1: a' && echo x", who, False),     # no error flag, nothing committed
+            ("git commit -m 'W13.1: a'; python3 tree.py log W13 x", who, False),
+            ("git commit -q -m 'W13.1: a'", "", False),                # -q prints nothing on success
+            ("git commit -m 'W13.1: a'", "[dfs/W13 abc1234] W13.1: a\n 1 file changed", False),
+            ("git commit -m 'W13.2: b'", "nothing to commit, working tree clean", False),
+            ("git commit -m 'W13.3: c'", "dfs_check: the roadmap broke its own rules.\n- x", True),
+            # a quoted `|` in an option (`-c user.name="${a%|*}"`) before `commit`
+            ("a=x; git -c user.name=\"${a%|*}\" commit -q -m 'W13.5: e'", "", False),
+            # a retry inside one command that worked after the first try failed
+            ("git commit -m 'W13.4: d' || git -c user.name=a -c user.email=b commit -m 'W13.4: d'",
+             who + "\n[dfs/W13 def5678] W13.4: d", False),
+        ), [False, False, True, True, False, False, True, True])
+
+    def test_only_the_commits_that_were_made_count_as_nodes(self):
+        recs = [user("Follow /x/SKILL.md. Work task W13. Everything", "2026-10-01T00:00:00Z")]
+        for i, (subj, text, error) in enumerate([
+                ("W13.1: a", "Author identity unknown\nfatal: unable to auto-detect", False),
+                ("W13.1: a", "[dfs/W13 abc1234] W13.1: a", False),
+                ("W13.2: b", "dfs_check: the roadmap broke its own rules.", True)]):
+            recs += [assistant(f"m{i}", [bash(f"t{i}", f"git commit -m '{subj}'")], f"2026-10-01T00:0{i}:00Z"),
+                     user([result(f"t{i}", text, error)], f"2026-10-01T00:0{i}:30Z")]
+        s = dict(self.record(recs), usd=1.0)
+        (task,) = history.tasks_of([s], {}).values()
+        self.assertEqual((task["nodes"], task["refused"]), (1, 1))
+
     def test_a_work_session_and_its_started_node(self):
         rec = self.record([
             user("Follow /nix/store/x-roadmap-dfs/share/roadmap-dfs/SKILL.md. Work task W13. Everything", "2026-10-01T00:00:00Z"),

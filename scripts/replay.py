@@ -61,9 +61,12 @@ def config_dir():
 
 
 def transcripts(checkout):
-    """Glob for the transcripts of a checkout and of every worktree of it."""
-    enc = re.sub(r"[/.]", "-", str(Path(checkout).resolve()))
-    return os.path.join(config_dir(), "projects", enc + "*", "*.jsonl")
+    """Globs for the transcripts of a checkout and of its own worktrees: the exact directory
+    and `<dir>--dfs-worktrees-*`, so `dfs-replay-W55-1` never takes in `dfs-replay-W55-10`."""
+    enc = glob.escape(re.sub(r"[/.]", "-", str(Path(checkout).resolve())))
+    base = os.path.join(glob.escape(config_dir()), "projects")
+    return [os.path.join(base, enc, "*.jsonl"),
+            os.path.join(base, enc + "--dfs-worktrees-*", "*.jsonl")]
 
 
 def author_part(text):

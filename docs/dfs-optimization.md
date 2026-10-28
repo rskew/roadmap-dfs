@@ -121,7 +121,7 @@ sessions and $1.30 originally, with a first review that found issues. Replayed o
 |---|---|---|
 | sessions (work / review / critic) | 5 (3/2/0) | 6 (3/3/0) |
 | dollars | 1.30 | 3.48 |
-| node commits | 4 | 7 |
+| node commits | 4 | 5 (scored 7 before failed commits were excluded) |
 | first review | issues | issues |
 | reviews with issues / rounds | 1 / 2 | 2 / 3 |
 | spent after a review said issues | 0.47 | 1.66 |

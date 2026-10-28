@@ -174,6 +174,19 @@ class ScoreTest(unittest.TestCase):
         self.assertIn("DONE", out)
 
 
+class TranscriptsOfOneReplayTest(unittest.TestCase):
+    def test_replay_1_does_not_take_in_replay_10_but_does_take_its_worktrees(self):
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            for name in ("-tmp-dfs-replay-W5-1", "-tmp-dfs-replay-W5-1--dfs-worktrees-W5",
+                         "-tmp-dfs-replay-W5-10", "-tmp-dfs-replay-W5-10--dfs-worktrees-W5",
+                         "-tmp-dfs-replay-W5-1x"):
+                d = Path(cfg) / "projects" / name
+                d.mkdir(parents=True)
+                (d / "s.jsonl").write_text("{}\n")
+            found = {Path(f).parent.name for f in history._glob(replay.transcripts("/tmp/dfs-replay-W5-1"))}
+            self.assertEqual(found, {"-tmp-dfs-replay-W5-1", "-tmp-dfs-replay-W5-1--dfs-worktrees-W5"})
+
+
 class HistoryKeepsReplaysApartTest(unittest.TestCase):
     def test_default_mining_skips_replay_transcripts_and_notes_the_first_review(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -42,8 +42,14 @@ KINDS = [
 REPLAY = "-dfs-replay-"
 VERDICT = re.compile(r"tree\.py\b.*?\blog (W\d+) (review|critic|raise|backtrack)\b ?(ok|issues)?")
 STARTED = re.compile(r"tree\.py\b.*?\bstart (W\d+) (W[\d.]+(?:@\S+)?)")
-SUBJECT = re.compile(r"""git\b[^|;&]*\bcommit\b.*?(?:-m\s+(['"])(.+?)\1|<<-?\s*'?EOF'?\s*\n(.+?)\n)""", re.S)
+SUBJECT = re.compile(r"""git\b(?:[^|;&'"]|"[^"]*"|'[^']*')*?\bcommit\b.*?(?:-m\s+(['"])(.+?)\1|<<-?\s*'?EOF'?\s*\n(.+?)\n)""", re.S)
 REFUSED = "dfs_check: the roadmap broke its own rules"
+# What git prints when a commit did not happen, wherever in a chained command it failed:
+# `git commit ...; tree.py ...` exits with the last step, so the tool result is no error.
+# A `[branch sha] subject` line shows a commit that did happen, e.g. a retry that worked.
+FAILED = re.compile(r"Author identity unknown|^(?:fatal|error): |^nothing (?:added )?to commit"
+                    r"|^no changes added to commit", re.M)
+MADE = re.compile(r"^\[[^\]\n]+ [0-9a-f]{7,}\]", re.M)
 # Relative prices, in input-token units: a cache read is a tenth of an input token, a
 # one-hour cache write two, an output token five. Turned into dollars by the ratio the
 # runner's own `total_cost_usd` shows (see `calibrate`), so only the ratios are assumed.
@@ -96,10 +102,11 @@ def session(path):
                     out = _text(b.get("content"))
                     rec["errors"] += bool(b.get("is_error"))
                     if pending.get(b.get("tool_use_id")) == "commit":
-                        if REFUSED in out:
-                            rec["refused"] += 1
-                        elif rec["commits"]:
-                            rec["commits"][-1]["ok"] = not b.get("is_error")
+                        refused = REFUSED in out
+                        rec["refused"] += refused
+                        if rec["commits"]:
+                            rec["commits"][-1]["ok"] = not (b.get("is_error") or refused) and \
+                                (bool(MADE.search(out)) or not FAILED.search(out))
                 continue
             if r.get("type") != "assistant":
                 continue
@@ -266,10 +273,16 @@ def report(sessions, tasks, rates, n_priced):
           f"review issues {t['review_issues']}/{t['review_ok'] + t['review_issues']} raises {t['raises']}\n")
 
 
+def _glob(pattern):
+    """The files matching a glob, or any of a list of globs, each once."""
+    pats = [pattern] if isinstance(pattern, str) else pattern
+    return sorted({f for p in pats for f in glob.glob(p)})
+
+
 def find_repos(pattern, repos):
     """Add to `repos` each project in `pattern` whose checkout is on this box. The
     transcript directory is the checkout's path with every `/` and `.` made a `-`."""
-    for d in {project_of(os.path.basename(os.path.dirname(f))) for f in glob.glob(pattern)}:
+    for d in {project_of(os.path.basename(os.path.dirname(f))) for f in _glob(pattern)}:
         for cand in ("/" + d[1:].replace("-", "/"), "/workspace/" + d.split("-workspace-")[-1]):
             if d not in repos and os.path.isdir(os.path.join(cand, ".dfs")):
                 repos[d] = cand
@@ -287,9 +300,10 @@ def price(sessions, costs):
 
 
 def load(pattern, repos, replays=False):
-    """(sessions, tasks, rate, n_priced) for the transcripts matching `pattern`, with the
-    checkouts in `repos` ({project: path}, extended here) supplying costs and logs."""
-    files = [f for f in glob.glob(pattern)
+    """(sessions, tasks, rate, n_priced) for the transcripts matching `pattern` (a glob or
+    a list of them), with the checkouts in `repos` ({project: path}, extended here)
+    supplying costs and logs."""
+    files = [f for f in _glob(pattern)
              if replays or REPLAY not in os.path.dirname(f)]
     find_repos(pattern, repos)
     sessions = [session(f) for f in files]
