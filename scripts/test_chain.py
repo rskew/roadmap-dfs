@@ -2185,6 +2185,8 @@ class Chain(unittest.TestCase):
         old = dfs_tree.dfs_paths.work_root
         dfs_tree.dfs_paths.work_root = lambda: self.root
         try:
+            # An `issues` needs a finding behind it, here an open raise.
+            dfs_tree.append_log("W1", "raise", ["W1.1"], "which way?")
             for _ in range(4):
                 dfs_tree.append_log("W1", "review", ["issues"], "a finding")
             self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 4)

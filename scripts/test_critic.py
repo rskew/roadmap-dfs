@@ -128,5 +128,27 @@ class CriticOk(unittest.TestCase):
         self.assertEqual(dfs_context.tool_uses(str(t), "claude"), 1)
 
 
+    # A reviewer or critic logs ONE verdict. W116, 2026-10-28: the brief showed `ok` and
+    # `issues` under "exactly once, the verdict", and each review logged both.
+
+    def test_the_review_brief_asks_for_one_verdict_not_two_steps(self):
+        self.log("ok")
+        b = dfs_state.review_brief("W1")
+        self.assertNotIn("exactly once", b)
+        self.assertIn("ONE verdict", b)
+        self.assertIn("never both", b)
+        self.assertIn("If you added nothing, the verdict is `ok`", b)
+        self.assertIn("If you added something, the verdict is `issues`", b)
+        self.assertIn("refused", b)
+        self.assertEqual(b.count("review ok <<"), 1)
+        self.assertEqual(b.count("review issues <<"), 1)
+
+    def test_the_critic_brief_asks_for_one_verdict_too(self):
+        self.log("ok")
+        b = dfs_state.critic_brief("W1")
+        self.assertIn("ONE verdict", b)
+        self.assertIn("backtracked or raised above", b)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
