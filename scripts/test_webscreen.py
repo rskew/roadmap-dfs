@@ -6,6 +6,7 @@ Run:  python3 roadmap-dfs/scripts/test_webscreen.py
 """
 import collections
 import http.client
+import inspect
 import json
 import os
 import queue
@@ -140,6 +141,71 @@ class Controls(unittest.TestCase):
             self.ui.call_soon(lambda: ran.append(1), timeout=0.05)
         self.ui.drain_commands()
         self.assertEqual(ran, [])
+
+    def drain_once_queued(self):
+        """Drain on this screen's behalf as soon as a call is queued, not after a guessed delay."""
+        def run():
+            while self.ui.commands.empty():
+                time.sleep(0.001)
+            self.ui.drain_commands()
+        th = threading.Thread(target=run)
+        th.start()
+        return th
+
+    def test_a_command_the_screen_has_begun_is_waited_for_not_called_busy(self):
+        # The screen takes the command before the caller's timeout, then spends longer than
+        # the timeout inside it (a walk's Start spawns the runner and reloads the roadmap).
+        ran = []
+        began = threading.Event()
+        release = threading.Event()
+
+        def slow():
+            began.set()
+            release.wait(5)
+            ran.append(1)
+            return "started"
+        # Release the command 0.3 s after it began: past the 0.2 s timeout by construction.
+        threading.Thread(target=lambda: (began.wait(5), time.sleep(0.3), release.set())).start()
+        drainer = self.drain_once_queued()
+        self.assertEqual(self.ui.call_soon(slow, timeout=0.2), "started")
+        drainer.join()
+        self.assertEqual(ran, [1])
+
+    def test_a_command_that_exits_the_screen_frees_its_caller(self):
+        def die():
+            raise SystemExit(1)
+        result = []
+
+        def caller():
+            try:
+                self.ui.call_soon(die, timeout=1.0)
+            except Exception as e:
+                result.append(e)
+        th = threading.Thread(target=caller)
+        th.start()
+        while self.ui.commands.empty():
+            time.sleep(0.001)
+        with self.assertRaises(SystemExit):
+            self.ui.drain_commands()
+        th.join(2)
+        self.assertFalse(th.is_alive())
+        self.assertIn("stopped", str(result[0]))
+
+    def test_a_begun_command_that_never_finishes_is_reported_not_hung_on(self):
+        release = threading.Event()
+        # The command blocks until the test ends; the caller must give up on its own.
+        t0 = time.time()
+        drainer = self.drain_once_queued()
+        with self.assertRaises(ValueError) as cm:
+            self.ui.call_soon(lambda: release.wait(5), timeout=0.2, running_timeout=0.2)
+        self.assertIn("still running", str(cm.exception))
+        self.assertLess(time.time() - t0, 2)
+        release.set()
+        drainer.join(2)
+
+    def test_the_call_soon_timeouts_default_to_5_and_60_seconds(self):
+        params = inspect.signature(TUI.UI.call_soon).parameters
+        self.assertEqual((params["timeout"].default, params["running_timeout"].default), (5.0, 60.0))
 
     def test_the_snapshot_is_the_screens_state(self):
         with Screening(self.ui):

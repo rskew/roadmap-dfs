@@ -1911,17 +1911,27 @@ class UI(WalkMixin):
     commands = None
     web = None          # the running server's handle, from `start_web`
 
-    def call_soon(self, fn, timeout=5.0):
+    def call_soon(self, fn, timeout=5.0, running_timeout=60.0):
         """Run `fn` on the screen's own thread and return its result (or raise its
-        error). A screen with a prompt open does not poll, so a request can wait: it
-        gives up after `timeout` seconds and says so."""
+        error). A screen with a prompt open does not poll, so a request can wait: a
+        command still queued after `timeout` seconds is called off and reported as busy.
+        One the screen has already begun cannot be called off, so it is waited for up to
+        `running_timeout` more seconds, and reported as still running past that."""
         if self.commands is None:
             raise ValueError("this screen is not serving the web page")
         call = _Call(fn)
         self.commands.put(call)
         if not call.done.wait(timeout):
-            call.cancelled = True
-            raise ValueError("the terminal screen is busy (a prompt is open): try again in a moment")
+            with call.lock:
+                if not call.started:
+                    call.cancelled = True
+            if call.cancelled:
+                raise ValueError("the terminal screen is busy (a prompt is open): try again in a moment")
+            # The screen began it before the timeout and is still inside it (a walk's Start
+            # spawns the runner and reloads the roadmap). It can no longer be called off, so
+            # report what it does rather than "busy" for a command that took effect.
+            if not call.done.wait(running_timeout):
+                raise ValueError("the terminal screen is still running the command: check the page before retrying")
         if call.error is not None:
             raise call.error
         return call.result
@@ -1932,13 +1942,19 @@ class UI(WalkMixin):
                 call = self.commands.get_nowait()
             except queue.Empty:
                 return
-            if call.cancelled:
-                continue
+            with call.lock:
+                if call.cancelled:
+                    continue
+                call.started = True
             try:
                 call.result = call.fn()
             except Exception as e:      # the caller's to report, not the screen's to die of
                 call.error = e
-            call.done.set()
+            except BaseException as e:  # SystemExit and the like: free the caller, then let it go on
+                call.error = RuntimeError("the terminal screen stopped while running the command: %r" % (e,))
+                raise
+            finally:
+                call.done.set()
 
     def refresh_chains(self):
         """Re-derive which chains are on the box, NOW rather than at the last poll.
@@ -5167,6 +5183,8 @@ class _Call:
         self.fn, self.done = fn, threading.Event()
         self.result = self.error = None
         self.cancelled = False
+        self.started = False
+        self.lock = threading.Lock()    # decides, once, between "cancelled" and "started"
 
 
 class UiWalker:
