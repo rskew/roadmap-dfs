@@ -877,11 +877,18 @@ class WalkMixin:
                              "not starting with -" % name)
         chosen = read_models()
         chosen[role] = name
+        path = os.path.join(dfs_runs.ensure_run_root(), "models")
+        tmp = "%s.%d.tmp" % (path, os.getpid())   # written whole, then swapped in: a reader never sees half
         try:
-            with open(os.path.join(dfs_runs.ensure_run_root(), "models"), "w") as fh:
+            with open(tmp, "w") as fh:
                 json.dump(chosen, fh)
                 fh.write("\n")
+            os.replace(tmp, path)
         except OSError as e:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
             raise ValueError("could not keep the choice: %s" % e)
         what = "%s model: %s" % (role, name or "run.sh's default")
         self.msg = what
