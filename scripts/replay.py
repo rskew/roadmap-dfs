@@ -455,12 +455,13 @@ def hidden_docs_named(tool):
     return sorted(n for n in named if (tool / "docs" / n).exists())
 
 
-def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None):
+def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None, docs=None):
     """The command that runs `inner` in a proot of DEST: an empty root, the store paths it runs from
     (`store_closure`; the rest of /nix/store, with its `*-source` copies of task files, is not there), /proc and /dev, the
     nix `bash` as /bin/sh and `env` as /usr/bin/env, the network files of /etc, the box's home as
     HOME, DEST at its own path, and (unless the tool is in the store) the tool's own entries at
     theirs: never the tool as a whole, which when it is the live checkout holds its `.dfs/`.
+    `docs` is the directory `tool_docs` made, laid over the tool's own `docs`. Nothing is written here.
     The sessions see the host's `/workspace/...` only as the path down to DEST."""
     dest, tool, box = Path(dest).resolve(), Path(tool).resolve(), box_of(dest)
     # The store paths the chain runs from (the bins, the tool when it is in the store, and the
@@ -484,8 +485,7 @@ def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None):
                 cmd += ["-b", f"{tool / entry}:{tool / entry}"]
     # a tool in the store is bound whole above (its bin and libexec are on the sessions' PATH),
     # a live checkout's entries one by one: either way its docs are the box's copy without the
-    # hidden ones
-    docs = tool_docs(dest, tool)
+    # hidden ones (`tool_docs`, built by the caller: this function only builds a command)
     if docs:
         cmd += ["-b", f"{docs}:{tool / 'docs'}"]
     return cmd + ["-w", str(dest), "/usr/bin/env", "-i", *[f"{k}={v}" for k, v in env.items()], *inner]
@@ -502,7 +502,8 @@ def launch(dest, task, cap, tool, bash_minutes, repo=None, agent="claude"):
     bins = tool_bins(repo or main_checkout(), agent)
     flag = [] if agent == "claude" else [f"--{agent}"]
     inner = ["bash", str(tool / "scripts" / "run.sh"), *flag, task, str(cap or 6)]
-    argv = sandbox_argv(dest, tool, inner, bins, sandbox_env(tool, bins, bash_minutes, agent), agent)
+    argv = sandbox_argv(dest, tool, inner, bins, sandbox_env(tool, bins, bash_minutes, agent), agent,
+                        docs=tool_docs(dest, tool))
     # proot unpacks its loader into PROOT_TMP_DIR, which has to be able to execute: the box is
     # beside DEST, on the mount DEST is on
     return argv, {"PROOT_TMP_DIR": str(box_of(dest) / "tmp"), "PATH": os.environ.get("PATH", "")}

@@ -330,7 +330,8 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
 
     def sandbox_out(self, script, bins):
         env = replay.sandbox_env(self.tool, bins)
-        argv = replay.sandbox_argv(self.dest, self.tool, ["sh", "-c", script], bins, env)
+        argv = replay.sandbox_argv(self.dest, self.tool, ["sh", "-c", script], bins, env,
+                                   docs=replay.tool_docs(self.dest, self.tool))
         r = subprocess.run(argv, cwd=self.dest, env={"PROOT_TMP_DIR": str(replay.box_of(self.dest) / "tmp"),
                                                      "PATH": os.environ["PATH"]},
                            capture_output=True, text=True, timeout=120)
@@ -403,11 +404,24 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         Path(tool, "docs").mkdir(parents=True)
         Path(tool, "docs", "artefacts.md").write_text("a\n")
         Path(tool, "docs", "dfs-review-findings.tsv").write_text("W5\n")
-        argv = replay.sandbox_argv(self.dest, tool, ["true"], bins, {}, store=["/nix/store/t-roadmap"])
+        box_docs = replay.tool_docs(self.dest, tool)
+        argv = replay.sandbox_argv(self.dest, tool, ["true"], bins, {}, store=["/nix/store/t-roadmap"], docs=box_docs)
         binds = [argv[i + 1] for i, a in enumerate(argv) if a == "-b"]
         self.assertIn("/nix/store/t-roadmap", binds)                                   # the package, as before
         self.assertIn(f"{replay.box_of(self.dest) / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)   # docs laid over it, last
         self.assertNotIn(f"{Path(tool).resolve() / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)
+
+    def test_building_the_command_writes_nothing_to_the_box(self):
+        bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
+                "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
+        tool = Path(self.tmp.name) / "tool-with-docs"
+        (tool / "docs").mkdir(parents=True)
+        (tool / "docs" / "artefacts.md").write_text("a\n")
+        replay.sandbox_argv(self.dest, tool, ["true"], bins, {}, store=[])
+        self.assertFalse(replay.box_of(self.dest).exists())
+        argv = replay.sandbox_argv(self.dest, tool, ["true"], bins, {}, store=[], docs=replay.tool_docs(self.dest, tool))
+        self.assertTrue((replay.box_of(self.dest) / "docs" / "artefacts.md").is_file())
+        self.assertIn(f"{replay.box_of(self.dest) / 'docs'}:{tool.resolve() / 'docs'}", argv)
 
     def test_a_tool_in_the_store_is_not_bound_and_the_box_keeps_to_its_own_directories(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
