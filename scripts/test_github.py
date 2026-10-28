@@ -128,6 +128,21 @@ class Watch(unittest.TestCase):
             LINES.pop()
         self.assertEqual(dfs_github.watch("W1"), [])
 
+    def test_a_comment_whose_node_the_author_deleted_is_not_added_again(self):
+        self.assertEqual(dfs_github.watch("W1"), ["W1.2", "W1.3", "W1.4"])
+        self.assertEqual(dfs_tree.delete_node("W1", "W1.2"), ["W1.2"])
+        self.assertEqual(dfs_github.watch("W1"), [])
+        self.assertNotIn("W1.2", {nd["id"] for nd in dfs_tree.load("W1")["nodes"]})
+        # a comment that is new still becomes a node
+        LINES.append({"id": 45, "user": {"login": "cy"}, "body": "And here.", "path": "app.py",
+                      "line": 20})
+        (self.root / "lines.json").write_text(json.dumps(LINES))
+        try:
+            self.assertEqual(len(dfs_github.watch("W1")), 1)
+        finally:
+            LINES.pop()
+        self.assertEqual(dfs_github.watch("W1"), [])
+
     def test_line_comments_on_every_page_become_nodes(self):
         # `gh api --paginate` prints one array per page, back to back
         page2 = [{"id": 90 + i, "user": {"login": "cy"}, "body": "More %d." % i, "path": "app.py",

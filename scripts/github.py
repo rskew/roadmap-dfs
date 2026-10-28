@@ -252,7 +252,8 @@ def land(task, url, head=""):
 def watch(task):
     """Turn each comment on `task`'s pull request that the tree does not hold yet into an open
     node, at the root as a review's finding is, which reopens the task for the walk. A comment
-    is known by the `(github <kind> <id>)` its node's Approach ends with. Returns the new ids.
+    is known by the `(github <kind> <id>)` its node's Approach ends with, in the tree or in the
+    text of a node the author deleted (which dismisses it). Returns the new ids.
     A pull request merged on GitHub is landed locally (`land`) and one closed unmerged is a
     raise (`closed`), and add nothing."""
     t = dfs_tree.load(task)
@@ -269,7 +270,9 @@ def watch(task):
     if _pr_marks(t)[-1:] == [[url, "closed"]]:
         dfs_tree.append_log(task, "pr", [url])   # reopened on GitHub: watched as before
         _settle(task, CLOSED + url)
-    known = " ".join(nd["fields"].get("Approach", "") for nd in t["nodes"])
+    # A node the author deleted is dismissed: its text, mark included, is in the `delete` entry.
+    known = " ".join([nd["fields"].get("Approach", "") for nd in t["nodes"]]
+                     + [e["body"] for e in t["log"] if e["kind"] == "delete"])
     added = []
     for kind, cid, who, text, where, link in comments:
         mark = "(github %s %s)" % (kind, cid)

@@ -73,7 +73,8 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   conversation comment, review with a body and line comment becomes one open node at the root of the
   task, as a reviewer's finding does: who wrote it, the text, the file and line, its link, and
   `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing; every
-  other comment does, your own replies and bots' included.
+  other comment does, your own replies and bots' included. Delete the node of a comment you do not
+  want acted on and it is dismissed: the watch does not add it again.
   The task is open again, so the walk works and raises on the node as on any other; nothing is posted back
   to GitHub.
 - **The push**: when that task is finished anew (the fix reviewed, or accepted) the hold pushes `dfs/<task>` to
