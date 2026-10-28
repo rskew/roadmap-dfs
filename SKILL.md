@@ -77,7 +77,9 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   verdict. A node with no assumption needs none. The screen marks a node with a
   Hypothesis (⚑) and names those nodes when the author accepts the tree, so keep it for
   what is both important and open to question: an ordinary choice the check settles is
-  not one.
+  not one. An assumption you find in a node already determined, yours or one a review
+  names, is stated in a new child of that node, with its Hypothesis, Evidence and page:
+  the determined node itself cannot change, and a review's note on it is never answered.
   What you built, the steps you took and every test you ran belong in the Approach
   and the commit, not here.
 - **A choice the author may want made the other way is a Hypothesis**, never an `Ask:`:
@@ -87,7 +89,8 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 - **The Determination is the verdict and nothing else**: what you found, in one
   sentence, which is what the author reads under the node. The hand-off ("Next, check
   that …") belongs in the next node's Approach, and caveats in a Hypothesis,
-  not in prose here or in the Summary where nothing looks for them.
+  not in prose here or in the Summary where nothing looks for them. Which tests ran
+  and how many passed belong in the commit message: "passed" is enough here.
 - **A node's Approach and Hypothesis are concise, clear and stand alone.** A session,
   the critic and the TUI each read one node without the rest of the tree, so say the thing
   itself: the file, function, fault and check by name. "Fix what W13.3 found", "as in
@@ -183,7 +186,9 @@ that overlap the merge are a raise, which the runner logs; so is a merge, cherry
 revert or rebase of theirs left unfinished in the checkout (a rebase detaches HEAD, and the
 raise says so), which the runner leaves untouched. The rebase rewrites the
 branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
-by a hash that would dangle once the branch is merged and deleted.
+by a hash that would dangle once the branch is merged and deleted. Until then a task in
+flight has its current file only on its branch: the default branch's copy is stale or
+empty, so to read another task's tree or log use `git show dfs/<task>:.dfs/items/<task>.md`.
 
 When `.dfs/` is gitignored the worktree is cut all the same. The ignored planning files are in
 no commit, so the worktree's `.dfs/items`, `.dfs/artefacts` and the rest are links to the
