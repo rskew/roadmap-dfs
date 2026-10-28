@@ -68,24 +68,18 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   `Wrong if` and shows the second half on its own, since it is the part the author
   answers. Not a second description of the work. The Evidence is the
   observations that bear on it, one line each: what was run or read, what it showed,
-  and which way it cuts. **A Hypothesis names an interactive artefact**, as
-  `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself: a page the author can
-  operate, with the options to switch between, the inputs to move and the evidence to
-  open, and with Confirm and Refute buttons that submit their ruling on the node (the
-  template's answer form does; see Raising). `check.py` refuses a commit that adds a Hypothesis
-  naming no such page, or one with no control a handler answers, or that cannot post a
-  verdict. A node with no assumption needs none. The screen marks a node with a
+  and which way it cuts. **A Hypothesis names an answer page**, as
+  `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself (see Raising); `check.py`
+  refuses a commit that adds one without it. A node with no assumption needs none. Write
+  it when you start the node, before the work. The screen marks a node with a
   Hypothesis (⚑) and names those nodes when the author accepts the tree, so keep it for
   what is both important and open to question: an ordinary choice the check settles is
-  not one. An assumption you find in a node already determined, yours or one a review
+  not one. A choice the author may want made the other way is one, never an `Ask:`
+  (`check.py` refuses a node that adds or changes one). An assumption you find in a node already determined, yours or one a review
   names, is stated in a new child of that node, with its Hypothesis, Evidence and page:
   the determined node itself cannot change, and a review's note on it is never answered.
   What you built, the steps you took and every test you ran belong in the Approach
   and the commit, not here.
-- **A choice the author may want made the other way is a Hypothesis**, never an `Ask:`:
-  you chose, the work went on, and the assumption is written with its `Wrong if`, its
-  Evidence and its artefact so that it can be refuted. `check.py` refuses a node that
-  adds or changes an `Ask:`. An `Ask:` already committed stays as it is.
 - **The Determination is the verdict and nothing else**: what you found, in one
   sentence, which is what the author reads under the node. The hand-off ("Next, check
   that …") belongs in the next node's Approach, and caveats in a Hypothesis,
@@ -104,10 +98,6 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   what is planned under it holds the task open.
 - A node is **live** unless it is pruned: below a refuted node, or cut off by a
   correction or backtrack.
-- **Write the hypothesis when you start the node**, before the work, when there is
-  one: the assumption, and what would show it is not so. A node that states one can
-  be refuted on evidence; the critic looks at it, and at the nodes that should have
-  stated one and did not.
 - **Evidence is what you saw, not what you believe**: the command and what it
   printed, the test and whether it went red, cited in a line, not pasted. Try to
   refute your own hypothesis. The critic looks for a node confirmed on reasoning
@@ -120,16 +110,14 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 - Add nodes freely and keep them small. After each node, re-plan the open nodes ahead:
   edit, add or refute them. Backing up is normal.
 - **A determined node is history.** Once confirmed or refuted and committed, it is not
-  edited; `check.py` refuses it. Later understanding goes in a new node. Its
-  evidence lines may MOVE, verbatim, into `.dfs/archive/items/<task>.md` (leaving
-  `Evidence: archived.`), which is how a task file over its budget shrinks; append
-  them at the archive's END under a `**<id> Evidence**:` heading, since nothing
-  already there may move, and stage the archive in the same commit. Its Approach,
-  Hypothesis and Determination may move too, by `tree.py shelve <task> [<ids>]`, which appends
-  each verbatim to the archive's end as `**<id> Approach**: <text>` and leaves
-  `Approach: archived.` (a Determination leaves its first clause and `(archived.)`); `dfs_tree.load` and the TUI put the words back, and the
-  critic finds them in the archive with the evidence. (`Plan:`, the Approach's old
-  name, is still read as it.) Status and Parent never move.
+  edited; `check.py` refuses it. Later understanding goes in a new node. A task file
+  over its budget shrinks by moving words, verbatim, to `.dfs/archive/items/<task>.md`,
+  appended at its END (nothing already there may move) and staged in the same commit.
+  Its evidence lines move under a `**<id> Evidence**:` heading, leaving
+  `Evidence: archived.`; its Approach, Hypothesis and Determination move by
+  `tree.py shelve <task> [<ids>]`, leaving `Approach: archived.` (a Determination keeps
+  its first clause). `dfs_tree.load` and the TUI put the words back. Status and Parent
+  never move.
 - **The log only grows, but its past may move.** `tree.py compact <task>` moves
   every entry older than the author's last answer, correction or accept, verbatim, to
   the archive's end under `**Log**:`. Every count is read through `dfs_tree.load`,
@@ -181,21 +169,12 @@ review passes (or the author accepts), the runner rebases `dfs/<task>` onto the 
 branch and merges it in with `--no-ff`, locally and without a push, and removes the worktree and the
 branch. A rebase that conflicts is not done: the runner aborts it and adds an open node asking
 for `dfs/<task>` to be rebased onto the default branch and the conflicts resolved, so the next
-session takes it up like any open node. Edits of the author's on the default branch
-that overlap the merge are a raise, which the runner logs; so is a merge, cherry-pick,
-revert or rebase of theirs left unfinished in the checkout (a rebase detaches HEAD, and the
-raise says so), which the runner leaves untouched. The rebase rewrites the
+session takes it up like any open node. (Edits of the author's that overlap the merge,
+or a merge or rebase of theirs left unfinished, are the runner's raise, not yours.) The rebase rewrites the
 branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
 by a hash that would dangle once the branch is merged and deleted. Until then a task in
 flight has its current file only on its branch: the default branch's copy is stale or
 empty, so to read another task's tree or log use `git show dfs/<task>:.dfs/items/<task>.md`.
-
-When `.dfs/` is gitignored the worktree is cut all the same. The ignored planning files are in
-no commit, so the worktree's `.dfs/items`, `.dfs/artefacts` and the rest are links to the
-author's checkout, and the task file you write there is the one copy: it is never staged, and
-your node commits carry the code alone (below). A blanket rule such as `.*` that hides force-added
-task files and `order.md` is the same: they are linked too, so you edit them in the author's
-checkout, and they are left modified and uncommitted there after the merge.
 
 Two cases have no branch: a first run while the checkout is off `main`/`master`, and a repo
 with no commit yet. Then the item is worked in place, on whatever is checked out, and
@@ -208,6 +187,11 @@ is the raise above until the checkout is back on the default branch.
 Supported: `.dfs/` is planning, and git history shows the walk. Your briefing says
 when it is. Then:
 
+- **The worktree is cut all the same**, and the ignored planning files are in no commit,
+  so its `.dfs/items`, `.dfs/artefacts` and the rest are links to the author's checkout.
+  The task file you write there is the one copy and is never staged. A blanket rule such
+  as `.*` that hides force-added task files and `order.md` is the same: they are linked
+  too, and are left modified and uncommitted in the author's checkout after the merge.
 - **Every node still ends in a commit** whose subject starts with its id. It stages
   the code alone, since there is no task file to stage; a node that changed no
   tracked file, a refuted one included, is `git commit --allow-empty`, because the
