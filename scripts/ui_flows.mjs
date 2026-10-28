@@ -119,6 +119,48 @@ const FLOWS = {
     await ctx.close();
   },
 
+  // j/k and the arrows step the same way down the list and down a task's tree, with focus on the row; Left and Right fold.
+  keys: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const hash = () => page.evaluate(() => location.hash);
+    const wait = async (what, fn, arg) => { try { await page.waitForFunction(fn, arg, { timeout: 4000 }); } catch (e) { throw new Error(`${what}; at ${await hash()}, focus on ${await page.evaluate(() => document.activeElement.outerHTML.slice(0, 80))}`); } };
+    const onItem = () => page.evaluate(() => document.activeElement.dataset.id || "");
+    const ids = await page.$$eval("#view button.item[data-act=task]", a => a.map(e => e.dataset.id));
+    assert(ids.length > 3, "the fixture lists tasks");
+    for (const [key, want] of [["j", 0], ["j", 1], ["ArrowDown", 2], ["k", 1], ["ArrowUp", 0], ["k", 0]]) {
+      await page.keyboard.press(key);
+      same(await onItem(), ids[want], `${key} on the list focuses ${ids[want]}`);
+    }
+    await page.keyboard.press("j"); await page.keyboard.press("Enter");
+    await page.waitForSelector(".row");
+    same(await hash(), "#/t/" + ids[1], "Enter opens the focused task");
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
+    await wait("step 2",() => document.activeElement.matches('.main[data-id="W9.2"]'));
+    const nodes = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
+    const at = nodes.indexOf("W9.2");
+    await page.keyboard.press("j");
+    await wait("step 3",n => location.hash === "#/t/W9/" + n && document.activeElement.matches(`.main[data-id="${n}"]`), nodes[at + 1]);
+    await page.keyboard.press("ArrowDown");
+    await wait("step 4",n => location.hash === "#/t/W9/" + n && document.activeElement.matches(`.main[data-id="${n}"]`), nodes[at + 2]);
+    await page.keyboard.press("ArrowUp"); await page.keyboard.press("k");
+    await wait("step 5",n => location.hash === "#/t/W9/" + n && document.activeElement.matches(`.main[data-id="${n}"]`), nodes[at]);
+    // Left folds a node that has children, Right unfolds it, and focus stays on its row.
+    const parent = await page.$eval("#view .row:has(.fold:not(.none)) .main", e => e.dataset.id);
+    await page.focus(`#view .main[data-id="${parent}"]`);
+    const count = () => page.$$eval("#view .row", a => a.length);
+    const before = await count();
+    await page.keyboard.press("ArrowLeft");
+    await wait("step 6",n => document.querySelectorAll("#view .row").length < n, before);
+    await wait("Left gives focus back", p => document.activeElement.dataset.id === p, parent);
+    same(await page.evaluate(() => document.activeElement.dataset.id), parent, "Left keeps focus on the folded row");
+    await page.keyboard.press("ArrowRight");
+    await wait("step 7",n => document.querySelectorAll("#view .row").length === n, before);
+    await wait("Right gives focus back", p => document.activeElement.dataset.id === p, parent);
+    same(await page.evaluate(() => document.activeElement.dataset.id), parent, "Right keeps focus on the unfolded row");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // The list, its filter, the project's name, and nothing in the console.
   async list(b) {
     const { page, errors } = await open(b, PHONE);
@@ -2069,7 +2111,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       // Enter on the bare page opens the first node; c rules on it; Escape closes it
       await page.keyboard.press("Enter"); await page.waitForSelector("#sheet.open");
       await page.keyboard.press("c"); await dialog(page); await page.keyboard.press("Escape");
-      await page.waitForFunction(() => document.activeElement === document.body);     // the closed dialog gives its focus back
+      await page.waitForFunction(() => document.activeElement === document.body || document.activeElement.matches(".row .main"));     // the closed dialog gives its focus back, to the open node's row
       await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("#sheet.open"));
       // f shows the flagged nodes only, and again all of them
       const all = (await page.$$(".row")).length;

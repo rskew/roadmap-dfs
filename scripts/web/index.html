@@ -585,11 +585,13 @@ function focusKey(el) {
 }
 async function render(force) {
   const key = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
+  const mine = RENDERS + 1;
   await renderDraw(force);
   const lost = !document.activeElement || document.activeElement === document.body;
   if (key && lost) {
     const el = (key.sel && $(key.sel)) || document.querySelectorAll(FOCUSABLE)[key.at]; if (el) el.focus();
   } else if (MID.picked && lost) midSelect();      // the selected control was drawn over: the middle's is selected again
+  if (mine === RENDERS) focusRow();      // a newer render draws over this one, and gives the focus back after it
 }
 async function renderDraw(force) {
   // A render is a fetch and then a draw, and a newer one can start before an older one
@@ -997,8 +999,10 @@ function drawTasks(push) {
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
   $("#view").className = "col";
+  const on = document.activeElement && document.activeElement.matches("#view button.item[data-act=task]") ? document.activeElement.dataset.id : null;
   if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }
   else $("#view").innerHTML = html;
+  const kept = on && $(`#view button.item[data-id="${CSS.escape(on)}"]`); if (kept) kept.focus({ preventScroll: true });   // the keys' place survives a redraw
   if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
@@ -1798,12 +1802,57 @@ addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
 setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
+/* Keys. j/k and the up and down arrows step the same way on the list (focus moves from task to task, Enter opens the
+   focused one) and on a task (the open node moves to the next or previous visible one, with focus on its row). Left
+   folds a node's children and Right unfolds them. Arrows leave a scrolling pane alone: on a task they step only from
+   the page or a node row, so a node's own pane still scrolls with them. */
+const stepKey = e => e.key === "j" ? 1 : e.key === "k" ? -1 : e.key === "ArrowDown" ? 2 : e.key === "ArrowUp" ? -2 : 0;
+function stepList(d) {
+  const rows = [...document.querySelectorAll("#view button.item[data-act=task]")];
+  if (!rows.length) return;
+  const i = rows.indexOf(document.activeElement), n = rows[i < 0 ? (d > 0 ? 0 : rows.length - 1) : Math.max(0, Math.min(rows.length - 1, i + d))];
+  n.focus(); n.scrollIntoView({ block: "nearest" });
+}
+// After a redraw the row the keys were on is drawn anew; `S.focusId` names the one to give focus back to, and a node
+// opened some other way (a link, a hash) takes focus once, so the focus follows the open node.
+function focusRow() {
+  const r = route(); if (r.view !== "task" || !S.task) return;
+  const open = S.node && S.task.rows.find(x => x.key === S.node), seen = r.task + "/" + (open ? open.id : "");
+  const a = document.activeElement, lost = !a || a === document.body || !!(a.closest && a.closest("#view .row"));
+  let id = S.focusId; S.focusId = null;
+  if (!id && open && FOCUS.at !== seen && lost) id = open.id;
+  FOCUS.at = seen;
+  const el = id && $(`#view .row .main[data-id="${CSS.escape(id)}"]`);
+  if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: "nearest" }); }
+}
+const FOCUS = { at: "" };
 addEventListener("keydown", e => {
-  if (e.target.closest("dialog, input, textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
-  if (!S.task || route().view !== "task") return;
+  if (e.target.closest("dialog, input, textarea, [data-grip]") || e.metaKey || e.ctrlKey || e.altKey) return;
+  const v = route().view, d = stepKey(e);
+  if (v === "tasks") {
+    if (d) { e.preventDefault(); stepList(d > 0 ? 1 : -1); }
+    return;
+  }
+  if (!S.task || v !== "task") return;
   const open = S.node && S.task.rows.find(x => x.key === S.node);
-  if (e.key === "j") step(1); else if (e.key === "k") step(-1); else if (e.key === "n") nextFlag();
+  const onRow = e.target === document.body || !!e.target.closest(".row");
+  const here = e.target.closest && e.target.closest(".row .main, .row .fold");
+  // A key pressed before the last one has been drawn goes on from where that one is headed (S.focusId), not from the stale row.
+  const cur = S.focusId ? S.task.rows.find(x => x.id === S.focusId)
+    : here ? S.task.rows.find(x => x.id === (here.dataset.id || here.parentElement.querySelector(".main").dataset.id)) : open;
+  if (d && (Math.abs(d) === 1 || onRow)) {
+    if (Math.abs(d) === 2) e.preventDefault();
+    const rows = visibleRows(S.task).filter(r => r.kind === "node"), at = Math.max(-1, rows.findIndex(r => r.key === (cur ? cur.key : null)));
+    const n = rows[Math.max(0, Math.min(rows.length - 1, at + (d > 0 ? 1 : -1)))];
+    if (n && n.id === route().node) { S.focusId = n.id; focusRow(); }      // already open: no hash change, so no redraw to wait for
+    else if (n) { S.focusId = n.id; go(`t/${S.task.id}/${n.id}`, true); }
+  }
+  else if (e.key === "n") nextFlag();
   else if (e.key === "Escape") up();                       // a node back to its task, a task back to the list
+  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onRow && cur && cur.kids && !S.flagged) {
+    const s = S.folded[S.task.id] ||= new Set(), folded = s.has(cur.id);
+    if (e.key === "ArrowLeft" ? !folded : folded) { folded ? s.delete(cur.id) : s.add(cur.id); S.focusId = cur.id; S.sig = ""; render(true); }
+  }
   else if (e.key === "Enter" && !S.node && e.target === document.body) { const first = visibleRows(S.task).find(x => x.kind === "node"); if (first) go(`t/${S.task.id}/${first.id}`); }
   else if (e.key === "c" && open) correctForm(open.id);
   else if (e.key === "f") { S.flagged = !S.flagged; S.sig = ""; render(true); }
