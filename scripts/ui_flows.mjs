@@ -1732,6 +1732,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await toList(page);
     await page.waitForSelector(".item[data-id=W3]");
     assert((await tag("W3")) === true, "the list row says draft once marked");
+    assert(await page.$eval(".item[data-id=W3]", e => e.classList.contains("draft") && getComputedStyle(e.querySelector(".tag.draft")).backgroundColor !== "rgba(0, 0, 0, 0)"), "a draft's row is marked and its badge is filled");
     if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "draft-list.png") });
     await task(page, "W3");
     await page.click("[data-act=draft]");
