@@ -320,6 +320,10 @@ sessions' calls: every path they named outside DEST was the tool in the store (`
 `context.py`, `tree.py`) and the sandbox answered `context.py` with "no transcript". The
 sandbox held on this replay under the new binds, and it counts as a first-review pass of one,
 on a sample of one: the arm is kiro, so its pass rate is the kiro system's, not claude's.
+A second kiro replay, `dfs-replay-W55-k2` (same setup, run from `replay.py replay W55 … --agent
+kiro`), finished in 3 sessions (2 work, 1 review) and 5.6 credits, 2 node commits, first review
+`ok`, merged, DONE, and `score` printed 0 calls naming a live path and 0 conclusions shown. It
+shows the kiro path still runs end to end; two passes of two are not a pass rate.
 
 - **The starting point keeps only the title, Goal and Background.** Any nodes the author
   wrote into the task before work began are dropped, so a task that began with
