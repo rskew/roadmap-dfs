@@ -1711,8 +1711,20 @@ function acceptForm() {
 }
 
 /* ── events ─────────────────────────────────────────────────────────────────── */
+/* A touch tap's click is aimed at release, not at the press. When the list moves under a finger (a push redraws a row
+   above with another height) a press on a task's archive button clicks the row that has come to lie there, and opens
+   the task. So the button under each press is kept, and a pointer click that lands on a different button runs the one
+   that was pressed. A click with no pointer (the keyboard's, a script's) has `detail` 0 and is left alone. */
+let PRESS = null;
+document.addEventListener("pointerdown", e => {
+  const p = e.target.closest && e.target.closest("[data-act]");
+  PRESS = p ? { act: p.dataset.act, dataset: { ...p.dataset }, disabled: p.disabled } : null;
+}, true);
+document.addEventListener("pointercancel", () => { PRESS = null; }, true);
 document.addEventListener("click", e => {
-  const b = e.target.closest("[data-act]"), tab = e.target.closest("[data-tab]");
+  let b = e.target.closest("[data-act]");
+  const tab = e.target.closest("[data-tab]"), pressed = PRESS; PRESS = null;
+  if (b && pressed && e.detail > 0 && (pressed.act !== b.dataset.act || pressed.dataset.id !== b.dataset.id)) b = pressed;
   if (tab) return go(tab.dataset.tab === "tasks" ? "" : tab.dataset.tab);
   // An artefact link in a dialog (the chat's replies) opens the viewer in #view, which a modal dialog covers: close it first.
   if (e.target.closest("a.art, a.shot")) for (const d of document.querySelectorAll("dialog[open]")) d.close();

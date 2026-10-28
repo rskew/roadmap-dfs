@@ -303,7 +303,8 @@ class Flows(unittest.TestCase):
         self.assertFalse(dfs_tree.exists("W3"))
         self.assertTrue((self.root / ".dfs" / "archive" / "deleted" / "items" / "W3.md").is_file())
 
-    def test_archiving_a_finished_task_that_is_on_origin(self):
+    def archivable_w4(self, flow):
+        """Accept W4, push main to a bare origin so W4 is archivable, and run `flow` on the list."""
         sh = lambda c, cwd=self.root: subprocess.run(c, shell=True, cwd=cwd, check=True, capture_output=True)
         dfs_tree.append_log("W4", "accept")
         sh("git add -A && git -c user.name=t -c user.email=t@t commit -qm 'W4: accepted'")
@@ -312,9 +313,12 @@ class Flows(unittest.TestCase):
             sh("git init -q --bare -b main", remote)
             sh("git remote add origin %s && git push -q -u origin main" % remote)
             dfs_tree._unpushed_seen.clear()
-            self.flow("archive")
+            self.flow(flow)
         finally:
             shutil.rmtree(remote, ignore_errors=True)
+
+    def test_archiving_a_finished_task_that_is_on_origin(self):
+        self.archivable_w4("archive")
         self.assertFalse(dfs_tree.exists("W4"))
         self.assertTrue((self.root / ".dfs" / "archive" / "archived" / "items" / "W4.md").is_file())
 
@@ -322,6 +326,10 @@ class Flows(unittest.TestCase):
         dfs_tree._retire("W4", dfs_tree.archived_dir(), "archived")
         self.flow("archivedview")
         self.assertFalse(dfs_tree.exists("W4"))
+
+    def test_a_tap_on_archive_is_not_taken_by_the_row_that_moves_under_it(self):
+        self.archivable_w4("archive_moved")
+        self.assertTrue(dfs_tree.exists("W4"), "the dialog was opened, not confirmed")
 
     def test_accepting_a_finished_tree(self):
         self.flow("accept")

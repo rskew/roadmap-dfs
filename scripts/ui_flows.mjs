@@ -749,6 +749,23 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A tap on the archive button while the list moves under the finger (a redraw gave a row above another height)
+  // is still the archive button's: its click is aimed at release, where a row now lies, and must not open that row.
+  async archive_moved(b) {
+    const { page, errors } = await open(b, PHONE);
+    await page.waitForSelector("[data-act=archive][data-id=W4]");
+    const cdp = await page.context().newCDPSession(page);
+    const box = await boxOf(page, "[data-act=archive][data-id=W4]");
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [at] });
+    await page.$eval(".item", el => { el.style.paddingBottom = "76px"; });      // the list moves down under the finger
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await dialog(page);
+    assert(/Archive W4\?/.test(await page.textContent("dialog")), "the pressed button's dialog opened, not the row under it");
+    assert(!/#\/t\//.test(page.url()), "no task was opened");
+    same(errors, [], "no page errors");
+  },
+
   // Add a node under another.
   async add(b) {
     const { page, errors } = await open(b, PHONE);
