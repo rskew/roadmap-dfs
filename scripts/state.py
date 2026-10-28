@@ -792,7 +792,12 @@ def _record_block(task, kind):
             "    <the decision: the options, what each commits the work to, what you "
             "would pick, and the strongest case against it>",
             "    EOF", "",
-            "Then, exactly once, the verdict:", "",
+            "Then log ONE verdict, either of the two below and never both. %s:" % (
+                "`issues` if you added a node or raised above, `ok` if you did not"
+                if kind == "review" else
+                "`issues` if you added a node, backtracked or raised above, `ok` if you did not"),
+            "",
+            "  If you added nothing, the verdict is `ok`:", "",
             "    %s log %s %s ok <<'EOF'" % (tree_cmd, task, kind),
             "    <%s, one per line, or nothing>" % (
                 "the minor findings" if kind == "review" else
@@ -800,11 +805,15 @@ def _record_block(task, kind):
                 "read, and what it showed>`, then anything the author should know that "
                 "is not a finding. An ok that names no node, or that comes from a "
                 "session that read and ran nothing, is not accepted"),
-            "    EOF",
+            "    EOF", "",
+            "  If you added something, the verdict is `issues`, and it is the only one you log:", "",
             "    %s log %s %s issues <<'EOF'" % (tree_cmd, task, kind),
             "    <one line per %s, naming it>" % (
                 "node added, backtrack or raise" if kind == "critic" else "node added or raise"),
             "    EOF", ""]
+    if kind == "review":
+        out += ["`issues` with no open node or raise behind it is refused, and `ok` and "
+                "`issues` together would read as two reviews: log the one that is true.", ""]
     return out
 
 
