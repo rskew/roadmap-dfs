@@ -230,10 +230,16 @@ def kiro_context_usage(rec):
 
 
 def snap_window(estimates):
-    """The model window nearest (in ratio) to the median of `estimates`, or None."""
+    """The model window nearest (in ratio) to the LARGEST of `estimates`, or None.
+
+    ⚠ Not the median. In 3 of 54 real runs a later breakdown carried a `kiroResponses`
+    part whose tokens / percent was ~410k beside the ~985k every `tools` entry gave, the
+    median of the three was ~410k, and the snap chose 200k: a 7.6% reading became 15k
+    tokens instead of 76k. A window too small under-reports the peak, which is the
+    unsafe side for a ceiling, so the largest estimate decides."""
     if not estimates:
         return None
-    est = sorted(estimates)[len(estimates) // 2]
+    est = max(estimates)
     return min(WINDOWS, key=lambda w: max(w / est, est / w))
 
 

@@ -226,6 +226,15 @@ class Reading(unittest.TestCase):
         peak, _ = dfs_context.peak_and_turns(self.write([self.info(1, 40, small)]), "kiro")
         self.assertEqual(peak, 80000)
 
+    def test_a_part_whose_tokens_disagree_with_the_others_does_not_shrink_the_window(self):
+        # Seen in real runs: `tools` implies ~985k, `kiroResponses` ~406k; the median of
+        # the estimates chose 200k and the peak came out 5x too small.
+        mixed = {"tools": {"tokens": 5912, "percent": 0.6},
+                 "kiroResponses": {"tokens": 27230, "percent": 6.7},
+                 "yourPrompts": {"tokens": 1269, "percent": 0.3}}
+        peak, _ = dfs_context.peak_and_turns(self.write([self.info(1, 7.5779, mixed)]), "kiro")
+        self.assertEqual(peak, 75779)
+
     def test_a_percentage_with_no_breakdown_is_not_turned_into_tokens(self):
         self.assertEqual(dfs_context.peak_and_turns(self.write([self.info(1, 40)]), "kiro"), (0, 0))
 
