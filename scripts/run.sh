@@ -332,7 +332,7 @@ if [ "$MODE" = chat ]; then
         "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json --no-interactive "${PERMISSION_ARGV[@]}" -- "$CHAT_PROMPT" 2>&1 < /dev/null \
           | python3 "$HERE/chat.py" --kiro-result > "$opening_json" || true
       else
-        printf '%s' "$CHAT_PROMPT" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --format json "${PERMISSION_ARGV[@]}" \
+        printf '%s' "$CHAT_PROMPT" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" \
           | python3 "$HERE/chat.py" --opencode-result > "$opening_json" || true
       fi
       opening_field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$opening_json" "$1" 2>/dev/null || true; }
@@ -407,7 +407,7 @@ if [ "$MODE" = chatturn ]; then
   if [ "$AGENT" = opencode ]; then
     # The prompt is on stdin here too: as an argument opencode wraps a message with spaces in
     # quotes, which the page would show; on stdin it is kept as written.
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --format json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" \
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" \
       | python3 "$HERE/chat.py" --opencode-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
   fi
@@ -1102,7 +1102,7 @@ echo "dfs_run: task $ITEM, cap $CAP, agent $AGENT, logs in $RUNDIR"
 if [ "$AGENT" = codex ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} exec --json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = opencode ]; then
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} run --format json ${PERMISSION_ARGV[*]} <prompt>"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} run --standalone --format json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = kiro ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --agent dfs-inbox --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
 else

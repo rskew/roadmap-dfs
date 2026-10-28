@@ -27,8 +27,8 @@ def newest(pattern):
     return next(iter(sorted(glob.glob(pattern))[::-1]), None)
 
 
-CODEX = os.environ.get("TEST_CODEX") or newest("/nix/store/*-codex-0.162*/bin/codex") or shutil.which("codex")
-OPENCODE = os.environ.get("TEST_OPENCODE") or newest("/nix/store/*-opencode-1.18*/bin/opencode") or shutil.which("opencode")
+CODEX = os.environ.get("TEST_CODEX") or newest("/nix/store/*-codex-0.16*/bin/codex") or shutil.which("codex")
+OPENCODE = os.environ.get("TEST_OPENCODE") or newest("/nix/store/*-opencode-2.*/bin/opencode") or shutil.which("opencode")
 KIRO = os.environ.get("TEST_KIRO") or newest("/nix/store/*-kiro-cli-unwrapped-*/bin/kiro-cli-chat")
 
 

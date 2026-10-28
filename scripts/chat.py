@@ -219,25 +219,29 @@ def opencode_query(sql, args=()):
 
 
 def opencode_turns(sid):
-    """(role, text, message id) for an opencode session, from its `message` and `part`
-    tables (opencode 1.18.35): a message's `data` holds its role, and its text is its `text`
-    parts in order. Tool, patch and step parts are not words, and a `synthetic` or `ignored`
-    text is opencode's own note to the model."""
+    """(role, text, message id) for an opencode session, from its `session_message` table
+    (opencode 2.1.1): a row's `type` is `user`, `assistant` or `idle` (a turn marker), and its
+    `data` holds the words, a user's as `text` and an assistant's as the `text` items of
+    `content`, in order. Tool and reasoning items are not words, and a `synthetic` or
+    `ignored` text is opencode's own note to the model."""
     rows = opencode_query(
-        "select m.id, m.data, p.data from message m join part p on p.message_id = m.id "
-        "where m.session_id = ? order by m.time_created, m.id, p.time_created, p.id", (sid,))
+        "select id, type, data from session_message where session_id = ? and type in ('user', 'assistant') "
+        "order by seq, id", (sid,))
     out = []
-    for mid, mdata, pdata in rows:
+    for mid, kind, data in rows:
         try:
-            role = json.loads(mdata).get("role")
-            part = json.loads(pdata)
-        except (ValueError, AttributeError):
+            body = json.loads(data)
+        except (ValueError, TypeError):
             continue
-        if role not in ("user", "assistant") or not isinstance(part, dict) or part.get("type") != "text":
+        if not isinstance(body, dict):
             continue
-        if part.get("synthetic") or part.get("ignored") or not isinstance(part.get("text"), str):
-            continue
-        out.append(("you" if role == "user" else "agent", part["text"], mid))
+        if kind == "user":
+            items = [body]
+        else:
+            items = [i for i in body.get("content") or [] if isinstance(i, dict) and i.get("type") == "text"]
+        for item in items:
+            if isinstance(item.get("text"), str) and not item.get("synthetic") and not item.get("ignored"):
+                out.append(("you" if kind == "user" else "agent", item["text"], mid))
     return out
 
 
@@ -300,7 +304,7 @@ def has_transcript(sid, agent):
     if not sid:
         return False
     if agent in STORES:
-        return bool(opencode_query("select 1 from session where id = ?", (sid,)))
+        return bool(opencode_query("select 1 from session_v2 where id = ?", (sid,)))
     p = transcript_file(sid, agent)
     return bool(p and os.path.exists(p))
 
@@ -308,7 +312,7 @@ def has_transcript(sid, agent):
 def transcript_mtime(sid, agent):
     """When the conversation last changed, or None."""
     if agent in STORES:
-        rows = opencode_query("select time_updated from session where id = ?", (sid,))
+        rows = opencode_query("select time_updated from session_v2 where id = ?", (sid,))
         return rows[0][0] / 1000 if rows else None
     p = transcript_file(sid, agent)
     try:
@@ -353,9 +357,11 @@ def opencode_result(lines, sid=""):
     """One turn of `opencode run --format json` as the single JSON line a turn is read from
     ({session_id, is_error, result}, as codex_result). Every event carries the `sessionID`
     (opencode mints it, on a resumed turn too). The answer is the `text` of the last step,
-    after its tool calls; a failure is an `error` event (its `error.data.message`), and a
-    stream that never finished a step on `stop` is one too."""
-    answer, error, done = [], "", False
+    after its tool calls; a failure is an `error` event (its `error.data.message`), a last step
+    that ended on anything but `stop`, or one with no words. opencode 2.1.1 often ends the stream
+    without the last step's `step_finish` (the process exits first), so a last step that said
+    something and was not stopped is a finished one."""
+    answer, error, finish = [], "", ""
     for line in lines:
         try:
             rec = json.loads(line)
@@ -366,16 +372,16 @@ def opencode_result(lines, sid=""):
         sid = rec.get("sessionID") or sid
         kind, part = rec.get("type"), rec.get("part") if isinstance(rec.get("part"), dict) else {}
         if kind == "step_start":
-            answer = []
+            answer, finish = [], ""
         elif kind == "text" and isinstance(part.get("text"), str):
             answer.append(part["text"])
         elif kind == "step_finish":
-            done = part.get("reason") == "stop"
+            finish = part.get("reason") or "stop"
         elif kind == "error":
             err = rec.get("error") if isinstance(rec.get("error"), dict) else {}
             error = (err.get("data") or {}).get("message") or err.get("message") or err.get("name") or error or "the turn failed"
     text = "".join(answer).strip()
-    failed = bool(error) or not done
+    failed = bool(error) or not text or finish not in ("", "stop")
     return dict(type="result", session_id=sid, is_error=failed, result=(error or text) if failed else text)
 
 

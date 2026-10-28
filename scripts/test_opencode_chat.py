@@ -25,7 +25,7 @@ import chat as dfs_chat     # noqa: E402
 import ptyrelay             # noqa: E402
 from test_agent_models import FakeOpenAIModel, start_until  # noqa: E402
 
-OPENCODE = os.environ.get("TEST_OPENCODE") or next(iter(sorted(glob.glob("/nix/store/*-opencode-1.18*/bin/opencode"))[::-1]), None) or shutil.which("opencode")
+OPENCODE = os.environ.get("TEST_OPENCODE") or next(iter(sorted(glob.glob("/nix/store/*-opencode-2.*/bin/opencode"))[::-1]), None) or shutil.which("opencode")
 
 
 def until(fn, timeout=30):
@@ -89,7 +89,7 @@ class OpencodeCrossing(unittest.TestCase):
 
     def sessions(self):
         with sqlite3.connect(dfs_chat.opencode_db()) as db:
-            return db.execute("select count(*) from session").fetchone()[0]
+            return db.execute("select count(*) from session_v2").fetchone()[0]
 
     def texts(self):
         return [(m["role"], m["text"]) for m in self.chats.state("project")["messages"]]
@@ -161,6 +161,7 @@ class OpencodeCrossing(unittest.TestCase):
         relay.close()
         self.assertTrue(until(lambda: not relay.live, 10))
         self.page_says("PAGE-THREE")
+        self.assertTrue(self.heard("PAGE-THREE"), "the model heard the page's resumed turn; the page: %s" % self.chats.state("project"))
         last = self.heard("PAGE-THREE")[-1].decode()
         self.assertIn("PAGE-ONE", last, "the page's resumed turn carries the first message")
         self.assertIn("SCREEN-TWO", last, "and what was typed on the screen")
@@ -187,6 +188,7 @@ class OpencodeCrossing(unittest.TestCase):
         relay.close()
         self.assertTrue(until(lambda: not relay.live, 10))
         self.page_says("PAGE-TWO")
+        self.assertTrue(self.heard("PAGE-TWO"), "the model heard the page's turn; the page: %s" % self.chats.state("project"))
         last = self.heard("PAGE-TWO")[-1].decode()
         self.assertIn("SCREEN-ONE", last)
         # opencode may write the message to its database after the turn ends, more so on a loaded machine

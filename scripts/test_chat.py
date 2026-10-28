@@ -77,7 +77,7 @@ PY
 
 OPENCODE_STUB = r"""#!/usr/bin/env bash
 # an opencode that records its arguments and what it was told, keeps its sessions in a sqlite store
-# as opencode does, and prints `run --format json` events. Without `run` it is the interactive chat.
+# as opencode does, and prints `run --format json` events, in the shapes a real opencode 2.1.1 wrote. Without `run` it is the interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
 [ "$1" = run ] || exit 0
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
@@ -91,22 +91,19 @@ import json, os, sqlite3, sys, time
 sid, prompt, say = sys.argv[1:4]
 d = os.path.join(os.environ["HOME"], ".local", "share", "opencode"); os.makedirs(d, exist_ok=True)
 db = sqlite3.connect(os.path.join(d, "opencode.db"))
-db.execute("create table if not exists session (id text primary key, time_updated integer not null)")
-db.execute("create table if not exists message (id text primary key, session_id text not null, time_created integer not null, data text not null)")
-db.execute("create table if not exists part (id text primary key, message_id text not null, session_id text not null, time_created integer not null, data text not null)")
-n = db.execute("select count(*) from message").fetchone()[0]
+db.execute("create table if not exists session_v2 (id text primary key, time_updated integer not null)")
+db.execute("create table if not exists session_message (id text primary key, session_id text not null, type text not null, seq integer not null, time_created integer not null, time_updated integer not null, data text not null)")
+n = db.execute("select count(*) from session_message").fetchone()[0]
 now = int(time.time() * 1000)
-db.execute("insert or replace into session values (?, ?)", (sid, now))
-def message(role, parts):
+db.execute("insert or replace into session_v2 values (?, ?)", (sid, now))
+def message(kind, data):
     global n
     n += 1
-    mid = "msg_%04d" % n
-    db.execute("insert into message values (?, ?, ?, ?)", (mid, sid, now + n, json.dumps({"role": role})))
-    for i, p in enumerate(parts):
-        db.execute("insert into part values (?, ?, ?, ?, ?)", ("prt_%04d_%d" % (n, i), mid, sid, now + n, json.dumps(p)))
-message("user", [{"type": "text", "text": prompt}])
-message("assistant", [{"type": "step-start"}, {"type": "tool", "tool": "read"}, {"type": "text", "text": "Reading."},
-                      {"type": "text", "text": "I read it. " + say}, {"type": "step-finish", "reason": "stop"}])
+    db.execute("insert into session_message values (?, ?, ?, ?, ?, ?, ?)", ("msg_%04d" % n, sid, kind, n, now + n, now + n, json.dumps(data)))
+message("user", {"time": {"created": now}, "text": prompt, "files": []})
+message("assistant", {"agent": "build", "content": [{"type": "reasoning", "text": "thinking"}, {"type": "tool", "name": "read"}, {"type": "text", "text": "Reading."},
+                      {"type": "text", "text": "I read it. " + say}], "finish": "stop"})
+message("idle", {"outcome": "succeeded"})
 db.commit()
 def ev(kind, **part):
     print(json.dumps({"type": kind, "sessionID": sid, "part": part}))
@@ -591,8 +588,7 @@ class Chat(unittest.TestCase):
         subprocess.run([str(self.opencode), "run", "--session", sid], input="You are talking with the author about task W1. The author writes: hello",
                        text=True, capture_output=True, check=True, env=dict(os.environ))
         db = sqlite3.connect(self.root / "home" / ".local" / "share" / "opencode" / "opencode.db")
-        db.execute("insert into message values ('msg_9000', ?, 1, '{\"role\":\"user\"}')", (sid,))
-        db.execute("insert into part values ('prt_9000', 'msg_9000', ?, 1, ?)", (sid, json.dumps({"type": "text", "text": "opencode's own note", "synthetic": True})))
+        db.execute("insert into session_message values ('msg_9000', ?, 'assistant', 99, 1, 1, ?)", (sid, json.dumps({"content": [{"type": "text", "text": "opencode's own note", "synthetic": True}]})))
         db.commit()
         db.close()
         self.assertTrue(dfs_chat.has_transcript(sid, "opencode"))
@@ -611,9 +607,9 @@ class Chat(unittest.TestCase):
         self.chats.send("W1", "-and then?")
         st = self.settle("W1")
         first, first_in, second, second_in = self.calls()
-        self.assertEqual(first, "run --format json --auto")
+        self.assertEqual(first, "run --standalone --format json --auto")
         self.assertIn("The author writes: Where is the work?", first_in)
-        self.assertEqual(second, "run --format json --auto --session %s" % rec["sid"])
+        self.assertEqual(second, "run --standalone --format json --auto --session %s" % rec["sid"])
         self.assertEqual(second_in, "stdin: -and then?", "the message goes in on stdin: opencode quotes one given as an argument")
         self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["Where is the work?", "-and then?"])
 
@@ -636,7 +632,7 @@ class Chat(unittest.TestCase):
         rec = json.loads(self.chats.path("W1").read_text())
         self.assertEqual(rec["agent"], "opencode")
         opening, opening_in, interactive = self.calls()
-        self.assertEqual(opening, "run --format json --auto")
+        self.assertEqual(opening, "run --standalone --format json --auto")
         self.assertIn("Discuss task W1 with the author", opening_in)
         self.assertEqual(interactive, "--session %s --auto" % rec["sid"])
         self.assertEqual(self.chats.state("W1")["messages"][-1]["text"], "Reading.\nI read it. Fine.")
@@ -655,6 +651,10 @@ class Chat(unittest.TestCase):
         bad = dfs_chat.opencode_result([step("step_start"), json.dumps({"type": "error", "sessionID": "ses_1", "error": {
             "name": "APIError", "data": {"message": "rate limited", "statusCode": 429}}})])
         self.assertEqual((bad["is_error"], bad["result"]), (True, "rate limited"))
+        cut = dfs_chat.opencode_result([step("step_start"), step("text", text="no step_finish came")])      # opencode 2.1.1 exits first
+        self.assertEqual((cut["is_error"], cut["result"]), (False, "no step_finish came"))
+        mid_tool = dfs_chat.opencode_result([step("step_start"), step("text", text="reading"), step("step_finish", reason="tool-calls")])
+        self.assertTrue(mid_tool["is_error"])
         died = dfs_chat.opencode_result([], "kept")
         self.assertEqual((died["session_id"], died["is_error"], died["result"]), ("kept", True, ""))
 

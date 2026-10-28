@@ -25,7 +25,7 @@ import chat as dfs_chat     # noqa: E402
 import ptyrelay             # noqa: E402
 from test_agent_models import FakeCodexModel  # noqa: E402
 
-CODEX = os.environ.get("TEST_CODEX") or next(iter(sorted(glob.glob("/nix/store/*-codex-0.162*/bin/codex"))[::-1]), None) or shutil.which("codex")
+CODEX = os.environ.get("TEST_CODEX") or next(iter(sorted(glob.glob("/nix/store/*-codex-0.16*/bin/codex"))[::-1]), None) or shutil.which("codex")
 
 
 def until(fn, timeout=30):
