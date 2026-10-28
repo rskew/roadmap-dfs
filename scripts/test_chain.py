@@ -90,11 +90,11 @@ case "$recipe" in
   okbare)  $T log W1 critic ok < /dev/null > /dev/null ;;
   rok)     $T log W1 review ok < /dev/null > /dev/null ;;
   rissue)  echo "the step's code has a bug" | $T log W1 raise W1.1 > /dev/null
-           echo "one issue" | $T log W1 review issues > /dev/null ;;
+           echo "W1.2 one issue" | $T log W1 review issues > /dev/null ;;
   fix)     python3 -c 'import os; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("## Log","### W1.2 · fix the bug\nParent: W1.1\nStatus: confirmed\nDetermination: fixed.\n\n## Log",1))'
            echo fixed >> app.txt; git add -A && git -c user.name=t -c user.email=t@t commit -qm "W1.2: fix the bug" ;;
   rnode)   python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); n=len(re.findall(r"^### W1\.",t,re.M))+1; open(p,"w").write(t.replace("## Log","### W1.%d · review finding %d\nStatus: open\nApproach: fix it.\n\n## Log" % (n,n),1))'
-           echo "a finding" | $T log W1 review issues > /dev/null ;;
+           echo "W1.2 a finding" | $T log W1 review issues > /dev/null ;;
   unblock) rm -f "$BLOCK_FILE" ;&
   fixn)    id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: fixed.")+t[m.end():]); print(m.group(1))')"
            echo "fixed $id" >> app.txt; git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: fixed" ;;
@@ -103,7 +103,7 @@ case "$recipe" in
            git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: the item is up to date" ;;
   rminor)  echo "a comment reads oddly" | $T log W1 review ok > /dev/null ;;
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
-           echo "one issue" | $T log W1 critic issues > /dev/null ;;
+           echo "W1.2 one issue" | $T log W1 critic issues > /dev/null ;;
   meddle)  echo "critic was here" >> app.txt; $T log W1 critic ok < /dev/null > /dev/null ;;
   rmeddle) echo "reviewer was here" >> app.txt; $T log W1 review ok < /dev/null > /dev/null ;;
   silent)  : ;;
@@ -2188,11 +2188,11 @@ class Chain(unittest.TestCase):
             # An `issues` needs a finding behind it, here an open raise.
             dfs_tree.append_log("W1", "raise", ["W1.1"], "which way?")
             for _ in range(4):
-                dfs_tree.append_log("W1", "review", ["issues"], "a finding")
+                dfs_tree.append_log("W1", "review", ["issues"], "W1.2: a finding")
             self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 4)
             dfs_tree.append_log("W1", "accept")
             self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 0)
-            dfs_tree.append_log("W1", "review", ["issues"], "a finding")
+            dfs_tree.append_log("W1", "review", ["issues"], "W1.2: a finding")
             dfs_tree.append_log("W1", "review", ["ok"], "")
             self.assertEqual(dfs_tree.review_rounds_unsettled(dfs_tree.load("W1")), 0, "a review that came back ok settles them")
         finally:

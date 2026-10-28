@@ -408,6 +408,28 @@ class AppendLog(InARepo):
             dfs_tree.append_log("W1", "assume")
 
 
+class IssuesNameAFinding(InARepo):
+    """25 of 97 `review · issues` and 4 of 14 `critic · issues` entries in the real logs
+    named no node, so the verdict read as a finding that was not."""
+
+    def test_an_issues_verdict_with_no_node_is_refused(self):
+        self.write(task(node(1)))
+        for kind in ("review", "critic"):
+            for body in ("", "none", "No nodes added, no backtrack, nothing raised.",
+                         "a finding"):
+                with self.assertRaises(ValueError, msg="%s %r" % (kind, body)):
+                    dfs_tree.append_log("W1", kind, ["issues"], body)
+        self.assertNotIn("issues", (dfs_paths.items() / "W1.md").read_text().split("## Log")[-1])
+
+    def test_an_issues_verdict_naming_a_node_or_ok_with_none_is_written(self):
+        self.write(task(node(1)))
+        dfs_tree.append_log("W1", "review", ["issues"], "W1.2 · Fix: the guard is missing.")
+        dfs_tree.append_log("W1", "critic", ["issues"], "backtrack W1.1: its evidence is false.")
+        dfs_tree.append_log("W1", "critic", ["ok"], "none")
+        dfs_tree.append_log("W1", "review", ["ok"])
+        dfs_tree.append_log("W1", "review", ["issues"], "W1@fx.3 · Fix: on a branch.")
+
+
 class AtomicWrites(InARepo):
     """A rewrite of a task file is a temp file renamed over it, so a process killed in the
     middle leaves the old text: on 2026-10-23 a kill between `write_text`'s truncate and
