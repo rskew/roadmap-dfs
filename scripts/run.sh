@@ -277,6 +277,10 @@ TREE_SUMMARY_ASK="Start with a concise summary, in short lines and no more than 
 TASK_ITEMS_REL="$DFS_ITEMS_REL"
 if { [ "$MODE" = chat ] || [ "$MODE" = chatturn ]; } && [ -n "$ITEM" ] && [ "$ITEM" != project ] && [ "$ITEM" != new ]; then
   TASK_ITEMS_REL="$(python3 "$HERE/paths.py" --task-items-rel "$ITEM")" || exit 2
+  WT_ITEMS_REL="$(python3 "$HERE/paths.py" --task-worktree-items-rel "$ITEM")" || exit 2
+  # The session keeps this prompt for good, and the worktree may be cut after it begins, so the
+  # prompt also says where to look then.
+  WORKTREE_RULE="Where the task is worked is its own worktree: whenever $WT_ITEMS_REL exists it holds the task's current files and the top-level $DFS_ITEMS_REL copy is stale, so check which exists before you rely on what you read earlier."
 fi
 
 if [ "$MODE" = chat ]; then
@@ -288,7 +292,7 @@ if [ "$MODE" = chat ]; then
     default_chat_prompt="Read $DFS_ROADMAP_REL. Discuss the project with the author: its direction, the tasks on the roadmap and how they stand, what to do next, or new work they have in mind. Do not perform work or edit files unless the author explicitly asks. If the talk turns to a NEW task, ask what done looks like and why it is worth doing, then propose the name and the Goal paragraph, and no steps (the author adds those as nodes later). Ask the author before writing the task file; if they say yes, create it with an empty tree (the author can also write it with $DFS_SCRIPTS_REL/run.sh --open). Start by summarising the roadmap in a few lines and asking what the author wants to talk about."
     chat_subject="the project"
   elif [ -n "$ITEM" ]; then
-    default_chat_prompt="Read $DFS_ROADMAP_REL and task $ITEM's parts, $TASK_ITEMS_REL/$ITEM.md and every file in $TASK_ITEMS_REL/$ITEM/, whichever exist. Discuss task $ITEM with the author. Do not perform the work, edit files or append to the task's log unless the author explicitly changes the task. $TREE_SUMMARY_ASK"
+    default_chat_prompt="Read $DFS_ROADMAP_REL and task $ITEM's parts, $TASK_ITEMS_REL/$ITEM.md and every file in $TASK_ITEMS_REL/$ITEM/, whichever exist. $WORKTREE_RULE Discuss task $ITEM with the author. Do not perform the work, edit files or append to the task's log unless the author explicitly changes the task. $TREE_SUMMARY_ASK"
     chat_subject="task $ITEM"
   else
     default_chat_prompt="Read $DFS_EPIC_REL and $DFS_ROADMAP_REL. Discuss the roadmap tool with the author. Do not perform work or edit files unless the author explicitly changes the task. Start by summarising its current goal, open decisions, and the next question worth discussing."
@@ -376,7 +380,7 @@ if [ "$MODE" = chatturn ]; then
     if [ "$ITEM" = project ]; then
       about="the project as a whole: read $DFS_ROADMAP_REL for how it stands"
     else
-      about="task $ITEM: read $DFS_ROADMAP_REL, then $TASK_ITEMS_REL/$ITEM.md and every file in $TASK_ITEMS_REL/$ITEM/, whichever exist"
+      about="task $ITEM: read $DFS_ROADMAP_REL, then $TASK_ITEMS_REL/$ITEM.md and every file in $TASK_ITEMS_REL/$ITEM/, whichever exist. $WORKTREE_RULE"
     fi
     framing="You are talking with the author about $about. They are on a phone: answer briefly and plainly, in short paragraphs, and say which node or file you mean."
     if [ -n "${CHAT_OPENING:-}" ] && [ -z "$message" ]; then

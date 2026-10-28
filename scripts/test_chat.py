@@ -386,7 +386,9 @@ class Chat(unittest.TestCase):
         self.chats.send("W1", "first")
         self.settle("W1")
         self.assertIn(top, self.calls()[0], "a task with no worktree is read where it is")
-        self.assertNotIn(wt, self.calls()[0])
+        self.assertNotIn(" " + wt, self.calls()[0])
+        self.assertIn("whenever .dfs/worktrees/W1/.dfs/items exists it holds the task's current files", self.calls()[0],
+                      "a chat begun before the worktree is cut is told where the task will be")
         self.chats.clear("W1")
         self.log.unlink()
         (self.root / ".dfs" / "worktrees" / "W1" / ".dfs" / "items").mkdir(parents=True)
