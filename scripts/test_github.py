@@ -6,6 +6,7 @@ Run:  python3 <scripts>/test_github.py
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -388,13 +389,20 @@ class NetworkCalls(unittest.TestCase):
         limit, grace, started = dfs_branch.GIT_NET_TIMEOUT, dfs_branch.GIT_PIPE_GRACE, time.time()
         dfs_branch.GIT_NET_TIMEOUT = 1; dfs_branch.GIT_PIPE_GRACE = 1
         repo = tempfile.mkdtemp()
+        pidfile = Path(repo) / "child.pid"
         subprocess.run(["git", "init", "-q", repo], check=True)
-        try:   # `setsid` starts a sleep in a session of its own, which killing git's group misses
-            r = dfs_branch._git_net("-c", "alias.hang=!setsid sleep 20 & sleep 20; true", "hang", cwd=repo)
+        # `setsid` starts a sleep in a session of its own, which killing git's group misses;
+        # it writes its pid so the test can kill that one process and no other
+        alias = "!setsid sh -c 'echo $$ > %s; exec sleep 20' & sleep 20; true" % pidfile
+        try:
+            r = dfs_branch._git_net("-c", "alias.hang=" + alias, "hang", cwd=repo)
         finally:
             dfs_branch.GIT_NET_TIMEOUT, dfs_branch.GIT_PIPE_GRACE = limit, grace
+            try:
+                os.kill(int(pidfile.read_text().strip()), signal.SIGKILL)
+            except (OSError, ValueError):
+                pass
             shutil.rmtree(repo, ignore_errors=True)
-            subprocess.run(["pkill", "-f", "^sleep 20$"], check=False)
         self.assertLess(time.time() - started, 10)
         self.assertEqual(r.returncode, 124)
         self.assertIn("did not answer within 1 seconds", r.stderr)
