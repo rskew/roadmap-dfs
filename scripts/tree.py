@@ -1400,14 +1400,12 @@ def status_of(t):
         return "open", why
     if review_due(t):
         return "open", "the tree is complete; the implementation review is due"
+    # A review that said `issues` puts each issue in the tree as an open node (which
+    # holds the task open through the frontier above) or as a raise (blocked above). One
+    # that left neither has nothing to fix, so it is read as the review it is: ok. It
+    # used to hold the task open until the author's `accept`, and the next review did the
+    # same (W116: four sessions).
     rv = last_verdict(t, "review")
-    if rv and rv["args"][:1] == ["issues"] and not any(
-            e["kind"] == "accept" and e["ts"] > rv["ts"] for e in t["log"]):
-        # The reviewer puts each issue in the tree as an open node, which reopens the
-        # task by itself; this is the review that said `issues` and added none. The
-        # fix is still work, in new nodes, and completing those earns another review.
-        # The author's `accept` is what takes the code as it is instead.
-        return "open", "the implementation review found issues; fix them in new nodes"
     last_acc = max((e["ts"] for e in t["log"] if e["kind"] == "accept"), default="")
     marks = [e for e in t["log"] if e["kind"] == "pr"]
     shut = bool(marks) and marks[-1]["args"][1:2] == ["closed"]

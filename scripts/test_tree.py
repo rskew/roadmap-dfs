@@ -180,11 +180,38 @@ class Derivation(unittest.TestCase):
                          "the tree is complete; the implementation review is due"))
         t = self.t(node(1, "confirmed"), log=log + "- 2026-09-25T09:20:00Z · review · ok\n")
         self.assertEqual(dfs_tree.status_of(t)[0], "done")
-        # A review that said `issues` and added no node still leaves the task open.
-        issues = log + "- 2026-09-25T09:20:01Z · review · issues\n  bug\n"
-        self.assertIn("review found issues", dfs_tree.status_of(self.t(node(1, "confirmed"), log=issues))[1])
-        accepted = issues + "- 2026-09-25T09:40:00Z · accept\n"
+
+    def test_a_review_issues_with_nothing_behind_it_does_not_hold_the_task_open(self):
+        # W116, 2026-10-28: each review logged `ok` and then `issues` ("none: no node added,
+        # no raise"), and the task stayed open on the second with nothing to fix.
+        work = ("- 2026-09-25T09:00:00Z · session · work\n"
+                "- 2026-09-25T09:10:00Z · end · work · ok\n")
+        ok = "- 2026-09-25T09:20:00Z · review · ok\n  a comment reads oddly\n"
+        issues = "- 2026-09-25T09:20:01Z · review · issues\n  none: no node added, no raise\n"
+        done = self.t(node(1, "confirmed"), log=work + ok + issues)
+        self.assertEqual(dfs_tree.status_of(done)[0], "done")
+        self.assertFalse(dfs_tree.review_due(done))
+        # An `issues` alone, with no node and no raise, is no more than that.
+        self.assertEqual(dfs_tree.status_of(self.t(node(1, "confirmed"), log=work + issues))[0], "done")
+        # The author's accept after it is still done.
+        accepted = work + ok + issues + "- 2026-09-25T09:40:00Z · accept\n"
         self.assertEqual(dfs_tree.status_of(self.t(node(1, "confirmed"), log=accepted))[0], "done")
+
+    def test_a_review_issues_that_added_a_node_or_raise_still_opens_the_task(self):
+        work = ("- 2026-09-25T09:00:00Z · session · work\n"
+                "- 2026-09-25T09:10:00Z · end · work · ok\n")
+        ok = "- 2026-09-25T09:20:00Z · review · ok\n"
+        issues = "- 2026-09-25T09:20:01Z · review · issues\n  W1.2: a bug\n"
+        t = self.t(node(1, "confirmed"), node(2, parent=1), log=work + ok + issues)
+        self.assertEqual(dfs_tree.status_of(t), ("open", "current node W1.2 · step 2"))
+        raised = work + ok + issues + "- 2026-09-25T09:20:02Z · raise · W1.1\n  which?\n"
+        t = self.t(node(1, "confirmed"), log=raised)
+        self.assertEqual(dfs_tree.status_of(t)[0], "blocked")
+        # Its fix completes the tree again: a review is due, as after any work.
+        fixed = (work + ok + issues + "- 2026-09-25T09:30:00Z · session · work\n"
+                 "- 2026-09-25T09:35:00Z · end · work · ok\n")
+        t = self.t(node(1, "confirmed"), node(2, "confirmed", 1), log=fixed)
+        self.assertEqual(dfs_tree.status_of(t)[1], "the tree is complete; the implementation review is due")
 
     def test_an_accept_no_longer_holds_once_a_node_is_open_again(self):
         # The merge of an accepted item reopens it with a node, which writes no log entry.
