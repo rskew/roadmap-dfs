@@ -1734,6 +1734,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert((await tag("W3")) === true, "the list row says draft once marked");
     assert(await page.$eval(".item[data-id=W3]", e => e.classList.contains("draft") && getComputedStyle(e.querySelector(".tag.draft")).backgroundColor !== "rgba(0, 0, 0, 0)"), "a draft's row is marked and its badge is filled");
     assert(await page.$eval(".item[data-id=W3]", e => getComputedStyle(e, "::before").backgroundImage.includes("gradient")), "a draft's stripe is drawn by its own pseudo-element, which hover does not reset");
+    await page.hover(".item[data-id=W3]");
+    assert(await page.$eval(".item[data-id=W3]", e => getComputedStyle(e, "::before").backgroundImage.includes("gradient") && getComputedStyle(e, "::before").position === "absolute"), "a hovered draft row still draws its stripe");
     if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "draft-list.png") });
     await task(page, "W3");
     await page.click("[data-act=draft]");

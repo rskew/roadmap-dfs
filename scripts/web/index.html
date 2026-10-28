@@ -144,7 +144,7 @@ pre.runlog .r-err { color: var(--attention); }
 .item.done .body { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); min-width: 0; }
 .item.done .goal { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item.done .meta { flex: 0 1 auto; min-width: 0; margin-top: 0; }
-/* a draft (open, not held, and the walk passes it over) is the one row marked in the list's own ink: a dashed stripe down its edge,
+/* a draft (an open task that is not held, which the walk passes over) is the one row marked in the list's own ink: a dashed stripe down its edge,
    its goal in italics and a filled badge, so it reads as not yet released without a colour that already means "needs you" */
 .item.draft { position: relative; }
 .item.draft::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--rule-status); pointer-events: none; background: repeating-linear-gradient(180deg, var(--ink) 0 6px, transparent 6px 11px); }   /* a pseudo-element, so neither the hover wash nor the assumption's inset shadow on this edge covers it */
