@@ -1432,12 +1432,13 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertEqual(meanwhile, [(False, 200)])
         self.assertEqual(data["task"]["pr"], "https://github.com/o/r/pull/9")
 
-    def test_a_delete_during_an_open_pr_push_waits_for_it_and_neither_deadlocks(self):
-        """Open PR holds the git lock for its push and `gh`; a delete holds the web LOCK and then
-        wants the git lock. Open PR must not take LOCK while it holds the git lock, or both wait
+    def test_a_delete_and_an_accept_during_an_open_pr_push_wait_for_it_and_nothing_deadlocks(self):
+        """Open PR holds the git lock for its push and `gh`; a delete or an accept holds the web LOCK
+        and then wants the git lock. Open PR must not take LOCK while it holds the git lock, or both wait
         for good. The real `open_pr` runs here, with its git and `gh` calls stubbed."""
         task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
         other = self.call("POST", "/api/new", dict(name="Delete me"))[1]["added"]
+        third = self.call("POST", "/api/new", dict(name="Accept me"))[1]["added"]
         (self.root / ".dfs" / "github").write_text("hub\n")
         wt = self.root / ".dfs" / "worktrees" / other        # a worked task: its delete releases the worktree
         r = subprocess.run("git add -A && git -c user.name=t -c user.email=t@t commit -qm tasks && "
@@ -1470,6 +1471,8 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertTrue(inside.wait(10), "Open PR never reached gh")
         deleting = threading.Thread(target=post, args=("delete", "/api/delete_task", dict(task=other)), daemon=True)
         deleting.start()
+        accepting = threading.Thread(target=post, args=("accept", "/api/accept", dict(task=third)), daemon=True)
+        accepting.start()                            # an accept also holds LOCK and then wants the git lock
         for _ in range(100):                         # the delete holds LOCK, waiting on the git lock
             if dfs_web.LOCK.locked():
                 break
@@ -1478,8 +1481,9 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         go.set()
         opening.join(10)
         deleting.join(10)
-        self.assertEqual((opening.is_alive(), deleting.is_alive()), (False, False), "deadlock")
-        self.assertEqual(done, {"open": 200, "delete": 200})
+        accepting.join(10)
+        self.assertEqual((opening.is_alive(), deleting.is_alive(), accepting.is_alive()), (False,) * 3, "deadlock")
+        self.assertEqual(done, {"open": 200, "delete": 200, "accept": 200})
         self.assertEqual(dfs_tree.pr_url(dfs_tree.load(task)), "https://github.com/o/r/pull/9")
 
     def test_marking_a_draft_tells_the_walk_only_when_it_becomes_one(self):

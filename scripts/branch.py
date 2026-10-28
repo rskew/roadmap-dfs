@@ -94,6 +94,10 @@ def _run_bounded(cmd, cwd, env):
                     pipe.close()
                 except OSError:
                     pass
+            try:   # the killed git is reaped now, not at garbage collection
+                proc.wait(timeout=GIT_PIPE_GRACE)
+            except subprocess.TimeoutExpired:
+                pass
         err = "git did not answer within %d seconds; check the network. %s" % (GIT_NET_TIMEOUT, err or "")
         return subprocess.CompletedProcess(cmd, 124, out or "", err)
     return subprocess.CompletedProcess(cmd, proc.returncode, out, err)

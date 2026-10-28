@@ -205,8 +205,8 @@ def land(task, url, head=""):
     it with no merge or rebase of the author's in progress, else it is a raise asking them to
     pull (once). The task's files are carried from the worktree, which holds the log entries no
     commit does, and left uncommitted in the checkout. A branch holding commits that never
-    reached the pull request's head (`head`, as `_pull` read it), or a worktree holding changes beyond the task's files, is
-    kept as `dfs-merged/<task>` (`-2`, `-3` … when that name is taken), not deleted."""
+    reached the pull request's head (`head`, as `_pull` read it), or a worktree holding changes
+    beyond the task's files, is kept as `dfs-merged/<task>` (`-2`, `-3` … when that name is taken), not deleted."""
     remote = dfs_paths.read_github()
     name, wt, default = dfs_paths.item_branch(task), dfs_paths.worktree(task), dfs_paths.branch()
     tag = "merged PR " + url
