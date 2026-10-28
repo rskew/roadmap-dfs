@@ -12,8 +12,11 @@ import curses
 import importlib.util
 import inspect
 import re
+import os
 import sys
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -282,6 +285,24 @@ class Commanding(unittest.TestCase):
         ui = a_screen([item("W1"), item("W2")], pane="runs")
         ui.command_run("go W2")
         self.assertEqual((ui.pane, ui.current()["id"]), ("item", "W2"))
+
+    def test_model_chooses_the_models_the_walk_gives_its_chains(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
+            ui = a_screen([item("W1")])
+            ui.command_run("model")
+            self.assertEqual(ui.msg, "models: plan (runner's default), implement (runner's default)")
+            ui.command_run("model plan opus")
+            ui.command_run("model implement default")
+            self.assertEqual(ui.models(), dict(plan="opus", implement="default"))
+            ui.command_run("model plan")
+            self.assertEqual(ui.msg, "plan model: opus")
+            ui.command_run("model plan none")
+            self.assertEqual(ui.models()["plan"], "")
+            ui.command_run("model plan --help")
+            self.assertIn("not a model name", ui.msg)
+            ui.command_run("model review opus")
+            self.assertIn("plan or implement", ui.msg)
+            self.assertEqual(ui.models(), dict(plan="", implement="default"))
 
     def test_a_confirmation_is_never_answered_for_you(self):
         # `:stop W1 y`-less: K asks, and with only ⏎ typed it must not stop.

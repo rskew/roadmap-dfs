@@ -112,6 +112,19 @@ never exceeds the sessions left, and the walk's header names every live chain. A
 of its chains), or turning the walk off, ends every chain after the run it is in. Merges and worktree cuts run one at a time
 under a lock in the git common directory, so two chains finishing together merge in turn.
 
+## Choosing the models
+
+A claude session runs on one of two models: the **plan** model for the session that opens a task with
+no nodes and for every critic and review (opus unless told otherwise), and the **implement** model for
+every other work session (sonnet). The walk can choose both: `:model plan opus` and
+`:model implement sonnet[1m]` on the screen, the walk box's "Plan model" and "Implement model" fields
+on the web page. `:model plan default` leaves claude to its own default, `:model plan none` takes the
+choice away (the runner's opus and sonnet again), and `:model` alone shows the choices. They are kept in
+`.dfs/runs/models`, shared by the screen and the page, and reach every chain the walk starts afterwards
+as `PLAN_MODEL` and `IMPLEMENT_MODEL`, the variables `run.sh` reads (set them yourself for a run by
+hand). A name is letters, digits and `. _ : [ ] -`, not starting with `-`. They apply to claude only:
+codex, kiro and opencode read their model from their own config.
+
 ## Running the sandbox as a daemon
 
 `sandbox daemon [command args]` runs the command (default: the repo's `CONTAINER_APP_CMD`, from `.container.env`)

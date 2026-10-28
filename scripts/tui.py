@@ -74,7 +74,7 @@ import runs as dfs_runs               # noqa: E402  (needs HERE on the path firs
 import order as dfs_order              # noqa: E402  (the same)
 import paths as dfs_paths              # noqa: E402  (the same)
 import limit as dfs_limit              # noqa: E402  (the same)
-from walk import (AGENTS, MAX_PARALLEL, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
+from walk import (AGENTS, MAX_PARALLEL, MODEL_ROLES, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
                   WALK_STOP, WalkMixin, agent_file, read_agent, walk_decide, walk_held_for)
 import tree as dfs_tree               # noqa: E402  (the same)
 import github as dfs_github             # noqa: E402  (the same)
@@ -3490,7 +3490,7 @@ class UI(WalkMixin):
 
     def command(self):
         """`:` — any key by its name, and an item to do it to: `:work W7 5`,
-        `:review W12`, `:walk 20`, `:pin W9`, `:go W3`.
+        `:review W12`, `:walk 20`, `:pin W9`, `:go W3`, `:model plan opus`.
 
         ⚠️ NAMES SCALE WHERE LETTERS DO NOT. k9s ran out of letters and grew a `:`;
         this screen was already one key short (`n` could not be "next match"). A
@@ -3511,6 +3511,8 @@ class UI(WalkMixin):
     def command_run(self, line):
         words = line.split()
         name, args = words[0].lower(), words[1:]
+        if name == "model":
+            return self.command_model(args)
         if name == "go":
             if not args:
                 self.msg = ":go wants an item — :go W7"
@@ -3538,6 +3540,26 @@ class UI(WalkMixin):
             return self.key_run(row)
         finally:
             self.answers = []
+
+    def command_model(self, args):
+        """`:model` shows the models chosen for the walk's claude sessions; `:model plan opus`
+        and `:model implement sonnet` choose them for the next chain, `:model plan default`
+        leaves claude to its own default and `:model plan none` takes the choice away (the
+        runner's opus to plan and sonnet to implement). Kept like the agent, for the next screen."""
+        if not args:
+            m = self.models()
+            self.msg = "models: " + ", ".join("%s %s" % (r, m[r] or "(runner's default)")
+                                              for r in MODEL_ROLES)
+        elif len(args) == 1 and args[0] in MODEL_ROLES:
+            self.msg = "%s model: %s" % (args[0], self.models()[args[0]] or "(runner's default)")
+        elif len(args) == 2:
+            try:
+                self.set_model(args[0], "" if args[1] == "none" else args[1])
+            except ValueError as e:
+                self.msg = str(e)
+        else:
+            self.msg = ":model plan|implement <name>, <name> being default, none or a claude model"
+        return True
 
     def item_index(self, iid):
         want = iid.upper()
