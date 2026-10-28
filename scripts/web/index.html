@@ -1022,6 +1022,7 @@ function typingInBox() {
 }
 function drawTasks(push) {
   const had = findEnter();
+  const boxKey = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;     // a draw replaces the box: focus goes back to its control
   const items = S.state.items.filter(i => !S.only || i.needs_you);
   // A push (drawTasks(true)) redraws the list, and a redrawn number field puts the caret back at its start: digits typed after the push
   // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
@@ -1074,6 +1075,7 @@ function drawTasks(push) {
   if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }
   else $("#view").innerHTML = html;
   findLeave(had);
+  if (boxKey && (!document.activeElement || document.activeElement === document.body)) { const el = (boxKey.sel && $(boxKey.sel)) || document.querySelectorAll(FOCUSABLE)[boxKey.at]; if (el) el.focus({ preventScroll: true }); }
   const kept = on && $(`#view button.item[data-id="${CSS.escape(on)}"]`); if (kept) kept.focus({ preventScroll: true });   // the keys' place survives a redraw
   if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
@@ -1929,7 +1931,7 @@ function focusRow() {
 }
 const FOCUS = { at: "" };
 addEventListener("keydown", e => {
-  if (e.target.closest("dialog, input, textarea, [data-grip]") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest("dialog, input, textarea, select, [data-grip]") || e.metaKey || e.ctrlKey || e.altKey) return;
   const v = route().view, d = stepKey(e);
   if (is("help", e)) { e.preventDefault(); keysHelp(); return; }
   if (is("find", e) && FIND.input && (v === "tasks" || (v === "task" && S.task))) { e.preventDefault(); FIND.input.focus(); FIND.input.select(); return; }

@@ -157,6 +157,19 @@ const FLOWS = {
     await wait("step 7",n => document.querySelectorAll("#view .row").length === n, before);
     await wait("Right gives focus back", p => document.activeElement.dataset.id === p, parent);
     same(await page.evaluate(() => document.activeElement.dataset.id), parent, "Right keeps focus on the unfolded row");
+    // A select on the list keeps its own arrow keys and type-ahead: they change its option, not the focused task.
+    await page.goto(URL_); await page.waitForSelector(".item");
+    await openWalk(page);
+    assert((await page.$$("#nextsel option")).length > 1, "the walk box offers more than one Next");
+    await page.focus("#nextsel");
+    const sel = () => page.$eval("#nextsel", e => e.value);
+    const first = await sel();
+    await page.keyboard.press("ArrowDown");
+    assert((await sel()) !== first, "ArrowDown on the Next select changes its option");
+    await page.waitForTimeout(600);        // the change posts the choice and the box is drawn again; focus must come back to it
+    assert(await page.evaluate(() => document.activeElement.id === "nextsel"), "and focus stays on the select, not " + await page.evaluate(() => document.activeElement.outerHTML.slice(0, 90)));
+    await page.keyboard.press("j");
+    assert(await page.evaluate(() => document.activeElement.id === "nextsel"), "j on a select does not move focus to a task");
     same(errors, [], "no page errors");
     await ctx.close();
   },
