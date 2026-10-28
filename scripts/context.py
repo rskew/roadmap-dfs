@@ -200,14 +200,56 @@ def kiro_session_id(records):
     return ""
 
 
+# ⚠ THIS KIRO SENDS NO `usage_update`. Read from a real run (KAS 0.66.34, 2026-10-28):
+# its stream carries `session_info_update` records whose `_meta.kiro.contextUsage`
+# holds `usagePercentage`, the share of the model's window in use, and the first of
+# them also a `breakdown` of tokens and percent per part (`tools`, `yourPrompts`...).
+# Read only for `usage_update`, every such session measured 0 and the runner wrote
+# `peak 0` into the Log for all of them — a figure that looked measured and was not,
+# and that kept the §1 L1 checkpoint from ever firing. The window is not in the
+# stream, so it is the one the breakdown implies (tokens / percent), snapped to the
+# nearest size a model has: percent is rounded to 0.1, so one entry is good to about
+# 15%, and the sizes are five times apart.
+WINDOWS = (128_000, 200_000, 1_000_000, 2_000_000)
+
+
+def kiro_context_usage(rec):
+    """[(usagePercentage, window estimates)] for the `contextUsage` blocks in one record."""
+    out = []
+    for d in _walk(rec):
+        cu = d.get("contextUsage")
+        if not isinstance(cu, dict) or not isinstance(cu.get("usagePercentage"), (int, float)):
+            continue
+        sizes = []
+        for part in (d.get("breakdown") or {}).values():
+            tok, pct = (part.get("tokens"), part.get("percent")) if isinstance(part, dict) else (0, 0)
+            if isinstance(tok, (int, float)) and isinstance(pct, (int, float)) and tok > 0 and pct >= 0.3:
+                sizes.append(tok * 100 / pct)
+        out.append((float(cu["usagePercentage"]), sizes))
+    return out
+
+
+def snap_window(estimates):
+    """The model window nearest (in ratio) to the LARGEST of `estimates`, or None.
+
+    ⚠ Not the median. In 3 of 54 real runs a later breakdown carried a `kiroResponses`
+    part whose tokens / percent was ~410k beside the ~985k every `tools` entry gave, the
+    median of the three was ~410k, and the snap chose 200k: a 7.6% reading became 15k
+    tokens instead of 76k. A window too small under-reports the peak, which is the
+    unsafe side for a ceiling, so the largest estimate decides."""
+    if not estimates:
+        return None
+    est = max(estimates)
+    return min(WINDOWS, key=lambda w: max(w / est, est / w))
+
+
 def _kiro_log(session_id, root=None):
     """The newest chain run log under `.dfs/runs/` that names `session_id`, or None.
 
     Opencode's is found the same way: see the section below."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import paths as dfs_paths
-    runs = str(dfs_paths.runs())
-    logs = glob.glob(os.path.join(runs, "*", "run-*.json"))
+    logs = [f for d in dfs_paths.run_dirs() for f in glob.glob(os.path.join(str(d), "*", "run-*.json"))]
     logs.sort(key=lambda f: os.path.getmtime(f) if os.path.exists(f) else 0, reverse=True)
     needle = session_id.encode()
     for log in logs:
@@ -461,6 +503,7 @@ def files_written(path, provider="claude"):
 def peak_and_turns(path, provider):
     """Peak context and response count for a Claude or Codex rollout, or a Kiro or Opencode stream."""
     best, seen = 0, set()
+    percents, windows, best_pct = set(), [], 0.0
     with open(path, errors="replace") as fh:
         for line in fh:
             try:
@@ -481,6 +524,10 @@ def peak_and_turns(path, provider):
                     if u["sessionUpdate"] == "usage_update" and isinstance(u.get("used"), int):
                         seen.add(len(seen))
                         best = max(best, u["used"])
+                for pct, sizes in kiro_context_usage(rec):
+                    percents.add(pct)
+                    windows.extend(sizes)
+                    best_pct = max(best_pct, pct)
                 continue
             if provider == "codex":
                 if rec.get("type") != "event_msg":
@@ -504,7 +551,41 @@ def peak_and_turns(path, provider):
             # over 12,026 responses it totals 23,892 tokens, at most 2 per response.
             best = max(best, (usage.get("cache_read_input_tokens") or 0)
                              + (usage.get("cache_creation_input_tokens") or 0))
+    if provider == "kiro" and not seen and percents:
+        window = snap_window(windows)
+        if window:
+            return round(best_pct * window / 100), len(percents)
     return best, len(seen)
+
+
+def unmeasured_turns(path, provider):
+    """Responses in a stream that carries no context reading, counted without one.
+
+    ⚠ The runner's fallback ceiling (`MAX_TURNS`, in run.sh) is for exactly these
+    streams, and it reads `$turns` beside `peak -1`. A turn count of -1 there made
+    `-1 -gt 100` false, so a session with no reading had no ceiling at all. A kiro
+    response is not marked in its stream, so its tool calls (each its own request to
+    the model) stand for it; opencode writes a `step_finish` per response, tokens or
+    not; claude's assistant message ids are counted as `peak_and_turns` dedupes them.
+    Codex has no response marker without its token count, so it counts none."""
+    seen = set()
+    with open(path, errors="replace") as fh:
+        for line in fh:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            if provider == "kiro":
+                for u in acp_updates(rec):
+                    if u["sessionUpdate"] == "tool_call":
+                        seen.add(u.get("toolCallId") or len(seen))
+            elif provider == "opencode":
+                if isinstance(rec, dict) and rec.get("type") == "step_finish":
+                    seen.add(len(seen))
+            elif provider == "claude" and rec.get("type") == "assistant":
+                msg = rec.get("message") or {}
+                seen.add(msg.get("id") or len(seen))
+    return len(seen)
 
 
 def _is_verdict_call(text):
@@ -600,6 +681,16 @@ def main(argv):
             peak, turns = peak_and_turns(argv[1], argv[2])
         except (FileNotFoundError, IsADirectoryError):
             peak, turns = -1, -1
+        # ⚠ No reading is not a reading of 0: a transcript with no usage in it was
+        # logged `peak 0` for a whole day, and 0 looked measured. -1 is "unavailable".
+        # The turns stay a count: run.sh's fallback ceiling reads them beside peak -1,
+        # and a -1 there can never exceed it.
+        if peak == 0 and turns == 0:
+            peak = -1
+            try:
+                turns = unmeasured_turns(argv[1], argv[2])
+            except OSError:
+                turns = -1
         print(peak, turns)
         return 0
     if argv[:1] == ["--tool-uses"]:

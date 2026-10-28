@@ -596,8 +596,10 @@ dfs_state() {
 # first draft of this arithmetic already differed from it by 2 tokens on a 238-response
 # transcript. Claude writes one line per content block, so its records are deduped on
 # message.id; Codex writes one token_count event per API response. Both count model
-# responses rather than JSONL records. -1 means no transcript, which is itself worth
-# seeing, and is what the ceilings below read as "unavailable".
+# responses rather than JSONL records. A peak of -1 means no reading (no transcript, or
+# a stream with no usage in it), which is itself worth seeing, and is what the ceilings
+# below read as "unavailable". The turns beside it are then counted without usage
+# (-1 only when there is no transcript), since the MAX_TURNS fallback reads them.
 transcript_measure() {  # transcript -> "<peak> <turns>"
   python3 "$HERE/context.py" --measure "$1" "$AGENT"
 }
@@ -1210,11 +1212,14 @@ for i in $(seq 1 "$CAP"); do
   read -r peak turns <<< "$(transcript_measure "$tp")"
   total_turns=$(( total_turns + (turns > 0 ? turns : 0) ))
   meta_set peak="$peak" turns="$turns"
+  # A reading below 0 is "unavailable", and the Log says so: `peak 0` and `peak -1` read
+  # as measurements, and 13 sessions of 2026-10-28 carried a 0 that measured nothing.
+  if [ "${peak:--1}" -lt 0 ]; then peak_shown=unmeasured; else peak_shown="$peak"; fi
   if [ "$AGENT" != claude ]; then
-    echo "   exit $rc · $turns turns · peak context $peak · cost unavailable · session ${SID:-unknown}"
+    echo "   exit $rc · $turns turns · peak context $peak_shown · cost unavailable · session ${SID:-unknown}"
   else
     total_cost="$(python3 -c 'import sys; print(round(float(sys.argv[1] or 0)+float(sys.argv[2] or 0),4))' "$total_cost" "${cost:-0}")"
-    echo "   exit $rc · $turns turns · peak context $peak · \$${cost:-?} · session $SID"
+    echo "   exit $rc · $turns turns · peak context $peak_shown · \$${cost:-?} · session $SID"
   fi
 
   if [ "$rc" -eq 130 ] || [ "$rc" -eq 143 ]; then on_interrupt; fi
@@ -1310,7 +1315,7 @@ for i in $(seq 1 "$CAP"); do
     fi
     silent=0
     [ "$kind" = critic ] && refused=0
-    tree_log end "$kind" ok "peak $peak$outside_note"
+    tree_log end "$kind" ok "peak $peak_shown$outside_note"
   else
     fp_after="$(python3 "$HERE/state.py" --fingerprint)"
     if [ "$fp_after" = "$fp_before" ]; then
@@ -1319,7 +1324,7 @@ for i in $(seq 1 "$CAP"); do
       echo "dfs_run: the repo did not move — the session changed nothing. Stopping rather than repeating it."
       exit 1
     fi
-    tree_log end work ok "peak $peak"
+    tree_log end work ok "peak $peak_shown"
     silent=0
   fi
   # What the run did to the task, as one outline.

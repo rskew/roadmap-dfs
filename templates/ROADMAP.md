@@ -24,7 +24,7 @@ work, finishes the node and commits it. Backing up reverts the refuted node's co
 unless the evidence says why a change should stay; the commits stay in history as its
 evidence.
 
-After every fifth session on a task, a critic judges the tree's reasoning, not its
+After every fifth work session on a task, a critic judges the tree's reasoning, not its
 code: whether the evidence is true and independent, whether it supports the path
 taken, and whether the path still serves the task's Goal. When the tree is complete, a reviewer judges the implementation against the
 goal. What either finds is work, so it goes in the tree: the reviewer adds an open
@@ -32,7 +32,10 @@ node for each finding that shows the Goal is not met, and the critic adds one or
 backtracks to the first node whose evidence does not carry its determination, which
 withdraws that node and everything below it. A lesser finding (a wording, a stale
 sentence, a missing test for a guard) is never a node of its own: it rides in one
-node beside a real finding, or in the review's `ok` for the author to read. Reviews
+node beside a real finding, or in the review's `ok` for the author to read. An
+assumption a determined node made without a Hypothesis is not lesser: the review
+states it once, as an open node under that node whose Approach is to state it as a
+Hypothesis with its page, and a later review does not repeat one that has a node. Reviews
 have no round limit: some tasks need extensive review, and the budget of sessions a
 run is given is the backstop for a review loop.
 

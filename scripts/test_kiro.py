@@ -113,7 +113,10 @@ PY
 EMIT = """import json, sys
 sys.path.insert(0, %r)
 import test_kiro as t
+import os
 for rec in t.stream(sys.argv[1]):
+    if os.environ.get("NO_USAGE") and "usage_update" in json.dumps(rec):
+        continue
     print(json.dumps(rec))
 """ % str(HERE)
 
@@ -164,6 +167,12 @@ class Chain(unittest.TestCase):
         self.assertEqual(meta.get("turns"), "2", out)
         self.assertIn("W1.1 [confirmed]", out)
 
+    def test_a_session_with_no_usage_and_too_many_turns_stops_the_chain(self):
+        # Five tool calls, no usage reading: peak is unmeasured, so MAX_TURNS=3 must trip.
+        rc, meta, out = self.run_chain(cap=3, NO_USAGE="1", MAX_TURNS="3")
+        self.assertEqual((rc, meta.get("stop")), (1, "overturns"), out)
+        self.assertEqual((meta.get("peak"), meta.get("turns")), ("-1", "5"), out)
+
     def test_the_parent_s_session_is_not_handed_down(self):
         self.run_chain(cap=1)
         self.assertEqual((self.aside / "env-1").read_text().split(), ["<unset>", "1"])
@@ -194,6 +203,75 @@ class Reading(unittest.TestCase):
     def test_peak_is_the_largest_context_in_use(self):
         self.assertEqual(dfs_context.peak_and_turns(self.write(stream(1)), "kiro"),
                          (52001, 2))
+
+    def info(self, n, pct, breakdown=None):
+        """What KAS 0.66.34 sends in place of `usage_update`: a `session_info_update`
+        whose `_meta.kiro.contextUsage` is the share of the window in use."""
+        kiro = {"contextUsage": {"usagePercentage": pct}, "kind": "context_usage"}
+        if breakdown:
+            kiro["breakdown"] = breakdown
+        return update(n, sessionUpdate="session_info_update", _meta={"kiro": kiro})
+
+    FIRST = {"tools": {"tokens": 6400, "percent": 0.6}, "yourPrompts": {"tokens": 4298, "percent": 0.4},
+             "memory": {"tokens": 0, "percent": 0}}
+
+    def test_a_stream_with_only_a_context_percentage_is_measured_from_it(self):
+        recs = [self.info(1, 1, self.FIRST), self.info(1, 2.6432), self.info(1, 2.6432, self.FIRST),
+                self.info(1, 7.6)]
+        peak, turns = dfs_context.peak_and_turns(self.write(recs), "kiro")
+        self.assertEqual((peak, turns), (76000, 3))
+
+    def test_the_window_is_the_one_the_breakdown_implies(self):
+        small = {"tools": {"tokens": 5912, "percent": 3}}
+        peak, _ = dfs_context.peak_and_turns(self.write([self.info(1, 40, small)]), "kiro")
+        self.assertEqual(peak, 80000)
+
+    def test_a_part_whose_tokens_disagree_with_the_others_does_not_shrink_the_window(self):
+        # Seen in real runs: `tools` implies ~985k, `kiroResponses` ~406k; the median of
+        # the estimates chose 200k and the peak came out 5x too small.
+        mixed = {"tools": {"tokens": 5912, "percent": 0.6},
+                 "kiroResponses": {"tokens": 27230, "percent": 6.7},
+                 "yourPrompts": {"tokens": 1269, "percent": 0.3}}
+        peak, _ = dfs_context.peak_and_turns(self.write([self.info(1, 7.5779, mixed)]), "kiro")
+        self.assertEqual(peak, 75779)
+
+    def test_a_percentage_with_no_breakdown_is_not_turned_into_tokens(self):
+        self.assertEqual(dfs_context.peak_and_turns(self.write([self.info(1, 40)]), "kiro"), (0, 0))
+
+    def test_a_stream_with_no_usage_is_unmeasured_not_zero(self):
+        path = self.write([update(1, sessionUpdate="agent_message_chunk",
+                                  content={"type": "text", "text": "hi"})])
+        out = subprocess.run([sys.executable, str(HERE / "context.py"), "--measure", path, "kiro"],
+                             capture_output=True, text=True).stdout.split()
+        self.assertEqual(out, ["-1", "0"])
+
+    def test_an_unmeasured_stream_still_counts_its_turns_for_the_fallback_ceiling(self):
+        # run.sh stops on `peak -1 && turns > MAX_TURNS`; a turn count of -1 never could.
+        recs = [r for r in stream(1) if "usage_update" not in json.dumps(r)]
+        out = subprocess.run([sys.executable, str(HERE / "context.py"), "--measure",
+                              self.write(recs), "kiro"], capture_output=True, text=True).stdout.split()
+        self.assertEqual(out, ["-1", "5"])
+
+    def test_no_transcript_is_unmeasured_with_no_turns(self):
+        out = subprocess.run([sys.executable, str(HERE / "context.py"), "--measure",
+                              "/nonexistent/run.json", "kiro"], capture_output=True, text=True).stdout.split()
+        self.assertEqual(out, ["-1", "-1"])
+
+    def test_a_session_in_a_worktree_finds_the_main_checkout_s_run_log(self):
+        main = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, main)
+        work = main / ".dfs" / "worktrees" / "W1"
+        work.mkdir(parents=True)
+        (main / ".dfs" / "runs" / "dfs_run_x").mkdir(parents=True)
+        log = main / ".dfs" / "runs" / "dfs_run_x" / "run-1.json"
+        log.write_text("".join(json.dumps(r) + "\n" for r in stream(1)))
+        old = os.getcwd()
+        os.chdir(work)
+        try:
+            found = dfs_context.transcript_path(SID % 1, "kiro")
+        finally:
+            os.chdir(old)
+        self.assertEqual(found and Path(found).resolve(), log.resolve())
 
     def test_writes_are_edits_and_writing_commands_not_reads_or_failures(self):
         paths, calls = dfs_context.files_written(self.write(stream(1)), "kiro")

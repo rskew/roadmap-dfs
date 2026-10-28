@@ -1,0 +1,196 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which window does a kiro session have?</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tabs button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+  .row .lab { width: 118px; flex: none; }
+  .bar { position: relative; flex: 1; height: 22px; background: #eee; border-radius: 4px; }
+  .bar i { position: absolute; top: 0; bottom: 0; background: #3b6ea5; border-radius: 4px; }
+  .bar.bad i { background: #b3402a; }
+  .val { width: 70px; flex: none; text-align: right; }
+  #cap { margin-top: 10px; }
+  summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+</style>
+<h1>Which window does a kiro session have?</h1>
+<p>Kiro sends a percentage of the window in use, not the window. The runner turns the percentage into tokens with a window it estimates from the breakdown (tokens / percent per part) and snaps to 128k, 200k, 1M or 2M. Tap a rule to see what it reads on the 3 real runs where the parts disagree (a 7.6% reading; the true window is the 1M of the other 51).</p>
+<div class="tabs" role="group" aria-label="Rule">
+  <button type="button" data-r="median" aria-pressed="false">Median (before)</button>
+  <button type="button" data-r="max" aria-pressed="true">Largest (now)</button>
+  <button type="button" data-r="raw" aria-pressed="false">Raw estimate</button>
+</div>
+<div id="rows"></div>
+<p id="cap"></p>
+<h2>Evidence</h2>
+<details open><summary>54 runs with a breakdown, last 200 run logs</summary>
+<p>51 imply about 1M from every part (985,333 from <code>tools</code>: 5,912 tokens at 0.6%). 3 (rg6oahr3 run-1 and run-3, y2otka9c run-8) also carry a late <code>kiroResponses</code> part of 14,476 to 29,999 tokens at 4 to 7%, which implies about 360k to 430k. The median of the three estimates chose 200k there, so the 7.6% reading was 15k tokens, not 76k.</p></details>
+<script>
+  var PCT = 7.5779, EST = [985333, 406418, 423000], W = [128000, 200000, 1000000, 2000000];
+  function snap(e) { return W.reduce(function (a, w) { var r = function (x) { return Math.max(x / e, e / x); }; return r(w) < r(a) ? w : a; }); }
+  function est(rule) {
+    var s = EST.slice().sort(function (a, b) { return a - b; });
+    return rule === 'median' ? s[1] : s[2];
+  }
+  function show(rule) {
+    var e = est(rule), w = rule === 'raw' ? e : snap(e), tok = Math.round(PCT * w / 100);
+    var bad = tok < 70000;
+    document.getElementById('rows').innerHTML =
+      [['window used', w, 1000000], ['peak tokens', tok, 80000]].map(function (r) {
+        return '<div class="row"><span class="lab">' + r[0] + '</span><span class="bar' + (bad ? ' bad' : '') + '"><i style="left:0;width:' + Math.min(100, r[1] / r[2] * 100) + '%"></i></span><span class="val">' + r[1].toLocaleString() + '</span></div>';
+      }).join('');
+    document.getElementById('cap').textContent = rule === 'median' ? 'Median of the three estimates is ' + Math.round(e).toLocaleString() + ', snapped to 200k: the peak reads 15k, five times too small, and the checkpoint cannot fire.'
+      : rule === 'max' ? 'The largest estimate is ' + Math.round(e).toLocaleString() + ', snapped to 1M: the peak reads 75,779. A window too small hides context, so the larger side is the safe one.'
+      : 'The raw largest estimate is ' + Math.round(e).toLocaleString() + ': no snap, but the figure moves 8 to 9% with the rounding of a part at 0.6%, and every later reader sees a window nobody has.';
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) { b.setAttribute('aria-pressed', String(b.dataset.r === rule)); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) { b.addEventListener('click', function () { show(b.dataset.r); }); });
+  show('max');
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep the largest-estimate snap to 200k, 1M, 2M or 128k."> Keep the snap (largest estimate)</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Record the raw estimate or the percentage itself, not a snapped window."> Record the raw estimate or percentage</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
