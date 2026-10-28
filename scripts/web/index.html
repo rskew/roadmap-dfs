@@ -153,7 +153,8 @@ pre.runlog .r-err { color: var(--attention); }
 .item .meta .tag.draft { background: var(--ink); color: var(--paper); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 1px var(--s2); }
 .item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
 /* The table style (wide screens only, chosen with the Table button): one line per task, a column each for status, review, branch and run.
-   The rows sit in a container; narrower than 820px (a task open beside the list) the same markup is laid out as the card. */
+   The rows sit in a container; narrower than 820px (a task open beside the list) the same markup is laid out as the card.
+   --z is 1 or more at every width, so the 880px column never falls under 820px by itself. */
 #view.tbl { container: tasks / inline-size; }
 .listopt { justify-content: flex-end; margin: 0 0 var(--s2); }
 .tblhead, .noarch { display: none; }
@@ -163,7 +164,7 @@ pre.runlog .r-err { color: var(--attention); }
 .item.tbl .cell .tag { white-space: normal; overflow-wrap: anywhere; }
 .item.tbl.done .goal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @container tasks (min-width: 820px) {
-  .item.tbl, .tblhead { grid-template-columns: 4.5rem minmax(0, 1fr) 10rem 5rem 9rem 8rem; align-items: center; gap: 0 var(--s3); }
+  .item.tbl, .tblhead { grid-template-columns: 4.5rem minmax(0, 1fr) 8rem 4rem 7rem 6rem; align-items: center; gap: 0 var(--s3); }
   .tblhead { display: grid; box-sizing: border-box; width: 100%; min-height: calc(36px * var(--z)); padding-left: 2.2rem; border-bottom: var(--rule-strong) solid var(--ink); font-size: var(--fs-label); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .item.tbl, .item.tbl.done { padding-block: 0; min-height: var(--hit); }
   .item.tbl .goal { grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
