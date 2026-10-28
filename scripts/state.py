@@ -530,10 +530,7 @@ COMPACT_NOTE_TOKENS = 1_000
 
 
 def _compact_note(task) -> str:
-    try:
-        t = dfs_tree.load(task)
-    except Exception:
-        return ""
+    t = dfs_tree.load(task)
     cut = dfs_tree.log_cutoff(t["log"])
     n = sum(len(e["text"]) for e in t["log"] if e["ts"] < cut) // 4
     if n < COMPACT_NOTE_TOKENS:

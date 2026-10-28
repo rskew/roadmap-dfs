@@ -416,7 +416,7 @@ class IssuesNameAFinding(InARepo):
         self.write(task(node(1)))
         for kind in ("review", "critic"):
             for body in ("", "none", "No nodes added, no backtrack, nothing raised.",
-                         "a finding"):
+                         "a finding", "kiro2.24 probed", "v2.5 is out", "W2.1 is another task's"):
                 with self.assertRaises(ValueError, msg="%s %r" % (kind, body)):
                     dfs_tree.append_log("W1", kind, ["issues"], body)
         self.assertNotIn("issues", (dfs_paths.items() / "W1.md").read_text().split("## Log")[-1])

@@ -662,8 +662,10 @@ def can_answer(page):
 # ⚠ In the logs of 2026-10-09 to 2026-10-28, 25 of 97 `review · issues` and 4 of 14
 # `critic · issues` entries named no node ("none", "No nodes added, no backtrack"), so
 # the review tally read 97 issues where 72 had any, and the task read as reopened with
-# nothing to do. The id is what makes an `issues` verdict a finding.
-NODE_ID = re.compile(r"\b[A-Za-z]+\d+(?:@[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?\.\d+\b")
+# nothing to do. The id is what makes an `issues` verdict a finding. It must be an id
+# of THIS task (`W113.4`): the looser `[A-Za-z]+\d+.\d+` also took `v2.5` or `kiro2.24`.
+def finding_id(task):
+    return re.compile(r"\b%s(?:@[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?\.\d+\b" % re.escape(task))
 
 
 def append_log(task, kind, args=(), body=""):
@@ -671,7 +673,7 @@ def append_log(task, kind, args=(), body=""):
     and re-render: the Log section is found by name, wherever it is."""
     if kind not in KINDS:
         raise ValueError("unknown log kind %r (one of %s)" % (kind, ", ".join(KINDS)))
-    if kind in ("critic", "review") and list(args[:1]) == ["issues"] and not NODE_ID.search(body):
+    if kind in ("critic", "review") and list(args[:1]) == ["issues"] and not finding_id(task).search(body):
         raise ValueError("a %s `issues` verdict names no node: a finding is a node (added, "
                          "backtracked or raised), written as its id such as %s.1. With none, "
                          "the verdict is `ok`, and any lesser point goes in its body"
