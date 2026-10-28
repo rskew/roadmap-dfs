@@ -345,6 +345,18 @@ class Flows(unittest.TestCase):
     def test_the_walk_controls_stay_under_the_bar_as_the_list_scrolls(self):
         self.flow("walkpin")
 
+    def test_esc_backs_out_of_a_node_then_the_task_and_closes_only_a_form(self):
+        self.with_runs("escape")      # runs, so Esc on a run log can be tried too
+
+    def test_j_k_and_the_arrows_step_the_list_and_the_tree_and_left_right_fold(self):
+        self.flow("keys")
+
+    def test_slash_searches_the_list_and_a_tasks_nodes_and_esc_clears_it(self):
+        self.flow("find")
+
+    def test_question_mark_lists_the_keys_from_the_table_the_handler_reads(self):
+        self.flow("help")
+
     def test_navigation_is_under_the_thumbs(self):
         self.flow("thumbs")
 

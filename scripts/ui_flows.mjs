@@ -101,6 +101,184 @@ async function openWalk(page) {
 }
 
 const FLOWS = {
+  // Esc backs out one level at a time on a wide screen: node, task, list; and in a form it closes the form only.
+  escape: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const hash = () => page.evaluate(() => location.hash);
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => location.hash === "#/t/W9" && !S.node);
+    await page.keyboard.press("Escape"); await page.waitForSelector(".item");
+    assert(!/#\/t\//.test(await hash()), `Esc on the task left it for the list, at ${await hash()}`);
+    await page.keyboard.press("Escape"); await page.waitForTimeout(150);
+    assert(!/#\/t\//.test(await hash()), "Esc on the list stays on the list");
+    await task(page, "W9"); await page.click("[data-act=add]"); await dialog(page);
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    assert(/#\/t\/W9$/.test(await hash()), `Esc in a form closed only the form, at ${await hash()}`);
+    // The artefact viewer and a run's log have a Back button, so Esc is it: it lands on the task they were opened from.
+    await page.click(".tile >> nth=0"); await page.waitForSelector("iframe.artview");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    assert(/#\/a\/W9\//.test(await hash()), `the viewer is open, at ${await hash()}`);
+    await page.keyboard.press("Escape"); await page.waitForSelector(".arts");
+    assert(/#\/t\/W9$/.test(await hash()) && !(await page.$("iframe.artview")), `Esc on an artefact goes back to its task, at ${await hash()}`);
+    // The run row can draw zero-width where no font gives its text a width, so follow its link from the page rather than click a box playwright must see.
+    await page.waitForSelector("a.runrow", { state: "attached" }); await page.$eval("a.runrow", a => a.click()); await page.waitForSelector("#runlog");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    assert(/#\/r\/W9\//.test(await hash()), `the run log is open, at ${await hash()}`);
+    await page.keyboard.press("Escape"); await page.waitForSelector("a.runrow", { state: "attached" });
+    assert(/#\/t\/W9$/.test(await hash()) && !(await page.$("#runlog")), `Esc on a run log goes back to its task, at ${await hash()}`);
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
+  // j/k and the arrows step the same way down the list and down a task's tree, with focus on the row; Left and Right fold.
+  keys: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const hash = () => page.evaluate(() => location.hash);
+    const wait = async (what, fn, arg) => { try { await page.waitForFunction(fn, arg, { timeout: 4000 }); } catch (e) { throw new Error(`${what}; at ${await hash()}, focus on ${await page.evaluate(() => document.activeElement.outerHTML.slice(0, 80))}`); } };
+    const onItem = () => page.evaluate(() => document.activeElement.dataset.id || "");
+    const ids = await page.$$eval("#view button.item[data-act=task]", a => a.map(e => e.dataset.id));
+    assert(ids.length > 3, "the fixture lists tasks");
+    for (const [key, want] of [["j", 0], ["j", 1], ["ArrowDown", 2], ["k", 1], ["ArrowUp", 0], ["k", 0]]) {
+      await page.keyboard.press(key);
+      same(await onItem(), ids[want], `${key} on the list focuses ${ids[want]}`);
+    }
+    await page.keyboard.press("j"); await page.keyboard.press("Enter");
+    await page.waitForSelector(".row");
+    same(await hash(), "#/t/" + ids[1], "Enter opens the focused task");
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
+    await wait("step 2",() => document.activeElement.matches('.main[data-id="W9.2"]'));
+    const nodes = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
+    const at = nodes.indexOf("W9.2");
+    await page.keyboard.press("j");
+    await wait("step 3",n => location.hash === "#/t/W9/" + n && document.activeElement.matches(`.main[data-id="${n}"]`), nodes[at + 1]);
+    await page.keyboard.press("ArrowDown");
+    await wait("step 4",n => location.hash === "#/t/W9/" + n && document.activeElement.matches(`.main[data-id="${n}"]`), nodes[at + 2]);
+    await page.keyboard.press("ArrowUp"); await page.keyboard.press("k");
+    await wait("step 5",n => location.hash === "#/t/W9/" + n && document.activeElement.matches(`.main[data-id="${n}"]`), nodes[at]);
+    // Left folds a node that has children, Right unfolds it, and focus stays on its row.
+    const parent = await page.$eval("#view .row:has(.fold:not(.none)) .main", e => e.dataset.id);
+    await page.focus(`#view .main[data-id="${parent}"]`);
+    const count = () => page.$$eval("#view .row", a => a.length);
+    const before = await count();
+    await page.evaluate(() => { window.__dp = []; addEventListener("keydown", e => window.__dp.push([e.key, e.defaultPrevented])); });      // added after the page's handler, so it sees what that did
+    await page.keyboard.press("ArrowLeft");
+    await wait("step 6",n => document.querySelectorAll("#view .row").length < n, before);
+    await wait("Left gives focus back", p => document.activeElement.dataset.id === p, parent);
+    same(await page.evaluate(() => document.activeElement.dataset.id), parent, "Left keeps focus on the folded row");
+    await page.keyboard.press("ArrowRight");
+    await wait("step 7",n => document.querySelectorAll("#view .row").length === n, before);
+    await wait("Right gives focus back", p => document.activeElement.dataset.id === p, parent);
+    same(await page.evaluate(() => document.activeElement.dataset.id), parent, "Right keeps focus on the unfolded row");
+    same(await page.evaluate(() => window.__dp.filter(([k]) => /^Arrow(Left|Right)$/.test(k))), [["ArrowLeft", true], ["ArrowRight", true]], "Left and Right that fold or unfold do not also scroll the page");
+    // A select on the list keeps its own arrow keys and type-ahead: they change its option, not the focused task.
+    await page.goto(URL_); await page.waitForSelector(".item");
+    await openWalk(page);
+    assert((await page.$$("#nextsel option")).length > 1, "the walk box offers more than one Next");
+    await page.focus("#nextsel");
+    const sel = () => page.$eval("#nextsel", e => e.value);
+    const first = await sel();
+    await page.keyboard.press("ArrowDown");
+    assert((await sel()) !== first, "ArrowDown on the Next select changes its option");
+    await page.waitForTimeout(600);        // the change posts the choice and the box is drawn again; focus must come back to it
+    assert(await page.evaluate(() => document.activeElement.id === "nextsel"), "and focus stays on the select, not " + await page.evaluate(() => document.activeElement.outerHTML.slice(0, 90)));
+    await page.keyboard.press("j");
+    assert(await page.evaluate(() => document.activeElement.id === "nextsel"), "j on a select does not move focus to a task");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
+  // `/` focuses the search field on the list and on a task; typing keeps the rows that hold every word; Esc clears it.
+  find: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const shown = sel => page.$$eval(sel, a => a.filter(e => !e.closest("[hidden]")).map(e => e.dataset.id));
+    const focusedField = () => page.evaluate(() => document.activeElement && document.activeElement.id === "find-q");
+    const all = await shown("#view button.item[data-act=task]");
+    assert(all.length > 3, "the fixture lists tasks");
+    await page.keyboard.press("/");
+    assert(await focusedField(), "/ focuses the search field on the list");
+    const word = await page.$eval(`#view button.item[data-id="${all[1]}"] .goal`, e => e.textContent.trim().split(/\s+/).sort((a, b) => b.length - a.length)[0].toLowerCase());
+    const want = await page.$$eval("#view button.item[data-act=task]", (a, w) => a.filter(e => (e.querySelector(".iid").textContent + " " + e.querySelector(".goal").textContent).toLowerCase().includes(w)).map(e => e.dataset.id), word);
+    await page.fill("#find-q", word);        // fill sets the value and fires `input`; this chromium's keyboard drops all but the last character typed into a field
+    same(await shown("#view button.item[data-act=task]"), want, `typing "${word}" keeps the tasks that hold it`);
+    assert(want.includes(all[1]) && want.length < all.length, "and it is a real filter");
+    await page.fill("#find-q", word + " zzzqq");
+    same(await shown("#view button.item[data-act=task]"), [], "a word nothing holds leaves no task");
+    assert(/No task matches/.test(await page.textContent("#find-n")), "and the field says so");
+    await page.keyboard.press("Escape");
+    same(await shown("#view button.item[data-act=task]"), all, "Esc clears the filter");
+    assert(!(await focusedField()) && (await page.inputValue("#find-q")) === "", "and leaves the field empty and unfocused");
+    assert(!/#\/t\//.test(await page.evaluate(() => location.hash)), "Esc in the field does not leave the list");
+    // Enter leaves the field for the first task left, and j goes on from it.
+    await page.keyboard.press("/"); await page.fill("#find-q", word); await page.keyboard.press("Enter");
+    same(await page.evaluate(() => document.activeElement.dataset.id), want[0], "Enter focuses the first task left");
+    // On a task: nodes by id or title, folded ones included.
+    await page.goto(URL_ + "#/t/W9"); await page.waitForSelector(".row");
+    const ids = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
+    const folded = await page.$eval("#view .row:has(.fold:not(.none)) .fold", e => e.dataset.id);
+    await page.click(`#view .fold[data-id="${folded}"]`); await page.waitForFunction(n => document.querySelectorAll("#view .row").length < n, ids.length);
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    const hidden = await page.evaluate(f => S.task.rows.find(r => r.kind === "node" && r.parent === f).id, folded);
+    await page.keyboard.press("/");
+    assert(await focusedField(), "/ focuses the search field on a task");
+    await page.fill("#find-q", hidden);
+    await page.waitForFunction(i => [...document.querySelectorAll("#view .row .main")].some(e => e.dataset.id === i), hidden);
+    assert((await shown("#view .row .main")).includes(hidden), "a node under a folded one is found");
+    assert(await focusedField(), "typing in a task's field keeps focus through the redraw");
+    // A key typed mid-word redraws the task and the caret stays where it was (a typed key fires `input` the same way; the keyboard cannot type here).
+    const caret = await page.evaluate(() => { const f = FIND.input; f.setSelectionRange(2, 2); f.dispatchEvent(new Event("input")); return [document.activeElement === f, f.selectionStart, f.selectionEnd]; });
+    same(caret, [true, 2, 2], "an input event in the middle of the query keeps focus and the caret through the redraw");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(n => document.querySelectorAll("#view .row").length === n, (await page.$$("#view .row")).length);
+    same((await page.$$("#view .row")).length < ids.length, true, "Esc restores the fold");
+    assert(/#\/t\/W9$/.test(await page.evaluate(() => location.hash)), "and stays on the task");
+    // Leaving the task for another view clears the search: coming back to the task starts with nothing typed.
+    const whole = (await page.$$("#view .row")).length;      // the fold from above is still in place
+    await page.keyboard.press("/"); await page.fill("#find-q", hidden);
+    await page.waitForFunction(q => S.q === q, hidden);
+    await page.evaluate(() => { location.hash = "#/chats"; });
+    await page.waitForFunction(() => lastView === "chats:" && !document.querySelector("#view .row"));
+    await page.evaluate(() => { location.hash = "#/t/W9"; });
+    await page.waitForSelector("#view .row");
+    same(await page.inputValue("#find-q"), "", "coming back to the task finds the search field empty");
+    same(await page.evaluate(() => S.q), "", "and no query set");
+    same((await page.$$("#view .row")).length, whole, "and the task drawn whole, not filtered");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
+  // `?` lists the keys the page binds, from the table its handler reads; Esc closes the list and leaves the screen where it was.
+  help: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const hash = () => page.evaluate(() => location.hash);
+    const open_ = () => page.$("dialog[open] dl.keys");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("?");
+    await page.waitForSelector("dialog[open] dl.keys");
+    const shown = await page.$$eval("dialog[open] dl.keys dt", a => a.map(e => e.textContent.trim()));
+    const table = await page.evaluate(() => KEYS.map(k => k.show.trim()));
+    same(shown, table, "the dialog lists every key in the table");
+    for (const k of ["/", "Esc", "?", "n", "c", "f"]) assert(shown.includes(k), `${k} is listed`);
+    const says = await page.$$eval("dialog[open] dl.keys dd", a => a.map(e => e.textContent));
+    assert(says.some(s => /search is set/.test(s) && /Fold/.test(s)), "← says it does nothing while a search is set");
+    assert(says.some(s => /artefact's own frame/.test(s)), "Esc says it is inert inside an artefact's frame");
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    same(await hash(), "", "Esc closed only the key list, on the list");
+    // The table is what the handler reads: a key moved in it moves in the page.
+    await page.evaluate(() => { KEYS.find(k => k.id === "help").keys = ["h"]; });
+    await page.keyboard.press("?"); await page.waitForTimeout(150);
+    assert(!(await open_()), "? opens nothing once the table gives help another key");
+    await page.keyboard.press("h"); await page.waitForSelector("dialog[open] dl.keys");
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("h"); await page.waitForSelector("dialog[open] dl.keys");
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    same(await hash(), "#/t/W9/W9.2", "Esc closed only the key list, on a node");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // The list, its filter, the project's name, and nothing in the console.
   async list(b) {
     const { page, errors } = await open(b, PHONE);
@@ -2051,7 +2229,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       // Enter on the bare page opens the first node; c rules on it; Escape closes it
       await page.keyboard.press("Enter"); await page.waitForSelector("#sheet.open");
       await page.keyboard.press("c"); await dialog(page); await page.keyboard.press("Escape");
-      await page.waitForFunction(() => document.activeElement === document.body);     // the closed dialog gives its focus back
+      await page.waitForFunction(() => document.activeElement === document.body || document.activeElement.matches(".row .main"));     // the closed dialog gives its focus back, to the open node's row
       await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("#sheet.open"));
       // f shows the flagged nodes only, and again all of them
       const all = (await page.$$(".row")).length;
