@@ -185,6 +185,9 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 #find input { flex: 1; min-width: 0; }
 #find .n { flex: none; color: var(--muted); font-size: var(--fs-label); letter-spacing: .04em; }
 #view [hidden] { display: none !important; }
+dl.keys { display: grid; grid-template-columns: max-content 1fr; gap: var(--s2) var(--s4); margin: var(--s3) 0; }
+dl.keys dt, dl.keys dd { margin: 0; }
+dl.keys kbd { font: inherit; font-weight: 600; white-space: pre; }
 
 /* the walk */
 /* The walk's controls stay in reach on a long list: the box sticks under the bar (its measured height, `--bar-h`, as a long
@@ -1879,7 +1882,33 @@ setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#cha
    focused one) and on a task (the open node moves to the next or previous visible one, with focus on its row). Left
    folds a node's children and Right unfolds them. Arrows leave a scrolling pane alone: on a task they step only from
    the page or a node row, so a node's own pane still scrolls with them. */
-const stepKey = e => e.key === "j" ? 1 : e.key === "k" ? -1 : e.key === "ArrowDown" ? 2 : e.key === "ArrowUp" ? -2 : 0;
+/* The keys the page binds, in one table: the handler below asks it which key is which (`is`), and `?` draws it, so the
+   list a reader sees is the list that works. `on` is where it applies: the list, a task, or both. */
+const KEYS = [
+  { id: "next", keys: ["j", "ArrowDown"], show: "j  ↓", does: "Next task on the list, next node in the tree", on: "both" },
+  { id: "prev", keys: ["k", "ArrowUp"], show: "k  ↑", does: "Previous task, previous node", on: "both" },
+  { id: "unfold", keys: ["ArrowRight"], show: "→", does: "Unfold the focused node", on: "task" },
+  { id: "fold", keys: ["ArrowLeft"], show: "←", does: "Fold the focused node's children", on: "task" },
+  { id: "open", keys: ["Enter"], show: "Enter", does: "Open the focused task, or the first node", on: "both" },
+  { id: "back", keys: ["Escape"], show: "Esc", does: "Back out: clear the search, close a form, leave a node for its task, a task for the list", on: "both" },
+  { id: "find", keys: ["/"], show: "/", does: "Search the tasks, or the nodes of a task", on: "both" },
+  { id: "flag", keys: ["n"], show: "n", does: "Go to the next node that wants you", on: "task" },
+  { id: "flagged", keys: ["f"], show: "f", does: "Show only the nodes that want you, or all", on: "task" },
+  { id: "correct", keys: ["c"], show: "c", does: "Confirm or refute the open node", on: "task" },
+  { id: "help", keys: ["?"], show: "?", does: "This list", on: "both" },
+];
+const is = (id, e) => KEYS.find(k => k.id === id).keys.includes(e.key);
+function keysHelp() {
+  const d = $("#form"); if (d.open) return;
+  const where = { both: "list and task", task: "task" };
+  d.innerHTML = `<form method="dialog"><p class="cap">Keys</p><dl class="keys">${KEYS.map(k =>
+    `<dt><kbd>${esc(k.show)}</kbd></dt><dd>${esc(k.does)} <span class="muted">(${where[k.on]})</span></dd>`).join("")}</dl>
+    <div class="row-btns"><button class="btn primary" value="ok">Close</button></div></form>`;
+  d.addEventListener("close", () => { d.innerHTML = ""; }, { once: true });
+  d.showModal();
+}
+// j and k step once; the arrows only from the page or a node row, so they stay with a pane that scrolls (2 and -2).
+const stepKey = e => is("next", e) ? (e.key.length === 1 ? 1 : 2) : is("prev", e) ? (e.key.length === 1 ? -1 : -2) : 0;
 function stepList(d) {
   const rows = [...document.querySelectorAll("#view button.item[data-act=task]")].filter(x => !x.closest("[hidden]"));
   if (!rows.length) return;
@@ -1902,7 +1931,8 @@ const FOCUS = { at: "" };
 addEventListener("keydown", e => {
   if (e.target.closest("dialog, input, textarea, [data-grip]") || e.metaKey || e.ctrlKey || e.altKey) return;
   const v = route().view, d = stepKey(e);
-  if (e.key === "/" && FIND.input && (v === "tasks" || (v === "task" && S.task))) { e.preventDefault(); FIND.input.focus(); FIND.input.select(); return; }
+  if (is("help", e)) { e.preventDefault(); keysHelp(); return; }
+  if (is("find", e) && FIND.input && (v === "tasks" || (v === "task" && S.task))) { e.preventDefault(); FIND.input.focus(); FIND.input.select(); return; }
   if (d) { MID.until = 0; MID.last = -Infinity; }          // a step the key chose is not the scroll the middle control follows
   if (v === "tasks") {
     if (d) { e.preventDefault(); stepList(d > 0 ? 1 : -1); }
@@ -1922,15 +1952,15 @@ addEventListener("keydown", e => {
     if (n && n.id === route().node) { S.focusId = n.id; focusRow(); }      // already open: no hash change, so no redraw to wait for
     else if (n) { S.focusId = n.id; go(`t/${S.task.id}/${n.id}`, true); }
   }
-  else if (e.key === "n") nextFlag();
-  else if (e.key === "Escape") up();                       // a node back to its task, a task back to the list
-  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onRow && cur && cur.kids && !S.flagged && !S.q) {
+  else if (is("flag", e)) nextFlag();
+  else if (is("back", e)) up();                       // a node back to its task, a task back to the list
+  else if ((is("fold", e) || is("unfold", e)) && onRow && cur && cur.kids && !S.flagged && !S.q) {
     const s = S.folded[S.task.id] ||= new Set(), folded = s.has(cur.id);
-    if (e.key === "ArrowLeft" ? !folded : folded) { folded ? s.delete(cur.id) : s.add(cur.id); S.focusId = cur.id; S.sig = ""; render(true); }
+    if (is("fold", e) ? !folded : folded) { folded ? s.delete(cur.id) : s.add(cur.id); S.focusId = cur.id; S.sig = ""; render(true); }
   }
-  else if (e.key === "Enter" && !S.node && e.target === document.body) { const first = visibleRows(S.task).find(x => x.kind === "node"); if (first) go(`t/${S.task.id}/${first.id}`); }
-  else if (e.key === "c" && open) correctForm(open.id);
-  else if (e.key === "f") { S.flagged = !S.flagged; S.sig = ""; render(true); }
+  else if (is("open", e) && !S.node && e.target === document.body) { const first = visibleRows(S.task).find(x => x.kind === "node"); if (first) go(`t/${S.task.id}/${first.id}`); }
+  else if (is("correct", e) && open) correctForm(open.id);
+  else if (is("flagged", e)) { S.flagged = !S.flagged; S.sig = ""; render(true); }
 });
 /* Right-click on a node: its actions at the pointer, the same ones the sheet has. Any click, Escape or scroll closes it. */
 function ctxClose() { const m = $("#ctx"); if (!m.hidden) { m.hidden = true; m.innerHTML = ""; } }

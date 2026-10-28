@@ -354,6 +354,9 @@ class Flows(unittest.TestCase):
     def test_slash_searches_the_list_and_a_tasks_nodes_and_esc_clears_it(self):
         self.flow("find")
 
+    def test_question_mark_lists_the_keys_from_the_table_the_handler_reads(self):
+        self.flow("help")
+
     def test_navigation_is_under_the_thumbs(self):
         self.flow("thumbs")
 

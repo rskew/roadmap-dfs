@@ -206,6 +206,35 @@ const FLOWS = {
     await ctx.close();
   },
 
+  // `?` lists the keys the page binds, from the table its handler reads; Esc closes the list and leaves the screen where it was.
+  help: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const hash = () => page.evaluate(() => location.hash);
+    const open_ = () => page.$("dialog[open] dl.keys");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("?");
+    await page.waitForSelector("dialog[open] dl.keys");
+    const shown = await page.$$eval("dialog[open] dl.keys dt", a => a.map(e => e.textContent.trim()));
+    const table = await page.evaluate(() => KEYS.map(k => k.show.trim()));
+    same(shown, table, "the dialog lists every key in the table");
+    for (const k of ["/", "Esc", "?", "n", "c", "f"]) assert(shown.includes(k), `${k} is listed`);
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    same(await hash(), "", "Esc closed only the key list, on the list");
+    // The table is what the handler reads: a key moved in it moves in the page.
+    await page.evaluate(() => { KEYS.find(k => k.id === "help").keys = ["h"]; });
+    await page.keyboard.press("?"); await page.waitForTimeout(150);
+    assert(!(await open_()), "? opens nothing once the table gives help another key");
+    await page.keyboard.press("h"); await page.waitForSelector("dialog[open] dl.keys");
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("h"); await page.waitForSelector("dialog[open] dl.keys");
+    await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    same(await hash(), "#/t/W9/W9.2", "Esc closed only the key list, on a node");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // The list, its filter, the project's name, and nothing in the console.
   async list(b) {
     const { page, errors } = await open(b, PHONE);
