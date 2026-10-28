@@ -165,6 +165,7 @@ pre.runlog .r-err { color: var(--attention); }
 .item.tbl .itag { display: inline; margin-right: var(--s2); }
 .item.tbl .cells { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); grid-column: 2; margin-top: 6px; font-size: var(--fs-control); }
 .item.tbl .cell { display: contents; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }   /* read by a screen reader, not drawn: the table's column names */
 .item.tbl .cell .tag { white-space: normal; overflow-wrap: anywhere; }
 .item.tbl.done .goal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @container tasks (min-width: 980px) {
@@ -174,7 +175,7 @@ pre.runlog .r-err { color: var(--attention); }
   .item.tbl, .item.tbl.done { padding-block: 0; min-height: var(--hit); }
   .item.tbl .goal { grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .item.tbl .cells { display: contents; }
-  .item.tbl .cell { display: flex; align-items: center; gap: var(--s1); min-width: 0; overflow: hidden; white-space: nowrap; }
+  .item.tbl .cell { position: relative; display: flex; align-items: center; gap: var(--s1); min-width: 0; overflow: hidden; white-space: nowrap; }
   .item.tbl .cell .tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .item.tbl .why { grid-column: 2 / -1; margin: 0 0 var(--s2); }
   .arow.t { display: flex; align-items: stretch; }
@@ -1089,16 +1090,16 @@ function drawTasks(push) {
     const style = `--ind:${Math.min(it.depth, 3) * 14}px`;
     if (table) {
       // one line: id, goal, then a cell each for status, review, branch and run; a cell cut short says its whole text in its title
-      const cell = (text, h) => `<span class="cell" title="${esc(text)}">${h}</span>`;
+      const cell = (name, text, h) => `<span class="cell" title="${esc(text)}">${h.trim() ? `<span class="vh">${name}: </span>` : ""}${h}</span>`;   // the header row is aria-hidden, so each filled cell names its column for a screen reader
       const hold = it.blocked_by ? `held by ${it.blocked_by}` : "", wt = it.waiting_on ? `waiting on ${it.waiting_on}` : "";
       const br = [it.ahead ? `${it.ahead} not on ${it.base}` : "", it.uncommitted ? `${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${it.base}` : ""].filter(Boolean);
-      const cells = cell([it.status, it.draft ? "draft" : "", wt, hold].filter(Boolean).join(", "),
+      const cells = cell("Status", [it.status, it.draft ? "draft" : "", wt, hold].filter(Boolean).join(", "),
           `<span class="st ${esc(it.status)}">${esc(it.status)}</span>${it.draft ? `<span class="tag">draft</span>` : ""}${wt ? `<span class="tag">${esc(wt)}</span>` : ""}${hold ? `<span class="tag attention">${esc(hold)}</span>` : ""}`)
-        + cell(it.rev || "", it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : "")
-        + cell((it.pr ? "pull request, " : it.pr_ready ? "ready to open a pull request, " : "") + br.join(" "),
+        + cell("Review", it.rev || "", it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : "")
+        + cell("Branch", (it.pr ? "pull request, " : it.pr_ready ? "ready to open a pull request, " : "") + br.join(" "),
             `${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}`
             + `${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}`)
-        + cell("", walkTags(it));
+        + cell("Run", "", walkTags(it));
       const row = `<span class="iid">${iidHtml(it.id)}</span><span class="goal" title="${esc(it.goal)}">${tagHtml(it.id)}${esc(it.goal)}</span><span class="cells">${cells}</span>`
         + (it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : "");
       const lead = it.archivable

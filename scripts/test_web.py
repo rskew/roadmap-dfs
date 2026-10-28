@@ -645,6 +645,38 @@ class Web(unittest.TestCase):
             self.assertNotIn(" tbl\" data-act", h, name)
         self.assertNotIn("liststyle", out["reorder"][0], "Reorder has no style button")
         self.assertIn('aria-pressed="false"', out["card"][0])
+        # the header row is aria-hidden, so each filled cell names its column for a screen reader, and an empty one says nothing
+        self.assertIn('<span class="vh">Status: </span>', html)
+        self.assertIn('<span class="vh">Review: </span><span class="tag assumption">rev 2<', html)
+        self.assertIn('<span class="vh">Branch: </span><span class="tag">3 not on main<', html)
+        self.assertIn('<span class="vh">Run: </span><span class="tag settled">running<', html)
+        self.assertEqual(html.count('<span class="vh">Review: '), 1, "only W1 has a review cell to name")
+        self.assertEqual(html.count('<span class="vh">Run: '), 1, "only W1 is running")
+
+    def test_the_table_needs_the_viewport_and_the_page_without_its_scrollbar_to_be_wide(self):
+        """tableWide() and the observer that redraws on a crossing, in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's tableWide()")
+        src = (HERE / "web" / "index.html").read_text()
+        min_line = src[src.index("const TABLE_MIN"):src.index("\n", src.index("const tableWide"))]
+        observer = src[src.index("// One redraw path"):src.index('addEventListener("hashchange"')]
+        js = ("let mq = true, cw = 1280; const matchMedia = () => ({matches: mq, addEventListener: (_, f) => { media = f; }}); let media = null;"
+              "const document = {documentElement: {clientWidth: 0}}; Object.defineProperty(document.documentElement, 'clientWidth', {get: () => cw});"
+              + min_line + "\n"
+              "const out = {};"
+              "out.wide = tableWide(); cw = 1011; out.scrollbar = tableWide(); cw = 1012; out.edge = tableWide(); mq = false; out.narrow = tableWide(); mq = true; cw = 1280;"
+              "let renders = 0, fire = null; const render = () => { renders++; };"
+              "class ResizeObserver { constructor(f) { fire = f; } observe() {} }"
+              + observer + "\n"
+              "fire(); out.unchanged = renders; cw = 1000; fire(); out.crossed = renders; fire(); out.again = renders; cw = 1280; fire(); out.back = renders;"
+              "console.log(JSON.stringify(out))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertTrue(out["wide"])
+        self.assertFalse(out["scrollbar"], "a classic scrollbar leaves the page under 1012px though the media query holds")
+        self.assertTrue(out["edge"])
+        self.assertFalse(out["narrow"])
+        self.assertEqual((out["unchanged"], out["crossed"], out["again"], out["back"]), (0, 1, 1, 2), "one redraw per crossing, none when nothing changed")
 
     def test_a_stop_break_is_drawn_apart_from_a_plain_one_and_offers_to_be_plain(self):
         """drawTasks() in index.html, run under node (skipped when there is none)."""
