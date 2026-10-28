@@ -1,0 +1,439 @@
+#!/usr/bin/env python3
+"""Run a finished task again from where it began, under a system you changed, and score it.
+
+A finished task's starting point is recoverable from git: the repo as it was the commit
+before the task's first node, and a task file holding what the author wrote (its title,
+Goal and Background) and nothing the sessions added. This clones the repo there, lets a
+chain (run.sh) work the task, and measures the result with history.py's `session()` and
+`tasks_of()`, the code that measured the original, so the two columns are comparable.
+
+  python3 <scripts>/replay.py candidates [--repo PATH]       (tasks the loop's selection rule picks from)
+  python3 <scripts>/replay.py plan    TASK [--repo PATH]
+  python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE]
+  python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M]
+  python3 <scripts>/replay.py score   DEST TASK [--repo PATH]
+  python3 <scripts>/replay.py replay  TASK DEST [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
+
+The system that changes is the TOOL (`--tool DIR`: a roadmap-dfs checkout or store path,
+or `--tool-ref REV`: a revision of the repo being replayed, when that repo is roadmap-dfs
+itself, exported with git archive; SKILL.md, the scripts and the templates all come from
+it) and optionally the LAW (`--law FILE`, copied over `.dfs/ROADMAP.md`). With neither, the
+replay runs the current tool under the law of the starting commit.
+
+DEST's basename must contain `dfs-replay-`: that is how history.py keeps the replay's
+transcripts out of the history it mines. A replay spends real money (the original's cost
+is printed by `plan`) and cannot answer a raise: a chain that stops on one is scored as
+blocked, which is itself a result.
+"""
+import glob
+import json
+import os
+import re
+import shutil
+import statistics as st
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import history  # noqa: E402
+
+KEEP = ("Goal", "Background")   # the sections the author writes; the rest is the sessions'
+IDENTITY = {"user.name": "dfs replay", "user.email": "replay@dfs.invalid"}   # where the checkout has none
+
+
+def git(repo, *args, check=True):
+    r = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True)
+    if check and r.returncode:
+        raise SystemExit(f"replay: git {' '.join(args)} in {repo}: {r.stderr.strip()}")
+    return r.stdout
+
+
+def main_checkout():
+    """The repo the history belongs to: the checkout that owns this directory's worktree."""
+    common = git(os.getcwd(), "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    return os.path.dirname(common)
+
+
+def config_dir():
+    return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+
+
+def transcripts(checkout):
+    """Globs for the transcripts of a checkout and of its own worktrees: the exact directory
+    and `<dir>--dfs-worktrees-*`, so `dfs-replay-W55-1` never takes in `dfs-replay-W55-10`."""
+    enc = glob.escape(re.sub(r"[/.]", "-", str(Path(checkout).resolve())))
+    base = os.path.join(glob.escape(config_dir()), "projects")
+    return [os.path.join(base, enc, "*.jsonl"),
+            os.path.join(base, enc + "--dfs-worktrees-*", "*.jsonl")]
+
+
+def author_part(text):
+    """A task file as the author left it: title, Goal and Background, no Summary, Tree or
+    Log. Sections are split at `## ` headings; the title and what precedes the first stay."""
+    parts = re.split(r"(?m)^(?=## )", text)
+    keep = [p for p in parts if not p.startswith("## ") or p[3:].split("\n", 1)[0].strip() in KEEP]
+    return "".join(keep).rstrip() + "\n"
+
+
+def starting_point(repo, task):
+    """(sha before the task's first node, the task file as the author wrote it)."""
+    subjects = git(repo, "log", "--reverse", "--format=%H", "-E", f"--grep=^{task}\\.[0-9]").split()
+    if not subjects:
+        raise SystemExit(f"replay: no commit in {repo} starts with {task}.<n>")
+    first = subjects[0]
+    rel = f".dfs/items/{task}.md"
+    parent = git(repo, "rev-parse", first + "^").strip()
+    # The author's file may exist already at the parent; if not, the first node's commit
+    # added it and the part the author wrote is still in it.
+    for rev in (parent, first):
+        r = subprocess.run(["git", "show", f"{rev}:{rel}"], cwd=repo, capture_output=True, text=True)
+        if r.returncode == 0:
+            return parent, author_part(r.stdout)
+    raise SystemExit(f"replay: {rel} is in neither {parent[:8]} nor {first[:8]}")
+
+
+def original(repo, task):
+    """The original run of `task`, scored by the code that scores a replay."""
+    repos = {}
+    sessions, tasks, _, _ = history.load(transcripts(repo), repos)
+    mine = history.project_of(re.sub(r"[/.]", "-", str(Path(repo).resolve())))
+    for (project, name), t in tasks.items():
+        if name == task and project == mine:
+            return t
+    return None
+
+
+def candidates(repo, limit=3.0):
+    """The tasks of this repo that the loop's selection rule picks from the history: original
+    at most `limit` dollars, a first review that found issues, and a node commit to start
+    before. Whether a task's evidence lies in the repo is for a reader to check."""
+    tasks = history.load(transcripts(repo), {})[1]
+    mine = history.project_of(re.sub(r"[/.]", "-", str(Path(repo).resolve())))
+    rows = []
+    for (project, name), t in tasks.items():
+        if project != mine or t["first_review"] != "issues" or not t["sessions"].get("work") \
+                or not 0 < t["usd"] <= limit:
+            continue
+        try:
+            starting_point(repo, name)
+        except SystemExit:
+            continue
+        rows.append(t)
+    return sorted(rows, key=lambda t: t["usd"])
+
+
+def hooks_can_run(where):
+    """Whether a script written under `where` can be executed: git skips a hook on a noexec
+    mount ("hook was ignored because it's not set as executable"), and a replay with no
+    pre-commit hook runs without the dfs guard, a different system from the original."""
+    with tempfile.TemporaryDirectory(dir=where) as d:
+        probe = Path(d) / "probe"
+        probe.write_text("#!/bin/sh\nexit 0\n")
+        probe.chmod(0o755)
+        try:
+            return subprocess.run([str(probe)], capture_output=True).returncode == 0
+        except OSError:
+            return False
+
+
+def identity(repo):
+    """The author identity of the checkout being replayed, for the clone's config."""
+    return {k: git(repo, "config", k, check=False).strip() or d for k, d in IDENTITY.items()}
+
+
+def seal(dest):
+    """Leave nothing of the original's later work in the clone: no `origin` (its refs hold
+    the task's own nodes and every commit since), no branch but `main`, no tag, no reflog entry naming them, and
+    no object that is not reachable from the starting point."""
+    git(dest, "remote", "remove", "origin")
+    for branch in git(dest, "branch", "--format=%(refname:short)").split():
+        if branch != "main":   # a source on `trunk` clones with its tip, the original's later work, as a branch
+            git(dest, "branch", "-D", branch)
+    for tag in git(dest, "tag", "--list").split():
+        git(dest, "tag", "-d", tag)
+    git(dest, "reflog", "expire", "--expire=now", "--all")
+    git(dest, "gc", "-q", "--prune=now")
+
+
+def prepare(repo, task, dest, tool=None, tool_ref=None, law=None):
+    dest = Path(dest).resolve()
+    if "dfs-replay-" not in dest.name:
+        raise SystemExit("replay: DEST's name must contain 'dfs-replay-' (history.py skips it by that)")
+    if dest.exists():
+        raise SystemExit(f"replay: {dest} exists; a replay starts from nothing")
+    if not dest.parent.is_dir() or not hooks_can_run(dest.parent):
+        raise SystemExit(f"replay: scripts cannot run under {dest.parent} (a noexec mount, as /tmp often is), "
+                         "so git would skip the dfs hooks and the replay would run without the guard; "
+                         "choose a DEST on a mount that can execute")
+    sha, text = starting_point(repo, task)
+    ident = identity(repo)
+    subprocess.run(["git", "clone", "-q", "--no-checkout", str(repo), str(dest)], check=True)
+    git(dest, "checkout", "-q", "-B", "main", sha)
+    seal(dest)
+    for k, v in ident.items():
+        git(dest, "config", k, v)
+    (dest / ".dfs" / "items").mkdir(parents=True, exist_ok=True)
+    (dest / ".dfs" / "items" / f"{task}.md").write_text(text)
+    if law:
+        shutil.copy(law, dest / ".dfs" / "ROADMAP.md")
+    if tool_ref:
+        tool = export_tool(repo, tool_ref, dest.parent / (dest.name + "-tool"))
+    tool = Path(tool or os.environ.get("DFS_TOOL") or HERE.parent).resolve()
+    # init.py brings the hooks and .gitignore up to the tool's; the starting point is a
+    # commit of its own after it, so nothing is left for the first session to find
+    # uncommitted and the task's first node is the next commit.
+    subprocess.run([sys.executable, str(tool / "scripts" / "init.py")], cwd=dest, check=True,
+                   env={**os.environ, "DFS_TOOL": str(tool)}, capture_output=True)
+    git(dest, "add", "-A", ".dfs")
+    git(dest, "commit", "-q", "--allow-empty", "-m",
+        f"replay: {task} as the author left it, from {sha[:8]}", "--no-verify")
+    (dest / ".git" / "replay.json").write_text(json.dumps({"task": task, "from": sha, "tool": str(tool)}))
+    return dest, tool
+
+
+def export_tool(repo, rev, into):
+    into.mkdir(parents=True)
+    tar = subprocess.run(["git", "archive", rev], cwd=repo, capture_output=True, check=True).stdout
+    subprocess.run(["tar", "-x", "-C", str(into)], input=tar, check=True)
+    return into
+
+
+BASH_MINUTES = 15
+
+
+def bash_bound(minutes):
+    """The child's Bash limits, so one call cannot sit for the runner's hour (W55's replay
+    spent 53 minutes in `grep -r /`): an unnamed call gets `minutes`, and no call more than
+    twice that. A call that really needs longer fails loudly and the session sees why."""
+    ms = int(float(minutes) * 60_000)
+    return {"BASH_DEFAULT_TIMEOUT_MS": str(ms), "BASH_MAX_TIMEOUT_MS": str(2 * ms)}
+
+
+def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES):
+    dest = Path(dest).resolve()
+    info = json.loads((dest / ".git" / "replay.json").read_text())
+    tool = Path(tool or info["tool"])
+    env = {**os.environ, "DFS_TOOL": str(tool), **bash_bound(bash_minutes)}
+    cmd = ["bash", str(tool / "scripts" / "run.sh"), task, str(cap or 6)]
+    # The chain's own words are kept beside the replay: its last "dfs_run: DONE|BLOCKED|CAP"
+    # line is why it stopped, which the runner's meta.json (the task's status) does not say.
+    with subprocess.Popen(cmd, cwd=dest, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, errors="replace") as p, open(dest / ".git" / "replay.out", "w") as log:
+        for line in p.stdout:
+            sys.stdout.write(line)
+            sys.stdout.flush()
+            log.write(line)
+    return p.returncode
+
+
+def stopped_on(dest):
+    """Why the chain stopped: DONE, BLOCKED or CAP (empty when it was never run here)."""
+    try:
+        text = (Path(dest) / ".git" / "replay.out").read_text()
+    except OSError:
+        return ""
+    found = re.findall(r"dfs_run: (DONE|BLOCKED|CAP)\b", text)
+    return found[-1] if found else "other"
+
+
+REACH_FIELDS = ("command", "file_path", "path", "pattern", "notebook_path")
+
+
+def live_paths(repo):
+    """What a replay's sessions can reach that the original's later work or evidence lives
+    in: the live checkout (its runs, items, worktrees and scripts), the codex session logs
+    and the transcripts of every earlier session, the original task's included."""
+    home = os.path.expanduser("~")
+    paths = [str(Path(repo).resolve()), os.path.join(home, ".codex"), os.path.join(config_dir(), "projects")]
+    # a session writes the home as `~` or `$HOME` as often as in full
+    return paths + [p.replace(home, h, 1) for p in paths[1:] if p.startswith(home) for h in ("~", "$HOME")]
+
+
+def reached(dest, repo, files, tool=None):
+    """The tool calls in `files` (transcripts) that name a live path outside `dest`, as
+    (session id, tool, text). DEST, its exported tool and what the tool the replay runs
+    under is for (its SKILL.md, scripts, templates and docs) are cut out first, so a replay
+    kept inside the live checkout, or run under it, does not count reading its own tool.
+    The rest of a tool that is the live checkout (its `.dfs/` runs, items and worktrees)
+    still counts. A path built at run time (`cd ..`, a variable) is not seen, so this is
+    a floor."""
+    dest = str(Path(dest).resolve())
+    cut = [re.escape(dest + "-tool"), re.escape(dest) + r"(?![\w-])"]
+    if tool:
+        base = re.escape(str(Path(tool).resolve()))
+        cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|(?:scripts|templates|docs)(?![\w-]))")
+    own = re.compile("(?:" + "|".join(cut) + ")")
+    live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + r")(?![\w-])")
+    found = []
+    for f in files:
+        sid = os.path.basename(f)[:-6]
+        with open(f, errors="replace") as fh:
+            for line in fh:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                msg = r.get("message") or {}
+                if r.get("type") != "assistant" or not isinstance(msg.get("content"), list):
+                    continue
+                for b in msg["content"]:
+                    if not isinstance(b, dict) or b.get("type") != "tool_use":
+                        continue
+                    inp = b.get("input") or {}
+                    text = " ".join(str(inp[k]) for k in REACH_FIELDS if inp.get(k))
+                    if live.search(own.sub("", text)):
+                        found.append((sid, b.get("name"), text))
+    return found
+
+
+def original_lines(repo, task):
+    """What the original run concluded, as strings a tool result can be searched for: each
+    node's title and the head of its Determination, from the task file and its archive."""
+    lines = set()
+    for rel in (f".dfs/items/{task}.md", f".dfs/archive/items/{task}.md"):
+        try:
+            text = (Path(repo) / rel).read_text()
+        except OSError:
+            continue
+        for m in re.finditer(r"(?m)^### (W\d+\.\d+ · .+)$|^Determination: (.{40,})$", text):
+            lines.add((m.group(1) or m.group(2))[:60].strip())
+    return lines
+
+
+def answer_seen(dest, repo, task, files):
+    """The original's conclusions (`original_lines`) that appear in a tool result of a
+    replay's sessions and are not in the replay's own record (its committed task file and
+    commit messages), as {line: [session ids]}: a replay that read them was shown the answer,
+    whether or not it used it. Looks at what a tool printed, not at what the session then
+    did; a conclusion the replay printed from its own uncommitted task file and wrote
+    identically counts as shown (negligible)."""
+    own = git(dest, "log", "--all", "-p", "--format=%B", "--", ".dfs/items", check=False)
+    own += git(dest, "log", "--all", "--format=%B", check=False)
+    wanted = {l for l in original_lines(repo, task) if l not in own}
+    seen = {}
+    for f in files:
+        sid = os.path.basename(f)[:-6]
+        with open(f, errors="replace") as fh:
+            for line in fh:
+                if '"tool_result"' not in line:
+                    continue
+                for w in wanted:
+                    if json.dumps(w)[1:-1] in line and sid not in seen.setdefault(w, []):
+                        seen[w].append(sid)
+    return seen
+
+
+def score(dest, task, repo=None):
+    """The replay's score, with how many tool calls named the live checkout (`repo`, the
+    checkout that owns this directory when not given) from outside DEST. Fails loudly on a
+    DEST that is not this task's prepared replay (arguments swapped, a typo) or that has no
+    transcript of the task, since a table of dashes reads as a replay that did nothing."""
+    dest = Path(dest).resolve()
+    try:
+        info = json.loads((dest / ".git" / "replay.json").read_text())
+    except (OSError, ValueError):
+        raise SystemExit(f"replay: {dest} is not a prepared replay (no .git/replay.json); "
+                         "usage: replay.py score DEST TASK")
+    if info.get("task") != task:
+        raise SystemExit(f"replay: {dest} replays {info.get('task')}, not {task}; "
+                         "usage: replay.py score DEST TASK")
+    enc = re.sub(r"[/.]", "-", str(dest))
+    repos = {enc: str(dest)}
+    sessions, tasks, _, _ = history.load(transcripts(dest), repos, replays=True)
+    t = next((t for (p, n), t in tasks.items() if n == task), None)
+    if t is None:
+        raise SystemExit(f"replay: no session of {task} in the transcripts of {dest} "
+                         f"({len(sessions)} sessions found under {', '.join(transcripts(dest))})")
+    t["stopped"] = stopped_on(dest)
+    t["finished"] = merged(dest, task)
+    repo = repo or main_checkout()
+    files = history._glob(transcripts(dest))
+    t["reach"] = reached(dest, repo, files, info.get("tool"))
+    t["outside"] = len(t["reach"])
+    t["answer"] = answer_seen(dest, repo, task, files)
+    return t
+
+
+def merged(dest, task):
+    """Whether the replay's branch reached main: the runner merges only after a review passes."""
+    log = git(dest, "log", "main", "--format=%s", "-E", f"--grep=^{task}: merge")
+    return bool(log.strip())
+
+
+ROWS = [
+    ("sessions", lambda t: sum(t["sessions"].values())),
+    ("  work / review / critic", lambda t: "/".join(str(t["sessions"].get(k, 0)) for k in ("work", "review", "critic"))),
+    ("dollars", lambda t: f"{t['usd']:.2f}"),
+    ("nodes committed", lambda t: t["nodes"]),
+    ("first review", lambda t: t["first_review"] or "none"),
+    ("reviews with issues / rounds", lambda t: f"{t['review_issues']} / {t['review_ok'] + t['review_issues']}"),
+    ("critic issues", lambda t: t["critic_issues"]),
+    ("raises", lambda t: t["raises"]),
+    ("refused commits", lambda t: t["refused"]),
+    ("spent after a review said issues", lambda t: f"{t['after_issues']:.2f}"),
+    ("tool calls naming the live checkout", lambda t: t.get("outside", "-")),
+    ("original's nodes shown in a result", lambda t: len(t["answer"]) if "answer" in t else "-"),
+]
+
+
+def compare(task, before, after):
+    w = sys.stdout.write
+    w(f"\n{task}: original against replay\n{'':36} {'original':>10} {'replay':>10}\n")
+    for name, f in ROWS:
+        w(f"{name:36} {str(f(before)) if before else '-':>10} {str(f(after)) if after else '-':>10}\n")
+    if after:
+        w(f"{'chain stopped on':36} {'':>10} {after.get('stopped') or '-':>10}\n")
+        w(f"{'review passed and merged':36} {'':>10} {'yes' if after.get('finished') else 'no':>10}\n")
+
+
+def main(argv):
+    if not argv or argv[0] not in ("plan", "prepare", "run", "score", "replay", "candidates"):
+        sys.stdout.write(__doc__)
+        return 2
+    cmd, rest = argv[0], argv[1:]
+    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES}
+    pos = []
+    it = iter(rest)
+    for a in it:
+        if a.startswith("--") and a[2:] in opts:
+            opts[a[2:]] = next(it)
+        else:
+            pos.append(a)
+    repo = opts["repo"]
+    if cmd == "candidates":
+        rows = candidates(repo)
+        sys.stdout.write(f"{len(rows)} tasks: original at most $3, first review said issues, a node commit to start before\n")
+        for t in rows:
+            sys.stdout.write(f"  {t['task']:6} ${t['usd']:5.2f}  sessions {sum(t['sessions'].values())}  "
+                             f"nodes {t['nodes']}  review issues {t['review_issues']}/{t['review_issues'] + t['review_ok']}\n")
+    elif cmd == "plan":
+        task, = pos
+        sha, text = starting_point(repo, task)
+        before = original(repo, task)
+        sys.stdout.write(f"{task} starts from {sha[:8]}; the task file as the author left it:\n\n{text}\n")
+        compare(task, before, None)
+    elif cmd == "prepare":
+        task, dest = pos
+        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"])
+        sys.stdout.write(f"prepared {dest} under tool {tool}\n")
+    elif cmd == "run":
+        dest, task = pos
+        return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"])
+    elif cmd == "score":
+        dest, task = pos
+        compare(task, original(repo, task), score(dest, task, repo))
+    elif cmd == "replay":
+        task, dest = pos
+        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"])
+        before = original(repo, task)
+        cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
+        run(dest, task, cap, tool, opts["bash-minutes"])
+        compare(task, before, score(dest, task, repo))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

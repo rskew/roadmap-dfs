@@ -1,0 +1,24 @@
+n	node	case	what triggers the fault
+1	W75.10	no	a task file never committed on the default branch (an unusual starting state)
+2	W75.11	stretch	a merge that exits 1 (dirty worktree): a failure path, not one of the four
+3	W75.13	no	an attachment added by the author while the task is in its worktree (two checkouts out of step)
+4	W75.17	no	deleting a task that has a worktree
+5	W75.19	no	an attachment named before the task's first run
+6	W75.20	no	delete_task on a worked task erases attachments
+7	W75.23	interrupted	the author's own checkout is mid-merge when the branch merge runs
+8	W75.24	no	a repo with no commit yet (an unusual starting state, as row 1)
+9	W75.30	empty	the first .dfs/archive or artefacts page in a gitignored roadmap (none there yet)
+10	W81.15	stretch	a page message sent during the headless opening turn: a race, not one of the four
+11	W81.17	stretch	the opening turn fails (usage limit, no login): a failure path
+12	W87.10	stretch	a merge that fails loses the raise it writes: a failure path
+13	W87.12	interrupted	SIGINT during git merge drops the set-aside edits
+14	W87.16	stretch	after main force-commits a new task file the next enter replaces a link: a later call, with a changed main
+15	W90.5	repeated	two page messages sent in turn, the first recorded
+16	W90.8	repeated	two messages, one inside the other ("now", "no")
+17	W90.10	repeated	the same pair, polled twice
+18	W95.4	stretch	a push (redraw) while typing in a field: an interruption of input, not a short screen
+19	W108.4	no	adoption in a project git partly holds (force-added task files)
+20	W108.6	no	DFS_ADOPT grandfathers a new task's first node on its item branch
+21	W108.8	no	adoption on a branch that is not dfs/<task>
+22	W116.9	no	a pull request merged while comment nodes are open
+23	W116.10	repeated	landing a second merged pull request after the first

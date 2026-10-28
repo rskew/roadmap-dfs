@@ -1,0 +1,442 @@
+#!/usr/bin/env python3
+"""replay.py: a task's starting point is rebuilt from git, and a replay is told apart from history."""
+import io
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+from contextlib import redirect_stdout
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import history  # noqa: E402
+import replay  # noqa: E402
+
+TASK_FILE = """# W5 · Make the thing
+
+## Summary
+
+Added by the finishing session.
+
+## Goal
+
+Make the thing.
+
+## Background
+
+The author's note.
+
+## Tree
+
+### W5.1 · Do it
+Status: confirmed
+
+## Log
+
+- 2026-10-01T00:00:00Z · session · work · x
+"""
+
+
+def git(cwd, *args):
+    return subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=cwd,
+                          check=True, capture_output=True, text=True).stdout.strip()
+
+
+can_exec = replay.hooks_can_run   # the real probe, kept before any test patches replay's
+
+
+class StartingPointTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        if not can_exec(self.tmp.name):   # /tmp is often noexec: the other tests do not need hooks
+            patch = mock.patch.object(replay, "hooks_can_run", return_value=True)
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-q", "-b", "main")
+        (self.repo / "code.py").write_text("v1\n")
+        (self.repo / ".dfs" / "items").mkdir(parents=True)
+        (self.repo / ".dfs" / "ROADMAP.md").write_text("law\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "before the task")
+        self.start = git(self.repo, "rev-parse", "HEAD")
+        (self.repo / "code.py").write_text("v2\n")
+        (self.repo / ".dfs" / "items" / "W5.md").write_text(TASK_FILE)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "W5.1: do it")
+        (self.repo / "code.py").write_text("v3\n")
+        git(self.repo, "commit", "-qam", "W5.2: more")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_author_part_keeps_goal_and_background_only(self):
+        text = replay.author_part(TASK_FILE)
+        self.assertIn("## Goal\n\nMake the thing.", text)
+        self.assertIn("## Background", text)
+        for gone in ("Summary", "## Tree", "## Log", "W5.1"):
+            self.assertNotIn(gone, text)
+
+    def test_the_starting_point_is_the_commit_before_the_first_node(self):
+        sha, text = replay.starting_point(self.repo, "W5")
+        self.assertEqual(sha, self.start)
+        self.assertTrue(text.startswith("# W5 · Make the thing"))
+        self.assertNotIn("Tree", text)
+
+    def test_a_task_with_no_node_commit_is_refused(self):
+        with self.assertRaises(SystemExit):
+            replay.starting_point(self.repo, "W9")
+
+    def test_prepare_clones_the_old_code_with_the_goal_alone_and_a_clean_tree(self):
+        dest = Path(self.tmp.name) / "dfs-replay-W5-a"
+        out, tool = replay.prepare(self.repo, "W5", dest, tool=Path(__file__).resolve().parent.parent)
+        self.assertEqual((out / "code.py").read_text(), "v1\n")
+        self.assertNotIn("## Tree", (out / ".dfs" / "items" / "W5.md").read_text())
+        self.assertEqual(git(out, "status", "--porcelain"), "")
+        self.assertTrue((out / ".git" / "hooks" / "pre-commit").exists())
+        self.assertEqual(git(out, "config", "user.email"), "t@t")   # the checkout's identity
+        self.assertEqual(json.loads((out / ".git" / "replay.json").read_text())["from"], self.start)
+        with self.assertRaises(SystemExit):   # a replay starts from nothing
+            replay.prepare(self.repo, "W5", dest)
+
+    def test_a_dest_where_hooks_cannot_run_is_refused_before_cloning(self):
+        dest = Path(self.tmp.name) / "dfs-replay-W5-noexec"
+        with mock.patch.object(replay, "hooks_can_run", return_value=False):
+            with self.assertRaises(SystemExit) as e:
+                replay.prepare(self.repo, "W5", dest)
+        self.assertIn("noexec", str(e.exception))
+        self.assertFalse(dest.exists())
+
+    def test_the_clone_holds_nothing_of_the_originals_later_work(self):
+        git(self.repo, "tag", "later")   # a tag on a commit after the starting point
+        out, _ = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-c",
+                                tool=Path(__file__).resolve().parent.parent)
+        self.assertEqual(git(out, "remote"), "")
+        self.assertEqual(git(out, "tag", "--list"), "")
+        self.assertEqual(git(out, "branch", "--all", "--format=%(refname)"), "refs/heads/main")
+        later = git(self.repo, "rev-parse", "HEAD")
+        self.assertNotEqual(subprocess.run(["git", "cat-file", "-e", later], cwd=out).returncode, 0)
+
+    def test_a_source_whose_branch_is_not_main_leaves_no_branch_holding_the_later_work(self):
+        git(self.repo, "branch", "-m", "trunk")
+        out, _ = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-t",
+                                tool=Path(__file__).resolve().parent.parent)
+        self.assertEqual(git(out, "branch", "--all", "--format=%(refname)"), "refs/heads/main")
+        self.assertEqual(git(out, "log", "--all", "--format=%s", "--grep=W5.2"), "")
+
+    def test_the_guard_refuses_a_commit_in_a_prepared_clone(self):
+        if not can_exec(self.tmp.name):
+            self.skipTest("this temp dir is noexec, so git would skip the hook; set TMPDIR to one that is not")
+        out, _ = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-d",
+                                tool=Path(__file__).resolve().parent.parent)
+        item = out / ".dfs" / "items" / "W5.md"
+        # a Status that is not open | parked | confirmed | refuted is a shape fault the guard refuses
+        item.write_text(item.read_text() + "\n## Tree\n\n### W5.1 · Do it\nStatus: done\nApproach: Do the thing in code.py.\n")
+        git(out, "add", ".dfs")
+        r = subprocess.run(["git", "commit", "-qm", "did it"], cwd=out, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_a_dest_not_named_as_a_replay_is_refused(self):
+        with self.assertRaises(SystemExit):
+            replay.prepare(self.repo, "W5", Path(self.tmp.name) / "scratch")
+
+    def test_law_replaces_the_starting_commits_law(self):
+        law = Path(self.tmp.name) / "law.md"
+        law.write_text("a changed law\n")
+        out, _ = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-b",
+                                tool=Path(__file__).resolve().parent.parent, law=law)
+        self.assertEqual((out / ".dfs" / "ROADMAP.md").read_text(), "a changed law\n")
+
+
+class ChangedToolTest(unittest.TestCase):
+    """The changed arm: `--tool-ref REV` runs a replay under the tool as REV had it."""
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        if not can_exec(self.tmp.name):
+            patch = mock.patch.object(replay, "hooks_can_run", return_value=True)
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.repo = Path(self.tmp.name) / "repo"
+        self.repo.mkdir()
+        git(self.repo, "init", "-q", "-b", "main")
+        (self.repo / ".dfs" / "items").mkdir(parents=True)
+        (self.repo / ".dfs" / "ROADMAP.md").write_text("law\n")
+        # The repo is a roadmap-dfs of its own: this checkout's tool files (not the tests or
+        # fixtures), as they are at the commit the task starts from.
+        files = git(self.ROOT, "ls-files", "SKILL.md", "scripts", "templates").split("\n")
+        for rel in files:
+            if "fixtures" in rel or Path(rel).name.startswith("test_") or not (self.ROOT / rel).is_file():
+                continue
+            (self.repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(self.ROOT / rel, self.repo / rel)
+        (self.repo / "SKILL.md").write_text("# skill\n\nTHE OLD LINE\n")
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "before the task")
+        self.old = git(self.repo, "rev-parse", "HEAD")
+        (self.repo / ".dfs" / "items" / "W5.md").write_text(TASK_FILE)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-qm", "W5.1: do it")
+        # a later revision whose SKILL.md differs: the change an arm would carry
+        (self.repo / "SKILL.md").write_text("# skill\n\nTHE CHANGED LINE\n")
+        git(self.repo, "commit", "-qam", "W5.2: change the skill")
+        self.changed = git(self.repo, "rev-parse", "HEAD")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_the_tool_is_the_exported_revision_not_the_checkout_and_the_hooks_name_it(self):
+        out, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-x", tool_ref=self.changed)
+        self.assertEqual(tool, Path(self.tmp.name) / "dfs-replay-W5-x-tool")
+        self.assertIn("THE CHANGED LINE", (tool / "SKILL.md").read_text())
+        self.assertNotIn("THE OLD LINE", (tool / "SKILL.md").read_text())
+        self.assertEqual(json.loads((out / ".git" / "replay.json").read_text())["tool"], str(tool))
+        self.assertTrue((tool / "scripts" / "hook.sh").is_file())
+        # init.py ran from the exported tool, so the hook the clone commits under is the REV's guard
+        hook = (out / ".git" / "hooks" / "pre-commit").read_text()
+        self.assertIn('dfs_tool="${DFS_TOOL:-%s}"' % tool, hook)
+
+    def test_an_earlier_revision_exports_the_earlier_text(self):
+        _, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-y", tool_ref=self.old)
+        self.assertIn("THE OLD LINE", (tool / "SKILL.md").read_text())
+
+    def test_without_a_tool_ref_the_arm_is_the_given_tool_and_nothing_is_exported(self):
+        out, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-z", tool=self.ROOT)
+        self.assertEqual(tool, self.ROOT)
+        self.assertFalse((Path(self.tmp.name) / "dfs-replay-W5-z-tool").exists())
+
+    def test_an_unknown_revision_fails_instead_of_running_the_current_tool(self):
+        with self.assertRaises(subprocess.CalledProcessError):
+            replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-bad", tool_ref="no-such-rev")
+
+    def test_run_launches_the_chain_from_the_prepared_tool_with_it_in_the_environment(self):
+        out, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-r", tool_ref=self.changed)
+        seen = {}
+
+        class Fake:
+            returncode = 0
+            stdout = io.StringIO("dfs_run: DONE\n")
+            def __init__(self, cmd, **kw):
+                seen["cmd"], seen["env"], seen["cwd"] = cmd, kw["env"], kw["cwd"]
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        with mock.patch.object(replay.subprocess, "Popen", Fake), redirect_stdout(io.StringIO()):
+            replay.run(out, "W5", cap=3)
+        self.assertEqual(seen["cmd"], ["bash", str(tool / "scripts" / "run.sh"), "W5", "3"])
+        self.assertEqual(seen["env"]["DFS_TOOL"], str(tool))
+        self.assertEqual(Path(seen["cwd"]), out)
+
+
+class ScoreTest(unittest.TestCase):
+    def test_a_replay_bounds_one_bash_call(self):
+        b = replay.bash_bound(15)
+        self.assertEqual(b, {"BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1800000"})
+        self.assertEqual(replay.bash_bound(0.5)["BASH_DEFAULT_TIMEOUT_MS"], "30000")
+
+    def test_why_a_chain_stopped_is_its_last_stop_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".git").mkdir()
+            self.assertEqual(replay.stopped_on(tmp), "")
+            (Path(tmp) / ".git" / "replay.out").write_text(
+                "dfs_run: BLOCKED a raise\n...\ndfs_run: DONE after run 6 — every live node\n")
+            self.assertEqual(replay.stopped_on(tmp), "DONE")
+            (Path(tmp) / ".git" / "replay.out").write_text("dfs_run: it fell over\n")
+            self.assertEqual(replay.stopped_on(tmp), "other")
+
+    def test_score_fails_loudly_on_swapped_arguments_a_wrong_task_or_no_transcripts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "dfs-replay-W5-a"
+            (dest / ".git").mkdir(parents=True)
+            with self.assertRaises(SystemExit) as e:   # not a prepared replay
+                replay.score(dest, "W5")
+            self.assertIn("not a prepared replay", str(e.exception))
+            with self.assertRaises(SystemExit) as e:   # swapped: the task where DEST goes
+                replay.score("W5", str(dest))
+            self.assertIn("not a prepared replay", str(e.exception))
+            (dest / ".git" / "replay.json").write_text(json.dumps({"task": "W5"}))
+            with self.assertRaises(SystemExit) as e:   # another task's replay
+                replay.score(dest, "W9")
+            self.assertIn("replays W5, not W9", str(e.exception))
+            with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+                with self.assertRaises(SystemExit) as e:   # prepared, but no session of it
+                    replay.score(dest, "W5")
+                self.assertIn("no session of W5", str(e.exception))
+
+    def test_the_comparison_names_both_columns(self):
+        t = {"sessions": {"work": 2, "review": 1}, "usd": 1.5, "nodes": 3, "first_review": "issues",
+             "review_issues": 1, "review_ok": 1, "critic_issues": 0, "raises": 0, "refused": 0,
+             "after_issues": 0.5}
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            replay.compare("W5", t, dict(t, stopped="DONE", finished=True))
+        out = buf.getvalue()
+        self.assertIn("original", out)
+        self.assertIn("first review", out)
+        self.assertIn("DONE", out)
+
+
+class TranscriptsOfOneReplayTest(unittest.TestCase):
+    def test_replay_1_does_not_take_in_replay_10_but_does_take_its_worktrees(self):
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            for name in ("-tmp-dfs-replay-W5-1", "-tmp-dfs-replay-W5-1--dfs-worktrees-W5",
+                         "-tmp-dfs-replay-W5-10", "-tmp-dfs-replay-W5-10--dfs-worktrees-W5",
+                         "-tmp-dfs-replay-W5-1x"):
+                d = Path(cfg) / "projects" / name
+                d.mkdir(parents=True)
+                (d / "s.jsonl").write_text("{}\n")
+            found = {Path(f).parent.name for f in history._glob(replay.transcripts("/tmp/dfs-replay-W5-1"))}
+            self.assertEqual(found, {"-tmp-dfs-replay-W5-1", "-tmp-dfs-replay-W5-1--dfs-worktrees-W5"})
+
+
+class CandidatesTest(unittest.TestCase):
+    def test_the_selection_rule_keeps_cheap_tasks_whose_first_review_found_issues(self):
+        def task(name, usd, first, work=1, project="-r"):
+            return (project, name), {"task": name, "usd": usd, "first_review": first,
+                                      "sessions": {"work": work}}
+        def start(repo, name):
+            if name == "W5":
+                raise SystemExit("no node commit")
+            return None, None
+
+        tasks = dict([task("W1", 2.0, "issues"), task("W2", 4.0, "issues"), task("W3", 1.0, "ok"),
+                      task("W4", 1.5, "issues", project="-other"), task("W5", 0.5, "issues"),
+                      task("W6", 1.0, "issues", work=0)])
+        with mock.patch.object(replay.history, "load", return_value=(None, tasks, None, None)), \
+                mock.patch.object(replay, "starting_point", side_effect=start), \
+                mock.patch.object(replay, "transcripts", return_value=[]), \
+                mock.patch.object(replay.history, "project_of", return_value="-r"):
+            rows = replay.candidates("/r")
+        self.assertEqual([t["task"] for t in rows], ["W1"])   # W2 dear, W3 passed, W4 elsewhere, W5 no node commit, W6 no work
+
+
+class OriginalIsTheRepoOwnTest(unittest.TestCase):
+    def test_a_task_of_the_same_name_in_another_project_is_not_the_original(self):
+        lines = [
+            {"type": "user", "timestamp": "2026-10-01T00:00:00Z", "message": {"content": "You are the implementation reviewer for task W5. x"}},
+            {"type": "assistant", "timestamp": "2026-10-01T00:01:00Z", "message": {"id": "m", "model": "m", "usage": {"input_tokens": 1, "output_tokens": 1}, "content": [
+                {"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "tree.py log W5 review issues"}}]}},
+        ]
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            for name in ("-tmp-mine", "-tmp-other"):
+                d = Path(cfg) / "projects" / name
+                d.mkdir(parents=True)
+                (d / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in lines))
+            # transcripts() is patched wide, as it was before it was narrowed, to show that
+            # original() itself refuses the other project's task.
+            wide = [os.path.join(cfg, "projects", "*", "*.jsonl")]
+            with mock.patch.object(replay, "transcripts", return_value=wide):
+                self.assertIsNotNone(replay.original("/tmp/mine", "W5"))
+                self.assertIsNone(replay.original("/tmp/nobody", "W5"))
+
+
+class ReachOutsideDestTest(unittest.TestCase):
+    """A replay kept inside the live checkout can read the original's runs, items and
+    codex logs; the score counts the calls that did, and the results that showed the answer."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        tmp = Path(self.tmp.name)
+        self.live = tmp / "live"
+        self.dest = self.live / ".dfs" / "runs" / "replays" / "dfs-replay-W5-a"
+        self.home = tmp / "home"
+        (self.live / ".dfs" / "items").mkdir(parents=True)
+        self.dest.mkdir(parents=True)
+        self.home.mkdir()
+        env = mock.patch.dict(os.environ, {"HOME": str(self.home), "CLAUDE_CONFIG_DIR": str(self.home / ".claude")})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def transcript(self, calls, results=()):
+        path = Path(self.tmp.name) / "s.jsonl"
+        rows = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": f"t{i}", "name": name, "input": inp}]}} for i, (name, inp) in enumerate(calls)]
+        rows += [{"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t0", "content": r}]}} for r in results]
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        return [str(path)]
+
+    def reached(self, calls, tool=None):
+        return [(n, t) for _, n, t in replay.reached(self.dest, self.live, self.transcript(calls), tool)]
+
+    def test_calls_inside_dest_are_not_reach_and_calls_outside_it_are(self):
+        d, live = str(self.dest), str(self.live)
+        got = self.reached([
+            ("Bash", {"command": f"cd {d} && git log"}),                                   # its own clone
+            ("Read", {"file_path": f"{d}/.dfs/worktrees/W5/scripts/x.py"}),                  # its own worktree
+            ("Bash", {"command": f"ls {d}-tool/templates"}),                                # its exported tool
+            ("Bash", {"command": f"grep -r limit {live}/.dfs/runs"}),                       # the live runs
+            ("Read", {"file_path": f"{live}/.dfs/items/W5.md"}),                            # the original's task file
+            ("Glob", {"pattern": f"{live}/.dfs/worktrees/*/scripts/*.py"}),                 # live worktrees
+            ("Bash", {"command": f"ls {d[:-1]}b/.dfs"}),                                    # a sibling replay is live too
+            ("Bash", {"command": "grep -rl limit ~/.codex/sessions"}),                      # codex logs, written with ~
+            ("Bash", {"command": f"grep -rl limit {self.home}/.codex"}),
+            ("Bash", {"command": "ls $HOME/.claude/projects"}),                              # earlier sessions' transcripts
+            ("Bash", {"command": "git status"}),
+        ])
+        self.assertEqual([n for n, _ in got],
+                         ["Bash", "Read", "Glob", "Bash", "Bash", "Bash", "Bash"])
+
+    def test_the_tool_the_replay_runs_under_is_not_reach_even_inside_the_live_checkout(self):
+        tool = self.live / "scripts"
+        calls = [("Bash", {"command": f"cat {tool}/limit.py"})]
+        self.assertEqual(len(self.reached(calls)), 1)
+        self.assertEqual(len(self.reached(calls, tool=self.live)), 0)
+
+    def test_a_tool_that_is_the_live_checkout_still_counts_a_read_of_its_dfs_dir(self):
+        live = str(self.live)
+        calls = [("Bash", {"command": f"cat {live}/scripts/limit.py {live}/SKILL.md"}),   # the tool itself
+                 ("Bash", {"command": f"ls {live}/.dfs/runs"}),                            # the original's runs
+                 ("Read", {"file_path": f"{live}/.dfs/items/W5.md"}),                      # the original's task
+                 ("Glob", {"pattern": f"{live}/.dfs/worktrees/*/scripts/*.py"}),           # live worktrees
+                 ("Bash", {"command": f"cat {live}/scripts-old/x"})]                       # not the tool's scripts
+        got = self.reached(calls, tool=self.live)
+        self.assertEqual([n for n, _ in got], ["Bash", "Read", "Glob", "Bash"])
+
+    def test_a_result_that_prints_the_originals_conclusion_is_the_answer_seen(self):
+        (self.live / ".dfs" / "items" / "W5.md").write_text(
+            "# W5\n\n## Tree\n\n### W5.1 \u00b7 Fix the parser\nDetermination: the parser now reads a quoted pipe before the verb.\n"
+            "\n### W5.2 \u00b7 Own idea\nDetermination: both sessions wrote this very sentence themselves.\n")
+        git(self.dest, "init", "-q")
+        (self.dest / ".dfs" / "items").mkdir(parents=True)
+        (self.dest / ".dfs" / "items" / "W5.md").write_text("### W5.2 \u00b7 Own idea\nDetermination: both sessions wrote this very sentence themselves.\n")
+        git(self.dest, "add", "-A")
+        git(self.dest, "commit", "-q", "-m", "W5.2: own")
+        files = self.transcript([("Bash", {"command": "x"})], [
+            "== run-1.json\nDetermination: the parser now reads a quoted pipe before the verb. more",
+            "W5.2 \u00b7 Own idea ... Determination: both sessions wrote this very sentence themselves."])
+        seen = replay.answer_seen(self.dest, self.live, "W5", files)
+        self.assertEqual(list(seen), ["the parser now reads a quoted pipe before the verb."[:60]])   # not the one it wrote itself
+        self.assertEqual(replay.answer_seen(self.dest, self.live, "W5", self.transcript([("Bash", {"command": "x"})], ["nothing"])), {})
+
+
+class HistoryKeepsReplaysApartTest(unittest.TestCase):
+    def test_default_mining_skips_replay_transcripts_and_notes_the_first_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for name in ("-w-proj", "-tmp-dfs-replay-W5-a"):
+                d = Path(tmp) / name
+                d.mkdir()
+                lines = [
+                    {"type": "user", "timestamp": "2026-10-01T00:00:00Z", "message": {"content": "You are the implementation reviewer for task W5. x"}},
+                    {"type": "assistant", "timestamp": "2026-10-01T00:01:00Z", "message": {"id": "m", "model": "m", "usage": {"input_tokens": 1, "output_tokens": 1}, "content": [
+                        {"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "tree.py log W5 review issues"}}]}},
+                ]
+                (d / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in lines))
+            _, tasks, _, _ = history.load(os.path.join(tmp, "*", "*.jsonl"), {})
+            self.assertEqual([p for p, _ in tasks], ["-w-proj"])
+            self.assertEqual(tasks[("-w-proj", "W5")]["first_review"], "issues")
+            _, tasks, _, _ = history.load(os.path.join(tmp, "*", "*.jsonl"), {}, replays=True)
+            self.assertEqual(len(tasks), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
