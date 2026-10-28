@@ -1033,36 +1033,49 @@ def merge(task):
     saved = paths = None
 
     def join():
-        return _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name), name)
+        return _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name),
+                     "-m", _task_details(task), name)
 
     def restore():
         _put_back_shared_edits(aside)
         if held and not _put_back(*held.pop()):
             _stash_kept(task, paths, saved, "is not merged, and")
     try:
-        _set_aside_shared_edits(name, wt, aside)
-        r = _git(*_identity(), "merge", "--no-ff", "-m", "%s: merge the item's branch %s" % (task, name),
-                 "-m", _task_details(task), name)
-        if r.returncode != 0:
-            return _unmerged(task, wt, name, r, restore)
-    finally:
-        # Every way out of the window puts the edits back, an interrupt (Stop chain's SIGINT
-        # reaches this process) included: they have no other copy.
-        _put_back_shared_edits(aside)
-    if dfs_paths.ignored():
-        rescue_ignored_state(wt)
-    for what, r in (("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))),
-                    ("its branch could not be deleted", _git("branch", "-d", name))):
-        if r.returncode != 0:
-            print("dfs_branch: %s merged, but %s: %s" % (task, what, " ".join(out_of(r).split())),
-                  file=sys.stderr)
-    if held and not _put_back(*held.pop()):
-        _raise_blocked(task, (
-            "%s is merged into %s, but your uncommitted edits to %s, which the merge needed out of the "
-            "way, conflict with what it brought in. They are kept in the stash %s (message "
-            "dfs-merge-%s) and those paths are as the merge left them: `git stash apply %s` "
-            "and resolve it.") % (task, dfs_paths.branch(), ", ".join(paths), saved[:12], task, saved[:12]))
-        return "blocked"
+        try:
+            _set_aside_shared_edits(name, wt, aside)
+            r = join()
+            if r.returncode != 0 and not _in_progress():
+                # git refused over the author's edits: set them aside for the length of this merge
+                paths = _refused_paths(r)
+                saved = _set_aside(task, paths) if paths else None
+                if saved:
+                    held.append((saved, paths))
+                    r = join()
+            if r.returncode != 0:
+                return _unmerged(task, wt, name, r, restore)
+        finally:
+            # Every way out of the window puts the edits back, an interrupt (Stop chain's SIGINT
+            # reaches this process) included: they have no other copy.
+            _put_back_shared_edits(aside)
+        if dfs_paths.ignored():
+            rescue_ignored_state(wt)
+        for what, r in (("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))),
+                        ("its branch could not be deleted", _git("branch", "-d", name))):
+            if r.returncode != 0:
+                print("dfs_branch: %s merged, but %s: %s" % (task, what, " ".join(out_of(r).split())),
+                      file=sys.stderr)
+        if held and not _put_back(*held.pop()):
+            _stash_kept(task, paths, saved, "is merged into %s, but" % dfs_paths.branch())
+            return "blocked"
+    except BaseException:
+        # An interrupt (Stop chain's SIGINT) or a crash anywhere after the edits were set aside
+        # leaves them in the stash alone, so no way out may skip putting them back: an unfinished
+        # merge is aborted first, and a stash that no longer applies is raised for by name.
+        if _git("rev-parse", "-q", "--verify", "MERGE_HEAD").returncode == 0:
+            _git("merge", "--abort")
+        if held and not _put_back(*held.pop()):
+            _stash_kept(task, paths, saved, "was interrupted, and")
+        raise
     return "merged"
 
 
@@ -1131,6 +1144,7 @@ def main(argv):
             "conflict": "not merged: it conflicts with %s, so a node asks for the branch to be rebased onto it" %
                         dfs_paths.branch(),
             "refused": "not merged: git would overwrite uncommitted edits here, raised for the author",
+            "blocked": "dfs/%s merged, but putting your edits back conflicted with it, so a raise names the stash that keeps them" % argv[2],
             "held": "not merged: GitHub mode holds dfs/%s, with its worktree, until you open its pull request"
                     % argv[2],
             "pushed-over": "not pushed: its pull request's branch moved on GitHub, so a node asks to rebase onto it",

@@ -761,7 +761,10 @@ def append_log(task, kind, args=(), body=""):
         import branch as dfs_branch
         try:
             result = dfs_branch.merge(task)
-            if result not in ("merged", "held", "none"):
+            if result == "blocked":
+                print("dfs_tree: %s was accepted and merged, but your edits set aside for the merge "
+                      "conflict with it; the raise names the stash that keeps them" % task, file=sys.stderr)
+            elif result not in ("merged", "held", "none"):
                 print("dfs_tree: %s was accepted but not merged (%s); see its tree" % (task, result),
                       file=sys.stderr)
         except dfs_branch.BranchError as e:
@@ -803,7 +806,7 @@ def next_task_id():
     dfs_paths.NoBranch on a detached HEAD."""
     tag = dfs_paths.branch_tag()
     nums = [int(m.group(1)) for m in (re.fullmatch(r"W(\d+)(?:@.*)?", i)
-                                          for i in set(task_ids()) | retired_ids() | branch_ids()) if m]
+                                          for i in set(task_ids()) | worktree_task_ids() | retired_ids() | branch_ids()) if m]
     return "W%d%s" % (max(nums, default=0) + 1, "@" + tag if tag else "")
 
 
