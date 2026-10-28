@@ -1,0 +1,242 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What the .dfs logs show, and which fixes to take</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .sub { color: #555; font-size: 14px; margin: 0 0 12px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .bar { display: flex; width: 100%; height: 44px; border: 1.5px solid #333; border-radius: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; }
+  .c1 { background: #7fb069; } .c2 { background: #e6c84c; } .c3 { background: #d9774a; } .c4 { background: #8ab4d8; } .c5 { background: #bbb; }
+  .key { list-style: none; margin: 8px 0 0; padding: 0; }
+  .key li { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 15px; }
+  .key em { flex: none; width: 14px; height: 14px; border: 1px solid #333; display: inline-block; align-self: center; }
+  .cap { color: #444; font-size: 14px; margin: 8px 0 0; }
+  .card { border: 1.5px solid #333; border-radius: 6px; background: #fff; margin: 8px 0; }
+  .card summary { padding: 10px 12px; min-height: 44px; box-sizing: border-box; cursor: pointer; font-weight: 600; }
+  .card div { padding: 0 12px 12px; font-size: 15px; }
+  .card p { margin: 6px 0; }
+  .tag { font-weight: 400; color: #555; font-size: 14px; }
+</style>
+
+<h1>What the .dfs logs show</h1>
+<p class="sub">119 task files, 634 nodes, 1725 log entries, 261 run records. Counted by throwaway scripts over this worktree's items and the main checkout's runs directory.</p>
+
+<h2>Where the numbers go</h2>
+<div class="tabs" role="group" aria-label="Chart">
+  <button type="button" data-view="raises" aria-pressed="true">The 21 raises</button>
+  <button type="button" data-view="log" aria-pressed="false">The 1725 log entries</button>
+  <button type="button" data-view="nodes" aria-pressed="false">The 634 nodes</button>
+  <button type="button" data-view="crit" aria-pressed="false">The 24 critic runs</button>
+</div>
+<div class="bar" id="bar" role="img" aria-label="Stacked bar"></div>
+<ul class="key" id="key"></ul>
+<p class="cap" id="cap"></p>
+
+<h2>Suggestions (tap to read)</h2>
+<details class="card"><summary>S1 · Context peak is recorded as 0 <span class="tag">tooling, concrete</span></summary><div>
+  <p>All 13 session-end lines dated 2026-10-28 (W125) say <code>peak 0</code>; no earlier day has one. The session now writing this ran <code>context.py</code> and got "no transcript for sess_...". So on this agent the §1 L1 checkpoint cannot fire.</p>
+  <p>Suggest: the runner records "unmeasured" rather than 0, and the cause (the agent's transcript is not where <code>context.py</code> looks) gets its own task. Cause not yet confirmed.</p>
+</div></details>
+<details class="card"><summary>S2 · Session and end lines are 71% of every Log <span class="tag">tooling, size</span></summary><div>
+  <p>1228 of 1725 log lines are <code>session</code>/<code>end</code> pairs (run id, peak). The same facts sit in <code>.dfs/runs</code>. 17 task files are over 25 KB (W48 is 40 KB, about 10k tokens) and are read whole every session; only 6 tasks have an archive.</p>
+  <p>Suggest: write one line per session at its end, and have the runner run <code>tree.py compact</code> when a file passes a size. Cost: the briefing's session counts read these lines, so it must keep counting them.</p>
+</div></details>
+<details class="card"><summary>S3 · "issues" logged with nothing found <span class="tag">tooling, small</span></summary><div>
+  <p>25 of the 97 <code>review · issues</code> entries and 4 of the 14 <code>critic · issues</code> entries carry no finding: an empty body, "none", or "no node added" (W61, W67 twice, W68, W89, W48). The tally of 97 review "issues" against 175 "ok" is really 72 against 175.</p>
+  <p>Suggest: <code>tree.py log</code> refuses an <code>issues</code> entry that names no node, so the count means something.</p>
+</div></details>
+<details class="card"><summary>S4 · The critic's catches are one family <span class="tag">SKILL.md wording and cadence</span></summary><div>
+  <p>The critic raised a real finding in 10 of 24 sessions (backtrack or added node). Each one was a determination resting on something that was not an observation of the real thing: W67.3 (a phrase split over two lines), W74.6 (two confounded arms), W81.6 (never run against the real kiro), W48.5 ("cannot run here", false), W68.5 (a check that passes without the change), W104.12 (a probe of kiro 2.24.0 for a chain pinning 2.31.1), W116.10 (a rerun that drops a commit silently, reproduced).</p>
+  <p>Suggest: one sentence in the SKILL's Evidence rules: name the version or object the claim is about beside the one observed, and show a check red without the change. Also: 16 of the 34 tasks with six or more sessions have no critic session. I did not check the cadence rule against author answers resetting the count, so that part may be nothing.</p>
+</div></details>
+<details class="card"><summary>S5 · Overlap with W97, and two idle tasks <span class="tag">ordering</span></summary><div>
+  <p>W97 (analyse past behaviour, replay old tasks) has no nodes and no sessions; this review is its first input, and the counts above are the kind of script it would keep. W86 (high-res PWA icon) is also untouched. Suggest: W97 takes S2 to S4 as inputs; the author decides whether W86 is still wanted.</p>
+</div></details>
+
+<h2>What already worked</h2>
+<p class="cap">Six review-round raises and W81's ten-session raise were all answered "Continue"; none appears after 2026-10-16, which fits the law's "no round limit". Nine merge-blocked raises (W87 to W109) stop after 2026-10-25; the landing rework (W116.18, W116.19) came after. W109.5's two tooling issues became W114, and the atomic writes landed. I read logs only and ran none of these paths.</p>
+
+<script>
+  var DATA = {
+    raises: { total: 21, parts: [
+      ["Merge blocked by uncommitted edits in the author's checkout", 9, "c3"],
+      ["Review-round or session-count limit, answered Continue", 7, "c2"],
+      ["Cannot reproduce or scope drift", 3, "c4"],
+      ["Tooling issue", 2, "c5"]],
+      cap: "Only the last two groups needed the author's judgement. The first two came back every time with the same answer and look fixed since late October." },
+    log: { total: 1725, parts: [
+      ["session and end lines", 1228, "c5"],
+      ["review verdicts", 272, "c4"],
+      ["critic verdicts", 36, "c2"],
+      ["answers, corrections, raises, backtracks and others", 189, "c1"]],
+      cap: "Seven of ten log entries say that a session ran. The author-facing record is under a third of the file." },
+    nodes: { total: 634, parts: [
+      ["confirmed", 544, "c1"],
+      ["parked", 80, "c2"],
+      ["refuted", 3, "c3"],
+      ["open or started", 7, "c5"]],
+      cap: "Node-level refutation is almost unused. Course corrections come from the critic and the review, not from a node's own evidence." },
+    crit: { total: 24, parts: [
+      ["sessions with a real finding", 10, "c3"],
+      ["sessions logging issues with nothing in them", 4, "c2"],
+      ["sessions with no issues entry", 10, "c1"]],
+      cap: "Where the critic ran, it found something in 10 of 24 sessions, and the findings are about evidence, not code." }
+  };
+  function draw(view) {
+    var d = DATA[view], bar = document.getElementById("bar"), key = document.getElementById("key");
+    bar.innerHTML = ""; key.innerHTML = "";
+    d.parts.forEach(function (p) {
+      var i = document.createElement("i"); i.className = p[2]; i.style.width = (100 * p[1] / d.total) + "%";
+      bar.appendChild(i);
+      var li = document.createElement("li");
+      li.innerHTML = '<em class="' + p[2] + '"></em><span>' + p[0] + ": <b>" + p[1] + "</b></span>";
+      key.appendChild(li);
+    });
+    document.getElementById("cap").textContent = d.cap;
+    document.querySelectorAll(".tabs button").forEach(function (b) {
+      b.setAttribute("aria-pressed", b.dataset.view === view ? "true" : "false");
+    });
+  }
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () { draw(b.dataset.view); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  var current = "raises";
+  document.querySelectorAll(".tabs button").forEach(function (b) { b.addEventListener("click", function () { current = b.dataset.view; }); });
+  window.dfsPageState = function () { return { view: current }; };
+  document.addEventListener("dfs-state", function (e) { if (e.detail && DATA[e.detail.view]) { current = e.detail.view; draw(current); } });
+  draw("raises");
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <fieldset id="dfs-options">
+    <legend>Which suggestions to act on</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Recommended: make S1 (peak recorded as 0) a tooling task now, and hand S2 to S5 to W97 as inputs."> S1 as a task now, S2 to S5 into W97 (recommended)</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Make S1, S2, S3 and S4 each a task of its own, ordered after the current walk."> S1 to S4 each as a task</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Make only S1 a task and drop the rest."> Only S1</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Take none of them as tasks: the observations are enough."> None, observations only</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
