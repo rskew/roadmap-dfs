@@ -175,8 +175,9 @@ elif [ "$AGENT" = opencode ]; then
   AGENT_CMD="${OPENCODE_CMD:-nix shell $NIX_AGENT_FLAGS $AGENT_NIXPKGS#opencode -c opencode}"
   CHAT_PROMPT_FLAG=(--prompt)
   # `--standalone`: the screen's chat, like every headless turn, runs on a private server. opencode's
-  # shared background service (`serve --service`, one fixed port) outlives the terminal, belongs to
-  # whichever HOME started it first, and writes the session from a process the page's turn cannot see.
+  # shared background service (`serve --service`, one fixed port) outlives the terminal and belongs to
+  # whichever HOME started it first, so a second HOME's run exits "port already in use" (and a TUI
+  # hangs at "Starting background server...").
   AGENT_SUB=(--standalone)
   PERMISSION_FLAGS="${PERMISSION_FLAGS---auto}"
 else
@@ -275,9 +276,8 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
 # is `run`'s arguments. opencode 2.1.1's private server (`serve --stdio`) sometimes crashes in Bun
 # as it starts ("Bus error"), and the run then ends before any step began: in a `Transport:` `error`, or
 # (when the server went before it was ready, 25s to 38s later on a loaded machine) with nothing on stdout and
-# "Standalone server exited before reporting readiness" on stderr. The turn is then run again (four times at most: on a loaded machine
-# half the starts crash).
-# A stream that began a step is never run again,
+# "Standalone server exited before reporting readiness" on stderr. The turn is then run again (five runs at most: on a
+# loaded machine half the starts crash). A stream that began a step is never run again,
 # nor is a turn of a session whose store gained an answer meanwhile: the crashed attempt may have
 # stored the message (the page reads a message stored twice once) but not an answer to be asked for twice.
 opencode_turn() {

@@ -182,7 +182,7 @@ def codex_turns(rec):
     `item_completed` events: a `UserMessage` is what was typed, without the environment and
     instructions codex sends beside it as user messages of its own, and an `AgentMessage`
     is what it said (a `commentary` phase between tool calls as well as the final answer).
-    Read from codex-cli 0.162.0's rollout, `exec` and `exec resume` both appending to one file."""
+    Read from codex-cli 0.162.0's rollout (and found to read the same under 0.163.0), `exec` and `exec resume` both appending to one file."""
     payload = rec.get("payload") if rec.get("type") == "event_msg" else None
     if not isinstance(payload, dict) or payload.get("type") != "item_completed":
         return []
@@ -225,7 +225,9 @@ def opencode_turns(sid):
     `content`, in order. Tool and reasoning items are not words, and a `synthetic` or
     `ignored` text is opencode's own note to the model. A user message repeated with no answer
     between is read once: run.sh runs a turn again when opencode's server crashes as it starts
-    (a Bun bug), and the crashed attempt may already have stored the message the new one stores."""
+    (a Bun bug), and the crashed attempt may already have stored the message the new one stores.
+    The rows alone cannot tell that from an author who sends the same words again after a turn
+    that stored no answer (an error, or Stop): that is read once too."""
     rows = opencode_query(
         "select id, type, data from session_message where session_id = ? and type in ('user', 'assistant') "
         "order by seq, id", (sid,))
@@ -262,7 +264,7 @@ def kiro_home():
 
 
 def kiro_messages(sid):
-    """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions are
+    """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions (read the same under 2.31.1) are
     `sess_<uuid>` directories (`session.json`, `messages.jsonl`) under `.kiro/sessions/`, in a
     bucket per workspace (as a real run writes them); its sqlite database holds only auth and history."""
     if not sid or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}", sid) or ".." in sid:
