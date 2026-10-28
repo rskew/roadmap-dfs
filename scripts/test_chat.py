@@ -757,6 +757,9 @@ class Chat(unittest.TestCase):
         self.assertEqual((bad["is_error"], bad["result"]), (True, "rate limited"))
         cut = dfs_chat.opencode_result([step("step_start"), step("text", text="no step_finish came")])      # opencode 2.1.1 exits first
         self.assertEqual((cut["is_error"], cut["result"]), (False, "no step_finish came"))
+        half = dfs_chat.opencode_result([step("step_start"), step("text", text="half an ans"), json.dumps({
+            "type": "error", "sessionID": "ses_1", "error": {"name": "UnknownError", "data": {"message": "Transport: closed"}}})])
+        self.assertEqual((half["is_error"], half["result"]), (True, "Transport: closed"))     # words before an error are not an answer
         mid_tool = dfs_chat.opencode_result([step("step_start"), step("text", text="reading"), step("step_finish", reason="tool-calls")])
         self.assertTrue(mid_tool["is_error"])
         died = dfs_chat.opencode_result([], "kept")
