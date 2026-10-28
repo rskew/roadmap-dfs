@@ -706,7 +706,8 @@ function chrome(r) {
 
 /* ── the walk: start it, stop it, choose where it goes next ─────────────────────── */
 // A walk that is running, however it started, ends the numbers typed in the box: after it they show its own again.
-function walkSeen(w) { if (w && w.on) S.walkDraft = null; return w; }
+// A model name typed and not yet kept (its change event has not fired) is not a number of the walk and stays.
+function walkSeen(w) { if (w && w.on) S.walkDraft = S.walkDraft && S.walkDraft.models ? { models: S.walkDraft.models } : null; return w; }
 function walkHtml() {
   const w = S.walk;
   if (!w || !w.enabled) return "";
@@ -925,7 +926,9 @@ const pinSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() =>
 }) : null;
 function typingInBox() {
   const a = document.activeElement;
-  return !!(a && (a.id === "bud" || a.id === "par") && a.closest("#walkbox") && S.walk && S.walk.enabled && !S.walk.on);
+  if (!a || !a.closest("#walkbox") || !S.walk || !S.walk.enabled) return false;
+  if (a.dataset && a.dataset.role) return true;   // a model field is shown walking or not
+  return (a.id === "bud" || a.id === "par") && !S.walk.on;
 }
 function drawTasks(push) {
   const items = S.state.items.filter(i => !S.only || i.needs_you);

@@ -645,6 +645,29 @@ class Web(unittest.TestCase):
         self.assertEqual(["open" in h for h in out], [False, False, False, True],
                          "only a reader's own toggle opens the panel, walking or not")
 
+    def test_a_model_field_holds_the_walk_box_back_from_a_push_walking_or_not(self):
+        """typingInBox() and walkSeen() in index.html, run under node (skipped when there is none);
+        the source is checked either way, since the script is not always run."""
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function typingInBox()"):src.index("function drawTasks(")]
+        self.assertIn("data-role", src[src.index("function modelFields"):src.index("async function setModel")])
+        self.assertIn("dataset.role", body, "typingInBox must hold for a model field")
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's typingInBox()")
+        seen = src[src.index("function walkSeen("):src.index("function walkHtml()")]
+        js = ("let S, document; const box = {closest: s => s === '#walkbox'};" + body + seen +
+              "const at = (a, on) => { S = {walk: {enabled: true, on}}; document = {activeElement: a}; return typingInBox(); };"
+              "const model = {dataset: {role: 'plan'}, id: 'model-plan', closest: box.closest};"
+              "const bud = {dataset: {}, id: 'bud', closest: box.closest};"
+              "S = {walkDraft: {budget: '3', models: {plan: 'op'}}}; walkSeen({on: true}); const kept = S.walkDraft;"
+              "S = {walkDraft: {budget: '3'}}; walkSeen({on: true}); const dropped = S.walkDraft;"
+              "console.log(JSON.stringify([at(model, true), at(model, false), at(bud, true), at(bud, false), at(null, false), kept, dropped]))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(out[:5], [True, True, False, True, False], "a model field holds the box walking or not; the numbers only while off")
+        self.assertEqual(out[5], {"models": {"plan": "op"}}, "a walk starting keeps a model name being typed")
+        self.assertIsNone(out[6], "and drops the typed numbers")
+
     def test_the_artefacts_section_previews_each_artefact_and_offers_no_list_of_the_rest(self):
         """artefactsHtml() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
