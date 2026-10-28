@@ -98,8 +98,9 @@ def original(repo, task):
     """The original run of `task`, scored by the code that scores a replay."""
     repos = {}
     sessions, tasks, _, _ = history.load(transcripts(repo), repos)
+    mine = history.project_of(re.sub(r"[/.]", "-", str(Path(repo).resolve())))
     for (project, name), t in tasks.items():
-        if name == task:
+        if name == task and project == mine:
             return t
     return None
 

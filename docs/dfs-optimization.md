@@ -36,21 +36,24 @@ through their transcripts alone.
 tokens, tool calls, commits, refused commits, verdicts) and one per task, and prints
 the tables below. Dollars are the runner's own `total_cost_usd` where it recorded one,
 and otherwise tokens priced at the same ratios (input 1, cache read 0.1, cache write 2,
-output 5), which match the runner's figure to within 0.1% at the median and 40% at the
-90th percentile over 566 sessions it priced.
+output 5), which match the runner's figure to within 0.0% at the median (by construction: the
+ratios are fitted to those same sessions) and 25% at the 90th percentile over the
+689 sessions it priced.
 
-Run on 2026-10-22 over 2,018 transcripts, 1,919 of them dfs sessions:
+Run on 2026-10-28 over 2,130 transcripts, 2,042 of them dfs sessions (every figure
+in this section and in section 4 is from this one run):
 
 | project | tasks | sessions per task, median / p90 | $ per task, median / p90 | review issues per task | raises |
 |---|---|---|---|---|---|
-| chirpstack-docker | 106 | 4 / 19 | 2.6 / 21.0 | 0.67 | 46 |
-| house | 20 | 4 / 22 | 3.6 / 24.0 | 0.75 | 3 |
-| roadmap-dfs | 99 | 3 / 13 | 2.0 / 9.4 | 0.74 | 10 |
-| shop-app | 22 | 6 / 30 | 7.4 / 50.3 | 1.95 | 22 |
+| chirpstack-docker | 124 | 4 / 19 | 2.7 / 19.9 | 0.73 | 48 |
+| farm-app | 2 | 8 / 9 | 7.5 / 7.8 | 0.00 | 0 |
+| house | 22 | 4 / 20 | 2.9 / 24.0 | 0.77 | 4 |
+| roadmap-dfs | 115 | 4 / 13 | 2.1 / 9.4 | 0.80 | 13 |
+| shop-app | 16 | 6 / 28 | 7.1 / 37.9 | 1.25 | 6 |
 
 What it shows, most important first:
 
-1. **A finished tree is often not finished.** 41.5% of all dfs spend is on a task after
+1. **A finished tree is often not finished.** 42.1% of all dfs spend is on a task after
    one of its reviews has already said issues. Of the 81 findings roadmap-dfs's reviews
    wrote, 32 are bugs the work session did not test for (an interrupted merge, a
    regression at one chain, a drag on a short screen), 19 are unmarked assumptions and
@@ -62,14 +65,14 @@ What it shows, most important first:
    about 35 times against about 2,350 `Status: confirmed`. Work proceeds as a confirmed
    line; the parked siblings are never taken up. Either the work rarely meets evidence
    against it, or sessions do not look for it: the 32 untested bugs suggest the second.
-3. **Review and critic are 29% of spend** (review 22.5%, critic 6.3%, work 71.2%).
-   Reviews are cheap per session (median $0.29 to $0.96) and are where the bugs
+3. **Review and critic are 33% of spend** (review 26.7%, critic 6.7%, work 66.5%).
+   Reviews are cheap per session (median $0.42 to $1.01) and are where the bugs
    above were caught, so they are not the place to cut.
-4. **The guard refuses a commit in 11% of sessions** (214 of 1,919, 283 refusals).
+4. **The guard refuses a commit in 12% of sessions** (236 of 2,042, 308 refusals).
    The reasons most seen are a task file over its size budget (~144), a file:line
    coordinate in a task file (~200 across files) and a node naming a Parent that does
    not exist (~72). Each costs a retry, not a failure.
-5. **Re-reading is not a cost.** 128 of 2,964 `Read` calls repeat an earlier slice.
+5. **Re-reading is not a cost.** 147 of 3,429 `Read` calls repeat an earlier slice.
 
 Not measured yet: whether a task's work was later fixed by another task (needs commit
 subjects matched across tasks), and the author's time, which no transcript records.
@@ -164,14 +167,14 @@ it). Each names the file it changes and the replay that tests it.
 
 | # | Change | Evidence | Where | Test replay |
 |---|---|---|---|---|
-| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 32 of 81 review findings are bugs the work did not test for; 41.7% of spend follows an issues review; 35 refuted nodes against 2,350 confirmed says sessions rarely look for evidence against their own work. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
+| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 32 of 81 review findings are bugs the work did not test for; 42.1% of spend follows an issues review; 35 refuted nodes against 2,350 confirmed says sessions rarely look for evidence against their own work. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 19 of 81 findings are unmarked assumptions. | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `history.py --json`, filter on the finding's class) |
 | 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. A task that needs five review rounds usually has more than five problems at round one. | 44 tasks needed two or more issue rounds; shop-app W13: 18 reviews, all with issues. Cuts rounds, not work, if the second finding was already there at round one; no evidence yet that it was. | the review prompt (`run.sh`) | a task with 3+ rounds: compare findings of round 1 against the union of later rounds in the task log before spending a replay |
-| 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 214 of 1,919 sessions hit a refusal, about 283 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
+| 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,042 sessions hit a refusal, 308 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
 | 5 | **Cap a review loop.** After three issues rounds the task raises for the author instead of continuing. | 12% of tasks hold 42% of spend. Does not improve quality, it limits the loss, and hands the author the tail. | `state.py` | none: read from history by counting what the cap would have saved |
 
-Not candidates, from the evidence: cutting reviews (they are 22.6% of spend and where
-the bugs were caught), re-read avoidance (128 of 2,971 reads), and encouraging branching
+Not candidates, from the evidence: cutting reviews (they are 26.7% of spend and where
+the bugs were caught), re-read avoidance (147 of 3,429 reads), and encouraging branching
 as an end in itself (candidate 1 is the version of it with a purpose).
 
 ### The loop

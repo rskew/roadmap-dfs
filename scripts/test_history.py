@@ -105,5 +105,13 @@ class SessionTest(unittest.TestCase):
         self.assertEqual((rec["kind"], rec["task"], rec["started"]), ("work", "W13", ["W13.5"]))
 
 
+class PriceTest(unittest.TestCase):
+    def test_a_runner_cost_of_zero_is_kept_not_estimated(self):
+        sessions = [{"sid": c, "model": "m", "units": 1000.0} for c in "abcdefg"]
+        history.price(sessions, {"a": 0.0, **{c: 2.0 for c in "bcdef"}})
+        self.assertEqual((sessions[0]["usd"], sessions[0]["priced"]), (0.0, True))
+        self.assertEqual((sessions[6]["usd"], sessions[6]["priced"]), (2.0, False))
+
+
 if __name__ == "__main__":
     unittest.main()

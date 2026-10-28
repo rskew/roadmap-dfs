@@ -187,6 +187,26 @@ class TranscriptsOfOneReplayTest(unittest.TestCase):
             self.assertEqual(found, {"-tmp-dfs-replay-W5-1", "-tmp-dfs-replay-W5-1--dfs-worktrees-W5"})
 
 
+class OriginalIsTheRepoOwnTest(unittest.TestCase):
+    def test_a_task_of_the_same_name_in_another_project_is_not_the_original(self):
+        lines = [
+            {"type": "user", "timestamp": "2026-10-01T00:00:00Z", "message": {"content": "You are the implementation reviewer for task W5. x"}},
+            {"type": "assistant", "timestamp": "2026-10-01T00:01:00Z", "message": {"id": "m", "model": "m", "usage": {"input_tokens": 1, "output_tokens": 1}, "content": [
+                {"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "tree.py log W5 review issues"}}]}},
+        ]
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            for name in ("-tmp-mine", "-tmp-other"):
+                d = Path(cfg) / "projects" / name
+                d.mkdir(parents=True)
+                (d / "s.jsonl").write_text("".join(json.dumps(r) + "\n" for r in lines))
+            # transcripts() is patched wide, as it was before it was narrowed, to show that
+            # original() itself refuses the other project's task.
+            wide = [os.path.join(cfg, "projects", "*", "*.jsonl")]
+            with mock.patch.object(replay, "transcripts", return_value=wide):
+                self.assertIsNotNone(replay.original("/tmp/mine", "W5"))
+                self.assertIsNone(replay.original("/tmp/nobody", "W5"))
+
+
 class HistoryKeepsReplaysApartTest(unittest.TestCase):
     def test_default_mining_skips_replay_transcripts_and_notes_the_first_review(self):
         with tempfile.TemporaryDirectory() as tmp:

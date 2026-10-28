@@ -152,7 +152,8 @@ def runner_costs(repo):
     out = {}
     for f in glob.glob(os.path.join(repo, ".dfs", "runs", "dfs_run_*", "run-*.json")):
         try:
-            j = json.load(open(f))
+            with open(f) as fh:
+                j = json.load(fh)
         except (ValueError, OSError):
             continue
         if isinstance(j, dict) and j.get("session_id") and j.get("total_cost_usd") is not None:
@@ -178,7 +179,9 @@ def author_log(repo):
     for f in glob.glob(os.path.join(repo, ".dfs", "items", "*.md")) + \
             glob.glob(os.path.join(repo, ".dfs", "archive", "items", "*.md")):
         task = os.path.basename(f)[:-3]
-        for m in re.finditer(r"^- \d{4}-[\dT:-]+Z · (\w+)(?: · (\w+))?(?: · (\w+))?", open(f).read(), re.M):
+        with open(f, errors="replace") as fh:
+            text = fh.read()
+        for m in re.finditer(r"^- \d{4}-[\dT:-]+Z · (\w+)(?: · (\w+))?(?: · (\w+))?", text, re.M):
             kind = m.group(1)
             if kind in ("review", "critic"):
                 kind += ":" + (m.group(2) or "")
@@ -294,7 +297,7 @@ def price(sessions, costs):
     else the weighted units at the rate its model's priced sessions show."""
     rate, overall, n_priced = calibrate(sessions, costs)
     for s in sessions:
-        s["usd"] = costs.get(s["sid"]) or s["units"] * rate.get(s["model"], overall or 0)
+        s["usd"] = costs[s["sid"]] if s["sid"] in costs else s["units"] * rate.get(s["model"], overall or 0)
         s["priced"] = s["sid"] in costs
     return overall or 0, n_priced
 
