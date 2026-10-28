@@ -834,10 +834,13 @@ def act(name, body):
     nodes = dfs_tree.by_id(t)
     if name == "open_pr":
         # as the terminal's `P`: GitHub mode's Open PR mark, which pushes the held branch and runs
-        # `gh pr create`; the url is in the log entry it writes. The push can take minutes, so it
-        # runs outside LOCK, which `open_pr` takes only to write that entry.
+        # `gh pr create`; the url is in the log entry it writes. The push can take minutes under
+        # the git lock, and an accept or delete holds LOCK while it waits for that lock, so the
+        # push runs outside LOCK, which is taken only afterwards for the entry (never both ways).
         try:
-            dfs_github.open_pr(task, writing=LOCK)
+            url = dfs_github.push_pr(task)
+            with LOCK:
+                dfs_tree.append_log(task, "pr", [url])
         except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError,
                 OSError, dfs_paths.NoBranch) as e:
             raise Refused(str(e), 409)

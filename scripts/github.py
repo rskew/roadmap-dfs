@@ -14,7 +14,6 @@ holds a finished item, its branch and worktree kept. The author's Open PR mark i
 `gh` must be logged in (`gh auth login`); `DFS_GH` names another command to run as it
 (the tests' fake). See README, "GitHub mode".
 """
-import contextlib
 import json
 import os
 import re
@@ -59,14 +58,22 @@ def gh(*args, cwd=None):
 pr_url = dfs_tree.pr_url
 
 
+def open_pr(task):
+    """Open the pull request of a finished item GitHub mode holds, log it and return its url."""
+    url = push_pr(task)
+    dfs_tree.append_log(task, "pr", [url])
+    return url
+
+
 @dfs_branch.one_at_a_time
-def open_pr(task, writing=None):
-    """Open the pull request of a finished item GitHub mode holds; returns its url. The branch
-    is rebased onto the default branch first (a conflict reopens the item with a node, as a
-    merge's does, and is a GithubError here), then pushed to the remote `.dfs/github` names
-    and handed to `gh pr create` with the merge commit's details as its body. The push and `gh`
-    can take minutes: a caller that serialises writers of the task file passes its lock as
-    `writing`, which is held only for the log entry at the end."""
+def push_pr(task):
+    """Open the pull request of a finished item GitHub mode holds; returns its url and writes
+    nothing to the task's log. The branch is rebased onto the default branch first (a conflict
+    reopens the item with a node, as a merge's does, and is a GithubError here), then pushed to
+    the remote `.dfs/github` names and handed to `gh pr create` with the merge commit's details
+    as its body. The push and `gh` can take minutes, all under the git lock: a caller that
+    serialises writers of the task file with a lock of its own (the web server's) runs this
+    outside it and logs the url itself, so it never holds that lock while waiting for this one."""
     remote = dfs_paths.read_github()
     if not remote:
         raise GithubError("GitHub mode is off: write the remote to push to into %s"
@@ -102,8 +109,6 @@ def open_pr(task, writing=None):
     url = next((w for w in out.split() if w.startswith("http")), "")
     if not url:
         raise GithubError("gh pr create printed no url: %s" % " ".join(out.split())[:200])
-    with writing or contextlib.nullcontext():
-        dfs_tree.append_log(task, "pr", [url])
     return url
 
 
