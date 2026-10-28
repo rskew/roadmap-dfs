@@ -20,7 +20,9 @@ The world an engine needs, as methods of `self`:
 """
 import calendar
 import collections
+import json
 import os
+import re
 import shlex
 import signal
 import subprocess
@@ -59,6 +61,34 @@ def read_agent(path):
     except OSError:
         return "claude"
     return name if name in AGENTS else "claude"
+
+
+MODEL_ROLES = ("plan", "implement")      # the two things run.sh gives a claude session a model for
+MODEL_ENV = {"plan": "PLAN_MODEL", "implement": "IMPLEMENT_MODEL"}
+MODEL_NAME = re.compile(r"[A-Za-z0-9._:\[\]][A-Za-z0-9._:\[\]-]*\Z")   # never a flag: no leading "-"
+
+
+def models_file():
+    """Where the models chosen for the walk are kept, beside `agent_file`."""
+    return os.path.join(dfs_runs.run_root(), "models")
+
+
+def read_models(path=None):
+    """The chosen model per role: {"plan": name, "implement": name}, "" for a role not
+    chosen (run.sh then uses its own default, opus to plan and sonnet to implement).
+    A missing or unreadable file, or a name it should not hold, reads as nothing chosen."""
+    out = {r: "" for r in MODEL_ROLES}
+    try:
+        with open(path or models_file(), errors="replace") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return out
+    if isinstance(data, dict):
+        for r in MODEL_ROLES:
+            v = data.get(r)
+            if isinstance(v, str) and (v == "default" or MODEL_NAME.match(v)):
+                out[r] = v
+    return out
 
 
 # ── the walk ──────────────────────────────────────────────────────────────────
@@ -780,6 +810,9 @@ class WalkMixin:
         console = os.path.join(rundir, "console.log")
         argv = self.runner(item, cap)
         env = dict(os.environ, RUNDIR=rundir)
+        for role, name in read_models().items():
+            if name:                    # "default" is the empty variable: claude's own default
+                env[MODEL_ENV[role]] = "" if name == "default" else name
         try:
             with open(console, "ab") as fh:
                 fh.write(("$ %s\n\n" % " ".join(argv)).encode())
@@ -825,6 +858,35 @@ class WalkMixin:
         self.msg = "agent: " + name
         self.event("walk", "agent: " + name)
 
+    def models(self):
+        """The models chosen for the chains the walk starts next, per role."""
+        return read_models()
+
+    def set_model(self, role, name):
+        """Choose the model a claude session runs on for `role` (plan: the first session
+        on a task, the critic and the review; implement: every other work session), kept
+        in `models_file` for the next chain. "" takes the choice away (run.sh's default
+        again); "default" gives claude's own default. ValueError says why not."""
+        if role not in MODEL_ROLES:
+            raise ValueError("a model is chosen for " + " or ".join(MODEL_ROLES))
+        if not isinstance(name, str):
+            raise ValueError("a model is a name")
+        name = name.strip()
+        if name and name != "default" and not MODEL_NAME.match(name):
+            raise ValueError("%r is not a model name: letters, digits and . _ : [ ] -, "
+                             "not starting with -" % name)
+        chosen = read_models()
+        chosen[role] = name
+        try:
+            with open(os.path.join(dfs_runs.ensure_run_root(), "models"), "w") as fh:
+                json.dump(chosen, fh)
+                fh.write("\n")
+        except OSError as e:
+            raise ValueError("could not keep the choice: %s" % e)
+        what = "%s model: %s" % (role, name or "run.sh's default")
+        self.msg = what
+        self.event("walk", what)
+
     def walk_start(self, budget, parallel=1):
         """Start a walk from outside the prompt: the page's Start, validated as `w`'s
         numbers are (and bounded, since a web page is further from the person than a key)."""
@@ -867,7 +929,7 @@ class WalkMixin:
             on=self.walk_on, pending=self.walk_pending,
             budget=self.walk_budget, used=self.walk_used(), parallel=self.walk_parallel,
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
-            note=self.walk_note, agent=self.agent, agents=list(AGENTS),
+            note=self.walk_note, agent=self.agent, agents=list(AGENTS), models=self.models(),
             pinned=self.walk_next, auto=auto, auto_goal=goal,
             chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],
                          progress=dfs_runs.progress(r), live=r["live"])
@@ -999,6 +1061,10 @@ class HeadlessWalk(WalkMixin):
     def set_agent(self, name):
         with self.lock:
             WalkMixin.set_agent(self, name)
+
+    def set_model(self, role, name):
+        with self.lock:
+            WalkMixin.set_model(self, role, name)
 
     def snapshot(self, data=None):
         with self.lock:
