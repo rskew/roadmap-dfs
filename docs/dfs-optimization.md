@@ -187,7 +187,7 @@ it). Each names the file it changes and the replay that tests it.
 |---|---|---|---|---|
 | 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 101 of 207 review finding lines are defects; 42.0% of spend follows an issues review; 13 refuted nodes and 7 backtracks against 524 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 28 of 207 review finding lines are unmarked assumptions (some repeat across rounds). | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `audit.py findings`, rows of class `assumption` in `docs/dfs-review-findings.tsv`) |
-| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (24 tasks), 4 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 16 name code the fixes changed (either could hold), 16 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 4 to 20 present ones; the four are in W75 (2), W88 and W91 |
+| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (21 tasks; 26 have two or more issues reviews), 4 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 16 name code the fixes changed (either could hold), 16 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 4 to 20 present ones; the four are in W75 (2), W88 and W91 |
 | 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,043 sessions hit a refusal, 308 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
 | 5 | **Cap a review loop.** After three issues rounds the task raises for the author instead of continuing. | 12% of tasks hold 42% of spend. Does not improve quality, it limits the loss, and hands the author the tail. | `state.py` | none: read from history by counting what the cap would have saved |
 
@@ -210,8 +210,9 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    arm is that revision (`--tool-ref REV`), the control is the revision it branched from.
    A change to the law goes as `--law FILE`, with the same revision for the tool.
 4. **Replay** each task under each arm **three times**: 4 tasks × 2 arms × 3 = 24 replays,
-   at the W55 figures roughly $30 to $85. Run them one at a time, since each is a chain
-   in its own scratch clone and the limits are the account's. Each replay is bounded:
+   at the W55 figures ($1.95 to $3.44 a replay) roughly $47 to $83. Run them one at a
+   time: each is a chain in its own scratch clone, and the three W55 replays run side by
+   side used up the account's usage limit in about half an hour and were stopped for 2h20m. Each replay is bounded:
    `--cap` sessions, and `--bash-minutes M` (default 15) is the most one Bash call may
    run, with twice that as the most a call may ask for, so a runaway search ends in
    minutes, where W55's replay sat 53 minutes in `grep -r /`. A call that hits the bound
@@ -220,11 +221,34 @@ as an end in itself (candidate 1 is the version of it with a purpose).
 5. **Compare** the arms per task, never pooled: first-review pass rate (out of 3),
    median dollars, refused commits, replays that stopped BLOCKED or on the cap. Then
    read the reviews of the changed arm's passes: a pass counts only if the review's
-   `ok` names what it checked. A candidate is **kept** if it passes the first review in
-   at least two more replays of the twelve than the control does, and no task gets worse
-   by more than one replay of three; with this sample a smaller difference is noise (one
-   task replayed to 1.3 and 3.5 dollars). **Dropped** otherwise, with the numbers in the
+   `ok` names what it checked (the `ok` of two guarded W55 replays still listed three
+   and four defects each). A candidate is **kept** if it passes the first review in at
+   least **four** more replays of the twelve than the control does, and no task gets
+   worse by more than one replay of three. **Dropped** otherwise, with the numbers in the
    candidate's row.
+
+   *Why four.* Assume each replay passes its first review with probability p, alone
+   and independently, p between 0.5 and 0.7 (the history fails 30% of first reviews; the
+   three guarded W55 replays passed 2 of 3). Two arms of the same tool then differ by
+   the margin by chance this often (exact sums over every outcome, recomputed by the page named below):
+
+   | margin (of 12) | kept by chance, p=0.5 | p=0.7 | kept if p goes 0.5 to 0.9 | 0.5 to 0.75 |
+   |---|---|---|---|---|
+   | 2 | 25.2% | 24.1% | 93.9% | 72.0% |
+   | 3 | 14.8% | 12.9% | 86.8% | 58.0% |
+   | 4 | 7.4% | 5.8% | 74.2% | 41.5% |
+   | 5 | 3.2% | 2.1% | 56.5% | 25.8% |
+
+   A margin of two keeps a change that does nothing one time in four, so the earlier
+   rule was no test; four keeps it about one in sixteen and still finds a change that
+   lifts p from 0.5 to 0.9 three times in four, but misses a modest gain (0.5 to 0.75:
+   41%), so a candidate that is dropped here is "not shown", not "shown useless". The
+   assumption is a Hypothesis of W97.10 (page
+   `.dfs/artefacts/e2c464a2-0f7a-4d68-b5fe-a0860ca3f587.html`). It is wrong if replays
+   of one task are alike (a task that passes 3 of 3 or fails 3 of 3 under both arms
+   carries no information and the true noise is above the table's), or if the control
+   replayed twice differs by four or more of twelve: run the control twice before the
+   first candidate, and if that happens, the margin and the 24 replays are not enough.
 6. **Keep** means merged into the tool and recorded here (the row, the arms, the
    figures) and the control for the next candidate is now the changed tool. Candidates
    are tested one at a time for that reason: two changes in one arm cannot be told apart.
@@ -242,5 +266,7 @@ check: it places a finding by the names it points at (backticks, snake_case, `na
 against the code before and the commits after the earlier review, so 16 of 43 lines
 cannot be placed, a fix that touches code near a name makes the line `maybe-introduced`,
 and it reads roadmap-dfs only (the other projects' repos are not on this box). Then
-candidate 1 on four tasks, the first real run of the loop, which needs `claude` and a
-DEST that can run scripts.
+run the control (the current tool) twice on the four chosen tasks, to see whether two
+control arms differ by four or more of twelve; then candidate 1 on the same four tasks,
+the first real run of the loop. It needs `claude` (from nixpkgs) and a DEST that can run
+scripts (inside the repo's ignored `.dfs/runs` works on the box used here).
