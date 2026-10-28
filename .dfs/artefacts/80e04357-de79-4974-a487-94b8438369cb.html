@@ -1,0 +1,216 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Should the screen's opencode always run on a private server?</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; margin: 0 0 12px; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .box b { display: block; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  .box.bad { border-color: #b3261e; background: #fdeceb; }
+  .link { display: flex; flex-direction: column; align-items: center; padding: 2px 0; color: #555; font-size: 14px; }
+  .link::after { content: "\2193"; font-size: 22px; line-height: 1; }
+  [hidden] { display: none; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td, th { border: 1px solid #bbb; padding: 6px 8px; text-align: left; vertical-align: top; }
+</style>
+
+<h1>Should the screen's opencode always run on a private server?</h1>
+<p>The screen's chat runs the opencode TUI. Today run.sh gives it <code>--standalone</code>, so it starts its own
+  <code>serve --stdio</code> server, as every headless turn does. Pick a way to see what that changes.</p>
+
+<div class="tabs" role="group" aria-label="Which setup to draw">
+  <button type="button" id="b-now" aria-pressed="true">Now: always standalone</button>
+  <button type="button" id="b-shared" aria-pressed="false">Shared service (opencode's default)</button>
+</div>
+
+<div id="v-now" class="dg">
+  <div class="box" data-node="tui"><b>TUI (screen)</b><span>run.sh adds --standalone</span></div>
+  <div class="link">starts its own</div>
+  <div class="box" data-node="own"><b>private serve --stdio</b><span>dies with the TUI; no port</span></div>
+  <div class="link">writes</div>
+  <div class="box" data-node="store"><b>opencode.db of this HOME</b><span>the page reads it every 4s</span></div>
+  <div class="box bad" data-node="bun"><b>If that server crashes in Bun</b><span>the TUI stays up drawing its busy animation and never asks the model. run.sh does not notice; only the tests restart it.</span></div>
+</div>
+
+<div id="v-shared" class="dg" hidden>
+  <div class="box" data-node="tui2"><b>TUI (screen)</b><span>no --standalone</span></div>
+  <div class="link">talks to</div>
+  <div class="box" data-node="svc"><b>shared serve --service, port 49374</b><span>started by the first opencode of any HOME, outlives the terminal</span></div>
+  <div class="link">writes</div>
+  <div class="box" data-node="store2"><b>opencode.db of the HOME that started it</b><span>one file</span></div>
+  <div class="box bad" data-node="coll"><b>Seen in the tests</b><span>a second HOME's run exits "port already in use"; its TUI hangs at "Starting background server...". A user with one HOME has not been tested either way.</span></div>
+</div>
+
+<h2>The assumption</h2>
+<p>The standalone TUI is right for a real user with one HOME, not only for the tests whose scratch HOMEs collided on
+  port 49374. It is wrong if a real user keeps opencode's shared service on purpose (other terminals attached to it), or
+  if a TUI that hangs after a Bun crash needs run.sh to restart it.</p>
+
+<table>
+  <tr><th></th><th>standalone (now)</th><th>shared service</th></tr>
+  <tr><td>scratch HOMEs</td><td>no collision (tests pass)</td><td>collide on port 49374</td></tr>
+  <tr><td>one real HOME</td><td>not tried against shared</td><td>not tried; opencode's own default</td></tr>
+  <tr><td>Bun crash</td><td>TUI hangs, not restarted in run.sh</td><td>service may outlive it</td></tr>
+</table>
+<h2>Also assumed, not asked separately</h2>
+<p>The Bun crash is provoked by the test's fast store polling and not by the web page's 4s pace (0 of 28 and 7 of 7
+  are small samples), and opencode 1.x stores need no support (chat.py reads only 2.1.1's session_v2).
+  Say so in your note if either is wrong.</p>
+
+<script>
+  function show(now) {
+    document.getElementById('v-now').hidden = !now;
+    document.getElementById('v-shared').hidden = now;
+    document.getElementById('b-now').setAttribute('aria-pressed', now);
+    document.getElementById('b-shared').setAttribute('aria-pressed', !now);
+    if (window.dfsAnswer) window.dfsAnswer.keep();
+  }
+  document.getElementById('b-now').addEventListener('click', function () { show(true); });
+  document.getElementById('b-shared').addEventListener('click', function () { show(false); });
+  window.dfsPageState = function () { return { now: !document.getElementById('v-now').hidden }; };
+  document.addEventListener('dfs-state', function (e) { if (e.detail && typeof e.detail.now === 'boolean') show(e.detail.now); });
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
