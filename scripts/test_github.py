@@ -20,6 +20,23 @@ import tree as dfs_tree    # noqa: E402
 import github as dfs_github  # noqa: E402
 
 
+def skip_if_tmp_noexec():
+    """Skip, saying why, when TMPDIR is mounted noexec: the fake `gh` and agents these suites write
+    there would fail with "Permission denied", which reads as a fault in the code. Set TMPDIR to a
+    directory that allows executables (outside the worktree)."""
+    d = tempfile.mkdtemp()
+    try:
+        probe = Path(d) / "probe"
+        probe.write_text("#!/bin/sh\n")
+        probe.chmod(0o755)
+        subprocess.run([str(probe)], check=True)
+    except PermissionError:
+        raise unittest.SkipTest("TMPDIR (%s) is mounted noexec; set TMPDIR to a directory that "
+                                "allows executables" % tempfile.gettempdir())
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 class Switch(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
@@ -82,6 +99,7 @@ LINES = [{"id": 44, "user": {"login": "cy"}, "body": "Off by one here.", "path":
 
 class Watch(unittest.TestCase):
     def setUp(self):
+        skip_if_tmp_noexec()
         self.root = Path(tempfile.mkdtemp())
         (self.root / ".dfs" / "items").mkdir(parents=True)
         (self.root / ".dfs" / "items" / "W1.md").write_text(TASK)
@@ -129,6 +147,19 @@ class Watch(unittest.TestCase):
         finally:
             LINES.pop()
         self.assertEqual(dfs_github.watch("W1"), [])
+
+    def test_a_hand_run_watch_passes_over_a_task_a_chain_is_on(self):
+        import runs as dfs_runs
+        with mock.patch.object(dfs_runs, "live_for", return_value={"item": "W1"}), \
+                mock.patch("sys.stderr") as err:
+            self.assertEqual(dfs_github.main(["github.py", "watch"]), 0)    # all tasks: skipped
+            self.assertEqual(dfs_github.main(["github.py", "watch", "W1"]), 1)   # named: refused
+        self.assertEqual(dfs_tree.load("W1")["nodes"][-1]["id"], "W1.1")
+        self.assertFalse(self.calls.exists())     # gh was never called
+        self.assertTrue(err.write.called)
+        with mock.patch.object(dfs_runs, "live_for", return_value=None), mock.patch("sys.stdout"):
+            self.assertEqual(dfs_github.main(["github.py", "watch", "W1"]), 0)
+        self.assertEqual(dfs_tree.load("W1")["nodes"][-1]["id"], "W1.4")
 
     def test_a_comment_whose_node_the_author_deleted_is_not_added_again(self):
         self.assertEqual(dfs_github.watch("W1"), ["W1.2", "W1.3", "W1.4"])
@@ -226,6 +257,9 @@ class Raises(unittest.TestCase):
 
 
 class GhTimeout(unittest.TestCase):
+    def setUp(self):
+        skip_if_tmp_noexec()
+
     def test_a_gh_that_does_not_answer_is_a_github_error(self):
         import time
         fake = Path(tempfile.mkdtemp()) / "gh"
@@ -249,6 +283,9 @@ class GhTimeout(unittest.TestCase):
 
 
 class NetworkCalls(unittest.TestCase):
+    def setUp(self):
+        skip_if_tmp_noexec()
+
     def env_of(self, **env):
         """The environment `_git_net` hands git, read back through a git alias running `env`."""
         import branch as dfs_branch

@@ -69,9 +69,10 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   request link). It is not the draft/ready mark, which only says whether the walk may pick a task up. A
   second mark is refused.
 - **The watch** reads each open pull request every five minutes while a walk runs (it stops when the
-  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand). Each new
-  conversation comment, review with a body and line comment becomes one open node at the root of the
-  task, as a reviewer's finding does: who wrote it, the text, the file and line, its link, and
+  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand and, like the
+  walk, passes over a task a work chain is on). Each new conversation comment, review with a body and line
+  comment becomes one open node at the root of the task, as a reviewer's finding does: who wrote it, the
+  text, the file and line, its link, and
   `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing; every
   other comment does, your own replies and bots' included. Delete the node of a comment you do not
   want acted on and it is dismissed: the watch does not add it again.

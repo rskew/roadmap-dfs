@@ -326,8 +326,16 @@ def main(argv):
         print(url)
         return 0
     if len(argv) in (2, 3) and argv[1] == "watch":
+        import runs as dfs_runs
         rc = 0
         for task in argv[2:] or watched():
+            # As the walk's poll does: a chain on the task is writing its tree and standing in its
+            # worktree, which a landing would remove.
+            if dfs_runs.live_for(task):
+                print("dfs_github: %s: a work chain is on it; watch again when it has finished" % task,
+                      file=sys.stderr)
+                rc = rc or (1 if argv[2:] else 0)
+                continue
             try:
                 for nid in watch(task):
                     print("dfs_github: %s: %s from its pull request" % (task, nid))

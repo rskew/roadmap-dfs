@@ -120,6 +120,8 @@ echo '{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_t
 
 class Chain(unittest.TestCase):
     def setUp(self):
+        from test_github import skip_if_tmp_noexec
+        skip_if_tmp_noexec()
         self.root = Path(tempfile.mkdtemp())
         (self.root / ".dfs" / "items").mkdir(parents=True)
         (self.root / ".dfs" / "ROADMAP.md").write_text(ROADMAP)
