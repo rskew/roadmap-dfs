@@ -239,10 +239,93 @@ def stopped_on(dest):
     return found[-1] if found else "other"
 
 
-def score(dest, task):
-    """The replay's score. Fails loudly on a DEST that is not this task's prepared replay
-    (arguments swapped, a typo) or that has no transcript of the task, since a table of
-    dashes reads as a replay that did nothing."""
+REACH_FIELDS = ("command", "file_path", "path", "pattern", "notebook_path")
+
+
+def live_paths(repo):
+    """What a replay's sessions can reach that the original's later work or evidence lives
+    in: the live checkout (its runs, items, worktrees and scripts), the codex session logs
+    and the transcripts of every earlier session, the original task's included."""
+    home = os.path.expanduser("~")
+    paths = [str(Path(repo).resolve()), os.path.join(home, ".codex"), os.path.join(config_dir(), "projects")]
+    # a session writes the home as `~` or `$HOME` as often as in full
+    return paths + [p.replace(home, h, 1) for p in paths[1:] if p.startswith(home) for h in ("~", "$HOME")]
+
+
+def reached(dest, repo, files, tool=None):
+    """The tool calls in `files` (transcripts) that name a live path outside `dest`, as
+    (session id, tool, text). DEST, its exported tool and the tool the replay runs under
+    are cut out first, so a replay kept inside the live checkout (or run under its
+    scripts) does not count itself; a path built at run time (`cd ..`, a variable) is not
+    seen, so this is a floor."""
+    dest = str(Path(dest).resolve())
+    cut = [re.escape(dest + "-tool"), re.escape(dest) + r"(?![\w-])"]
+    if tool:
+        cut.append(re.escape(str(Path(tool).resolve())) + r"(?![\w-])")
+    own = re.compile("(?:" + "|".join(cut) + ")")
+    live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + r")(?![\w-])")
+    found = []
+    for f in files:
+        sid = os.path.basename(f)[:-6]
+        with open(f, errors="replace") as fh:
+            for line in fh:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                msg = r.get("message") or {}
+                if r.get("type") != "assistant" or not isinstance(msg.get("content"), list):
+                    continue
+                for b in msg["content"]:
+                    if not isinstance(b, dict) or b.get("type") != "tool_use":
+                        continue
+                    inp = b.get("input") or {}
+                    text = " ".join(str(inp[k]) for k in REACH_FIELDS if inp.get(k))
+                    if live.search(own.sub("", text)):
+                        found.append((sid, b.get("name"), text))
+    return found
+
+
+def original_lines(repo, task):
+    """What the original run concluded, as strings a tool result can be searched for: each
+    node's title and the head of its Determination, from the task file and its archive."""
+    lines = set()
+    for rel in (f".dfs/items/{task}.md", f".dfs/archive/items/{task}.md"):
+        try:
+            text = (Path(repo) / rel).read_text()
+        except OSError:
+            continue
+        for m in re.finditer(r"(?m)^### (W\d+\.\d+ · .+)$|^Determination: (.{40,})$", text):
+            lines.add((m.group(1) or m.group(2))[:60].strip())
+    return lines
+
+
+def answer_seen(dest, repo, task, files):
+    """The original's conclusions (`original_lines`) that appear in a tool result of a
+    replay's sessions and are not in the replay's own record (its task file and commits),
+    as {line: [session ids]}: a replay that read them was shown the answer, whether or not
+    it used it. Looks at what a tool printed, not at what the session then did."""
+    own = git(dest, "log", "--all", "-p", "--format=%B", "--", ".dfs/items", check=False)
+    own += git(dest, "log", "--all", "--format=%B", check=False)
+    wanted = {l for l in original_lines(repo, task) if l not in own}
+    seen = {}
+    for f in files:
+        sid = os.path.basename(f)[:-6]
+        with open(f, errors="replace") as fh:
+            for line in fh:
+                if '"tool_result"' not in line:
+                    continue
+                for w in wanted:
+                    if json.dumps(w)[1:-1] in line and sid not in seen.setdefault(w, []):
+                        seen[w].append(sid)
+    return seen
+
+
+def score(dest, task, repo=None):
+    """The replay's score, with how many tool calls named the live checkout (`repo`, the
+    checkout that owns this directory when not given) from outside DEST. Fails loudly on a
+    DEST that is not this task's prepared replay (arguments swapped, a typo) or that has no
+    transcript of the task, since a table of dashes reads as a replay that did nothing."""
     dest = Path(dest).resolve()
     try:
         info = json.loads((dest / ".git" / "replay.json").read_text())
@@ -261,6 +344,11 @@ def score(dest, task):
                          f"({len(sessions)} sessions found under {', '.join(transcripts(dest))})")
     t["stopped"] = stopped_on(dest)
     t["finished"] = merged(dest, task)
+    repo = repo or main_checkout()
+    files = history._glob(transcripts(dest))
+    t["reach"] = reached(dest, repo, files, info.get("tool"))
+    t["outside"] = len(t["reach"])
+    t["answer"] = answer_seen(dest, repo, task, files)
     return t
 
 
@@ -281,6 +369,8 @@ ROWS = [
     ("raises", lambda t: t["raises"]),
     ("refused commits", lambda t: t["refused"]),
     ("spent after a review said issues", lambda t: f"{t['after_issues']:.2f}"),
+    ("tool calls naming the live checkout", lambda t: t.get("outside", "-")),
+    ("original's nodes shown in a result", lambda t: len(t["answer"]) if "answer" in t else "-"),
 ]
 
 
@@ -329,14 +419,14 @@ def main(argv):
         return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"])
     elif cmd == "score":
         dest, task = pos
-        compare(task, original(repo, task), score(dest, task))
+        compare(task, original(repo, task), score(dest, task, repo))
     elif cmd == "replay":
         task, dest = pos
         dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"])
         before = original(repo, task)
         cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
         run(dest, task, cap, tool, opts["bash-minutes"])
-        compare(task, before, score(dest, task))
+        compare(task, before, score(dest, task, repo))
     return 0
 
 

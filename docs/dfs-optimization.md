@@ -142,6 +142,8 @@ cost.
 | reviews with issues / rounds | 1 / 2 | 0 / 1 | 2 / 3 | 0 / 1 |
 | spent after a review said issues | 0.47 | 0.00 | 1.06 | 0.00 |
 | chain stopped on | | DONE, merged | DONE, merged | DONE, merged |
+| tool calls naming the live checkout (sessions of the replay's total) | | 8 (1 of 3) | 22 (3 of 5) | 5 (1 of 3) |
+| original's nodes shown in a tool result | | 1 | 3 | 0 |
 
 Two of the three first trees passed review, one failed it twice (as the original failed
 once), and the cost ran from 1.5 to 2.6 times the original's: so the harness has not shown
@@ -150,18 +152,56 @@ varies between replays of one task. The `ok` reviews of `a` and `c` each still l
 defects (`c` names a day-boundary hold of 24 hours that `b`'s review made a Fix node of),
 so which side of `ok` a tree falls on is partly the reviewer's call.
 
+The last two rows are from `replay.py score` (below): the three replays were not sealed
+from the box. Their DEST sits inside the live checkout (`/workspace/roadmap-dfs/.dfs/runs/replays/`,
+the one mount here that runs scripts), and sessions run as the same user, so the live
+`.dfs/runs`, `.dfs/items`, `.dfs/worktrees` and `~/.codex` were one directory up.
+
 What the proof does not show, and what a comparison has to allow for:
 
 - **One replay is one sample.** The same task, under one system, cost 1.95, 2.77 and 3.44
   dollars (1.30 originally) and its first review passed twice in three; a change to the
   system can only be judged over several replays of each arm (control and changed),
   compared on the first review's pass rate before cost.
-- **The replay's box is not the original's.** W55's original evidence was codex session
-  logs in `~/.codex/sessions`, which the scratch clone does not carry; an earlier,
-  unguarded replay ran `grep -r /` for them and sat in it for 53 minutes until the search
-  was killed by hand (the three above did not, but a session in `a` spent 28 minutes in
-  tool calls). Tasks whose evidence is outside the repo make poor replay candidates,
-  and a replay should be given a timeout on a single Bash call.
+- **The replay's box is the original's, with the answer on it.** `seal` empties the clone
+  of the original's later work, but not the box: a replay's sessions run as the same user,
+  and the live checkout's `.dfs/runs` (the original chain's run logs, with its sessions'
+  tool output), `.dfs/items` (the original `W55.md`), `.dfs/worktrees`, the codex session
+  logs in `~/.codex/sessions` and every earlier session's transcript under `~/.claude` are
+  readable. `replay.py score` now counts the tool calls that name them from outside DEST
+  (DEST, its exported tool and the tool it runs under are cut out first) and the original's
+  node titles and Determinations that a tool result printed and the replay did not write
+  itself. Both are floors: a path built at run time (`cd ..`, a variable) is not seen, and
+  a result that shows the answer is not a session that used it. Run on the four W55
+  replays, the sessions that reached out were 1 of 3 (`a`), 3 of 5 (`b`), 1 of 3 (`c`)
+  and 4 of 9 (`arm1`), 8, 22, 5 and 32 calls. All four read the live `.dfs/runs`, searching
+  its run logs and `activity.log` for the "usage limit" and "Try again at" lines the task is
+  about; `b` and `arm1` also searched `~/.codex/sessions`; `b` also read the test of
+  another task's live worktree (`.dfs/worktrees/W122/scripts/test_web.py`), ran a recursive
+  `grep` over `/workspace` and `/tmp`, and a glob over the live `scripts/*.py`,
+  `.dfs/worktrees/*/scripts/*.py` and `.dfs/items/*.md` that hit the 900-second bound and
+  returned nothing to the session. A tool result printed the original's own Determinations
+  (the fix, in words) in `a` (1 of the original's 6 lines), `b` (3) and `arm1` (3), from the
+  original chain's run logs (`dfs_run_53uiza6t`), not from the items directory; `c` saw none.
+  So the earlier text, "evidence the scratch clone does not carry", was wrong for these
+  runs. What it does to the figures: the two replays whose first review passed are `a`
+  (one of the original's lines shown) and `c` (none), and the one that failed, `b`, was
+  shown three, so the answer being on the box did not make these replays pass; but the
+  2 of 3 cannot be called a clean replay's pass rate either, and is an upper bound on
+  one. The earlier unguarded replay ran `grep -r /` for the evidence and sat in it for
+  53 minutes; none of these four did (searched in their transcripts), and a session in
+  `a` spent 28 minutes in tool calls.
+- **What the box must hide, and what it can.** For a clean replay the sessions would see
+  the clone, the tool and the account's credentials and nothing else: no live checkout,
+  no `~/.codex`, no other `~/.claude/projects`. This box cannot do it: a mount namespace
+  (`unshare -Urm`) is refused ("Operation not permitted"), `/tmp`, `/dev/shm` and the home
+  do not run scripts, so DEST cannot move out of the live checkout, and the original's run
+  logs, transcripts and task file are on the same disk. A box that can (a container that
+  mounts only the clone, `sandbox.sh run`, or a copy of the repo without `.dfs/runs`) is
+  the fix, and until a replay runs in one its pass rate is an upper bound on a clean
+  replay's, with `score`'s two rows printed beside it. Tasks whose evidence lies outside
+  the repo make poor candidates for the same reason, and a replay should be given a
+  timeout on a single Bash call.
 - **The starting point keeps only the title, Goal and Background.** Any nodes the author
   wrote into the task before work began are dropped, so a task that began with
   author-written nodes is not replayed from its real start; none of the candidate tasks
@@ -192,6 +232,10 @@ about how a session works, replayed on W55 as `dfs-replay-W55-arm1`.
   `issues` (2 reviews with issues of 3), merged. The $4.82 includes a session cut off when
   the shell call running the chain hit its 30-minute limit; the chain was resumed with
   `replay.py run`, as for the usage limit above.
+
+- It was not sealed from the box either: 32 calls in 4 of its 9 sessions named the live
+  checkout (`.dfs/runs`) or `~/.codex`, and a tool result printed three of the original's
+  Determinations (see "The replay's box" above).
 
 That is one replay of one arm, and the marker changes nothing a review would judge, so it
 says only that the changed-arm path runs end to end and that the session reads the
@@ -242,7 +286,8 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    dataset. Pick the failure class and the tasks it appears in.
 2. **Choose** one candidate and a replayable set: roadmap-dfs tasks that are small
    (original at most $3), whose evidence lies in the repo (not `~/.codex`, not the
-   network), and whose original first review found issues, so the control has
+   network; every task's original run logs and task file are on this box, so the replay's
+   `score` rows for outside reach are read against that), and whose original first review found issues, so the control has
    something to move. Take at least four. `replay.py plan TASK` prints the starting
    point and the original's numbers.
 3. **Change** the tool, on a branch of this repo, one candidate at a time: the changed
@@ -257,18 +302,23 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    minutes, where W55's replay sat 53 minutes in `grep -r /`. A call that hits the bound
    shows in the transcript as a timeout; count those as a result (the task needed
    something the scratch clone lacks) and drop the task from the set if it recurs.
+   The box is not hidden from the replay (section 3): `score` prints each replay's
+   calls naming the live checkout and the original's conclusions a result showed, and
+   those two rows go in the comparison.
 5. **Compare** the arms per task, never pooled: first-review pass rate (out of 3),
    median dollars, refused commits, replays that stopped BLOCKED or on the cap. Then
    read the reviews of the changed arm's passes: a pass counts only if the review's
    `ok` names what it checked (the `ok` of two guarded W55 replays still listed three
    and four defects each). A candidate is **kept** if it passes the first review in at
    least **four** more replays of the twelve than the control does, and no task gets
-   worse by more than one replay of three. **Dropped** otherwise, with the numbers in the
-   candidate's row.
+   worse by more than one replay of three, **on the pass rates of all replays and again on
+   only those whose `score` shows none of the original's conclusions in a result** (a
+   margin that holds only when the exposed replays are counted is the box's, not the
+   change's). **Dropped** otherwise, with the numbers in the candidate's row.
 
    *Why four.* Assume each replay passes its first review with probability p, alone
    and independently, p between 0.5 and 0.7 (the history fails 30% of first reviews; the
-   three guarded W55 replays passed 2 of 3). Two arms of the same tool then differ by
+   three guarded W55 replays passed 2 of 3, an upper bound on a clean replay's rate for the reason in section 3). Two arms of the same tool then differ by
    the margin by chance this often (exact sums over every outcome, recomputed by the page named below):
 
    | margin (of 12) | kept by chance, p=0.5 | p=0.7 | kept if p goes 0.5 to 0.9 | 0.5 to 0.75 |

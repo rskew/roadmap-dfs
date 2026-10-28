@@ -338,6 +338,77 @@ class OriginalIsTheRepoOwnTest(unittest.TestCase):
                 self.assertIsNone(replay.original("/tmp/nobody", "W5"))
 
 
+class ReachOutsideDestTest(unittest.TestCase):
+    """A replay kept inside the live checkout can read the original's runs, items and
+    codex logs; the score counts the calls that did, and the results that showed the answer."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        tmp = Path(self.tmp.name)
+        self.live = tmp / "live"
+        self.dest = self.live / ".dfs" / "runs" / "replays" / "dfs-replay-W5-a"
+        self.home = tmp / "home"
+        (self.live / ".dfs" / "items").mkdir(parents=True)
+        self.dest.mkdir(parents=True)
+        self.home.mkdir()
+        env = mock.patch.dict(os.environ, {"HOME": str(self.home), "CLAUDE_CONFIG_DIR": str(self.home / ".claude")})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def transcript(self, calls, results=()):
+        path = Path(self.tmp.name) / "s.jsonl"
+        rows = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": f"t{i}", "name": name, "input": inp}]}} for i, (name, inp) in enumerate(calls)]
+        rows += [{"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t0", "content": r}]}} for r in results]
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        return [str(path)]
+
+    def reached(self, calls, tool=None):
+        return [(n, t) for _, n, t in replay.reached(self.dest, self.live, self.transcript(calls), tool)]
+
+    def test_calls_inside_dest_are_not_reach_and_calls_outside_it_are(self):
+        d, live = str(self.dest), str(self.live)
+        got = self.reached([
+            ("Bash", {"command": f"cd {d} && git log"}),                                   # its own clone
+            ("Read", {"file_path": f"{d}/.dfs/worktrees/W5/scripts/x.py"}),                  # its own worktree
+            ("Bash", {"command": f"ls {d}-tool/templates"}),                                # its exported tool
+            ("Bash", {"command": f"grep -r limit {live}/.dfs/runs"}),                       # the live runs
+            ("Read", {"file_path": f"{live}/.dfs/items/W5.md"}),                            # the original's task file
+            ("Glob", {"pattern": f"{live}/.dfs/worktrees/*/scripts/*.py"}),                 # live worktrees
+            ("Bash", {"command": f"ls {d[:-1]}b/.dfs"}),                                    # a sibling replay is live too
+            ("Bash", {"command": "grep -rl limit ~/.codex/sessions"}),                      # codex logs, written with ~
+            ("Bash", {"command": f"grep -rl limit {self.home}/.codex"}),
+            ("Bash", {"command": "ls $HOME/.claude/projects"}),                              # earlier sessions' transcripts
+            ("Bash", {"command": "git status"}),
+        ])
+        self.assertEqual([n for n, _ in got],
+                         ["Bash", "Read", "Glob", "Bash", "Bash", "Bash", "Bash"])
+
+    def test_the_tool_the_replay_runs_under_is_not_reach_even_inside_the_live_checkout(self):
+        tool = self.live / "scripts"
+        calls = [("Bash", {"command": f"cat {tool}/limit.py"})]
+        self.assertEqual(len(self.reached(calls)), 1)
+        self.assertEqual(len(self.reached(calls, tool=self.live)), 0)
+
+    def test_a_result_that_prints_the_originals_conclusion_is_the_answer_seen(self):
+        (self.live / ".dfs" / "items" / "W5.md").write_text(
+            "# W5\n\n## Tree\n\n### W5.1 \u00b7 Fix the parser\nDetermination: the parser now reads a quoted pipe before the verb.\n"
+            "\n### W5.2 \u00b7 Own idea\nDetermination: both sessions wrote this very sentence themselves.\n")
+        git(self.dest, "init", "-q")
+        (self.dest / ".dfs" / "items").mkdir(parents=True)
+        (self.dest / ".dfs" / "items" / "W5.md").write_text("### W5.2 \u00b7 Own idea\nDetermination: both sessions wrote this very sentence themselves.\n")
+        git(self.dest, "add", "-A")
+        git(self.dest, "commit", "-q", "-m", "W5.2: own")
+        files = self.transcript([("Bash", {"command": "x"})], [
+            "== run-1.json\nDetermination: the parser now reads a quoted pipe before the verb. more",
+            "W5.2 \u00b7 Own idea ... Determination: both sessions wrote this very sentence themselves."])
+        seen = replay.answer_seen(self.dest, self.live, "W5", files)
+        self.assertEqual(list(seen), ["the parser now reads a quoted pipe before the verb."[:60]])   # not the one it wrote itself
+        self.assertEqual(replay.answer_seen(self.dest, self.live, "W5", self.transcript([("Bash", {"command": "x"})], ["nothing"])), {})
+
+
 class HistoryKeepsReplaysApartTest(unittest.TestCase):
     def test_default_mining_skips_replay_transcripts_and_notes_the_first_review(self):
         with tempfile.TemporaryDirectory() as tmp:
