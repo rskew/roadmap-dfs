@@ -531,7 +531,8 @@ class Ticking(Ticks, unittest.TestCase):
         ui.pane, ui.scroll, ui.answers, ui.labels, ui.begun = "items", 0, [], [], []
         ui.read_line = lambda label: ui.labels.append(label) or line
         ui.walk_parallel = parallel
-        ui.walk_begin = lambda budget, par=1: ui.begun.append(budget if par == 1 else (budget, par))
+        ui.walk_begin = lambda budget, par=1, stop_on_limit=False: ui.begun.append(
+            (budget, par, True) if stop_on_limit else budget if par == 1 else (budget, par))
         ui.walk_toggle()
         return ui
 
@@ -556,6 +557,15 @@ class Ticking(Ticks, unittest.TestCase):
         self.assertEqual(self.typed("20 1").begun, [20])
         self.assertEqual(self.typed("20 three").begun, [])
         self.assertEqual(self.typed("20 3 1").begun, [])
+
+    def test_the_word_stop_at_the_walk_prompt_ends_the_walk_at_a_usage_limit(self):
+        ui = self.typed("7 stop")
+        self.assertEqual(ui.begun, [(7, 1, True)])
+        self.assertEqual(self.typed("20 3 stop").begun, [(20, 3, True)])
+        for bad in ("stop", "stop 7", "7 stop 3", "7 3 4 stop", "7 halt"):
+            ui = self.typed(bad)
+            self.assertEqual(ui.begun, [], bad)
+            self.assertIn("not a number of sessions", ui.msg)
 
     def test_the_walk_command_s_arguments_are_the_prompts_two_numbers(self):
         # `:walk 20 3` answers the one prompt with "20" and leaves "3" for it.
