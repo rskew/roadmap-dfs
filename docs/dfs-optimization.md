@@ -122,40 +122,45 @@ the run with the code that scored the original (`history.session()`, `tasks_of()
 
 ### Proved on W55
 
-**Void until redone.** This replay ran on a noexec `/tmp`, so git skipped the dfs hooks
-(`pre-commit`, `pre-merge-commit`) and the replay ran without the guard; its clone had no
-git identity, and its commit count came from a score that counts failed commits. The
-table below shows what that run did, not what the current system does. `replay.py prepare`
-now refuses a DEST where scripts cannot run, gives the clone the original's identity and
-holds nothing of the original's later work; the W55 replay is to be run again from there.
-
 W55 ("Codex limits reached until reset time, time not parsed properly") is small: 5
-sessions and $1.30 originally, with a first review that found issues. Replayed on
-2026-10-22 under the same tool as this session:
+sessions and $1.30 originally, with a first review that found issues. It was replayed
+three times on 2026-10-28 (`dfs-replay-W55-a`, `-b`, `-c`) under the current tool, on a
+mount that runs scripts, so the dfs hooks ran (the clones hold `pre-commit` and
+`pre-merge-commit`); in the replays' transcripts no commit failed for a skipped hook or an
+unknown identity, and none ran `grep -r /`. All three stopped on the account's usage
+limit part-way (a work session in `a`, a work session in `b`, a review in `c`) and were
+resumed with `replay.py run` once it lifted, 2h20m later; the cut-off sessions are in the
+cost.
 
-| | original | replay |
-|---|---|---|
-| sessions (work / review / critic) | 5 (3/2/0) | 6 (3/3/0) |
-| dollars | 1.30 | 3.48 |
-| node commits | 4 | 5 (scored 7 before failed commits were excluded) |
-| first review | issues | issues |
-| reviews with issues / rounds | 1 / 2 | 2 / 3 |
-| spent after a review said issues | 0.47 | 1.66 |
-| chain stopped on | | DONE, review passed, merged |
+| | original | a | b | c |
+|---|---|---|---|---|
+| sessions (work / review / critic) | 5 (3/2/0) | 3 (2/1/0) | 5 (3/2/0) | 3 (1/2/0) |
+| dollars | 1.30 | 1.95 | 3.44 | 2.77 |
+| of which cut off by the limit | | 1.12 | 0.20 | 0.54 |
+| node commits | 4 | 1 | 4 | 1 |
+| first completed review | issues | ok | issues | ok |
+| reviews with issues / rounds | 1 / 2 | 0 / 1 | 2 / 3 | 0 / 1 |
+| spent after a review said issues | 0.47 | 0.00 | 1.06 | 0.00 |
+| chain stopped on | | DONE, merged | DONE, merged | DONE, merged |
 
-The replay planned one node, was found wanting by its first review, which added two
-nodes, and by its second, which added two more, then passed. It reproduced the original's
-shape (the first finished tree failed review) at 2.7 times the cost.
+Two of the three first trees passed review, one failed it twice (as the original failed
+once), and the cost ran from 1.5 to 2.6 times the original's: so the harness has not shown
+that it reproduces the failure it is meant to move, only that the first review's verdict
+varies between replays of one task. The `ok` reviews of `a` and `c` each still list
+defects (`c` names a day-boundary hold of 24 hours that `b`'s review made a Fix node of),
+so which side of `ok` a tree falls on is partly the reviewer's call.
 
 What the proof does not show, and what a comparison has to allow for:
 
-- **One replay is one sample.** The same task cost 1.3 or 3.5 dollars and took one or two
-  failing reviews; a change to the system can only be judged over several replays of each
-  arm (control and changed), compared on the first review's pass rate before cost.
+- **One replay is one sample.** The same task, under one system, cost 1.95, 2.77 and 3.44
+  dollars (1.30 originally) and its first review passed twice in three; a change to the
+  system can only be judged over several replays of each arm (control and changed),
+  compared on the first review's pass rate before cost.
 - **The replay's box is not the original's.** W55's original evidence was codex session
-  logs in `~/.codex/sessions`, which the scratch clone does not carry; the replay's first
-  session ran `grep -r /` for them and sat in it for 53 minutes until the search was
-  killed by hand. Tasks whose evidence is outside the repo make poor replay candidates,
+  logs in `~/.codex/sessions`, which the scratch clone does not carry; an earlier,
+  unguarded replay ran `grep -r /` for them and sat in it for 53 minutes until the search
+  was killed by hand (the three above did not, but a session in `a` spent 28 minutes in
+  tool calls). Tasks whose evidence is outside the repo make poor replay candidates,
   and a replay should be given a timeout on a single Bash call.
 - **The tool is the current one**, not the original's, so the control arm is the current
   tool; the original column is the history, not a control.
