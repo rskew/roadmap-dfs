@@ -4,12 +4,14 @@ files and the transcripts, each one checkable from its output.
 
     audit.py nodes    [--repo DIR]              node statuses as the tree reads them, backtracks, corrections
     audit.py findings [--repo DIR] [--out FILE] every review finding, one row each, with its class
+    audit.py rounds   [--repo DIR] [--out FILE] later reviews' defects against the code changed since the review before
     audit.py cost     [--projects GLOB] [--repo P=DIR]   price error on held-out sessions; shares by dollars and by units
 
 `nodes` and `findings` read the task files of a checkout (default: this directory's repo),
 as `tree.py` does, so the numbers are the ones the screen shows. Nothing here edits a task.
 """
 import collections
+from datetime import datetime, timezone
 import glob
 import hashlib
 import os
@@ -151,6 +153,109 @@ def report_findings(repo, out=None, sample=0):
             w(f"{r[0]} {r[2]:24} {r[3][:200]}\n")
 
 
+# ---------------------------------------------------------------- rounds
+
+TOKEN = re.compile(r"`([^`\n]{2,60})`|\b([A-Za-z_]\w*_\w+)\b|\b([A-Za-z_]\w*)\(\)")
+
+
+def named_code(line):
+    """The names a finding line points at: backticked spans, snake_case words and `name()`.
+    A backticked span with spaces is prose, not a name, and a bare node id is not code."""
+    out = set()
+    for m in TOKEN.finditer(line):
+        tok = next(g for g in m.groups() if g)
+        if " " not in tok and not re.fullmatch(r"W\d+(\.\d+)?", tok) and len(tok) > 2:
+            out.add(tok)
+    return out
+
+
+def git(repo, *args):
+    import subprocess
+    return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, errors="replace")
+
+
+def node_commits(repo):
+    """[(task, author time, sha)] for every commit whose subject opens with a node id, oldest
+    first by git's order, with the author date (a rebase keeps it; the committer date it does not)."""
+    out = git(repo, "log", "--reverse", "--format=%H%x02%aI%x02%s").stdout
+    commits = []
+    for ln in out.splitlines():
+        sha, when, subject = (ln.split("\x02", 2) + ["", ""])[:3]
+        m = re.match(r"(W\d+)\.\d+", subject)
+        if m:
+            commits.append((m.group(1), datetime.fromisoformat(when).astimezone(timezone.utc), sha))
+    return commits
+
+
+def utc(ts):
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def in_code(repo, rev, tok):
+    """Whether `tok` occurs in the tracked code at `rev`, planning files aside."""
+    return git(repo, "grep", "-q", "-F", "-e", tok, rev, "--", ".", ":!.dfs", ":!docs").returncode == 0
+
+
+def classify(repo, line, window):
+    """`window` is the node commits (oldest first) made in answer to the earlier review.
+      present            every name the line points at was in the code before the window and
+                         no commit of the window changed a line using it or within ten lines of
+                         one (so a change inside a function counts as touching it); the earlier
+                         review could have found it (a lower bound)
+      introduced         a name the line points at was not in the code before the window
+      maybe-introduced   the names were there, but a commit of the window changed lines at or near one
+      unplaced           the line points at no name, or the window has no commit"""
+    names = named_code(line)
+    if not names or not window:
+        return "unplaced"
+    base = window[0] + "^"
+    patch = "".join(git(repo, "show", "--format=", "-U10", sha, "--", ".", ":!.dfs", ":!docs").stdout for sha in window)
+    changed = [l for l in patch.splitlines() if not l.startswith(("+++", "---", "diff ", "index ", "@@"))]
+    if any(not in_code(repo, base, n) for n in names):
+        return "introduced"
+    return "maybe-introduced" if any(n in l for n in names for l in changed) else "present"
+
+
+def round_rows(tasks, commits, repo):
+    """One row per defect line of every issues review after the task's first: (task, review
+    ts, kind, line); `classify` says what the kinds are. The window is the task's node
+    commits between the review before and this one."""
+    rows = []
+    for k, t in tasks.items():
+        revs = [e for e in t["log"] if e["kind"] == "review" and e["args"][:1] == ["issues"]]
+        for prev, cur in zip(revs, revs[1:]):
+            lo, hi = utc(prev["ts"]), utc(cur["ts"])
+            window = [sha for task, when, sha in commits if task == k and lo < when <= hi]
+            for line in cur["body_lines"]:
+                line = line.strip()
+                if ASSUMPTION.match(line) or not NODE_LINE.match(line) or MINOR.search(line):
+                    continue
+                rows.append((k, cur["ts"], classify(repo, line, window), line))
+    return rows
+
+
+def report_rounds(repo, out=None):
+    tasks = load_tasks(repo)
+    rows = round_rows(tasks, node_commits(repo), repo)
+    multi = [k for k, t in tasks.items()
+             if sum(e["kind"] == "review" and e["args"][:1] == ["issues"] for e in t["log"]) >= 2]
+    c = collections.Counter(r[2] for r in rows)
+    w = sys.stdout.write
+    w(f"{len(multi)} tasks with two or more issues reviews; {len(rows)} defect lines in a review after the first: {dict(c)}\n")
+    by = collections.defaultdict(collections.Counter)
+    for r in rows:
+        by[r[0]][r[2]] += 1
+    w(f"  tasks with at least one defect in code the earlier review saw unchanged: {sum('present' in v for v in by.values())}\n")
+    w(f"  tasks where no later defect was placed as introduced: "
+      f"{sum(not v['introduced'] and not v['maybe-introduced'] and v['present'] for v in by.values())}\n")
+    if out:
+        with open(out, "w") as fh:
+            fh.write("task\treview\tkind\tline\n")
+            for r in rows:
+                fh.write("\t".join((r[0], r[1], r[2], r[3].replace("\t", " ").replace("\n", " "))) + "\n")
+        w(f"wrote {out}\n")
+
+
 # ---------------------------------------------------------------- cost
 
 def half(sid):
@@ -238,7 +343,7 @@ def report_cost(pattern, repos):
 
 
 def main(argv):
-    if not argv or argv[0] not in ("nodes", "findings", "cost"):
+    if not argv or argv[0] not in ("nodes", "findings", "rounds", "cost"):
         sys.stdout.write(__doc__)
         return 2
     cmd, opts, repos = argv[0], {}, {}
@@ -258,6 +363,8 @@ def main(argv):
         report_nodes(repo)
     elif cmd == "findings":
         report_findings(repo, opts.get("out"), int(opts.get("sample", 0)))
+    elif cmd == "rounds":
+        report_rounds(repo, opts.get("out"))
     else:
         base = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
         report_cost(opts.get("projects") or os.path.join(base, "projects", "*", "*.jsonl"), repos)

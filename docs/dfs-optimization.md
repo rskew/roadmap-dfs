@@ -182,7 +182,7 @@ it). Each names the file it changes and the replay that tests it.
 |---|---|---|---|---|
 | 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 101 of 207 review finding lines are defects; 42.0% of spend follows an issues review; 13 refuted nodes and 7 backtracks against 524 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 28 of 207 review finding lines are unmarked assumptions (some repeat across rounds). | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `audit.py findings`, rows of class `assumption` in `docs/dfs-review-findings.tsv`) |
-| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. A task that needs five review rounds usually has more than five problems at round one. | 44 tasks needed two or more issue rounds; shop-app W13: 18 reviews, all with issues. Cuts rounds, not work, if the second finding was already there at round one; no evidence yet that it was. | the review prompt (`run.sh`) | a task with 3+ rounds: compare findings of round 1 against the union of later rounds in the task log before spending a replay |
+| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (24 tasks), 4 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 16 name code the fixes changed (either could hold), 16 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 4 to 20 present ones; the four are in W75 (2), W88 and W91 |
 | 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,043 sessions hit a refusal, 308 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
 | 5 | **Cap a review loop.** After three issues rounds the task raises for the author instead of continuing. | 12% of tasks hold 42% of spend. Does not improve quality, it limits the loss, and hands the author the tail. | `state.py` | none: read from history by counting what the cap would have saved |
 
@@ -231,7 +231,11 @@ changed, task by task, in one sitting, and not run as two batches on different d
 
 ### Next
 
-Candidate 3 can be answered from the task logs with no replay, so it goes first: for the
-44 tasks with two or more issue rounds, whether the later rounds' findings were
-already present in the tree at round one. Then candidate 1 on four tasks, the first real
-run of the loop.
+Candidate 3 was answered from the task logs, with no replay (row 3 above): the present
+evidence does not support it, so no replay budget goes to it first. Limits of that
+check: it places a finding by the names it points at (backticks, snake_case, `name()`)
+against the code before and the commits after the earlier review, so 16 of 43 lines
+cannot be placed, a fix that touches code near a name makes the line `maybe-introduced`,
+and it reads roadmap-dfs only (the other projects' repos are not on this box). Then
+candidate 1 on four tasks, the first real run of the loop, which needs `claude` and a
+DEST that can run scripts.

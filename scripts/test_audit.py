@@ -86,6 +86,45 @@ class SplitTest(unittest.TestCase):
         self.assertGreater(max(err["p"]), 0.2)          # a fit on the same sessions would show none
 
 
+class RoundsTest(unittest.TestCase):
+    def setUp(self):
+        import subprocess
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, self.dir)
+
+        def run(*a, env=None):
+            subprocess.run(["git", "-C", self.dir, *a], check=True, capture_output=True, env=env)
+        run("init", "-q")
+        run("config", "user.name", "t")
+        run("config", "user.email", "t@t")
+        pad = "".join("# filler %d\n" % i for i in range(30))     # keeps keep_me out of the change's context
+        Path(self.dir, "a.py").write_text("def keep_me():\n    pass\n" + pad + "def touched_one():\n    pass\n")
+        run("add", "a.py")
+        run("commit", "-qm", "W9.1: base")
+        Path(self.dir, "a.py").write_text("def keep_me():\n    pass\n" + pad + "def touched_one():\n    return 1\n\ndef brand_new():\n    pass\n")
+        run("commit", "-qam", "W9.2: the fix")
+        self.window = [audit.git(self.dir, "rev-parse", "HEAD").stdout.strip()]
+
+    def kind(self, line):
+        return audit.classify(self.dir, line, self.window)
+
+    def test_a_defect_in_code_the_fix_left_alone_was_there_at_the_earlier_review(self):
+        self.assertEqual(self.kind("W9.3 added: `keep_me` drops the raise"), "present")
+
+    def test_a_defect_in_code_the_fix_wrote_or_changed_is_not_counted_as_there(self):
+        self.assertEqual(self.kind("W9.3 added: brand_new() loses the raise"), "introduced")
+        self.assertEqual(self.kind("W9.3 added: touched_one() returns early"), "maybe-introduced")
+
+    def test_a_line_naming_no_code_or_a_task_with_no_window_is_unplaced(self):
+        self.assertEqual(self.kind("W9.3 added: the page stays blank"), "unplaced")
+        self.assertEqual(audit.classify(self.dir, "W9.3 added: `keep_me` drops it", []), "unplaced")
+
+    def test_names_come_from_backticks_snake_case_and_calls_only(self):
+        self.assertEqual(audit.named_code("W9.3 added: `a.py` and some_name and call() but not Prose or `two words`"),
+                         {"a.py", "some_name", "call"})
+
+
 def half_ok(sid):
     return audit.half(sid) == 0
 
