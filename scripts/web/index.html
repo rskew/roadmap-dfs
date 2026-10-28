@@ -153,9 +153,13 @@ pre.runlog .r-err { color: var(--attention); }
 .item .meta .tag.draft { background: var(--ink); color: var(--paper); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 1px var(--s2); }
 .item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
 /* The table style (wide screens only, chosen with the Table button): one line per task, a column each for status, review, branch and run.
-   The rows sit in a container; narrower than 820px (a task open beside the list) the same markup is laid out as the card.
-   --z is 1 or more at every width, so the 880px column never falls under 820px by itself. */
+   The rows sit in a container; narrower than 980px (a task open beside the list) the same markup is laid out as the card.
+   The columns are in rem times --z, as the type is. 980px is the list column at which the goal keeps about 240px beside the fixed columns (743px of them and the gaps).
+   The fixed columns are sized from the text a cell really carries, measured in a browser at 16px: an id up to 77px (a nested W128.1), status
+   with its held-by or waiting-on tag up to 182px, review "rev 123" 70px, branch one "N not on origin/main" tag 158px, run "running work 4/20" 146px.
+   A cell with two branch tags (ahead and uncommitted) or four status tags is cut with an ellipsis and says the whole in its title. */
 #view.tbl { container: tasks / inline-size; }
+#view.col.tbl { max-width: var(--page); }   /* the cells carry whole tags, which the 880px card column leaves the goal about 100px beside; the table takes the page's width */
 .listopt { justify-content: flex-end; margin: 0 0 var(--s2); }
 .tblhead, .noarch { display: none; }
 .item.tbl .itag { display: inline; margin-right: var(--s2); }
@@ -163,8 +167,8 @@ pre.runlog .r-err { color: var(--attention); }
 .item.tbl .cell { display: contents; }
 .item.tbl .cell .tag { white-space: normal; overflow-wrap: anywhere; }
 .item.tbl.done .goal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@container tasks (min-width: 820px) {
-  .item.tbl, .tblhead { grid-template-columns: 4.5rem minmax(0, 1fr) 8rem 4rem 7rem 6rem; align-items: center; gap: 0 var(--s3); }
+@container tasks (min-width: 980px) {
+  .item.tbl, .tblhead { grid-template-columns: calc(5rem * var(--z)) minmax(0, 1fr) calc(11.5rem * var(--z)) calc(4.5rem * var(--z)) calc(10rem * var(--z)) calc(9.5rem * var(--z)); align-items: center; gap: 0 var(--s3); }
   .tblhead { display: grid; box-sizing: border-box; width: 100%; min-height: calc(36px * var(--z)); padding-left: 2.2rem; border-bottom: var(--rule-strong) solid var(--ink); font-size: var(--fs-label); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .item.tbl, .item.tbl.done { padding-block: 0; min-height: var(--hit); }
   .item.tbl .goal { grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -447,6 +451,7 @@ const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only:
 /* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
 const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
+const tableWide = () => matchMedia("(min-width: 1020px)").matches;   // the table needs a list column of 980px (below), which a 1020px screen gives
 /* The list style: `card` (a two-line card per task, the phone's only one) or `table` (one line per task with columns, on a wide screen). Kept in localStorage. */
 const listStyle = () => { try { return localStorage.getItem("listStyle") === "table" ? "table" : "card"; } catch (e) { return "card"; } };
 
@@ -1056,9 +1061,9 @@ function drawTasks(push) {
   // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
   const held = push && typingInBox() ? $("#walkbox") : null;
   S.boxHeld = !!held;
-  const table = !S.reorder && wide() && listStyle() === "table";
+  const table = !S.reorder && tableWide() && listStyle() === "table";
   let seg = 0, html = held ? "" : walkHtml();
-  if (!S.reorder) html += `<div class="actions listopt desk"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
+  if (!S.reorder && tableWide()) html += `<div class="actions listopt"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
   if (table) html += `<div class="tblhead" aria-hidden="true"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>`;
   for (const it of S.state.items) {
     const fenced = it.segment > seg && !S.only;
@@ -1926,6 +1931,7 @@ $("#chat-log").addEventListener("scroll", e => {
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
 matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
+matchMedia("(min-width: 1020px)").addEventListener("change", () => render(true));
 addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
