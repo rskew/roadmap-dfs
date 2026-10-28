@@ -1,0 +1,236 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W122: why archive sometimes opens the item</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .fig { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 8px; }
+  .fig svg { display: block; width: 100%; height: auto; }
+  .res { margin: 8px 0 0; padding: 8px 10px; border-radius: 6px; border: 1.5px solid #333; background: #fff; }
+  .res.ok { border-color: #1d7a3a; background: #eef8f0; }
+  .res.bad { border-color: #b3261e; background: #fdf0ef; }
+  .res b { display: block; }
+  input[type=range] { width: 100%; min-height: 44px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #ccc; vertical-align: top; }
+  .note { color: #555; font-size: 14px; }
+  .legend { list-style: none; margin: 8px 0; padding: 0; }
+  .legend li { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+  .legend i { width: 18px; height: 14px; border: 1.5px solid; flex: none; }
+</style>
+
+<h1>Why archive sometimes opens the item</h1>
+<p>Two causes could make a tap on a row's archive icon open the row. Both are drawn to scale below, from the real page at 360px
+  (the W4 row: 65px tall, the archive box 51 by 32px, the icon 18px inside it). Cause 1: the finger lands beside the icon.
+  Cause 2: the list moves between the press and the release.</p>
+
+<h2>Cause 1: the finger lands beside the icon</h2>
+<p class="note">Drag the finger up or down. Measured in headless Chromium with real touch taps at 2px steps: before the 44px change only the box
+  answered archive; every point outside it opened the row.</p>
+<div class="fig"><svg id="fig1" viewBox="-6 -14 210 94" role="img" aria-label="The archive box and the row, to scale"></svg></div>
+<ul class="note legend"><li><i style="background:#f4f1ea;border-color:#999"></i>the row: a press here opens the item</li>
+  <li><i style="background:#e8f1fb;border-color:#2b6cb0"></i>the 44px band, now (dashed)</li>
+  <li><i style="background:#d8e8d8;border-color:#1d7a3a"></i>the 51x32 box, before</li>
+  <li><i style="background:#555;border-color:#555"></i>the 18px icon</li>
+  <li><i style="background:rgba(179,38,30,.45);border-color:#b3261e"></i>the finger</li></ul>
+<label for="fy" class="note">Finger height on the row (px from the row's top): <output id="fyv">37</output></label>
+<input type="range" id="fy" min="-14" max="78" value="37" step="1">
+<div class="res" id="res1"><b id="r1a"></b><span id="r1b"></span></div>
+
+<h2>Cause 2: the list moves between press and release</h2>
+<p class="note">A real write made while the finger rests on the W2 icon, then the release. Pick what the project wrote. Shifts are the
+  measured movement of the icon at 360px; clicks are what the page received.</p>
+<div class="tabs" role="group" aria-label="What was written">
+  <button type="button" data-ev="note" aria-pressed="true">A review note on W1</button>
+  <button type="button" data-ev="raise" aria-pressed="false">A raise on W1</button>
+  <button type="button" data-ev="commit" aria-pressed="false">A commit or edit on W1</button>
+</div>
+<div class="fig"><svg id="fig2" viewBox="-6 -14 210 160" role="img" aria-label="The rows before and after a write, to scale"></svg></div>
+<ul class="note legend"><li><i style="background:#fbf1d8;border-color:#999"></i>W1's row, above (yellow: the part it grows by)</li>
+  <li><i style="background:#f4f1ea;border-color:#999"></i>W2's row, with its icon box (green)</li>
+  <li><i style="background:rgba(179,38,30,.45);border-color:#b3261e"></i>the finger: it does not move</li></ul>
+<div class="res" id="res2"><b id="r2a"></b><span id="r2b"></span></div>
+
+<h2>How often cause 2 can happen</h2>
+<table>
+  <tr><th>Fact</th><th>Observed</th></tr>
+  <tr><td>Log writes in this roadmap's history</td><td>427 over 121 active hours: 3.5 an hour, 26 in the busiest hour</td></tr>
+  <tr><td>Of those, ones that move rows by 40px or more (raise, answer, correction, backtrack)</td><td>80: 0.7 an hour</td></tr>
+  <tr><td>Finger down on a tap</td><td>about 0.1 s (an assumption, not measured on a device)</td></tr>
+  <tr><td>Chance one tap has a redraw land inside it</td><td>about 1 in 10,000 at 3.5 writes an hour; 1 in 1,400 in the busiest hour</td></tr>
+</table>
+<p class="note">The guard already makes cause 2 harmless. The question is which cause the author's "sometimes" is, since that decides
+  where further work goes: a larger target for cause 1, nothing more for cause 2.</p>
+
+<h2>What would show it wrong</h2>
+<p>The "sometimes" is mostly cause 1. Refute it if archive opens the item while the list is plainly still and your finger began on the
+  icon itself, or if your project writes row-changing events far more often than this roadmap's history (several a minute).</p>
+
+<script>
+  var NS = "http://www.w3.org/2000/svg";
+  function el(svg, tag, attrs, text) {
+    var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text) e.textContent = text;
+    svg.appendChild(e); return e;
+  }
+  // The W4 row, as measured: row 0..65, archive box x 16..67 y 21..53, icon x 16..34 y 28..46, 44px band y 15..58.
+  function drawRow(svg, top, o) {
+    el(svg, "rect", { x: 0, y: top, width: 200, height: 65, fill: o.fill || "#fff", stroke: "#999" });
+  }
+  function fig1(y) {
+    var svg = document.getElementById("fig1"); svg.innerHTML = "";
+    drawRow(svg, 0, { fill: "#f4f1ea" });
+    el(svg, "rect", { x: 16, y: 15, width: 51, height: 43, fill: "#e8f1fb", stroke: "#2b6cb0", "stroke-dasharray": "3 2" });
+    el(svg, "rect", { x: 16, y: 21, width: 51, height: 32, fill: "#d8e8d8", stroke: "#1d7a3a" });
+    el(svg, "rect", { x: 16, y: 28, width: 18, height: 18, fill: "#555" });
+    el(svg, "circle", { cx: 25, cy: y, r: 8, fill: "rgba(179,38,30,.45)", stroke: "#b3261e" });
+    var oldHit = y >= 21 && y <= 52, newHit = y >= 15 && y <= 58;
+    document.getElementById("fyv").textContent = y;
+    var r = document.getElementById("res1");
+    document.getElementById("r1a").textContent = oldHit ? "Before the 44px change: archive opens" : "Before the 44px change: the row opens";
+    document.getElementById("r1b").textContent = "Now: " + (newHit ? "archive opens" : "the row opens") + ". The icon is at 28 to 46, so the finger may be " +
+      (oldHit ? "" : "more than ") + (oldHit ? "7px" : "7px") + " off its edge before the old box lost it, and 13px now.";
+    r.className = "res " + (newHit ? "ok" : "bad");
+  }
+  var fy = document.getElementById("fy");
+  fy.addEventListener("input", function () { fig1(+fy.value); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+
+  var EV = {
+    note:   { dy: 3,  label: "review note: icon moves 3px",
+              head: "Still the icon: archive opens", body: "Measured: click on archive:W2, archive dialog, with and without the guard.", cls: "ok" },
+    raise:  { dy: 72, label: "raise on W1: icon moves 72px",
+              head: "The finger is now over another row", body: "Measured: without the guard the click lands on task:W1 and opens W1 (on W4: task:W3). With the guard the archive dialog opens. The redraw came 0.6 s after the write.", cls: "bad" },
+    commit: { dy: 0,  label: "commit or uncommitted edit on W1: no move",
+              head: "Nothing moves", body: "Measured: no change of height; the tap is untouched.", cls: "ok" }
+  };
+  var curEv = "note";
+  function fig2(name) {
+    curEv = name; var e = EV[name], svg = document.getElementById("fig2"); svg.innerHTML = "";
+    var h1 = 30, shift = e.dy / 2.4;   // drawn at 5/12 scale so the 72px shift fits: W1 row 69px -> 141px
+    drawRow(svg, 0, { fill: "#f4f1ea", label: "W1 above" });
+    el(svg, "rect", { x: 0, y: 0, width: 200, height: 22 + shift, fill: "#fbf1d8", stroke: "#999" });
+    var base = 22 + shift;
+    el(svg, "rect", { x: 0, y: base, width: 200, height: 40, fill: "#f4f1ea", stroke: "#999" });
+    var boxY = base + 20 - 6;   // the icon box sits in the lower half of the W2 row
+    el(svg, "rect", { x: 16, y: boxY, width: 51, height: 14, fill: "#d8e8d8", stroke: "#1d7a3a" });
+    var fingerY = 22 + 20 - 6 + 7;    // pressed on the icon before the write
+    el(svg, "circle", { cx: 25, cy: fingerY, r: 5, fill: "rgba(179,38,30,.45)", stroke: "#b3261e" });
+    var on = fingerY >= boxY && fingerY <= boxY + 14;
+    document.getElementById("r2a").textContent = e.head;
+    document.getElementById("r2b").textContent = e.body;
+    document.getElementById("res2").className = "res " + e.cls;
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) { b.setAttribute("aria-pressed", b.dataset.ev === name ? "true" : "false"); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
+    b.addEventListener("click", function () { fig2(b.dataset.ev); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return { y: +fy.value, ev: curEv }; };
+  document.addEventListener("dfs-state", function (e) {
+    if (e.detail && typeof e.detail.y === "number") { fy.value = e.detail.y; fig1(e.detail.y); }
+    if (e.detail && EV[e.detail.ev]) fig2(e.detail.ev);
+  });
+  fig1(37); fig2("note");
+</script>
+
+<!-- ===== The answer form ===== -->
+<style>
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function said() { return $('dfs-note').value.trim(); }
+    var touched = false, saving;
+    function mine() { return { option: '', note: $('dfs-note').value, page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null }; }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = { choose: function () { keep(); }, keep: keep };
+    $('dfs-note').addEventListener('input', keep);
+    function done(status, text) { status.textContent = text; parent.postMessage({ dfs: 'answered' }, '*'); }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Write your answer first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched && s.note) $('dfs-note').value = s.note;
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
