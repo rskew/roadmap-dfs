@@ -403,7 +403,9 @@ const tagAt = id => String(id).indexOf("@");
 const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
 const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false };
+const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0 };
+/* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
+const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
 
 /* Loading: a request still outstanding after 250 ms shows "loading" and the stripe under the header
@@ -595,7 +597,7 @@ async function renderDraw(force) {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
       let t; const at = WROTE;
-      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task)), api("/api/walk").then(walkSeen)]);
+      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/walk").then(walkSeen)]);
       S.walkAt = at;
       if (mine !== RENDERS) return;
       S.node = r.node;
@@ -603,7 +605,7 @@ async function renderDraw(force) {
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
     } else if (r.view === "artefact") {
-      const t = await api("/api/task/" + encodeURIComponent(r.task));
+      const t = await api("/api/task/" + encodeURIComponent(r.task) + "?archived=1");
       if (mine !== RENDERS) return;
       S.task = t; S.taskId = r.task; S.node = null;
       drawArtefact(r);
@@ -621,13 +623,14 @@ async function renderDraw(force) {
       let drawn = ""; const at = WROTE;
       if (arrived && S.state && S.walk && S.stateAt === WROTE && S.walkAt === WROTE && !S.inflight) {
         S.node = null; drawTasks(); chrome(r); scrollBack(where);
-        drawn = JSON.stringify([S.state, S.walk]);
+        drawn = JSON.stringify([S.state, S.walk, S.archived]);
       }
-      const [state, walk] = await Promise.all([api("/api/state"), api("/api/walk").then(walkSeen)]);
+      const [state, walk, arc] = await Promise.all([api("/api/state"), api("/api/walk").then(walkSeen), showArchived() ? api("/api/archived") : null]);
       if (mine !== RENDERS) return;
       if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
+      S.archived = arc ? arc.items : []; S.archivedCount = state.archived_count;   // the archived rows are not in S.state, so no move or push touches them
       S.state = state; S.needs = state.needs_you; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
-      S.node = null; if (JSON.stringify([state, walk]) !== drawn) drawTasks(true);
+      S.node = null; if (JSON.stringify([state, walk, S.archived]) !== drawn) drawTasks(true);
     }
     chrome(r);
     if (r.view === "task") refreshNeeds();
@@ -974,6 +977,15 @@ function drawTasks(push) {
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
   }
+  // Archived tasks follow the live ones, apart from the order and its breaks; the Needs you view and the reorder view are about live tasks.
+  if (showArchived() && !S.only && !S.reorder && S.archived.length) {
+    html += `<div class="break cap">archived</div>`;
+    for (const it of S.archived)
+      html += `<button class="item done archived" data-act="task" data-id="${esc(it.id)}"><span class="iid">${iidHtml(it.id)}</span>
+        <span class="body">${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span><span class="meta"><span class="tag">archived</span></span></span></button>`;
+  }
+  if (S.archivedCount || showArchived())
+    html += `<div class="actions"><button class="btn" data-act="archived" aria-pressed="${showArchived()}">${showArchived() ? "Hide archived" : "Show archived (" + S.archivedCount + ")"}</button></div>`;
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
   $("#view").className = "col";
@@ -1145,7 +1157,8 @@ function drawTask() {
   let html = `<div class="head"><h2>${inline(t.goal)}</h2>
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
     ${(tags => tags ? `<p class="walktags">${tags}</p>` : "")(walkTags(walkOf(t.id)))}</div>
-    <div class="actions">
+    ${t.archived ? `<p class="hint archived-note" role="note">Archived: this task is kept for reading. Its files are under <code>.dfs/archive/archived</code>: move <code>items/</code> back to <code>.dfs/items</code> and <code>archive/</code> to <code>.dfs/archive/items</code> to work on it again.</p>
+    <div class="actions"><button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button></div>` : `<div class="actions">
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>
       <button class="btn" data-act="edittask">Edit task</button>
@@ -1157,7 +1170,7 @@ function drawTask() {
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
       ${walkHere(t.id) ? `<button class="btn" data-act="walkhere" data-item="${esc(t.id)}">${S.walk.pinned === t.id ? "Walk goes here next" : "Walk here next"}</button>` : ""}
-    </div>${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
+    </div>`}${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
   for (const r of visibleRows(t)) {
     if (r.kind === "section") {
       // The Goal is a tap away on any width: open, it is a screen of its own above the
@@ -1264,7 +1277,7 @@ function artefactsHtml(t) {
 function raiseCard(r, where) {
   return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you</h4>
     <div class="text">${md(r.body)}</div>
-    <div class="actions"><button class="btn primary" data-act="answer" data-ts="${esc(r.ts)}">Answer</button></div></div>`;
+    ${S.task && S.task.archived ? "" : `<div class="actions"><button class="btn primary" data-act="answer" data-ts="${esc(r.ts)}">Answer</button></div>`}</div>`;
 }
 
 /* ── the node card ──────────────────────────────────────────────────────────── */
@@ -1286,11 +1299,11 @@ function drawSheet() {
   const restHtml = r.card.filter(([role]) => role !== "meta").map(blockHtml).join("");
   $("#sheet").innerHTML = `<div class="sheet-body"><div class="cap where">${i + 1} of ${rows.length}</div><h3>${esc(r.id)}  ${inline(r.title)}</h3>
       ${metaHtml}${r.raises.map(x => raiseCard(x, "")).join("")}${restHtml}</div>
-    <div class="sheet-actions">
+    ${t.archived ? "" : `<div class="sheet-actions">
       <button class="btn" data-act="correct" data-id="${esc(r.id)}">Refute/confirm</button>
       ${r.editable ? `<button class="btn" data-act="editnode" data-id="${esc(r.id)}">Edit</button>` : ""}
       <button class="btn" data-act="add" data-parent="${esc(r.id)}">Add under</button>
-      <button class="btn" data-act="deletenode" data-id="${esc(r.id)}">Delete</button></div>
+      <button class="btn" data-act="deletenode" data-id="${esc(r.id)}">Delete</button></div>`}
     <nav class="sheet-nav" aria-label="Nodes">
       <button data-act="prev" ${i <= 0 ? "disabled" : ""}>Prev</button>
       <button data-act="next" ${i >= rows.length - 1 ? "disabled" : ""}>Next</button>
@@ -1702,6 +1715,7 @@ document.addEventListener("click", e => {
   ({
     retry: () => render(true),
     flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
+    archived: () => { try { localStorage.setItem("showArchived", showArchived() ? "0" : "1"); } catch (e) {} render(true); },
     only: () => { S.only = d.v === "1"; S.reorder = false; S.moved = null; showList(); },
     reorder: () => { S.reorder = route().view === "tasks" ? !S.reorder : true; S.moved = null; if (S.reorder) S.only = false; showList(); },
     move: () => moveTask(d.id, d.move),
@@ -1782,7 +1796,8 @@ document.addEventListener("contextmenu", e => {
   if (!matchMedia("(hover: hover)").matches) return;      // a long-press on a touch screen keeps the browser's own menu
   e.preventDefault();
   const id = main.dataset.id, r = S.task.rows.find(x => x.id === id), m = $("#ctx");
-  m.innerHTML = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>
+  const open = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>`;
+  m.innerHTML = S.task.archived ? open : `${open}
     <button role="menuitem" data-act="correct" data-id="${esc(id)}">Refute/confirm</button>
     ${r && r.editable ? `<button role="menuitem" data-act="editnode" data-id="${esc(id)}">Edit</button>` : ""}
     <button role="menuitem" data-act="add" data-parent="${esc(id)}">Add under</button>

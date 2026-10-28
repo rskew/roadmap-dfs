@@ -150,8 +150,33 @@ def walk_marks(data):
             data.get("next_item"))
 
 
+def archived_rows():
+    """The tasks `archive_task` retired, as list rows after the live ones: `archived` is true,
+    and they carry none of the walk's marks. Read from `archived_dir()` and kept out of
+    `state.full()`, so the walk and the runner never see them."""
+    rows = []
+    for task in dfs_tree.archived_task_ids():
+        t = dfs_tree.load_archived(task)
+        rows.append(dict(
+            id=task, goal=t["name"] or (t["goal"].splitlines() or [""])[0], depth=0, status=dfs_tree.status_of(t)[0],
+            why="", rev="", needs_you=False, raises=0, standing=False, assumptions=[], corrections=[],
+            waiting_on="", blocked_by="", segment=0, stop=False, ahead=0, base="", uncommitted="",
+            archivable=False, draft=False, pr=dfs_tree.pr_url(t), pr_ready=False, running="", next=False,
+            archived=True))
+    return rows
+
+
+def archived_json():
+    """The archived tasks as list rows, and how many there are: what the list's Show archived
+    option draws after the live rows. A read of `archived_dir()` alone, so it is cheap beside
+    `state_json`."""
+    rows = archived_rows()
+    return dict(items=rows, archived_count=len(rows))
+
+
 def state_json():
-    """The task list: the rows `state.py --json` gives the terminal, plus `rev`."""
+    """The task list: the rows `state.py --json` gives the terminal, plus `rev` and how many
+    tasks are archived (`archived_json` has those)."""
     data = dfs_state.full()
     running, nxt = walk_marks(data)
     items = []
@@ -167,7 +192,7 @@ def state_json():
             uncommitted=it.get("uncommitted") or "", archivable=bool(it.get("archivable")),
             draft=bool(it.get("draft")), pr=it.get("pr") or "", pr_ready=bool(it.get("pr_ready")),
             running=running.get(it["id"], ""), next=it["id"] == nxt))
-    return dict(items=items, next_item=data.get("next_item"),
+    return dict(items=items, archived_count=len(dfs_tree.archived_task_ids()), next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
                 background=dfs_paths.read_background(), palettes=dfs_paths.background_palettes(),
@@ -326,11 +351,21 @@ def artefacts_for(text):
     return [entry(n) for n in named]
 
 
-def task_json(task):
-    if not dfs_tree.exists(task):
+def task_json(task, include_archived=False):
+    """One task for the page. A live task is read as ever. With `include_archived`, a task that
+    is not live is looked for among the archived ones (read from `archived_dir()`), and the
+    answer says `archived: true`; nothing the page posts reaches it, since `dfs_tree.exists` is
+    false for it."""
+    archived = False
+    if dfs_tree.exists(task):
+        t = dfs_tree.load(task)
+        archive, commits = archive_text(task), commits_for(task)
+    elif include_archived and task in dfs_tree.archived_task_ids():
+        archived = True
+        t = dfs_tree.load_archived(task)
+        archive, commits = dfs_tree.archived_archive_text(task), dfs_tree.node_commits(task)
+    else:
         raise Refused("no task %s" % task, 404)
-    t = dfs_tree.load(task)
-    archive, commits = archive_text(task), commits_for(task)
     status, why = dfs_tree.status_of(t)
     accepted = dfs_tree.accepted(t)
     rows = []
@@ -377,7 +412,7 @@ def task_json(task):
                             body="\n\n".join(b for _ts, _v, b in g["notes"]))
                        for g in dfs_tree.note_sessions(t)],
                 sessions=dfs_tree.sessions_since_author(t), draft=dfs_tree.is_draft(t),
-                pr=dfs_tree.pr_url(t), pr_ready=dfs_tree.pr_ready(t))
+                pr=dfs_tree.pr_url(t), pr_ready=dfs_tree.pr_ready(t), archived=archived)
 
 
 RUN_LISTED = 12             # the newest chains a task page lists
@@ -1236,6 +1271,10 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, FileNotFoundError, dfs_paths.NoBranch) as e:
             return self.json(500, dict(error=str(e)))
 
+    def flag(self, name):
+        """Whether the request's query has `?<name>=1`."""
+        return parse_qs(urlparse(self.path).query).get(name, [""])[0] == "1"
+
     def get(self, path):
         if path in ("/", "/index.html"):
             return self.send(200, index_html(), "text/html")
@@ -1251,10 +1290,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(200, login_state())
         if path == "/api/state":
             return self.json(200, state_json())
+        if path == "/api/archived":
+            return self.json(200, archived_json())
         if path == "/api/assumptions":
             return self.json(200, assumptions_json())
         if path.startswith("/api/task/"):
-            return self.json(200, task_json(segment(path, "/api/task/", dfs_tree.TASK_RE, "task")))
+            return self.json(200, task_json(segment(path, "/api/task/", dfs_tree.TASK_RE, "task"),
+                                            include_archived=self.flag("archived")))
         if path.startswith("/api/run/"):
             query = parse_qs(urlparse(self.path).query)
             from_, session = query.get("from", [""])[0], query.get("session", [None])[0]

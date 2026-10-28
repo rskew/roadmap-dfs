@@ -879,6 +879,45 @@ def delete_task(task):
     return _retire(task, deleted_dir(), "deleted")
 
 
+def archived_task_ids():
+    """The tasks `archive_task` has retired, whose files are still under `archived_dir()`."""
+    out = set()
+    base = archived_dir() / "items"
+    for p in base.glob("*") if base.is_dir() else ():
+        got = part_of(p.name) if p.is_file() else (p.name,) if re.fullmatch(TASK_RE, p.name) else None
+        if got and archived_tags(got[0]):
+            out.add(got[0])
+    return sorted(out)
+
+
+def archived_tags(task):
+    """The tags `task` has a part for among the archived tasks, default first."""
+    return part_tags(task, archived_dir() / "items")
+
+
+def archived_archive_text(task):
+    """The archive parts (`archive/<task>.md`) of an archived task, joined as `web.py` does for a live one."""
+    base = archived_dir() / "archive"
+    paths = [base / (("%s.md" % task) if not g else "%s/%s.md" % (task, g)) for g in archived_tags(task)]
+    return "\n\n".join(p.read_text() for p in paths if p.exists())
+
+
+def load_archived(task):
+    """An archived task as `load` gives a live one, read from `archived_dir()`. It is read
+    only: no write path in this module looks there. Raises FileNotFoundError for a task that
+    is not archived."""
+    tags = archived_tags(task)
+    if not tags:
+        raise FileNotFoundError(task)
+    items, arc = archived_dir() / "items", archived_dir() / "archive"
+
+    def read(p):
+        return p.read_text() if p.exists() else ""
+    def at(base, g):
+        return base / (("%s.md" % task) if not g else "%s/%s.md" % (task, g))
+    return combine(task, [(g, read(at(items, g)), read(at(arc, g))) for g in tags], None)
+
+
 def archive_blocker(task):
     """Why `task` cannot be archived yet, in words, or "" when it can: it is a finished tree
     (done) and its implementation was reviewed or accepted by the author, no commit of it is ahead of the default branch on origin
