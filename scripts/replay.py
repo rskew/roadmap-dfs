@@ -10,7 +10,7 @@ chain (run.sh) work the task, and measures the result with history.py's `session
   python3 <scripts>/replay.py candidates [--repo PATH]       (tasks the loop's selection rule picks from)
   python3 <scripts>/replay.py plan    TASK [--repo PATH]
   python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE]
-  python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M]
+  python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M]    (inside proot)
   python3 <scripts>/replay.py score   DEST TASK [--repo PATH]
   python3 <scripts>/replay.py replay  TASK DEST [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
 
@@ -19,6 +19,11 @@ or `--tool-ref REV`: a revision of the repo being replayed, when that repo is ro
 itself, exported with git archive; SKILL.md, the scripts and the templates all come from
 it) and optionally the LAW (`--law FILE`, copied over `.dfs/ROADMAP.md`). With neither, the
 replay runs the current tool under the law of the starting commit.
+
+A replay's sessions run inside proot (nix: pkgs.proot, no privileges needed), so they see
+their own clone and a fresh HOME and not the live checkout, its runs, its task files or the
+author's `~/.claude` and `~/.codex`; see `sandbox_argv`. proot hides paths, it is not a
+security boundary: `score` still counts the tool calls that name a live path.
 
 DEST's basename must contain `dfs-replay-`: that is how history.py keeps the replay's
 transcripts out of the history it mines. A replay spends real money (the original's cost
@@ -61,11 +66,12 @@ def config_dir():
     return os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
 
 
-def transcripts(checkout):
+def transcripts(checkout, config=None):
     """Globs for the transcripts of a checkout and of its own worktrees: the exact directory
-    and `<dir>--dfs-worktrees-*`, so `dfs-replay-W55-1` never takes in `dfs-replay-W55-10`."""
+    and `<dir>--dfs-worktrees-*`, so `dfs-replay-W55-1` never takes in `dfs-replay-W55-10`.
+    They are under `config` (a replay's own claude config dir), else the author's."""
     enc = glob.escape(re.sub(r"[/.]", "-", str(Path(checkout).resolve())))
-    base = os.path.join(glob.escape(config_dir()), "projects")
+    base = os.path.join(glob.escape(str(config or config_dir())), "projects")
     return [os.path.join(base, enc, "*.jsonl"),
             os.path.join(base, enc + "--dfs-worktrees-*", "*.jsonl")]
 
@@ -212,12 +218,127 @@ def bash_bound(minutes):
     return {"BASH_DEFAULT_TIMEOUT_MS": str(ms), "BASH_MAX_TIMEOUT_MS": str(2 * ms)}
 
 
-def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES):
+TOOL_ENTRIES = ("SKILL.md", "README.md", "LICENCE.txt", "scripts", "templates", "docs")   # what a tool is for
+SANDBOX_HOME = "/home/replay"
+ETC = ("/etc/resolv.conf", "/etc/ssl", "/etc/hosts", "/etc/nsswitch.conf", "/etc/passwd", "/etc/group")
+PASS_ENV = ("TERM", "LANG", "LC_ALL", "TZ", "ANTHROPIC_API_KEY")   # the rest of the box's environment stays out
+SIGN_IN_KEYS = ("hasCompletedOnboarding", "lastOnboardingVersion", "oauthAccount", "userID")
+_NIX_OUT = {}
+
+
+def box_of(dest):
+    """The replay's own scratch beside DEST (not in it, so it never lands in the clone): the
+    proot root, proot's temp dir and the home the sessions run with."""
+    dest = Path(dest).resolve()
+    return dest.parent / (dest.name + "-box")
+
+
+def nix_bin(attr, binary, given, repo):
+    """`binary` of nixpkgs' `attr` at the repo's agent pin: `given` (an env var's value) if set,
+    else built or found in the store by nix (offline when the store has it)."""
+    if given:
+        return given
+    key = (attr, str(repo))
+    if key not in _NIX_OUT:
+        rev = subprocess.run([sys.executable, str(HERE / "agent.py"), "--rev"], cwd=repo, capture_output=True, text=True)
+        if rev.returncode or not rev.stdout.strip():
+            raise SystemExit(f"replay: no agent pin to take {attr} from ({rev.stderr.strip()}); "
+                             f"set REPLAY_{attr.upper().replace('-', '_')}=/path/to/{binary}")
+        out = subprocess.run(["nix", "build", "--no-link", "--print-out-paths", "--impure",
+                              f"github:nixos/nixpkgs/{rev.stdout.strip()}#{attr}"],
+                             capture_output=True, text=True, timeout=900)
+        if out.returncode or not out.stdout.strip():
+            raise SystemExit(f"replay: nix could not build {attr}: {out.stderr.strip()[-300:]}")
+        _NIX_OUT[key] = out.stdout.split()[0]
+    return os.path.join(_NIX_OUT[key], "bin", binary)
+
+
+def tool_bins(repo):
+    """The programs the sandbox is built from, as paths in /nix/store (the one place it can see)."""
+    found = {
+        "proot": nix_bin("proot", "proot", os.environ.get("REPLAY_PROOT") or shutil.which("proot"), repo),
+        "claude": nix_bin("claude-code", "claude", os.environ.get("REPLAY_CLAUDE_CODE"), repo),
+        "bash": shutil.which("bash"),
+        "env": shutil.which("env"),
+    }
+    for name, path in found.items():
+        if not path or not os.path.exists(path):
+            raise SystemExit(f"replay: cannot find {name} for the sandbox")
+        if name in ("bash", "env") and not path.startswith("/nix/store/"):
+            raise SystemExit(f"replay: {name} is {path}, outside /nix/store, where the sandbox can see only nix's")
+    return found
+
+
+def make_box(dest):
+    """The box of DEST: an empty proot root, a temp dir for proot, and a fresh home holding
+    only the sign-in (credentials, the account keys of `.claude.json`) and `settings.json`,
+    so the sessions find no `~/.claude/projects`, no history, no `~/.codex`."""
+    box = box_of(dest)
+    for d in ("root/tmp", "tmp", "home/.claude"):
+        (box / d).mkdir(parents=True, exist_ok=True)
+    cfg = Path(config_dir())
+    for name in (".credentials.json", "settings.json"):
+        if (cfg / name).is_file() and not (box / "home" / ".claude" / name).exists():
+            shutil.copy(cfg / name, box / "home" / ".claude" / name)
+            (box / "home" / ".claude" / name).chmod(0o600)
+    sign_in = box / "home" / ".claude.json"
+    if not sign_in.exists():
+        for src in (cfg / ".claude.json", Path(os.path.expanduser("~/.claude.json"))):
+            if src.is_file():
+                data = json.loads(src.read_text())
+                sign_in.write_text(json.dumps({k: data[k] for k in SIGN_IN_KEYS if k in data}))
+                sign_in.chmod(0o600)
+                break
+    return box
+
+
+def sandbox_env(tool, bins, bash_minutes=BASH_MINUTES):
+    """What the sessions inside the sandbox are told: nothing of the live checkout (no
+    `DFS_*`, no `XDG_*`, no `CLAUDE_CONFIG_DIR`), a PATH of store entries only."""
+    path = ":".join(p for p in os.environ.get("PATH", "").split(":") if p.startswith("/nix/store/"))
+    env = {"PATH": path, "HOME": SANDBOX_HOME, "DFS_TOOL": str(tool), "CLAUDE_CMD": bins["claude"],
+           "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt", **bash_bound(bash_minutes)}
+    env.update({k: os.environ[k] for k in PASS_ENV if k in os.environ})
+    return env
+
+
+def sandbox_argv(dest, tool, inner, bins, env):
+    """The command that runs `inner` in a proot of DEST: an empty root, /nix, /proc and /dev, the
+    nix `bash` as /bin/sh and `env` as /usr/bin/env, the network files of /etc, the box's home as
+    HOME, DEST at its own path, and (unless the tool is in the store) the tool's own entries at
+    theirs: never the tool as a whole, which when it is the live checkout holds its `.dfs/`.
+    The sessions see the host's `/workspace/...` only as the path down to DEST."""
+    dest, tool, box = Path(dest).resolve(), Path(tool).resolve(), box_of(dest)
+    cmd = [bins["proot"], "-r", str(box / "root"), "-b", "/nix", "-b", "/proc", "-b", "/dev",
+           "-b", f"{bins['bash']}:/bin/sh", "-b", f"{bins['env']}:/usr/bin/env"]
+    for e in ETC:
+        if os.path.exists(e):
+            cmd += ["-b", e]
+    cmd += ["-b", f"{box / 'home'}:{SANDBOX_HOME}", "-b", f"{dest}:{dest}"]
+    if not str(tool).startswith("/nix/store/"):
+        for entry in TOOL_ENTRIES:
+            if (tool / entry).exists():
+                cmd += ["-b", f"{tool / entry}:{tool / entry}"]
+    return cmd + ["-w", str(dest), "/usr/bin/env", "-i", *[f"{k}={v}" for k, v in env.items()], *inner]
+
+
+def launch(dest, task, cap, tool, bash_minutes, repo=None):
+    """(argv, environment) of the chain's launch: run.sh inside the sandbox."""
+    dest = Path(dest).resolve()
+    make_box(dest)
+    bins = tool_bins(repo or main_checkout())
+    inner = ["bash", str(tool / "scripts" / "run.sh"), task, str(cap or 6)]
+    argv = sandbox_argv(dest, tool, inner, bins, sandbox_env(tool, bins, bash_minutes))
+    # proot unpacks its loader into PROOT_TMP_DIR, which has to be able to execute: the box is
+    # beside DEST, on the mount DEST is on
+    return argv, {"PROOT_TMP_DIR": str(box_of(dest) / "tmp"), "PATH": os.environ.get("PATH", "")}
+
+
+def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES, repo=None):
     dest = Path(dest).resolve()
     info = json.loads((dest / ".git" / "replay.json").read_text())
     tool = Path(tool or info["tool"])
-    env = {**os.environ, "DFS_TOOL": str(tool), **bash_bound(bash_minutes)}
-    cmd = ["bash", str(tool / "scripts" / "run.sh"), task, str(cap or 6)]
+    cmd, env = launch(dest, task, cap, tool, bash_minutes, repo)
     # The chain's own words are kept beside the replay: its last "dfs_run: DONE|BLOCKED|CAP"
     # line is why it stopped, which the runner's meta.json (the task's status) does not say.
     with subprocess.Popen(cmd, cwd=dest, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -227,6 +348,13 @@ def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES):
             sys.stdout.flush()
             log.write(line)
     return p.returncode
+
+
+def replay_config(dest):
+    """Where a replay's claude kept its transcripts: its box's home, or (a replay made before
+    the sandbox) the author's own config dir."""
+    home = box_of(dest) / "home" / ".claude"
+    return home if (home / "projects").is_dir() else None
 
 
 def stopped_on(dest):
@@ -342,15 +470,16 @@ def score(dest, task, repo=None):
                          "usage: replay.py score DEST TASK")
     enc = re.sub(r"[/.]", "-", str(dest))
     repos = {enc: str(dest)}
-    sessions, tasks, _, _ = history.load(transcripts(dest), repos, replays=True)
+    cfg = replay_config(dest)
+    sessions, tasks, _, _ = history.load(transcripts(dest, cfg), repos, replays=True)
     t = next((t for (p, n), t in tasks.items() if n == task), None)
     if t is None:
         raise SystemExit(f"replay: no session of {task} in the transcripts of {dest} "
-                         f"({len(sessions)} sessions found under {', '.join(transcripts(dest))})")
+                         f"({len(sessions)} sessions found under {', '.join(transcripts(dest, cfg))})")
     t["stopped"] = stopped_on(dest)
     t["finished"] = merged(dest, task)
     repo = repo or main_checkout()
-    files = history._glob(transcripts(dest))
+    files = history._glob(transcripts(dest, cfg))
     t["reach"] = reached(dest, repo, files, info.get("tool"))
     t["outside"] = len(t["reach"])
     t["answer"] = answer_seen(dest, repo, task, files)
@@ -421,7 +550,7 @@ def main(argv):
         sys.stdout.write(f"prepared {dest} under tool {tool}\n")
     elif cmd == "run":
         dest, task = pos
-        return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"])
+        return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"], repo)
     elif cmd == "score":
         dest, task = pos
         compare(task, original(repo, task), score(dest, task, repo))
@@ -430,7 +559,7 @@ def main(argv):
         dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"])
         before = original(repo, task)
         cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
-        run(dest, task, cap, tool, opts["bash-minutes"])
+        run(dest, task, cap, tool, opts["bash-minutes"], repo)
         compare(task, before, score(dest, task, repo))
     return 0
 

@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -215,9 +216,11 @@ class ChangedToolTest(unittest.TestCase):
         with self.assertRaises(subprocess.CalledProcessError):
             replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-bad", tool_ref="no-such-rev")
 
-    def test_run_launches_the_chain_from_the_prepared_tool_with_it_in_the_environment(self):
+    def test_run_launches_the_chain_from_the_prepared_tool_inside_the_sandbox(self):
         out, tool = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-r", tool_ref=self.changed)
         seen = {}
+        bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
+                "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
 
         class Fake:
             returncode = 0
@@ -229,11 +232,123 @@ class ChangedToolTest(unittest.TestCase):
             def __exit__(self, *a):
                 return False
 
-        with mock.patch.object(replay.subprocess, "Popen", Fake), redirect_stdout(io.StringIO()):
-            replay.run(out, "W5", cap=3)
-        self.assertEqual(seen["cmd"], ["bash", str(tool / "scripts" / "run.sh"), "W5", "3"])
-        self.assertEqual(seen["env"]["DFS_TOOL"], str(tool))
+        with mock.patch.object(replay.subprocess, "Popen", Fake), mock.patch.object(replay, "tool_bins", return_value=bins), \
+                mock.patch.object(replay, "config_dir", return_value=str(Path(self.tmp.name) / "no-config")), \
+                redirect_stdout(io.StringIO()):
+            replay.run(out, "W5", cap=3, repo=self.repo)
+        cmd = seen["cmd"]
+        self.assertEqual(cmd[0], "/nix/store/p/bin/proot")
+        self.assertEqual(cmd[cmd.index("-r") + 1], str(replay.box_of(out) / "root"))
+        self.assertEqual(cmd[-4:], ["bash", str(tool / "scripts" / "run.sh"), "W5", "3"])
+        self.assertIn("DFS_TOOL=" + str(tool), cmd)
+        self.assertIn("CLAUDE_CMD=/nix/store/c/bin/claude", cmd)
+        self.assertEqual(seen["env"]["PROOT_TMP_DIR"], str(replay.box_of(out) / "tmp"))
         self.assertEqual(Path(seen["cwd"]), out)
+
+
+class SandboxTest(unittest.TestCase):
+    """The replay's sessions run in proot: their own clone and a fresh home, not the live checkout."""
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def setUp(self):
+        base = self.ROOT / ".dfs" / "runs"   # ignored, and inside the checkout: the one mount that executes scripts here
+        base.mkdir(parents=True, exist_ok=True)
+        self.tmp = tempfile.TemporaryDirectory(dir=base, prefix="sbx-")
+        self.addCleanup(self.tmp.cleanup)
+        t = Path(self.tmp.name)
+        self.live = t / "live"                       # stands for the live checkout, outside the replay
+        (self.live / ".dfs" / "runs").mkdir(parents=True)
+        (self.live / ".dfs" / "runs" / "secret.txt").write_text("the original's evidence\n")
+        self.dest = t / "dfs-replay-W5-s"
+        self.dest.mkdir()
+        (self.dest / "in-the-clone.txt").write_text("mine\n")
+        self.tool = t / "tool"                       # a checkout used as the tool: its .dfs must stay out
+        for d in ("scripts", ".dfs/items"):
+            (self.tool / d).mkdir(parents=True)
+        (self.tool / ".dfs" / "items" / "W5.md").write_text("the original's task file\n")
+        (self.tool / "scripts" / "run.sh").write_text("# the tool\n")
+        (self.tool / "SKILL.md").write_text("skill\n")
+        self.cfg = t / "cfg"
+        self.cfg.mkdir()
+        (self.cfg / ".credentials.json").write_text('{"claudeAiOauth": {}}')
+        (self.cfg / "settings.json").write_text("{}")
+        (self.cfg / "projects" / "-live-session").mkdir(parents=True)
+        (self.cfg / ".claude.json").write_text(json.dumps(
+            {"oauthAccount": {"email": "a@b.invalid"}, "userID": "u", "projects": {str(self.live): {}},
+             "cachedGrowthBookFeatures": {"x": 1}}))
+
+    def bins(self):
+        try:
+            proot = replay.nix_bin("proot", "proot", os.environ.get("REPLAY_PROOT") or shutil.which("proot"), self.ROOT)
+        except (SystemExit, OSError, subprocess.SubprocessError):
+            self.skipTest("no proot here (set REPLAY_PROOT, or have nix and an agent pin)")
+        if not can_exec(self.tmp.name):
+            self.skipTest("scripts cannot run under this directory")
+        return {"proot": proot, "claude": "/nix/store/none/bin/claude", "bash": shutil.which("bash"), "env": shutil.which("env")}
+
+    def test_the_sessions_see_their_clone_and_the_tools_entries_and_nothing_of_the_live_checkout(self):
+        bins = self.bins()
+        with mock.patch.object(replay, "config_dir", return_value=str(self.cfg)):
+            replay.make_box(self.dest)
+        script = f"""
+echo "[parent]"; ls {self.tmp.name}
+echo "[dest]"; ls {self.dest}
+echo "[tool]"; ls -A {self.tool}
+echo "[live]"; ls {self.live} 2>&1; cat {self.live}/.dfs/runs/secret.txt 2>&1
+echo "[home]"; ls -A $HOME; ls -A $HOME/.claude; cat $HOME/.claude.json
+echo "[env]"; env
+echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
+        env = replay.sandbox_env(self.tool, bins)
+        argv = replay.sandbox_argv(self.dest, self.tool, ["sh", "-c", script], bins, env)
+        with mock.patch.dict(os.environ, {"DFS_RUNS": str(self.live / ".dfs" / "runs"), "XDG_CONFIG_HOME": "/home/live/.config",
+                                          "CLAUDE_CONFIG_DIR": str(self.cfg)}):
+            r = subprocess.run(argv, cwd=self.dest, env={"PROOT_TMP_DIR": str(replay.box_of(self.dest) / "tmp"),
+                                                         "PATH": os.environ["PATH"]},
+                               capture_output=True, text=True, timeout=120)
+        out = r.stdout
+        self.assertEqual(r.returncode, 0, r.stderr)
+        part = lambda name: out.split(f"[{name}]\n")[1].split("\n[")[0]
+        self.assertEqual(sorted(part("parent").split()), ["dfs-replay-W5-s", "tool"])   # the live checkout is not there
+        self.assertIn("in-the-clone.txt", part("dest"))
+        self.assertEqual(sorted(part("tool").split()), ["SKILL.md", "scripts"])         # its .dfs/items is not
+        self.assertNotIn("original's evidence", out)
+        self.assertNotIn("original's task file", out)
+        self.assertIn("No such file", part("live"))
+        home = part("home")
+        self.assertIn(".credentials.json", home)
+        self.assertNotIn("projects", home)                                              # no earlier session's transcript
+        self.assertIn("a@b.invalid", home)
+        self.assertNotIn("cachedGrowthBookFeatures", home)                               # only the sign-in keys
+        env_out = part("env")
+        for leaked in ("DFS_RUNS", "XDG_CONFIG_HOME", "CLAUDE_CONFIG_DIR", str(self.live)):
+            self.assertNotIn(leaked, env_out)
+        self.assertIn("HOME=/home/replay", env_out)
+        self.assertIn("DFS_TOOL=" + str(self.tool), env_out)
+
+    def test_a_tool_in_the_store_is_not_bound_and_the_box_keeps_to_its_own_directories(self):
+        bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
+                "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
+        argv = replay.sandbox_argv(self.dest, "/nix/store/t-roadmap/share/x", ["true"], bins, {"A": "1"})
+        binds = [argv[i + 1] for i, a in enumerate(argv) if a == "-b"]
+        self.assertIn(f"{self.dest.resolve()}:{self.dest.resolve()}", binds)
+        self.assertFalse([b for b in binds if "t-roadmap" in b])
+        self.assertEqual([b for b in binds if b.startswith(str(self.dest.parent.resolve()))],
+                         [f"{replay.box_of(self.dest) / 'home'}:/home/replay", f"{self.dest.resolve()}:{self.dest.resolve()}"])
+        self.assertEqual(argv[-3:], ["-i", "A=1", "true"])
+
+    def test_score_reads_the_transcripts_from_the_boxs_home_when_it_has_them(self):
+        self.assertIsNone(replay.replay_config(self.dest))           # no box: the author's config, as before
+        proj = replay.box_of(self.dest) / "home" / ".claude" / "projects" / "-x"
+        proj.mkdir(parents=True)
+        (proj / "s.jsonl").write_text("{}\n")
+        cfg = replay.replay_config(self.dest)
+        self.assertEqual(cfg, replay.box_of(self.dest) / "home" / ".claude")
+        found = history._glob(replay.transcripts(self.dest, cfg))
+        self.assertEqual(found, [])                                  # the project dir is not this DEST's
+        enc = re.sub(r"[/.]", "-", str(self.dest.resolve()))
+        (cfg / "projects" / enc).mkdir()
+        (cfg / "projects" / enc / "s.jsonl").write_text("{}\n")
+        self.assertEqual([Path(f).parent.name for f in history._glob(replay.transcripts(self.dest, cfg))], [enc])
 
 
 class ScoreTest(unittest.TestCase):
