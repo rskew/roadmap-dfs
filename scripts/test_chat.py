@@ -617,6 +617,20 @@ class Chat(unittest.TestCase):
         self.assertEqual([(m["role"], m["text"]) for m in dfs_chat.transcript_messages(sid, "opencode") if m["role"] == "you"],
                          [("you", "hello"), ("you", "again"), ("you", "again")])
 
+    def test_the_same_words_sent_again_after_a_turn_that_stored_no_answer_are_shown_once(self):
+        # A turn that failed or was stopped stores the user's message and an `idle` marker, no answer. The rows
+        # cannot be told from a crash retry's, so the page shows the resent words once: pinned here, not a surprise.
+        sid = "ses_resent"
+        subprocess.run([str(self.opencode), "run", "--session", sid], input="first", text=True, capture_output=True, check=True, env=dict(os.environ))
+        db = sqlite3.connect(self.root / "home" / ".local" / "share" / "opencode" / "opencode.db")
+        row = lambda mid, kind, seq, data: db.execute("insert into session_message values (?, ?, ?, ?, 1, 1, ?)", (mid, sid, kind, seq, json.dumps(data)))
+        row("msg_9101", "user", 100, {"text": "retry me", "files": []})
+        row("msg_9102", "idle", 101, {"outcome": "failed"})              # the turn ended with no answer
+        row("msg_9103", "user", 102, {"text": "retry me", "files": []})   # the author sends the same words again
+        db.commit()
+        db.close()
+        self.assertEqual([m["text"] for m in dfs_chat.transcript_messages(sid, "opencode") if m["role"] == "you"], ["first", "retry me"])
+
     def test_an_opencode_turn_is_answered_kept_and_resumed_by_the_id_opencode_made(self):
         self.use_opencode()
         self.chats.send("W1", "Where is the work?")
