@@ -7,9 +7,12 @@ page's pins, stopping, and the snapshot. The world is in memory.
 
 Run:  python3 roadmap-dfs/scripts/test_walker.py
 """
+import os
 import sys
+import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -379,6 +382,70 @@ class PullRequests(unittest.TestCase):
         self.w.start(4)
         self.assertTrue(self.w.walk_on)
         self.assertTrue(any("could not be read: gh is not logged in" in e[2] for e in self.w.events))
+
+
+class Models(unittest.TestCase):
+    """The models chosen for the walk: kept in the run root, given to a chain as the
+    variables run.sh reads, claude's own roles and nothing else."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patch = mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp.name})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.w = FakeWalker()
+
+    def test_nothing_is_chosen_until_one_is(self):
+        self.assertEqual(self.w.snapshot()["models"], dict(plan="", implement=""))
+
+    def test_a_model_is_chosen_per_role_and_kept_for_the_next_screen(self):
+        self.w.set_model("plan", "claude-opus-4-5")
+        self.w.set_model("implement", "sonnet[1m]")
+        self.assertEqual(dfs_walk.read_models(), dict(plan="claude-opus-4-5", implement="sonnet[1m]"))
+        self.assertEqual(FakeWalker().snapshot()["models"]["plan"], "claude-opus-4-5")
+
+    def test_an_empty_name_takes_the_choice_away(self):
+        self.w.set_model("plan", "haiku")
+        self.w.set_model("plan", "")
+        self.assertEqual(self.w.models()["plan"], "")
+
+    def test_a_role_or_a_name_that_is_not_one_is_refused(self):
+        for role, name in (("review", "opus"), ("plan", "--help"), ("plan", "a b"),
+                           ("plan", "opus; ls"), ("plan", None)):
+            with self.assertRaises(ValueError, msg=(role, name)):
+                self.w.set_model(role, name)
+        self.assertEqual(self.w.models(), dict(plan="", implement=""))
+
+    def test_a_file_holding_what_it_should_not_reads_as_nothing_chosen(self):
+        with open(dfs_walk.models_file(), "w") as fh:
+            fh.write('{"plan": "--bad", "implement": 3, "other": "x"}')
+        self.assertEqual(self.w.models(), dict(plan="", implement=""))
+        with open(dfs_walk.models_file(), "w") as fh:
+            fh.write("not json")
+        self.assertEqual(self.w.models(), dict(plan="", implement=""))
+
+    def chain_env(self):
+        """The environment a chain really started by `start_chain` is given."""
+        w = dfs_walk.HeadlessWalk()
+        w.reload = lambda data=None: None
+        with mock.patch.object(dfs_walk.dfs_runs, "live_for", return_value=None), \
+                mock.patch.object(dfs_walk.subprocess, "Popen") as popen:
+            popen.return_value.pid = 1
+            w.start_chain("W1", "5")
+        return popen.call_args.kwargs["env"]
+
+    def test_a_chain_gets_the_chosen_models_as_the_variables_run_sh_reads(self):
+        with mock.patch.dict(os.environ):
+            os.environ.pop("PLAN_MODEL", None)
+            os.environ.pop("IMPLEMENT_MODEL", None)
+            env = self.chain_env()
+            self.assertNotIn("PLAN_MODEL", env)         # not chosen: run.sh's own defaults
+            self.assertNotIn("IMPLEMENT_MODEL", env)
+            self.w.set_model("plan", "opus")
+            self.w.set_model("implement", "default")
+            env = self.chain_env()
+            self.assertEqual((env["PLAN_MODEL"], env["IMPLEMENT_MODEL"]), ("opus", ""))
 
 
 if __name__ == "__main__":

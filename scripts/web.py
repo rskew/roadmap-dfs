@@ -982,6 +982,8 @@ def walk_act(name, body):
             w.pin(body.get("item") or None)
         elif name == "walk/agent":
             w.set_agent(body.get("agent"))
+        elif name == "walk/model":
+            w.set_model(body.get("role"), body.get("model", ""))
         elif name == "chain/stop":
             w.stop_chain(need(body, "item", "the task"))
         else:
