@@ -583,7 +583,7 @@ class Web(unittest.TestCase):
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
         body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, pinSizes = null;"
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment) => ({id, goal: 'g', depth: 0, status: 'open', segment, raises: 0,"
               " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
@@ -605,6 +605,79 @@ class Web(unittest.TestCase):
         self.assertEqual(on.count("\u2192"), 2, "in is a right arrow")
         self.assertEqual(on.count("Remove break"), 1, "only W2 sits behind a fence")
 
+    def test_the_table_style_draws_one_row_per_task_on_a_wide_screen_only(self):
+        """drawTasks() in index.html, run under node (skipped when there is none): the table style is one
+        row per task with a cell for status, review, branch and run; the phone, Reorder and the default stay on the card."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = it => it.running ? '<span class=\"tag settled\">running</span>' : '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false;"
+              "let isWide = true, style = 'table'; const tableWide = () => isWide, listStyle = () => style;"
+              "const view = {}; const $ = s => s === '#view' ? view : null;"
+              "const row = (id, extra) => Object.assign({id, goal: 'g' + id, depth: 0, status: 'open', segment: 0, raises: 0,"
+              " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false, base: 'main'}, extra);"
+              "const S = {only: false, reorder: false, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "row('W1', {rev: 'rev 2', ahead: 3, running: 'work 1'}), row('W2', {status: 'blocked', blocked_by: 'W1', why: 'held'}),"
+              "row('W3', {status: 'done', archivable: true})]}};" + body +
+              "const out = {}; drawTasks(); out.table = [view.innerHTML, view.className];"
+              "isWide = false; drawTasks(); out.phone = [view.innerHTML, view.className];"
+              "isWide = true; S.reorder = true; drawTasks(); out.reorder = [view.innerHTML, view.className];"
+              "S.reorder = false; style = 'card'; drawTasks(); out.card = [view.innerHTML, view.className];"
+              "console.log(JSON.stringify(out))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        html, cls = out["table"]
+        self.assertEqual(cls, "col tbl")
+        self.assertEqual(html.count(' tbl" data-act="task"'), 3, "a row each")
+        self.assertEqual(html.count('class="tblhead"'), 1)
+        self.assertIn('aria-pressed="true"', html)
+        self.assertIn('class="tag assumption">rev 2<', html, "the review cell")
+        self.assertIn("3 not on main", html, "the branch cell")
+        self.assertIn("held by W1", html, "the status cell says what holds it")
+        self.assertIn('class="why">held<', html, "a blocked task keeps its reason on a line under it")
+        self.assertEqual(html.count('data-act="archive"'), 1)
+        self.assertEqual(html.count('class="noarch"'), 2)
+        for name in ("phone", "reorder", "card"):
+            h, c = out[name]
+            self.assertEqual(c, "col", name)
+            self.assertNotIn("tblhead", h, name)
+            self.assertNotIn(" tbl\" data-act", h, name)
+        self.assertNotIn("liststyle", out["reorder"][0], "Reorder has no style button")
+        self.assertIn('aria-pressed="false"', out["card"][0])
+        # the header row is aria-hidden, so each filled cell names its column for a screen reader, and an empty one says nothing
+        self.assertIn('<span class="vh">Status: </span>', html)
+        self.assertIn('<span class="vh">Review: </span><span class="tag assumption">rev 2<', html)
+        self.assertIn('<span class="vh">Branch: </span><span class="tag">3 not on main<', html)
+        self.assertIn('<span class="vh">Run: </span><span class="tag settled">running<', html)
+        self.assertEqual(html.count('<span class="vh">Review: '), 1, "only W1 has a review cell to name")
+        self.assertEqual(html.count('<span class="vh">Run: '), 1, "only W1 is running")
+
+    def test_the_table_needs_the_viewport_and_the_page_without_its_scrollbar_to_be_wide(self):
+        """tableWide() and the observer that redraws on a crossing, in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's tableWide()")
+        src = (HERE / "web" / "index.html").read_text()
+        min_line = src[src.index("const TABLE_MIN"):src.index("\n", src.index("const tableWide"))]
+        observer = src[src.index("// One redraw path"):src.index('addEventListener("hashchange"')]
+        js = ("let mq = true, cw = 1280; const matchMedia = () => ({matches: mq, addEventListener: (_, f) => { media = f; }}); let media = null;"
+              "const document = {documentElement: {clientWidth: 0}}; Object.defineProperty(document.documentElement, 'clientWidth', {get: () => cw});"
+              + min_line + "\n"
+              "const out = {};"
+              "out.wide = tableWide(); cw = 1011; out.scrollbar = tableWide(); cw = 1012; out.edge = tableWide(); mq = false; out.narrow = tableWide(); mq = true; cw = 1280;"
+              "let renders = 0, fire = null; const render = () => { renders++; };"
+              "class ResizeObserver { constructor(f) { fire = f; } observe() {} }"
+              + observer + "\n"
+              "fire(); out.unchanged = renders; cw = 1000; fire(); out.crossed = renders; fire(); out.again = renders; cw = 1280; fire(); out.back = renders;"
+              "console.log(JSON.stringify(out))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertTrue(out["wide"])
+        self.assertFalse(out["scrollbar"], "a classic scrollbar leaves the page under 1012px though the media query holds")
+        self.assertTrue(out["edge"])
+        self.assertFalse(out["narrow"])
+        self.assertEqual((out["unchanged"], out["crossed"], out["again"], out["back"]), (0, 1, 1, 2), "one redraw per crossing, none when nothing changed")
+
     def test_a_stop_break_is_drawn_apart_from_a_plain_one_and_offers_to_be_plain(self):
         """drawTasks() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
@@ -612,7 +685,7 @@ class Web(unittest.TestCase):
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
         body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, pinSizes = null;"
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment, stop, w) => ({id, goal: 'g', depth: 0, status: 'open', segment, stop, raises: 0,"
               " assumptions: [], rev: '', waiting_on: w || '', blocked_by: '', why: '', needs_you: false});"

@@ -152,6 +152,37 @@ pre.runlog .r-err { color: var(--attention); }
 .item.draft .goal { font-style: italic; }
 .item .meta .tag.draft { background: var(--ink); color: var(--paper); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 1px var(--s2); }
 .item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
+/* The table style (wide screens only, chosen with the Table button): one line per task, a column each for status, review, branch and run.
+   The rows sit in a container; where the list column is narrower than 980px (a viewport or a classic scrollbar leaving it short) the same markup is laid out as the card.
+   The columns are in rem times --z, as the type is. 980px is the list column at which the goal keeps about 240px beside the fixed columns (743px of them and the gaps).
+   The fixed columns are sized from the text a cell really carries, measured in a browser at 16px: an id up to 77px (a nested W128.1), status
+   with its held-by or waiting-on tag up to 182px, review "rev 123" 70px, branch one "N not on origin/main" tag 158px, run "running work 4/20" 146px.
+   A cell with two branch tags (ahead and uncommitted) or four status tags is cut with an ellipsis and says the whole in its title. */
+#view.tbl { container: tasks / inline-size; }
+#view.col.tbl { max-width: var(--page); }   /* the cells carry whole tags, which the 880px card column leaves the goal about 100px beside; the table takes the page's width */
+.listopt { justify-content: flex-end; margin: 0 0 var(--s2); }
+.tblhead, .noarch { display: none; }
+.item.tbl .itag { display: inline; margin-right: var(--s2); }
+.item.tbl .cells { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1) var(--s2); grid-column: 2; margin-top: 6px; font-size: var(--fs-control); }
+.item.tbl .cell { display: contents; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }   /* read by a screen reader, not drawn: the table's column names */
+.item.tbl .cell .tag { white-space: normal; overflow-wrap: anywhere; }
+.item.tbl.done .goal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container tasks (min-width: 980px) {
+  .item.tbl.tint { margin: 0; width: 100%; --gx: 0px; padding-right: 0; }   /* a tinted row lines up with the header and the other rows ids */
+  .item.tbl, .tblhead { grid-template-columns: calc(5rem * var(--z)) minmax(0, 1fr) calc(11.5rem * var(--z)) calc(4.5rem * var(--z)) calc(10rem * var(--z)) calc(9.5rem * var(--z)); align-items: center; gap: 0 var(--s3); }
+  .tblhead { display: grid; box-sizing: border-box; width: 100%; min-height: calc(36px * var(--z)); padding-left: 2.2rem; border-bottom: var(--rule-strong) solid var(--ink); font-size: var(--fs-label); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .item.tbl, .item.tbl.done { padding-block: 0; min-height: var(--hit); }
+  .item.tbl .goal { grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .item.tbl .cells { display: contents; }
+  .item.tbl .cell { position: relative; display: flex; align-items: center; gap: var(--s1); min-width: 0; overflow: hidden; white-space: nowrap; }
+  .item.tbl .cell .tag { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item.tbl .why { grid-column: 2 / -1; margin: 0 0 var(--s2); }
+  .arow.t { display: flex; align-items: stretch; }
+  .arow.t > .item { flex: 1; min-width: 0; width: auto; }
+  .arow.t > .item.tint { margin-left: 0; }
+  .arow.t > .archive, .arow.t > .noarch { display: flex; position: static; flex: none; width: 2.2rem; height: auto; align-self: center; }
+}
 /* Reorder: the row stops being one button (its controls are buttons too) and grows a strip of moves under its text */
 .item.reorder { cursor: default; }
 .item.reorder:active { background: none; }
@@ -422,6 +453,10 @@ const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only:
 /* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
 const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
+const TABLE_MIN = 1012;   // the table's list column of 980px (the container query in the CSS) plus the 16px gutters either side; change them together
+const tableWide = () => matchMedia(`(min-width: ${TABLE_MIN}px)`).matches && document.documentElement.clientWidth >= TABLE_MIN;   // clientWidth leaves out a classic scrollbar, which a media query does not
+/* The list style: `card` (a two-line card per task, the phone's only one) or `table` (one line per task with columns, on a wide screen). Kept in localStorage. */
+const listStyle = () => { try { return localStorage.getItem("listStyle") === "table" ? "table" : "card"; } catch (e) { return "card"; } };
 
 /* Loading: a request still outstanding after 250 ms shows "loading" and the stripe under the header
    and marks #view busy, so a slow link reads as waiting and not as a page that has stopped. Fast
@@ -1029,7 +1064,10 @@ function drawTasks(push) {
   // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
   const held = push && typingInBox() ? $("#walkbox") : null;
   S.boxHeld = !!held;
+  const table = !S.reorder && tableWide() && listStyle() === "table";
   let seg = 0, html = held ? "" : walkHtml();
+  if (!S.reorder && tableWide()) html += `<div class="actions listopt"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
+  if (table) html += `<div class="tblhead" aria-hidden="true"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>`;
   for (const it of S.state.items) {
     const fenced = it.segment > seg && !S.only;
     if (fenced) html += `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
@@ -1050,7 +1088,25 @@ function drawTasks(push) {
           ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}${wait}</span></span>
       ${it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}`;
     const style = `--ind:${Math.min(it.depth, 3) * 14}px`;
-    if (S.reorder) {
+    if (table) {
+      // one line: id, goal, then a cell each for status, review, branch and run; a cell cut short says its whole text in its title
+      const cell = (name, text, h) => `<span class="cell" title="${esc(text)}">${h.trim() ? `<span class="vh">${name}: </span>` : ""}${h}</span>`;   // the header row is aria-hidden, so each filled cell names its column for a screen reader
+      const hold = it.blocked_by ? `held by ${it.blocked_by}` : "", wt = it.waiting_on ? `waiting on ${it.waiting_on}` : "";
+      const br = [it.ahead ? `${it.ahead} not on ${it.base}` : "", it.uncommitted ? `${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${it.base}` : ""].filter(Boolean);
+      const cells = cell("Status", [it.status, it.draft ? "draft" : "", wt, hold].filter(Boolean).join(", "),
+          `<span class="st ${esc(it.status)}">${esc(it.status)}</span>${it.draft ? `<span class="tag">draft</span>` : ""}${wt ? `<span class="tag">${esc(wt)}</span>` : ""}${hold ? `<span class="tag attention">${esc(hold)}</span>` : ""}`)
+        + cell("Review", it.rev || "", it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : "")
+        + cell("Branch", (it.pr ? "pull request, " : it.pr_ready ? "ready to open a pull request, " : "") + br.join(" "),
+            `${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}`
+            + `${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}`)
+        + cell("Run", "", walkTags(it));
+      const row = `<span class="iid">${iidHtml(it.id)}</span><span class="goal" title="${esc(it.goal)}">${tagHtml(it.id)}${esc(it.goal)}</span><span class="cells">${cells}</span>`
+        + (it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : "");
+      const lead = it.archivable
+        ? `<button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}"><svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg></button>`
+        : `<span class="noarch"></span>`;
+      html += `<div class="arow t" style="${style}">${lead}<button class="${cls} tbl" data-act="task" data-id="${esc(it.id)}" style="${style}">${row}</button></div>`;
+    } else if (S.reorder) {
       const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
@@ -1071,7 +1127,7 @@ function drawTasks(push) {
     html += `<div class="actions"><button class="btn" data-act="archived" aria-pressed="${showArchived()}">${showArchived() ? "Hide archived" : "Show archived (" + S.archivedCount + ")"}</button></div>`;
   if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
-  $("#view").className = "col";
+  $("#view").className = "col" + (table ? " tbl" : "");
   const on = document.activeElement && document.activeElement.matches("#view button.item[data-act=task]") ? document.activeElement.dataset.id : null;
   if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }
   else $("#view").innerHTML = html;
@@ -1818,6 +1874,7 @@ document.addEventListener("click", e => {
   ({
     retry: () => render(true),
     flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
+    liststyle: () => { try { localStorage.setItem("listStyle", listStyle() === "table" ? "card" : "table"); } catch (e) {} render(true); },
     archived: () => { try { localStorage.setItem("showArchived", showArchived() ? "0" : "1"); } catch (e) {} render(true); },
     only: () => { S.only = d.v === "1"; S.reorder = false; S.moved = null; showList(); },
     reorder: () => { S.reorder = route().view === "tasks" ? !S.reorder : true; S.moved = null; if (S.reorder) S.only = false; showList(); },
@@ -1876,7 +1933,9 @@ $("#chat-log").addEventListener("scroll", e => {
   const l = e.target; if (!CHAT.scope || CHAT.fresh) return;
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
-matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
+// One redraw path for the table's room: the observer sees a viewport crossing and a classic scrollbar appearing or going (which leaves the media query unchanged); the media listener is only the fallback where there is no ResizeObserver, since both together redraw twice.
+if (typeof ResizeObserver === "function") { let tw = tableWide(); new ResizeObserver(() => { const n = tableWide(); if (n !== tw) { tw = n; render(true); } }).observe(document.documentElement); }
+else matchMedia(`(min-width: ${TABLE_MIN}px)`).addEventListener("change", () => render(true));
 addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
