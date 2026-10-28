@@ -125,6 +125,7 @@ pre.runlog .r-err { color: var(--attention); }
    row's own button, so the row's wrapper holds it over the empty space the id column leaves */
 .arow { position: relative; }
 .archive { position: absolute; left: var(--ind, 0px); bottom: var(--s3); width: 3.2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: flex-start; color: var(--muted); }
+.archive::before { content: ""; position: absolute; inset: -6px 0; }   /* the box is 32px high: a 44px touch target, kept inside the row */
 .archive svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 .archive:active { background: var(--sel); color: var(--ink); }
 .item .iid { font-weight: 600; letter-spacing: .03em; }
