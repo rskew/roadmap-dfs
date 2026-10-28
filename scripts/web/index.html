@@ -117,7 +117,8 @@ pre.runlog .r-err { color: var(--attention); }
 /* the task list: ruled, with ids in a column */
 .item { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 var(--s3); width: 100%; padding: var(--s4) 0; padding-left: calc(var(--ind, 0px) + var(--gx, 0px)); border-bottom: var(--rule) solid var(--line); }
 .item.tint { margin: 0 -10px; width: calc(100% + 20px); --gx: 10px; padding-right: 10px; }
-.item.assumes { background: var(--assumption-wash); }
+/* an assumption leaves the row unfilled so the page (and its picture) shows through; the stripe is its cue */
+.item.assumes { box-shadow: inset var(--rule-status) 0 0 var(--assumption-fill); }
 .item.blocks { background: var(--attention-wash); }          /* a blocker is the more urgent: it wins */
 .item:active { background: var(--sel); }
 /* a task that can be archived gets a small button on the left of its row, under its id; it cannot sit inside the
@@ -342,13 +343,12 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 .railitem .itag, .railitem .goal { grid-column: 2; }
 .railitem .goal { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .railitem.done { color: var(--muted); }
-.railitem.assumes { background: var(--assumption-wash); --st: var(--assumption-fill); }
+.railitem.assumes { --st: var(--assumption-fill); }
 .railitem.blocks { background: var(--attention-wash); --st: var(--attention); }
 .railitem[aria-current="true"] { background: var(--sel); --st: var(--ink); box-shadow: inset 0 0 0 var(--rule) var(--ink); }
 /* where a pointer rests, the thing under it says it can be pressed */
 @media (hover: hover) {
   .item:hover, .railitem:hover, .row .main:hover { background: var(--sel); }
-  .item.assumes:hover { background: var(--assumption-wash); filter: brightness(.96); }
   .item.blocks:hover { background: var(--attention-wash); filter: brightness(.96); }
 }
 /* the menu a right-click on a node opens: the sheet's own actions, at the pointer */
