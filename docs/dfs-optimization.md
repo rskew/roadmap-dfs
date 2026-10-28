@@ -155,8 +155,8 @@ varies between replays of one task. The `ok` reviews of `a` and `c` each still l
 defects (`c` names a day-boundary hold of 24 hours that `b`'s review made a Fix node of),
 so which side of `ok` a tree falls on is partly the reviewer's call.
 
-The last two rows are from `replay.py score` (below): the three replays were not sealed
-from the box. Their DEST sits inside the live checkout (`/workspace/roadmap-dfs/.dfs/runs/replays/`,
+The last two rows are from `replay.py score` (below): these three replays predate the
+sandbox ("Replayed under the sandbox", below) and were not sealed from the box. Their DEST sits inside the live checkout (`/workspace/roadmap-dfs/.dfs/runs/replays/`,
 the one mount here that runs scripts), and sessions run as the same user, so the live
 `.dfs/runs`, `.dfs/items`, `.dfs/worktrees` and `~/.codex` were one directory up.
 
@@ -166,7 +166,7 @@ What the proof does not show, and what a comparison has to allow for:
   dollars (1.30 originally) and its first review passed twice in three; a change to the
   system can only be judged over several replays of each arm (control and changed),
   compared on the first review's pass rate before cost.
-- **The replay's box is the original's, with the answer on it.** `seal` empties the clone
+- **The replays `a`, `b`, `c` and `arm1` ran with the original's evidence on the box.** `seal` empties the clone
   of the original's later work, but not the box: a replay's sessions run as the same user,
   and the live checkout's `.dfs/runs` (the original chain's run logs, with its sessions'
   tool output), `.dfs/items` (the original `W55.md`), `.dfs/worktrees`, the codex session
@@ -194,19 +194,48 @@ What the proof does not show, and what a comparison has to allow for:
   one. The earlier unguarded replay ran `grep -r /` for the evidence and sat in it for
   53 minutes; none of these four did (searched in their transcripts), and a session in
   `a` spent 28 minutes in tool calls.
-- **What the box must hide, and what it can.** For a clean replay the sessions would see
-  the clone, the tool and the account's credentials and nothing else: no live checkout,
-  no `~/.codex`, no other `~/.claude/projects`. This box cannot do it: a mount namespace
-  (`unshare -Urm`) is refused ("Operation not permitted"), `/tmp`, `/dev/shm` and the home
-  do not run scripts, so DEST cannot move out of the live checkout, and the original's run
-  logs, transcripts and task file are on the same disk. A box that can (a container that
-  mounts only the clone, `sandbox.sh run`, or a copy of the repo without `.dfs/runs`) is
-  the fix, and until a replay runs in one its pass rate is an upper bound on a clean
-  replay's, with `score`'s two rows printed beside it. Measuring the exposure and
-  calling the rate an upper bound, instead of hiding the answer, is a choice this box forced,
-  and the author may want the loop held until a box hides it (section 4, step 5, "undecided"). Tasks whose evidence lies outside
-  the repo make poor candidates for the same reason, and a replay should be given a
-  timeout on a single Bash call.
+- **From here a replay runs in a sandbox that hides the box.** `replay.py run` and `replay`
+  start the chain through proot (nix: `pkgs.proot`, no privileges; chroot, bwrap and user
+  namespaces are refused on this box). The sessions see an empty root holding `/nix`,
+  `/proc`, `/dev`, the network files of `/etc`, DEST at its own path, the tool's own
+  entries (`SKILL.md`, `scripts`, `templates`, `docs`; never the tool as a whole, which
+  when it is the live checkout holds its `.dfs/`), and a fresh home (`DEST-box/home`, at
+  `/home/replay`) with a copy of the sign-in and `settings.json` and nothing else: no
+  `~/.claude/projects`, no `~/.codex`, no history. Their environment is rebuilt (no
+  `DFS_*`, no `XDG_*`). Of the live checkout they see the path down to DEST and nothing
+  beside it. `SandboxTest` runs a real proot and finds the live runs, the tool's own
+  `.dfs/` and a `DFS_RUNS` in the host environment all absent (red when the tool's `.dfs`
+  is bound or the environment passes through); `claude` runs under it with network and
+  sign-in, and the chain (`run.sh`) runs to its first session. DEST stays inside the live
+  checkout's ignored `.dfs/runs`, the one mount here that runs scripts (git skips a hook
+  elsewhere).
+  What it does not do. proot hides paths and is not a security boundary: it intercepts
+  system calls and does not isolate the process, so an escape that never names a live path
+  would go unseen. The detector is `score`'s rows, and they see only tool calls that name
+  a live path: "calls naming a live path, answered nothing" (the sandbox returned nothing
+  or an error: an attempt, which a task whose text sends the sessions to the run logs makes
+  as a matter of course) and "answered output" (which a reader opens: a command can name a
+  live path and print only what its in-sandbox part found), and "original's nodes shown in
+  a result". A replay with any call answered with live output, or any of the original's
+  conclusions shown, is void: it is dropped from the count and a Fix node is opened to
+  close the hole. The sandbox copies the sign-in, so after the access token's hours the
+  replay's `claude` refreshes its own copy; whether that signs out the author's login is
+  not checked here, and the fix is to sign in again.
+  A task whose Goal sends its sessions to evidence outside the repo gets nothing from the
+  box now and has to work from the repo, so it is a poorer replay of that task, not a leak.
+
+### Replayed under the sandbox
+
+`dfs-replay-W55-p1` (2026-10-28, the store's tool, claude 2.1.308, run once the account's
+five-hour limit had reset): 2 sessions (1 work, 1 review), $2.36 against $1.30, 1 node
+commit, first review `ok`, merged. `score` prints 0 of the original's nodes shown in a
+result and 5 calls naming a live path: 3 answered nothing (greps of `/workspace/roadmap-dfs/.dfs`
+and `~/.codex` for the usage-limit logs, which the task is about) and 2 answered with
+output, which were read in the box's transcripts and show only lines from the clone's own
+`scripts/test_limit.py`, `replays` (the path down to DEST) and a listing of the nix store,
+nothing of the live checkout. So the sandbox held on this replay. It is one sample and
+counts as a first-review pass of one.
+
 - **The starting point keeps only the title, Goal and Background.** Any nodes the author
   wrote into the task before work began are dropped, so a task that began with
   author-written nodes is not replayed from its real start; none of the candidate tasks
@@ -291,9 +320,9 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    dataset. Pick the failure class and the tasks it appears in.
 2. **Choose** one candidate and a replayable set: roadmap-dfs tasks that are small
    (original at most $3), whose evidence lies in the repo (not `~/.codex`, not the
-   network; every task's original run logs and task file are on this box, so the replay's
-   `score` rows for outside reach are read against that), and whose original first review found issues, so the control has
-   something to move. Take at least four. `replay.py plan TASK` prints the starting
+   network: the sandbox hides every other source, so a task that sends its sessions to
+   the original's run logs can only be guessed at, as W55's is), and whose original first
+   review found issues, so the control has something to move. Take at least four. `replay.py plan TASK` prints the starting
    point and the original's numbers.
 3. **Change** the tool, on a branch of this repo, one candidate at a time: the changed
    arm is that revision (`--tool-ref REV`), the control is the revision it branched from.
@@ -307,36 +336,31 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    minutes, where W55's replay sat 53 minutes in `grep -r /`. A call that hits the bound
    shows in the transcript as a timeout; count those as a result (the task needed
    something the scratch clone lacks) and drop the task from the set if it recurs.
-   The box is not hidden from the replay (section 3): `score` prints each replay's
-   calls naming the live checkout and the original's conclusions a result showed, and
-   those two rows go in the comparison.
+   A replay runs only through `replay.py`, which starts it inside the proot sandbox of
+   section 3, so it sees its own clone and a fresh home and not the live checkout; there
+   is no way to run a candidate outside it. `score` prints three breach rows for each
+   replay (calls naming a live path that were answered nothing, that were answered
+   output, and the original's conclusions a result showed), and they go in the
+   comparison as a check that the sandbox held. They see only tool calls that name a live
+   path, and proot hides paths without being a security boundary, so an escape that never
+   names the path would go unseen. A replay with a call answered with live output (read
+   by hand) or a conclusion shown is void: it is dropped from the count, the arm is run
+   again, and a Fix node is opened to close the hole.
 5. **Compare** the arms per task, never pooled: first-review pass rate (out of 3),
    median dollars, refused commits, replays that stopped BLOCKED or on the cap. Then
    read the reviews of the changed arm's passes: a pass counts only if the review's
    `ok` names what it checked (the `ok` of two guarded W55 replays still listed three
    and four defects each). A candidate is **kept** if it passes the first review in at
    least **four** more replays of the twelve than the control does, and no task gets
-   worse by more than one replay of three (**test 1**, on all replays), **and** the replays
-   whose `score` shows none of the original's conclusions in a result ("unexposed") do not
-   contradict it (**test 2**): each arm has at least two of them, and the changed arm's
-   pass fraction among them is not below the control's. **Dropped** if test 1 fails or the
-   unexposed replays point the other way, with the numbers in the candidate's row.
-   **Undecided** if test 1 passes and an arm has fewer than two unexposed replays: it is
-   not kept, and it waits for a box that hides the
-   answer (section 3), where every replay is unexposed and test 2 reduces to test 1.
-
-   *Why test 2 is a no-contradiction check and not a second margin.* Section 3 measured
-   three of four W55 replays (`a`, `b`, `arm1`) shown the original's conclusions. At that
-   rate (exposure 0.75) 24 replays leave about 6 unexposed, 3 an arm, and a lead of four
-   cannot be asked of 3 replays (a lead cannot exceed the arm). So test 2 only asks that
-   the unexposed replays do not point the other way. This is an assumption of W97.18, and
-   the table below says what it buys. It does not remove the exposure: a change that
-   works only by making sessions look the answer up is still kept about a quarter of the
-   time at that exposure, because three replays an arm hardly separate it from nothing.
+   worse by more than one replay of three. **Dropped** if it does not, with the numbers
+   in the candidate's row: "not shown", not "shown useless" (a modest gain is missed more
+   often than not, below). The lead guards against reviewer noise and small samples,
+   which the sandbox does not remove: the first review's verdict varies between replays
+   of one tool.
 
    *Why four.* Assume each replay passes its first review with probability p, alone
    and independently, p between 0.5 and 0.7 (the history fails 30% of first reviews; the
-   three guarded W55 replays passed 2 of 3, an upper bound on a clean replay's rate for the reason in section 3). Two arms of the same tool then differ by
+   three W55 replays before the sandbox passed 2 of 3, an upper bound on a sandboxed replay's rate, and the one sandboxed replay passed). Two arms of the same tool then differ by
    the margin by chance this often (exact sums over every outcome, recomputed by `python3 <scripts>/chance.py` and by the page named below):
 
    | margin (of 12) | kept by chance, p=0.5 | p=0.7 | kept if p goes 0.5 to 0.9 | 0.5 to 0.75 |
@@ -345,24 +369,6 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    | 3 | 14.8% | 12.9% | 86.8% | 58.0% |
    | 4 | 7.4% | 5.8% | 74.2% | 41.5% |
    | 5 | 3.2% | 2.1% | 56.5% | 25.8% |
-
-   That table is test 1 alone. With test 2 and a share of replays shown the original's
-   conclusions (`python3 <scripts>/chance.py`: 100,000 simulated runs, seed 97, 12 replays
-   an arm, a replay exposed with the probability in the first column), at margin four:
-
-   | exposure | arms with 2+ unexposed | null p=0.5 kept | null p=0.7 kept | 0.5 to 0.9 kept | 0.5 to 0.75 kept | lookup-only gain kept |
-   |---|---|---|---|---|---|---|
-   | 0 | 100% | 7.4% | 5.8% | 74.2% | 41.5% | n/a |
-   | 0.50 | 99.4% | 7.3% | 5.7% | 73.1% | 40.3% | 27.7% |
-   | 0.75 | 70.8% | 4.9% | 3.8% | 51.0% | 27.5% | 26.8% |
-   | 1.00 | 0% | 0% | 0% | 0% | 0% | 0% |
-
-   ("Lookup-only": the pass rate is 0.5 for both arms unless a replay is exposed, and the
-   changed arm passes 0.9 of the exposed ones.) At the measured 0.75, a false keep falls to
-   4 or 5%, a real 0.5 to 0.9 gain is kept half the time, not three in four, and in 29% of
-   runs an arm has too few unexposed replays to decide; at 1.0, nothing can be kept, and
-   all four W55 replays did reach into `.dfs/runs`. The 0.75 itself is three
-   replays of one task, so the 0.5 to 1.0 rows bound it.
 
    A margin of two keeps a change that does nothing one time in four, so the earlier
    rule was no test; four keeps it about one in sixteen and still finds a change that
@@ -405,5 +411,6 @@ rule's last clause, evidence inside the repo, is not decidable from the history;
 each task file for it, and taking four, is the first step. Then
 run the control (the current tool) twice on those four tasks, to see whether two
 control arms differ by four or more of twelve; then candidate 1 on the same four tasks,
-the first real run of the loop (its changed-arm path ran once, in section 3). It needs `claude` (from nixpkgs) and a DEST that can run
-scripts (inside the repo's ignored `.dfs/runs` works on the box used here).
+the first real run of the loop (its changed-arm path ran once, in section 3). It needs `claude` and `proot` (both from nixpkgs at the agent pin;
+`REPLAY_CLAUDE_CODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
+(inside the repo's ignored `.dfs/runs` works on the box used here).
