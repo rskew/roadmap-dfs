@@ -108,6 +108,11 @@ message("idle", {"outcome": "succeeded"})
 db.commit()
 def ev(kind, **part):
     print(json.dumps({"type": kind, "sessionID": sid, "part": part}))
+flag = os.environ.get("CHAT_STUB_CRASH_AFTER_ANSWER")
+if flag and not os.path.exists(flag):       # the server crashed after the exchange was stored, before its events reached the client
+    open(flag, "w").close()
+    print(json.dumps({"type": "error", "sessionID": sid, "error": {"name": "UnknownError", "data": {"message": "Transport: The socket connection was closed unexpectedly"}}}, separators=(",", ":")))     # as opencode prints it
+    sys.exit(1)
 ev("step_start", type="step-start")
 ev("tool_use", type="tool", tool="read")
 ev("step_finish", type="step-finish", reason="tool-calls")
@@ -597,6 +602,20 @@ class Chat(unittest.TestCase):
                          [dict(role="prompt", text="You are talking with the author about task W1."), dict(role="you", text="hello"), dict(role="agent", text="Reading.\nI read it. Fine.")])
         self.assertAlmostEqual(dfs_chat.transcript_mtime(sid, "opencode"), time.time(), delta=60)
 
+    def test_an_opencode_message_stored_twice_with_no_answer_between_is_read_once(self):
+        sid = "ses_dup"
+        subprocess.run([str(self.opencode), "run", "--session", sid], input="hello", text=True, capture_output=True, check=True, env=dict(os.environ))
+        db = sqlite3.connect(self.root / "home" / ".local" / "share" / "opencode" / "opencode.db")
+        row = lambda mid, kind, seq, data: db.execute("insert into session_message values (?, ?, ?, ?, 1, 1, ?)", (mid, sid, kind, seq, json.dumps(data)))
+        row("msg_9001", "user", 100, {"text": "again", "files": []})     # a crashed attempt stored it ...
+        row("msg_9002", "user", 101, {"text": "again", "files": []})     # ... and the attempt run after it stored it too
+        row("msg_9003", "assistant", 102, {"content": [{"type": "tool", "name": "read"}]})      # an answer with no words
+        row("msg_9004", "user", 103, {"text": "again", "files": []})     # asked again after an answer: a second message
+        db.commit()
+        db.close()
+        self.assertEqual([(m["role"], m["text"]) for m in dfs_chat.transcript_messages(sid, "opencode") if m["role"] == "you"],
+                         [("you", "hello"), ("you", "again"), ("you", "again")])
+
     def test_an_opencode_turn_is_answered_kept_and_resumed_by_the_id_opencode_made(self):
         self.use_opencode()
         self.chats.send("W1", "Where is the work?")
@@ -633,6 +652,18 @@ class Chat(unittest.TestCase):
         self.assertEqual([m["role"] for m in st["messages"]], ["prompt", "you", "agent"], "%s %s" % (st["messages"], self.calls()))
         self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "run again after the crash, and no more")
 
+    def test_an_opencode_turn_whose_answer_was_stored_before_the_crash_is_not_run_again(self):
+        self.use_opencode()
+        self.chats.send("W1", "first")
+        self.settle("W1")
+        os.environ["CHAT_STUB_CRASH_AFTER_ANSWER"] = str(self.root / "crashed")
+        self.addCleanup(os.environ.pop, "CHAT_STUB_CRASH_AFTER_ANSWER", None)
+        self.chats.send("W1", "second")
+        st = self.settle("W1")
+        self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "the second turn was run once: its answer was in the store")
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["first", "second"])
+        self.assertEqual([m["role"] for m in st["messages"]][-3:], ["you", "agent", "error"], "the answer is there, and the page says the run ended in an error")
+
     def test_the_screens_opencode_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
         self.use_opencode()
         self.assertEqual(dfs_chat.claim("W1", "opencode"), ("", False), "opencode has no id to name for a new conversation")
@@ -645,13 +676,13 @@ class Chat(unittest.TestCase):
         opening, opening_in, interactive = self.calls()
         self.assertEqual(opening, "run --standalone --format json --auto")
         self.assertIn("Discuss task W1 with the author", opening_in)
-        self.assertEqual(interactive, "--session %s --auto" % rec["sid"])
+        self.assertEqual(interactive, "--standalone --session %s --auto" % rec["sid"])
         self.assertEqual(self.chats.state("W1")["messages"][-1]["text"], "Reading.\nI read it. Fine.")
         sid, resume = dfs_chat.claim("W1", "opencode")
         self.assertEqual((sid, resume), (rec["sid"], True))
         r = run(CHAT_SID=sid, CHAT_RESUME="1")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.calls()[3:], ["--session %s --auto" % sid])
+        self.assertEqual(self.calls()[3:], ["--standalone --session %s --auto" % sid])
 
     def test_an_opencode_stream_is_read_to_the_one_line_a_turn_is_read_from(self):
         step = lambda kind, **p: json.dumps({"type": kind, "sessionID": "ses_1", "part": p})

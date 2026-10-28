@@ -91,6 +91,13 @@ class OpencodeCrossing(unittest.TestCase):
         with sqlite3.connect(dfs_chat.opencode_db()) as db:
             return db.execute("select count(*) from session_v2").fetchone()[0]
 
+    def stored(self):
+        """What opencode.db holds for the conversation, for a failure message: each user and assistant row's type, id and words."""
+        sid = self.chats.sid("project")
+        with sqlite3.connect(dfs_chat.opencode_db()) as db:
+            rows = db.execute("select type, id, data from session_message where session_id = ? and type in ('user', 'assistant') order by seq", (sid,)).fetchall()
+        return [(t, i[-6:], d[:90]) for t, i, d in rows]
+
     def texts(self):
         return [(m["role"], m["text"]) for m in self.chats.state("project")["messages"]]
 
@@ -165,7 +172,7 @@ class OpencodeCrossing(unittest.TestCase):
         last = self.heard("PAGE-THREE")[-1].decode()
         self.assertIn("PAGE-ONE", last, "the page's resumed turn carries the first message")
         self.assertIn("SCREEN-TWO", last, "and what was typed on the screen")
-        self.assertEqual(self.yous(), ["PAGE-ONE", "SCREEN-TWO", "PAGE-THREE"])
+        self.assertEqual(self.yous(), ["PAGE-ONE", "SCREEN-TWO", "PAGE-THREE"], "the store holds %s" % self.stored())
         self.assertEqual(self.sessions(), 1, "one session in opencode.db holds the whole conversation")
 
     def test_a_message_sent_while_the_opening_turn_runs_waits_for_opencode_and_reaches_it(self):

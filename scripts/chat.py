@@ -223,11 +223,13 @@ def opencode_turns(sid):
     (opencode 2.1.1): a row's `type` is `user`, `assistant` or `idle` (a turn marker), and its
     `data` holds the words, a user's as `text` and an assistant's as the `text` items of
     `content`, in order. Tool and reasoning items are not words, and a `synthetic` or
-    `ignored` text is opencode's own note to the model."""
+    `ignored` text is opencode's own note to the model. A user message repeated with no answer
+    between is read once: run.sh runs a turn again when opencode's server crashes as it starts
+    (a Bun bug), and the crashed attempt may already have stored the message the new one stores."""
     rows = opencode_query(
         "select id, type, data from session_message where session_id = ? and type in ('user', 'assistant') "
         "order by seq, id", (sid,))
-    out = []
+    out, last = [], None        # last: the (type, text) of the row before, to see a repeated message
     for mid, kind, data in rows:
         try:
             body = json.loads(data)
@@ -235,7 +237,10 @@ def opencode_turns(sid):
             continue
         if not isinstance(body, dict):
             continue
+        before, last = last, (kind, body.get("text") if kind == "user" else None)
         if kind == "user":
+            if before == last:
+                continue
             items = [body]
         else:
             items = [i for i in body.get("content") or [] if isinstance(i, dict) and i.get("type") == "text"]
@@ -243,6 +248,12 @@ def opencode_turns(sid):
             if isinstance(item.get("text"), str) and not item.get("synthetic") and not item.get("ignored"):
                 out.append(("you" if kind == "user" else "agent", item["text"], mid))
     return out
+
+
+def opencode_answers(sid):
+    """How many answers (assistant messages) opencode's store holds for the session."""
+    rows = opencode_query("select count(*) from session_message where session_id = ? and type = 'assistant'", (sid,))
+    return rows[0][0] if rows else 0
 
 
 def kiro_home():
@@ -799,17 +810,20 @@ def save(scope, sid, agent):
 
 def main(argv):
     """`--codex-result [sid]`, `--opencode-result [sid]`, `--kiro-result [sid]`: that agent's JSON stream of a turn on
-    stdin, the turn's one JSON line on stdout (exit 1 if it failed). `--save scope sid agent`:
-    record a scope's conversation."""
+    stdin, the turn's one JSON line on stdout (exit 1 if it failed). `--opencode-answers sid`: how many answers
+    opencode's store holds for a session. `--save scope sid agent`: record a scope's conversation."""
     results = {"--codex-result": codex_result, "--opencode-result": opencode_result, "--kiro-result": kiro_result}
     if argv[:1] and argv[0] in results:
         out = results[argv[0]](sys.stdin, argv[1] if len(argv) > 1 else "")
         print(json.dumps(out))
         return 1 if out["is_error"] else 0
+    if argv[:1] == ["--opencode-answers"] and len(argv) == 2:
+        print(opencode_answers(argv[1]))
+        return 0
     if argv[:1] == ["--save"] and len(argv) == 4:
         save(*argv[1:])
         return 0
-    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --kiro-result [sid] | --save scope sid agent", file=sys.stderr)
+    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --kiro-result [sid] | --opencode-answers sid | --save scope sid agent", file=sys.stderr)
     return 2
 
 
