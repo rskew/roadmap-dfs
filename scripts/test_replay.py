@@ -392,6 +392,16 @@ class ReachOutsideDestTest(unittest.TestCase):
         self.assertEqual(len(self.reached(calls)), 1)
         self.assertEqual(len(self.reached(calls, tool=self.live)), 0)
 
+    def test_a_tool_that_is_the_live_checkout_still_counts_a_read_of_its_dfs_dir(self):
+        live = str(self.live)
+        calls = [("Bash", {"command": f"cat {live}/scripts/limit.py {live}/SKILL.md"}),   # the tool itself
+                 ("Bash", {"command": f"ls {live}/.dfs/runs"}),                            # the original's runs
+                 ("Read", {"file_path": f"{live}/.dfs/items/W5.md"}),                      # the original's task
+                 ("Glob", {"pattern": f"{live}/.dfs/worktrees/*/scripts/*.py"}),           # live worktrees
+                 ("Bash", {"command": f"cat {live}/scripts-old/x"})]                       # not the tool's scripts
+        got = self.reached(calls, tool=self.live)
+        self.assertEqual([n for n, _ in got], ["Bash", "Read", "Glob", "Bash"])
+
     def test_a_result_that_prints_the_originals_conclusion_is_the_answer_seen(self):
         (self.live / ".dfs" / "items" / "W5.md").write_text(
             "# W5\n\n## Tree\n\n### W5.1 \u00b7 Fix the parser\nDetermination: the parser now reads a quoted pipe before the verb.\n"

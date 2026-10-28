@@ -171,7 +171,7 @@ What the proof does not show, and what a comparison has to allow for:
   tool output), `.dfs/items` (the original `W55.md`), `.dfs/worktrees`, the codex session
   logs in `~/.codex/sessions` and every earlier session's transcript under `~/.claude` are
   readable. `replay.py score` now counts the tool calls that name them from outside DEST
-  (DEST, its exported tool and the tool it runs under are cut out first) and the original's
+  (DEST, its exported tool and the tool it runs under, meaning that tool's `SKILL.md`, `scripts`, `templates` and `docs`, are cut out first; a tool that is the live checkout still counts a read of its `.dfs/`) and the original's
   node titles and Determinations that a tool result printed and the replay did not write
   itself. Both are floors: a path built at run time (`cd ..`, a variable) is not seen, and
   a result that shows the answer is not a session that used it. Run on the four W55

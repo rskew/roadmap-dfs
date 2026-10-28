@@ -254,14 +254,17 @@ def live_paths(repo):
 
 def reached(dest, repo, files, tool=None):
     """The tool calls in `files` (transcripts) that name a live path outside `dest`, as
-    (session id, tool, text). DEST, its exported tool and the tool the replay runs under
-    are cut out first, so a replay kept inside the live checkout (or run under its
-    scripts) does not count itself; a path built at run time (`cd ..`, a variable) is not
-    seen, so this is a floor."""
+    (session id, tool, text). DEST, its exported tool and what the tool the replay runs
+    under is for (its SKILL.md, scripts, templates and docs) are cut out first, so a replay
+    kept inside the live checkout, or run under it, does not count reading its own tool.
+    The rest of a tool that is the live checkout (its `.dfs/` runs, items and worktrees)
+    still counts. A path built at run time (`cd ..`, a variable) is not seen, so this is
+    a floor."""
     dest = str(Path(dest).resolve())
     cut = [re.escape(dest + "-tool"), re.escape(dest) + r"(?![\w-])"]
     if tool:
-        cut.append(re.escape(str(Path(tool).resolve())) + r"(?![\w-])")
+        base = re.escape(str(Path(tool).resolve()))
+        cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|(?:scripts|templates|docs)(?![\w-]))")
     own = re.compile("(?:" + "|".join(cut) + ")")
     live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + r")(?![\w-])")
     found = []
