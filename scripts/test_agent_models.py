@@ -216,6 +216,29 @@ def opencode_hung(relay, samples):
     return bool(past) and ticks - past[-1][1] < HUNG_TICKS
 
 
+def has_server(pid):
+    """Whether the opencode with this pid has its private server (`serve --stdio`) running, as a child of its own."""
+    return subprocess.run(["pgrep", "-P", str(pid), "-f", "serve --stdio"], capture_output=True).returncode == 0
+
+
+def opencode_server_gone(relay):
+    """Whether relay's interactive opencode is alive but has lost its private server, which Bun crashes with a Bus
+    error now and then (the same as `opencode_crashed`, but of the server): the screen then draws its busy
+    animation for good and never asks the model. The server counts as lost once it was seen (or the prompt was
+    drawn, which only a TUI with its server does) and is not there now; that is kept on `relay`, since the crash can come
+    between one wait on the relay and the next. Only a child of the relay's own process counts: a headless turn's
+    server under run.sh is a grandchild, and comes and goes as it should. Looked for about once a second."""
+    if relay.agent != "opencode" or not relay.live:
+        return False
+    now = time.time()
+    if now - getattr(relay, "server_looked", 0) < 1:
+        return False
+    relay.server_looked = now
+    up = has_server(relay.pid)
+    relay.server_seen = getattr(relay, "server_seen", False) or up or prompt_drawn(relay)
+    return relay.server_seen and not up
+
+
 def opencode_crashed(relay):
     """Whether relay's opencode was killed by SIGBUS, which a loaded machine does to it now and then (its
     executable is mapped from a store on zfs; seen at start-up, mid-turn on the screen and in `opencode run`)."""
@@ -227,17 +250,17 @@ def start_until(relay, done, restart, timeout, tries=3):
     killed by SIGBUS (`opencode_crashed`) is closed and replaced by restart(), a started relay, at most `tries` starts in all. Returns the relay last started and
     whether done(relay) came true. `restart` registers the relay for closing, as the first one is."""
     for attempt in range(tries):
-        samples, end, hung = [], time.time() + timeout, False
+        samples, end, hung, why = [], time.time() + timeout, False, ""
         while time.time() < end and not hung:
             if done(relay):
                 return relay, True
-            hung = relay.agent == "opencode" and (opencode_crashed(relay) or opencode_hung(relay, samples))
+            why = "was killed by SIGBUS" if opencode_crashed(relay) else "lost its server" if opencode_server_gone(relay) else "hung at start-up" if opencode_hung(relay, samples) else ""
+            hung = relay.agent == "opencode" and bool(why)
             time.sleep(0.1)
         if not hung:
             return relay, False
         relay.close()
-        print("opencode %s (start %d of %d)" % ("was killed by SIGBUS" if opencode_crashed(relay) else "hung at start-up",
-                                                  attempt + 1, tries), file=sys.stderr)
+        print("opencode %s (start %d of %d)" % (why, attempt + 1, tries), file=sys.stderr)
         if attempt + 1 < tries:
             relay = restart()
     return relay, False
@@ -300,6 +323,25 @@ class StartUntil(unittest.TestCase):
         second = self.stand(self.IDLE, b"ctrl+p commands")
         relay, ok = start_until(first, lambda r: r is second, lambda: second, 20)
         self.assertEqual((relay, ok, first.closed), (second, True, True))
+
+    SERVER = "import subprocess, sys, time; k = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(%d)', 'serve', '--stdio']); time.sleep(60)"
+
+    def test_an_opencode_whose_server_has_gone_is_started_again_whatever_it_still_draws(self):
+        for code, drawn in ((self.SERVER % 2, b""), (self.IDLE, b"ctrl+p commands")):     # seen and then gone; a prompt but no server
+            first = self.stand(code, drawn)
+            time.sleep(0.5)
+            second = self.stand(self.IDLE, b"ctrl+p commands")
+            relay, ok = start_until(first, lambda r: r is second, lambda: second, 12)
+            self.assertEqual((relay, ok, first.closed), (second, True, True), code)
+
+    def test_one_whose_server_is_up_or_not_yet_started_is_waited_for(self):
+        up, starting = self.stand(self.SERVER % 60, b"ctrl+p commands"), self.stand(self.BUSY)
+        end = time.time() + 10
+        while not has_server(up.pid) and time.time() < end:     # the stand starts its server a moment after it starts
+            time.sleep(0.05)
+        for stand in (up, starting):
+            relay, ok = start_until(stand, lambda r: False, lambda: self.fail("restarted"), 4)
+            self.assertEqual((relay, ok, stand.closed), (stand, False, False))
 
     def test_one_that_ended_any_other_way_is_not_started_again(self):
         gone = self.stand(self.IDLE)

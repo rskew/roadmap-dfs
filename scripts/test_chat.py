@@ -83,6 +83,7 @@ echo "$@" >> "$CHAT_STUB_LOG"
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"not logged in","statusCode":401}}}'; exit 1; }
 shift
+[ -n "${CHAT_STUB_NOT_READY_ONCE:-}" ] && [ ! -e "$CHAT_STUB_NOT_READY_ONCE" ] && { touch "$CHAT_STUB_NOT_READY_ONCE"; echo "Error: Standalone server exited before reporting readiness" >&2; exit 1; }
 [ -n "${CHAT_STUB_CRASH_ONCE:-}" ] && [ ! -e "$CHAT_STUB_CRASH_ONCE" ] && { touch "$CHAT_STUB_CRASH_ONCE"; echo '{"type":"error","sessionID":"ses_x","error":{"name":"UnknownError","data":{"message":"Transport: Unable to connect. Is the computer able to access the url?"}}}'; exit 1; }
 sid=""; while [ $# -gt 0 ]; do [ "$1" = --session ] && { sid="$2"; shift; }; shift; done
 prompt="$(cat)"; echo "stdin: $prompt" >> "$CHAT_STUB_LOG"
@@ -651,6 +652,15 @@ class Chat(unittest.TestCase):
         st = self.settle("W1")
         self.assertEqual([m["role"] for m in st["messages"]], ["prompt", "you", "agent"], "%s %s" % (st["messages"], self.calls()))
         self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "run again after the crash, and no more")
+
+    def test_an_opencode_run_whose_server_exited_before_it_was_ready_is_run_again_once_and_once(self):
+        self.use_opencode()
+        os.environ["CHAT_STUB_NOT_READY_ONCE"] = str(self.root / "notready")
+        self.addCleanup(os.environ.pop, "CHAT_STUB_NOT_READY_ONCE", None)
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"]], ["prompt", "you", "agent"], "%s %s" % (st["messages"], self.calls()))
+        self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "run again after the server went, and no more")
 
     def test_an_opencode_turn_whose_answer_was_stored_before_the_crash_is_not_run_again(self):
         self.use_opencode()

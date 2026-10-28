@@ -23,7 +23,7 @@ sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
 import ptyrelay             # noqa: E402
-from test_agent_models import FakeOpenAIModel, start_until  # noqa: E402
+from test_agent_models import FakeOpenAIModel, prompt_drawn, start_until  # noqa: E402
 
 OPENCODE = os.environ.get("TEST_OPENCODE") or next(iter(sorted(glob.glob("/nix/store/*-opencode-2.*/bin/opencode"))[::-1]), None) or shutil.which("opencode")
 
@@ -40,6 +40,7 @@ def until(fn, timeout=30):
 @unittest.skipUnless(OPENCODE, "no opencode here")
 class OpencodeCrossing(unittest.TestCase):
     def setUp(self):
+        self._read = (0.0, None)            # when the page's state was last read, and what it was
         self.retyped = {}                   # message -> how many times `screen_again` typed it again after a restart
         self.root = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
@@ -84,7 +85,9 @@ class OpencodeCrossing(unittest.TestCase):
         if sid:         # the screen's opencode takes a moment to go, and the page will not send while it is there
             self.assertTrue(until(lambda: not dfs_chat.running_elsewhere(sid, agent="opencode"), 20), "the screen's opencode went")
         self.chats.send("project", text)
-        self.assertTrue(until(lambda: not self.chats.state("project")["busy"], 60), "the page's turn finished")
+        self._read = (0.0, None)        # what was read before the send says the page is not busy
+        # up to five runs of `opencode run` when its private server crashes in Bun, each 25s to 40s late on a loaded machine
+        self.assertTrue(until(lambda: not self.state()["busy"], 300), "the page's turn finished")
         return self.chats.state("project")
 
     def sessions(self):
@@ -98,8 +101,16 @@ class OpencodeCrossing(unittest.TestCase):
             rows = db.execute("select type, id, data from session_message where session_id = ? and type in ('user', 'assistant') order by seq", (sid,)).fetchall()
         return [(t, i[-6:], d[:90]) for t, i, d in rows]
 
+    def state(self):
+        """The page's state, read at most once a second. Every read opens opencode's store, and a real opencode whose
+        private server is starting while one is made crashes in Bun (Bus error) now and then: on a loaded machine
+        1 to 7 of 8 turns polled every 0.1s, none of 28 left alone. The web page reads it every 4s."""
+        if time.time() - self._read[0] >= 1.0:
+            self._read = (time.time(), self.chats.state("project"))
+        return self._read[1]
+
     def texts(self):
-        return [(m["role"], m["text"]) for m in self.chats.state("project")["messages"]]
+        return [(m["role"], m["text"]) for m in self.state()["messages"]]
 
     def heard(self, text):
         return [b for _, b in self.model.requests if text.encode() in b]
@@ -145,7 +156,7 @@ class OpencodeCrossing(unittest.TestCase):
     def type_on_the_screen(self, relay, text):
         """Type `text` on the screen's opencode and see the page read it and the answer. Returns the relay the text
         went to, which is not `relay` when its opencode hung at start-up or was killed and was started again (`start_until`)."""
-        relay, ok = start_until(relay, lambda r: r.first_out, lambda: self.screen_again(), 60)
+        relay, ok = start_until(relay, lambda r: r.first_out and prompt_drawn(r), lambda: self.screen_again(), 60)
         self.assertTrue(ok, "the screen's opencode drew itself; %s" % self.ended(relay))
         relay.send(text)
         relay, ok = start_until(relay, lambda r: self.heard(text), lambda: self.screen_again(text), 60)

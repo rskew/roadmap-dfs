@@ -273,25 +273,29 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
 
 # One headless opencode turn, its `--format json` stream on stdout: the prompt is stdin, the rest
 # is `run`'s arguments. opencode 2.1.1's private server (`serve --stdio`) sometimes crashes in Bun
-# as it starts ("Bus error"), and the run then ends in a `Transport:` `error` before any step
-# began, so the turn is run again (twice at most). A stream that began a step is never run again,
+# as it starts ("Bus error"), and the run then ends before any step began: in a `Transport:` `error`, or
+# (when the server went before it was ready, 25s to 38s later on a loaded machine) with nothing on stdout and
+# "Standalone server exited before reporting readiness" on stderr. The turn is then run again (four times at most: on a loaded machine
+# half the starts crash).
+# A stream that began a step is never run again,
 # nor is a turn of a session whose store gained an answer meanwhile: the crashed attempt may have
 # stored the message (the page reads a message stored twice once) but not an answer to be asked for twice.
 opencode_turn() {
-  local prompt tries=0 out sid="" answers="" a
+  local prompt tries=0 out err sid="" answers="" a
   prompt="$(cat; echo x)"; prompt="${prompt%x}"
   for a in "$@"; do [ "$sid" = "?" ] && sid="$a"; [ "$a" = --session ] && sid="?"; done
   [ "$sid" = "?" ] && sid=""
   [ -z "$sid" ] || answers="$(python3 "$HERE/chat.py" --opencode-answers "$sid")"
-  out="$(mktemp)"
+  out="$(mktemp)"; err="$(mktemp)"
   while :; do
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" || true
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" 2> "$err" || true
     tries=$((tries + 1))
-    if [ "$tries" -ge 3 ] || grep -q '"type":"step_start"' "$out" || ! grep -q '"type":"error".*Transport:' "$out"; then break; fi
+    if [ "$tries" -ge 5 ] || grep -q '"type":"step_start"' "$out"; then break; fi
+    if ! grep -q '"type":"error".*Transport:' "$out" && { [ -s "$out" ] || ! grep -q 'exited before reporting readiness' "$err"; }; then break; fi
     if [ -n "$sid" ] && [ "$(python3 "$HERE/chat.py" --opencode-answers "$sid")" != "$answers" ]; then break; fi
     echo "dfs_run: opencode ended before it began the turn; running it again" >&2
   done
-  cat "$out"; rm -f "$out"
+  cat "$err" >&2; cat "$out"; rm -f "$out" "$err"
 }
 
 # What an item's chat opens with, here and on the web page (--chat-turn's opening): short, in
