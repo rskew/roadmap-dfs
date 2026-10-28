@@ -287,6 +287,10 @@ opencode_turn() {
   [ "$sid" = "?" ] && sid=""
   [ -z "$sid" ] || answers="$(python3 "$HERE/chat.py" --opencode-answers "$sid")"
   out="$(mktemp)"; err="$(mktemp)"
+  # A Stop or a timeout signals the turn's whole process group, this function with it: the files hold
+  # the conversation's text, so they go with it. (bash runs a trap once the foreground `run` has ended.)
+  trap 'rm -f "$out" "$err"' EXIT
+  trap 'exit 143' TERM INT HUP
   while :; do
     printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" 2> "$err" || true
     tries=$((tries + 1))
@@ -296,6 +300,7 @@ opencode_turn() {
     echo "dfs_run: opencode ended before it began the turn; running it again" >&2
   done
   cat "$err" >&2; cat "$out"; rm -f "$out" "$err"
+  trap - EXIT TERM INT HUP
 }
 
 # What an item's chat opens with, here and on the web page (--chat-turn's opening): short, in

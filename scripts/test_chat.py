@@ -662,6 +662,27 @@ class Chat(unittest.TestCase):
         self.assertEqual([m["role"] for m in st["messages"]], ["prompt", "you", "agent"], "%s %s" % (st["messages"], self.calls()))
         self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "run again after the server went, and no more")
 
+    def test_an_opencode_turn_that_is_stopped_leaves_none_of_its_stream_files_behind(self):
+        self.use_opencode()
+        tmp = self.root / "tmp"
+        tmp.mkdir()
+        os.environ["TMPDIR"] = str(tmp)
+        self.addCleanup(os.environ.pop, "TMPDIR", None)
+        os.environ["CHAT_STUB_SLEEP"] = "60"
+        self.addCleanup(os.environ.pop, "CHAT_STUB_SLEEP", None)
+        self.log.write_text("")
+        self.chats.send("W1", "a long one")
+        end = time.time() + 10
+        while "started" not in self.log.read_text() and time.time() < end:
+            time.sleep(0.05)
+        self.assertEqual(len(list(tmp.iterdir())), 2, "the turn keeps its stream and its stderr in two files while it runs")
+        self.chats.interrupt("W1")
+        self.settle("W1")
+        end = time.time() + 10
+        while list(tmp.iterdir()) and time.time() < end:
+            time.sleep(0.05)
+        self.assertEqual(list(tmp.iterdir()), [])
+
     def test_an_opencode_turn_whose_answer_was_stored_before_the_crash_is_not_run_again(self):
         self.use_opencode()
         self.chats.send("W1", "first")
