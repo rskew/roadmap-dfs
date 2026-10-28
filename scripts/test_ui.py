@@ -324,8 +324,9 @@ class Flows(unittest.TestCase):
 
     def test_the_walk_controls(self):
         self.flow("walk")
-        # The box's Budget 7 and Chains 2 both reach the walk: the budget is split between the two chains.
-        self.assertEqual(sorted(cap for _, cap in self.fake.started_chains), ["3", "4"])
+        # The box's Budget 7 and Chains 2 both reach the walk, and the budget is split between the two chains. The flow
+        # starts it three times, by Enter in each number field and by the button, none of them asking first.
+        self.assertEqual(sorted(cap for _, cap in self.fake.started_chains), ["3", "3", "3", "4", "4", "4"])
         self.assertEqual(self.fake.chosen, "codex")
 
     def test_the_walk_controls_stay_under_the_bar_as_the_list_scrolls(self):

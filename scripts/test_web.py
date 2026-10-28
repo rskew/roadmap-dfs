@@ -627,6 +627,68 @@ class Web(unittest.TestCase):
         self.assertEqual(html.count("Plain break"), 1, "W2 sits behind a stop break")
         self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
 
+    def test_start_walk_asks_nothing_and_its_note_carries_the_permission_warning(self):
+        """index.html read as text (no node needed): the walk starts at once, so no confirmation dialog
+        is left, and the note under Start walk says what a walk does, since no dialog does."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertNotIn("Start the walk?", src)
+        note = src[src.index('id="walkhow"'):]
+        note = note[:note.index("</p>")]
+        self.assertIn("permission prompts off", note)
+        start = src[src.index("async function walkStart()"):src.index("async function walkStop()")]
+        self.assertNotIn("form(", start, "Start walk opens no dialog")
+        self.assertIn("walkStarting", start, "a second click while the request is out sends nothing")
+
+    def test_walk_start_and_stop_run_once_fold_the_box_and_stop_is_silent(self):
+        """walkStart/walkStop/collapseWalk from index.html, run in headless chromium (skipped when
+        there is none) against stubbed api, toast and drawTasks: one request however many clicks,
+        the box folded after a start and after a stop, no toast on stop, and a failure retryable."""
+        chrome = (os.environ.get("DFS_CHROMIUM") or shutil.which("chromium") or shutil.which("chromium-browser")
+                  or shutil.which("google-chrome"))
+        if not chrome:
+            self.skipTest("no chromium on PATH (or DFS_CHROMIUM) to run the page's walk functions")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function collapseWalk()"):src.index("function chainStopForm")]
+        js = """
+const out = [];
+const calls = [], toasts = []; let draws = 0, fail = false;
+const elems = {"#bud": {value: "5", reportValidity: () => true}, "#par": {value: "2", reportValidity: () => true}};
+const $ = s => elems[s] || null;
+const S = {walkOpen: true, walkDraft: {}, walk: null};
+const toast = (m, bad) => toasts.push([m, !!bad]);
+const drawTasks = () => { draws++; };
+const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTimeout(r, 20));
+  if (fail) throw new Error("no"); return {on: p.endsWith("start")}; };
+""" + body + """
+(async () => {
+  await Promise.all([walkStart(), walkStart()]);
+  out.push(["starts", calls.filter(c => c[0] === "/api/walk/start").length, calls[0][1].budget, calls[0][1].parallel]);
+  out.push(["after start", S.walkOpen, draws, toasts.length]);
+  S.walkOpen = true; toasts.length = 0; draws = 0;
+  await walkStop();
+  out.push(["after stop", S.walkOpen, draws, toasts.length]);
+  fail = true; await walkStart();
+  out.push(["failed start", JSON.stringify(toasts)]);
+  fail = false; calls.length = 0; await walkStart();
+  out.push(["retry", calls.length]);
+  document.body.textContent = "RESULT" + JSON.stringify(out) + "END";
+})();
+"""
+        with tempfile.TemporaryDirectory() as d:
+            page = Path(d) / "walk.html"
+            page.write_text("<!doctype html><body><script>" + js + "</script></body>")
+            dom = subprocess.run([chrome, "--headless", "--no-sandbox", "--disable-gpu", "--virtual-time-budget=5000",
+                                  f"--user-data-dir={d}/profile", "--dump-dom", page.as_uri()],
+                                 capture_output=True, text=True, timeout=60).stdout
+        m = re.search(r"RESULT(.*?)END", dom, re.S)
+        self.assertTrue(m, f"the page produced no result: {dom[:300]}")
+        got = {r[0]: r[1:] for r in json.loads(m.group(1))}
+        self.assertEqual(got["starts"], [1, 5, 2], "two clicks send one request, with the box's numbers")
+        self.assertEqual(got["after start"], [False, 1, 1], "start folds the box (one toast: Walking.)")
+        self.assertEqual(got["after stop"], [False, 1, 0], "stop folds the box and toasts nothing")
+        self.assertEqual(got["failed start"], ['[["no",true]]'], "a failure is an error toast")
+        self.assertEqual(got["retry"], [1], "a failed start does not lock out the next one")
+
     def test_the_walk_panel_is_collapsed_until_the_reader_opens_it(self):
         """walkHtml() in index.html, run under node (skipped when there is none): closed
         even while a walk is on, and open only once the reader's own toggle said so."""
