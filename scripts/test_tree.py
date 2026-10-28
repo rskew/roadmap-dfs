@@ -1928,6 +1928,35 @@ class Branches(InARepo):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("W1.3", (self.root / ".dfs/items/W1.md").read_text())
 
+    def test_a_commit_in_an_apply_rebase_is_not_judged_by_the_writer_rule(self):
+        """The same stop under `git rebase --apply`, which marks it with rebase-apply."""
+        self.switch("checkout -qb dfs/w1")
+        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2),
+                        "- 2026-09-25T09:00:00Z · session · work\n"))
+        (self.root / "f").write_text("branch\n")
+        self.commit()
+        self.switch("checkout -q master")
+        (self.root / "f").write_text("master\n")
+        self.commit()
+        self.switch("checkout -q dfs/w1")
+        self.hook_as("pre-commit")
+        r = self.git("rebase --apply master")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((self.root / ".git/rebase-apply").exists())
+        (self.root / "f").write_text("both\n")
+        self.git("add f")
+        r = self.git("commit -qm 'resolved'")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_a_node_a_hand_made_commit_adds_at_a_rebase_stop_is_still_judged(self):
+        self.conflicted_rebase()
+        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2)
+                        + node(4, parent=3), "- 2026-09-25T09:00:00Z · session · work\n"))
+        self.git("add -A")
+        r = self.git("commit -qm 'resolved'")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("W1.4", r.stdout + r.stderr)
+
     def test_the_same_commit_outside_a_rebase_is_still_refused_on_a_detached_head(self):
         self.hook_as("pre-commit")
         self.switch("checkout -q --detach")

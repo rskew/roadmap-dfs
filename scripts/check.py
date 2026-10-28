@@ -13,8 +13,10 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a node or log entry ADDED to a part other than this branch's (`dfs_paths.
       branch_tag`), or added at all on a detached HEAD: each branch writes only its
       own part, which is what lets two branches on one task merge without conflict.
-      Skipped while git is committing a merge, which brings other branches' parts, and
-      while a rebase is in progress, which replays commits judged where they were made
+      Skipped while git is committing a merge, which brings other branches' parts. While
+      a rebase is in progress, the nodes and log entries of the commit being replayed
+      (REBASE_HEAD) count as already there, since they were judged where they were made;
+      what a hand-made commit adds beyond them is judged as usual
     - a node id used twice, a Parent that does not exist or comes later, a Status
       that is not open | parked | confirmed | refuted, a Corrects naming no correction
       or backtrack
@@ -186,6 +188,31 @@ def rebasing():
                 (path if path.is_absolute() else dfs_paths.state() / path).exists():
             return True
     return False
+
+
+def replayed_base(task, head, replayed):
+    """What a hand-made commit at a rebase stop is judged against for the writer,
+    Hypothesis and Ask rules: HEAD's copy plus the nodes and log entries of the commit
+    being replayed (`replayed`, REBASE_HEAD's copy, or None) that HEAD lacks. They were
+    judged where they were made; anything else the commit adds is judged as usual."""
+    if not replayed:
+        return head
+    if not head:
+        return replayed
+    base, extra = dfs_tree.parse(head, task), dfs_tree.parse(replayed, task)
+    had_nodes = {nd["id"] for nd in base["nodes"]}
+    had_log = {e["text"].rstrip() for e in base["log"]}
+    base["nodes"] += [nd for nd in extra["nodes"] if nd["id"] not in had_nodes]
+    base["log"] += [e for e in extra["log"] if e["text"].rstrip() not in had_log]
+    return dfs_tree.render(base)
+
+
+def replayed_copy(path: Path):
+    """REBASE_HEAD's copy of `path`: the commit a rebase stopped on, or None."""
+    state = dfs_paths.state()
+    r = subprocess.run(["git", "show", f"REBASE_HEAD:./{path.relative_to(state)}"],
+                       cwd=state, capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
 
 
 def check_writer(task, tag, here, text, head):
@@ -643,9 +670,11 @@ def main() -> int:
         here = None
         if dfs_paths.branch() is not None:   # two branches with one tag, not detached
             fatal.append(str(e))
-    # also: the other parent's commits were judged there, and a rebase replays commits that
-    # were judged where they were made
-    judge_writer = not (merging() or rebasing())
+    # also: the other parent's commits were judged there. A rebase replays commits that
+    # were judged where they were made: they are exempt, a hand-made commit's own additions
+    # are not (`replayed_base`)
+    judge_writer = not merging()
+    in_rebase = rebasing()
     # A commit that first brings a committed roadmap's task files into git has nothing to
     # judge them against: what they hold was written before the guard saw them, under
     # whatever rules stood then. Their findings are grandfathered, shown and not refused,
@@ -704,13 +733,14 @@ def main() -> int:
                 text + "\n" + arc, None if head is None else head + "\n" + head_arc)]
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]
+            wbase = replayed_base(task, head, replayed_copy(path)) if in_rebase else head
             if judge_writer:   # a merge brings in nodes judged on their own branch
                 fatal += ["%s: %s" % (rel, b)
-                          for b in check_assumptions(task, text, head, read, arc, head_arc)]
+                          for b in check_assumptions(task, text, wbase, read, arc, head_arc)]
             if judge_writer:
-                fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, head)]
+                fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, wbase)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
-                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, head)]
+                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase)]
             now_tok = len(text) // 4
             was_tok = (len(head) // 4) if head is not None else 0
             budget = dfs_state.HANDOFF_BUDGET
