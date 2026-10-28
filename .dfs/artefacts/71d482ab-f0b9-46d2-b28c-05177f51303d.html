@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four styles for the web item list</title>
+<style>
+  :root { --paper:#f5f4ef; --sel:#e8e6dd; --ink:#1a1d21; --muted:#565a61; --line:#bebbb1; --faint:#ebe9e2;
+    --settled:#1f5aa6; --settled-wash:#d4e2f4; --attention:#ad2b20; --attention-wash:#f8d9d3;
+    --assumption:#8a5a00; --assumption-wash:#fbe8a6; --assumption-fill:#e0a400; }
+  @media (prefers-color-scheme: dark) { :root { --paper:#171a1d; --sel:#262b30; --ink:#e9e7e1; --muted:#bcc0c7; --line:#353a40; --faint:#272b30;
+    --settled:#a5c2e6; --settled-wash:#2a4766; --attention:#f5a094; --attention-wash:#6a2e28;
+    --assumption:#ecc96f; --assumption-wash:#54430f; --assumption-fill:#c9a043; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--paper); color: var(--ink); font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 960px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  p { margin: 6px 0; }
+  button { font: inherit; color: inherit; background: var(--paper); border: 1.5px solid var(--ink); border-radius: 6px; padding: 8px 12px; min-height: 44px; cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+  .bar .lab { font-size: 14px; color: var(--muted); flex: 1 0 100%; margin-bottom: -4px; }
+  label.chk { display: flex; align-items: center; gap: 10px; min-height: 44px; }
+  label.chk input { width: 32px; height: 32px; margin: 0; }
+  .read { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+  .read div { border: 1px solid var(--line); padding: 8px 10px; }
+  .read b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  .read span { font-size: 14px; color: var(--muted); }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); background: var(--paper); }
+  .notes { border-left: 3px solid var(--ink); padding: 2px 12px; margin: 12px 0; }
+  .notes p { margin: 6px 0; }
+  .legend { font-size: 14px; color: var(--muted); }
+
+  /* ---- the mock list: the app's own rules at 1x (design.css tokens), drawn at the width the screen has ---- */
+  .list { margin: 0 auto; font-size: 17px; line-height: 1.45; }
+  .list.phone { width: 328px; padding: 0 16px; }
+  .list.wide { width: 880px; padding: 0 16px; }
+  .m-item { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 12px; padding: 16px 0; padding-left: calc(var(--ind, 0px) + var(--gx, 0px)); border-bottom: 1px solid var(--line); }
+  .m-item.tint { margin: 0 -10px; width: calc(100% + 20px); --gx: 10px; padding-right: 10px; }
+  .m-item.assumes { box-shadow: inset 3px 0 0 var(--assumption-fill); }
+  .m-item.blocks { background: var(--attention-wash); }
+  .m-iid { font-weight: 600; letter-spacing: .03em; }
+  .m-goal { font-weight: 500; overflow-wrap: anywhere; display: block; }
+  .m-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 6px; font-size: 13px; }
+  .m-st { font-size: 12px; font-weight: 500; letter-spacing: .12em; color: var(--muted); }
+  .m-st.blocked { color: var(--attention); } .m-st.done { color: var(--settled); } .m-st.done::before { content: "\2713\00a0"; }
+  .tag { display: inline-block; padding: 0 7px; border: 1px solid var(--line); font-size: 12px; font-weight: 500; letter-spacing: .06em; line-height: 20px; color: var(--muted); }
+  .tag.assumption { color: var(--assumption); border-color: var(--assumption-fill); background: var(--assumption-wash); }
+  .tag.attention { color: var(--attention); border-color: var(--attention); background: var(--attention-wash); }
+  .tag.settled { color: var(--settled); border-color: var(--settled); background: var(--settled-wash); }
+  .m-item.done { padding-top: 8px; padding-bottom: 8px; }
+  .m-item.done .m-iid, .m-item.done .m-goal { color: var(--muted); font-weight: 400; }
+  .m-item.done .m-goal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .m-item.done .m-meta { margin-top: 0; }
+  /* B: a glyph, then the id, then the goal; tags only when there are any */
+  .b-row { display: grid; grid-template-columns: 1.4rem 3rem minmax(0, 1fr); gap: 0 8px; padding: 10px 0; padding-left: calc(var(--ind, 0px) + var(--gx, 0px)); border-bottom: 1px solid var(--line); align-items: baseline; }
+  .b-row.tint { margin: 0 -10px; width: calc(100% + 20px); --gx: 10px; padding-right: 10px; }
+  .b-row.assumes { box-shadow: inset 3px 0 0 var(--assumption-fill); }
+  .b-row.blocks { background: var(--attention-wash); }
+  .b-row .g { text-align: center; font-size: 15px; color: var(--muted); }
+  .b-row .g.running { color: var(--settled); } .b-row .g.blocked { color: var(--attention); } .b-row .g.review { color: var(--assumption); } .b-row .g.done { color: var(--settled); }
+  .b-row .m-goal { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .b-row .chips { grid-column: 3; display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; }
+  .b-row.done .m-iid, .b-row.done .m-goal { color: var(--muted); font-weight: 400; }
+  .fold { width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; min-height: 44px; color: var(--muted); padding: 8px 0; }
+  /* C: headings by what needs the author */
+  .c-head { display: flex; justify-content: space-between; align-items: baseline; margin: 0; padding: 14px 0 6px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; border-bottom: 2px solid var(--ink); background: var(--paper); }
+  .c-head span { font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .c-head.needs { color: var(--attention); }
+  .m-item.plain .m-meta:empty { display: none; }
+  /* D: a table on the wide column */
+  .d-grid { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) 6rem 7rem 11rem 7rem; gap: 0 12px; align-items: center; border-bottom: 1px solid var(--line); padding: 0 0 0 calc(var(--ind, 0px) + var(--gx, 0px)); min-height: 44px; font-size: 15px; }
+  .d-grid.head { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--ink); min-height: 36px; }
+  .d-grid.tint { margin: 0 -10px; width: calc(100% + 20px); --gx: 10px; padding-right: 10px; }
+  .d-grid.assumes { box-shadow: inset 3px 0 0 var(--assumption-fill); }
+  .d-grid.blocks { background: var(--attention-wash); }
+  .d-grid .m-goal { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-grid .cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .d-grid.done .m-iid, .d-grid.done .m-goal { color: var(--muted); font-weight: 400; }
+</style>
+
+<h1>Four styles for the web item list</h1>
+<p>You said the terminal list is fine and the web app is the one to work on, so these are the web list's rows, drawn as real HTML in the app's own colours and rules, on the same eleven tasks (ids and goals are real; the states are made up to show every case). Pick a style and a width, then read what the browser measured.</p>
+
+<div class="bar" role="group" aria-label="Style">
+  <span class="lab">Style</span>
+  <button type="button" data-style="A" aria-pressed="true">A · Card</button>
+  <button type="button" data-style="B" aria-pressed="false">B · Compact</button>
+  <button type="button" data-style="C" aria-pressed="false">C · Grouped</button>
+  <button type="button" data-style="D" aria-pressed="false">D · Table</button>
+</div>
+<div class="bar" role="group" aria-label="Width">
+  <span class="lab">Screen</span>
+  <button type="button" data-width="phone" aria-pressed="true">Phone, 360px</button>
+  <button type="button" data-width="wide" aria-pressed="false">Wide, 880px column</button>
+</div>
+<label class="chk"><input type="checkbox" id="fold" checked> Fold finished tasks into one line (B and C)</label>
+
+<div class="read" aria-live="polite">
+  <div><b id="r-h">0</b><span>px tall, whole list</span></div>
+  <div><b id="r-v">0</b><span>tasks in the first 640px</span></div>
+  <div><b id="r-c">0</b><span>goals cut short</span></div>
+</div>
+
+<div class="scroll" id="scroll"><div id="list" class="list phone" role="list" aria-label="Mock task list"></div></div>
+<p class="legend" id="legend"></p>
+
+<div class="notes" id="notes" aria-live="polite"></div>
+<button type="button" id="pick">Choose this style as my answer</button>
+
+<h2>How to read it</h2>
+<p class="legend">The wide list scrolls sideways inside its box on a phone. Heights are the browser's own layout of the rows drawn here, at the app's 17px body text, so they move with the width and the fold box. A tag is a task's review, branch or run state; a stripe is an unconfirmed assumption and a red wash is a blocker, as in the app now. Nothing in the running app has changed.</p>
+
+<script>
+(function () {
+  var TASKS = [
+    { id: 'W103', d: 0, st: 'done', goal: 'Add parameter to breaks that stops walks, enabling the user to review before continuing work' },
+    { id: 'W114', d: 0, st: 'open', goal: 'Bug reports', rev: 'rev 2' },
+    { id: 'W115', d: 0, st: 'blocked', goal: 'Login to Claude from dfs page', rev: 'rev 1' },
+    { id: 'W119', d: 1, st: 'open', held: 'W115', goal: 'Yellow assumptions item background should be transparent so the background shows through' },
+    { id: 'W116', d: 0, st: 'open', goal: 'Github mode', ahead: '3 not on main', run: 'running 2 of 5', a: true },
+    { id: 'W117', d: 1, st: 'open', goal: 'Pull-down refresh should work from the top bar when in item list' },
+    { id: 'W118', d: 1, st: 'open', goal: 'Chats should read the info for a task from its worktree rather than a stale top level task description', edits: true },
+    { id: 'W120', d: 0, st: 'done', goal: 'Remove confirmation on start walk' },
+    { id: 'W121', d: 0, st: 'done', goal: 'Option to show archived tasks', rev: 'accept' },
+    { id: 'W123', d: 0, st: 'open', goal: 'Propose a few different styles for the item list', a: true },
+    { id: 'W125', d: 0, st: 'open', goal: 'Allow choosing models to use for walk' }
+  ];
+  var STYLES = { A: 'A · Card (today)', B: 'B · Compact rows', C: 'C · Grouped by need', D: 'D · Table on the wide column' };
+  var ANSWER = {
+    A: 'Keep the web list as it is (A, the card). Close the task as proposals only.',
+    B: 'Build B, the compact row (status glyph, tags only when present, finished tasks folded), as a selectable web list style.',
+    C: 'Build C, the list grouped under headings by what needs me, as a selectable web list style.',
+    D: 'Build D, the table on the wide column (cards on the phone), as a selectable web list style.'
+  };
+  var NOTES = {
+    A: ['The card: an id column, the goal, then a line of the status word and tags. Every task costs two lines or more, and tags wrap to a third on a phone.',
+        'Gain: nothing to learn; the status is a word. Cost: the fewest tasks per screen, and an open task with no tags still spends a line saying "open".'],
+    B: ['The status becomes one glyph beside the id and the goal gets the row. Tags show on a line under the goal only when the task has one, so a plain open task is one or two lines. Finished tasks fold into one "done" line you tap to open.',
+        'Gain: more tasks in the first screen, and the rows that carry tags stand out because the others have none. Cost: five glyphs to learn where the word is plain today; the word moves into the glyph\u2019s accessible name, so a screen reader still hears it.'],
+    C: ['Headings by what is waiting on you: needs you, running, waiting, open, done. A row drops the status word, since its heading says it, and keeps its tags.',
+        'Gain: the first heading answers "what should I look at". Cost: the roadmap order only holds inside a group, so Reorder (drag, indent, breaks) would have to work on the plain list and not this one, and a task moves between headings as its state changes.'],
+    D: ['On the wide column the list becomes a table: one line per task, with columns for status, review, branch and run, so a state is compared down a column. On a phone there is no room for columns, so it draws the card.',
+        'Gain: the most tasks per screen on a desktop and states line up. Cost: no change on the phone, goals are cut to one line, and the columns are mostly empty.']
+  };
+  var state = { style: 'A', width: 'phone', fold: true, open: false };
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function cls(t) { var b = t.st === 'blocked'; return (b ? ' tint blocks' : t.a ? ' tint assumes' : ''); }
+  function tags(t) {
+    var o = [];
+    if (t.run) o.push('<span class="tag settled">' + esc(t.run) + '</span>');
+    if (t.rev) o.push('<span class="tag assumption">' + esc(t.rev) + '</span>');
+    if (t.ahead) o.push('<span class="tag">' + esc(t.ahead) + '</span>');
+    if (t.edits) o.push('<span class="tag">uncommitted edits, not on main</span>');
+    if (t.held) o.push('<span class="tag attention">held by ' + esc(t.held) + '</span>');
+    return o.join('');
+  }
+  function glyph(t) {
+    if (t.st === 'done' && t.rev) return ['review', '\u25c6', 'done, to accept'];
+    if (t.st === 'done') return ['done', '\u2713', 'done'];
+    if (t.st === 'blocked') return ['blocked', '\u25b2', 'blocked'];
+    if (t.run) return ['running', '\u25cf', 'running'];
+    if (t.rev) return ['review', '\u25c6', 'in review'];
+    if (t.held) return ['held', '\u25cb', 'held'];
+    return ['open', '\u25cb', 'open'];
+  }
+  function ind(t) { return ' style="--ind:' + (t.d * 14) + 'px"'; }
+  function card(t, plain) {
+    var d = t.st === 'done';
+    return '<div class="m-item' + cls(t) + (d ? ' done' : '') + (plain ? ' plain' : '') + '" role="listitem"' + ind(t) + '><span class="m-iid">' + t.id + '</span>' +
+      '<span class="m-body"><span class="m-goal">' + esc(t.goal) + '</span><span class="m-meta">' +
+      (plain ? '' : '<span class="m-st ' + t.st + '">' + t.st + '</span>') + tags(t) + '</span></span></div>';
+  }
+  function cardPlainDone(t) {   // C's done rows: the heading says done, so the check goes
+    return card(t, true);
+  }
+  function compact(t) {
+    var g = glyph(t), c = tags(t);
+    return '<div class="b-row' + cls(t) + (t.st === 'done' ? ' done' : '') + '" role="listitem"' + ind(t) + '><span class="g ' + g[0] + '" role="img" aria-label="' + g[2] + '">' + g[1] + '</span>' +
+      '<span class="m-iid">' + t.id + '</span><span class="m-goal">' + esc(t.goal) + '</span>' + (c ? '<span class="chips">' + c + '</span>' : '') + '</div>';
+  }
+  function folded(rows, label) {
+    if (!rows.length) return '';
+    if (state.open) return '<button type="button" class="fold" data-fold="1" aria-expanded="true">\u2713 ' + label + ' \u2014 tap to fold</button>' + rows.map(compact).join('');
+    return '<button type="button" class="fold" data-fold="1" aria-expanded="false">\u2713 ' + rows.length + ' done: ' + rows.map(function (t) { return t.id; }).join(', ') + '</button>';
+  }
+  function drawA() { return TASKS.map(function (t) { return card(t); }).join(''); }
+  function drawB() {
+    var open = TASKS.filter(function (t) { return !(state.fold && t.st === 'done' && !t.rev); });
+    var done = TASKS.filter(function (t) { return state.fold && t.st === 'done' && !t.rev; });
+    return open.map(compact).join('') + (state.fold ? folded(done, done.length + ' done') : '');
+  }
+  function groupOf(t) {
+    if (t.st === 'blocked' || t.rev) return 'Needs you';
+    if (t.run) return 'Running';
+    if (t.held) return 'Waiting';
+    return t.st === 'done' ? 'Done' : 'Open';
+  }
+  function drawC() {
+    var html = '';
+    ['Needs you', 'Running', 'Waiting', 'Open', 'Done'].forEach(function (g) {
+      var rows = TASKS.filter(function (t) { return groupOf(t) === g; });
+      if (!rows.length) return;
+      html += '<h3 class="c-head' + (g === 'Needs you' ? ' needs' : '') + '">' + g + '<span>' + rows.length + '</span></h3>';
+      if (g === 'Done' && state.fold) {
+        html += state.open ? '<button type="button" class="fold" data-fold="1" aria-expanded="true">tap to fold</button>' + rows.map(cardPlainDone).join('')
+          : '<button type="button" class="fold" data-fold="1" aria-expanded="false">' + rows.map(function (t) { return t.id; }).join(', ') + '</button>';
+      } else html += rows.map(cardPlainDone).join('');
+    });
+    return html;
+  }
+  function drawD() {
+    if (state.width === 'phone') return drawA();
+    var head = '<div class="d-grid head"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>';
+    return head + TASKS.map(function (t) {
+      return '<div class="d-grid' + cls(t) + (t.st === 'done' ? ' done' : '') + '" role="listitem"' + ind(t) + '><span class="m-iid">' + t.id + '</span><span class="m-goal">' + esc(t.goal) + '</span>' +
+        '<span class="cell m-st ' + t.st + '">' + (t.held ? 'held' : t.st) + '</span>' +
+        '<span class="cell">' + (t.rev ? '<span class="tag assumption">' + t.rev + '</span>' : '') + '</span>' +
+        '<span class="cell">' + (t.ahead ? '<span class="tag">' + t.ahead + '</span>' : t.edits ? '<span class="tag">uncommitted edits</span>' : '') + '</span>' +
+        '<span class="cell">' + (t.run ? '<span class="tag settled">' + t.run + '</span>' : '') + '</span></div>';
+    }).join('');
+  }
+  function measure() {
+    var list = $('list'), top = list.getBoundingClientRect().top, vis = 0, cut = 0;
+    list.querySelectorAll('[role=listitem]').forEach(function (r) { if (r.getBoundingClientRect().bottom - top <= 640) vis++; });
+    list.querySelectorAll('.m-goal').forEach(function (g) { if (g.scrollHeight > g.clientHeight + 1 || g.scrollWidth > g.clientWidth + 1) cut++; });
+    $('r-h').textContent = Math.round(list.getBoundingClientRect().height);
+    $('r-v').textContent = vis;
+    $('r-c').textContent = cut;
+  }
+  function draw() {
+    var list = $('list');
+    list.className = 'list ' + state.width;
+    list.innerHTML = { A: drawA, B: drawB, C: drawC, D: drawD }[state.style]();
+    document.querySelectorAll('[data-style]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.style === state.style)); });
+    document.querySelectorAll('[data-width]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.width === state.width)); });
+    $('fold').checked = state.fold;
+    $('notes').innerHTML = '<p><b>' + STYLES[state.style] + '</b></p>' + NOTES[state.style].map(function (s) { return '<p>' + s + '</p>'; }).join('') +
+      (state.style === 'D' && state.width === 'phone' ? '<p>On the phone this style draws the card, so its numbers equal A\u2019s.</p>' : '');
+    $('legend').textContent = state.style === 'B' ? 'Glyphs: \u25cb open or held, \u25cf running, \u25c6 in review or to accept, \u25b2 blocked, \u2713 done.' : '';
+    measure();
+  }
+  document.querySelectorAll('[data-style]').forEach(function (b) { b.addEventListener('click', function () { state.style = b.dataset.style; state.open = false; draw(); if (window.dfsAnswer) dfsAnswer.keep(); }); });
+  document.querySelectorAll('[data-width]').forEach(function (b) { b.addEventListener('click', function () { state.width = b.dataset.width; draw(); if (window.dfsAnswer) dfsAnswer.keep(); }); });
+  $('fold').addEventListener('change', function () { state.fold = $('fold').checked; state.open = false; draw(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  $('list').addEventListener('click', function (e) { if (e.target.closest('[data-fold]')) { state.open = !state.open; draw(); } });
+  $('pick').addEventListener('click', function () { if (window.dfsAnswer) { dfsAnswer.choose(ANSWER[state.style]); document.getElementById('dfs-answer').scrollIntoView(); } });
+  window.dfsPageState = function () { return { style: state.style, width: state.width, fold: state.fold }; };
+  document.addEventListener('dfs-state', function (e) { var s = e.detail || {}; if (STYLES[s.style]) state.style = s.style; if (s.width) state.width = s.width; if (typeof s.fold === 'boolean') state.fold = s.fold; draw(); });
+  draw();
+})();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which web list style</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build B, the compact row (status glyph, tags only when present, finished tasks folded), as a selectable web list style."> B · Compact rows</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build C, the list grouped under headings by what needs me, as a selectable web list style."> C · Grouped by need</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build D, the table on the wide column (cards on the phone), as a selectable web list style."> D · Table on the wide column</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep the web list as it is (A, the card). Close the task as proposals only."> A · Keep the card, none built</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
