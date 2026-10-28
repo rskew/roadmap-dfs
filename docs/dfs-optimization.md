@@ -67,8 +67,8 @@ What it shows, most important first:
    own tests missed a defect is not recorded in a review line, so "bugs the work did
    not test for" is not a measured class; the classes come from patterns in
    `audit.py` (`finding_rows`), and 30 sampled rows were each classed as a reader
-   would class them. The worst case, shop-app W13, had 18 reviews and every one
-   found issues. Quality, measured as review rounds with issues, is the largest cost
+   would class them. The most reviewed task, roadmap-dfs W75, had 23 reviews and 16 of them
+   found issues (`history.py`, "Most expensive tasks"). Quality, measured as review rounds with issues, is the largest cost
    as well as the largest failure.
 2. **The tree backs up rarely.** Section 1's recount: 13 nodes refuted once corrections
    are applied and 8 backtracks, against 535 confirmed. That is the tree used to back
@@ -82,9 +82,11 @@ What it shows, most important first:
    Reviews are cheap per session (median $0.42 to $1.01) and are where the defects
    above were caught, so they are not the place to cut.
 4. **The guard refuses a commit in 12% of sessions** (236 of 2,043, 304 refusals).
-   The reasons most seen are a task file over its size budget (~144), a file:line
-   coordinate in a task file (~200 across files) and a node naming a Parent that does
-   not exist (~72). Each costs a retry, not a failure.
+   `history.py` counts the refusals by what the refused commit's output lists (a refusal
+   lists every fault it found, so a refusal counts under each reason): a file:line
+   coordinate in a task file 198, a task file over its size budget 36, a node naming a
+   Parent that does not exist 28, a Hypothesis naming no artefact 9, anything else 22.
+   Each costs a retry, not a failure.
 5. **Re-reading is not a cost.** 150 of 3,458 `Read` calls repeat an earlier slice.
 
 Not measured yet: whether a task's work was later fixed by another task (needs commit
@@ -228,7 +230,7 @@ about how a session works, replayed on W55 as `dfs-replay-W55-arm1`.
 - The clone's `pre-commit` names the exported tool; no commit failed for a skipped hook or
   an unknown identity, and none ran `grep -r /` (searched in its transcripts).
 - `replay.py score` read the replay's transcripts: 9 sessions (5 work, 3 review, 1
-  critic), $4.82 against $1.30, 5 nodes on `main` as the clone's log holds, first review
+  critic), $4.82 against $1.30, 5 commits on `main` whose subject starts `W55.<n>` (4 distinct nodes, W55.4 twice; the original's 4 counts the same way), first review
   `issues` (2 reviews with issues of 3), merged. The $4.82 includes a session cut off when
   the shell call running the chain hit its 30-minute limit; the chain was resumed with
   `replay.py run`, as for the usage limit above.
@@ -268,9 +270,9 @@ it). Each names the file it changes and the replay that tests it.
 
 | # | Change | Evidence | Where | Test replay |
 |---|---|---|---|---|
-| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 40.9% of spend follows an issues review; 101 of 207 review finding lines are defects, but only 2 of them say a test or check is absent. Of the 23 defects whose review says it reproduced the fault (`docs/dfs-break-it-cases.tsv`; one reading by one session, so a reader can disagree row by row), 8 are in the cases this node names (4 repeated, 2 interrupted, 2 empty, none a short screen), 6 more only if "interrupted" is stretched to a failure path or a race, and 9 are not (an unusual starting state, two checkouts out of step, a different branch). So 8 of the 101 defects are shown to be ones this node would have looked for, 14 on the widest reading; the other 78 do not say they were reproduced and cannot be placed, so 8 is a floor. 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. The rank above 2 is kept because neither is stronger on this evidence (2's 28 lines repeat across rounds) and the order is not moved by it. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
+| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 40.9% of spend follows an issues review; 101 of 207 review finding lines are defects, but only 2 of them say a test or check is absent. Of the 23 defects whose review says it reproduced the fault (`docs/dfs-break-it-cases.tsv`; one reading by one session, so a reader can disagree row by row), 7 are in the cases this node names (4 repeated, 2 interrupted, 1 empty, none a short screen), 6 more only if "interrupted" is stretched to a failure path or a race, and 10 are not (an unusual starting state, which includes a repo with no commit yet, two checkouts out of step, a different branch). So 7 of the 101 defects are shown to be ones this node would have looked for, 13 on the widest reading; the other 78 do not say they were reproduced and cannot be placed, so 7 is a floor. Whether a repo with no commit yet is "empty" or "an unusual starting state" is a reading (row 8 of the file, classed with the other unusual starting state, row 1); read as empty it is 8 and 14. 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. The rank above 2 is kept because neither is stronger on this evidence (2's 28 lines repeat across rounds) and the order is not moved by it. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 28 of 207 review finding lines are unmarked assumptions (some repeat across rounds). | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `audit.py findings`, rows of class `assumption` in `docs/dfs-review-findings.tsv`) |
-| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (22 tasks; 26 have two or more issues reviews), 3 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 20 name code the fixes changed (either could hold), 13 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 3 to 23 present ones; the three are in W75, W88 and W91 |
+| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (21 tasks; 26 have two or more issues reviews), 3 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 20 name code the fixes changed (either could hold), 13 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 3 to 23 present ones; the three are in W75, W88 and W91 |
 | 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,043 sessions hit a refusal, 304 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
 | 5 | **Cap a review loop.** After three issues rounds the task raises for the author instead of continuing. | 30 of 276 reviewed tasks (11%) had three or more issues rounds and hold 34.3% of all dfs dollars (`history.py`); the cap saves only what is spent after the third round, less than that. Does not improve quality, it limits the loss, and hands the author the tail. | `state.py` | none: read from history by counting what the cap would have saved |
 

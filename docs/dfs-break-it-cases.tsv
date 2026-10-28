@@ -6,7 +6,7 @@ n	node	case	what triggers the fault
 5	W75.19	no	an attachment named before the task's first run
 6	W75.20	no	delete_task on a worked task erases attachments
 7	W75.23	interrupted	the author's own checkout is mid-merge when the branch merge runs
-8	W75.24	empty	a repo with no commit yet
+8	W75.24	no	a repo with no commit yet (an unusual starting state, as row 1)
 9	W75.30	empty	the first .dfs/archive or artefacts page in a gitignored roadmap (none there yet)
 10	W81.15	stretch	a page message sent during the headless opening turn: a race, not one of the four
 11	W81.17	stretch	the opening turn fails (usage limit, no login): a failure path

@@ -44,6 +44,14 @@ VERDICT = re.compile(r"tree\.py\b.*?\blog (W\d+) (review|critic|raise|backtrack)
 STARTED = re.compile(r"tree\.py\b.*?\bstart (W\d+) (W[\d.]+(?:@\S+)?)")
 SUBJECT = re.compile(r"""git\b(?:[^|;&'"]|"[^"]*"|'[^']*')*?\bcommit\b.*?(?:-m\s+(['"])(.+?)\1|<<-?\s*'?EOF'?\s*\n(.+?)\n)""", re.S)
 REFUSED = "dfs_check: the roadmap broke its own rules"
+# The bullet lines under a refusal, by what they say. A refusal lists every fault it found,
+# so it counts once under each reason it lists; a line matching none is `other`.
+REASONS = [
+    ("over the size budget", re.compile(r"tokens, over the [\d,]+ budget")),
+    ("coordinate in a task file", re.compile(r"carries a coordinate")),
+    ("Parent does not exist", re.compile(r"names Parent \S+, which does not exist")),
+    ("Hypothesis names no artefact", re.compile(r"states a Hypothesis and names\s+no artefact")),
+]
 # What git prints when a commit did not happen, wherever in a chained command it failed:
 # `git commit ...; tree.py ...` exits with the last step, so the tool result is no error.
 # A `[branch sha] subject` line shows a commit that did happen, e.g. a retry that worked.
@@ -66,6 +74,17 @@ def _text(content):
     return " ".join(b.get("text", "") for b in content or [] if isinstance(b, dict))
 
 
+def refusal_reasons(out):
+    """The reason of each fault line a refusal's output lists (see REASONS), one per line."""
+    text = out.split(REFUSED, 1)[-1]
+    # a fault line starts "  - " and wraps onto indented lines, so join the wrapped ones
+    faults = re.split(r"\n  - ", "\n" + text.split("\n\n  If this commit adopts")[0])[1:]
+    found = []
+    for f in faults:
+        found.append(next((name for name, pat in REASONS if pat.search(f)), "other"))
+    return found
+
+
 def session(path):
     """One transcript's record: what it was for, what it did, what it spent."""
     rec = {"sid": os.path.basename(path)[:-6],
@@ -73,7 +92,8 @@ def session(path):
            "kind": "other", "task": None, "start": None, "end": None, "model": None,
            "responses": 0, "peak": 0, "input": 0, "read": 0, "write": 0, "output": 0,
            "tools": collections.Counter(), "reads": 0, "rereads": 0, "errors": 0,
-           "commits": [], "refused": 0, "started": [], "verdicts": []}
+           "commits": [], "refused": 0, "started": [], "verdicts": [],
+           "reasons": collections.Counter()}
     seen, read_paths, pending = set(), set(), {}
     with open(path, errors="replace") as fh:
         for line in fh:
@@ -104,6 +124,8 @@ def session(path):
                     if pending.get(b.get("tool_use_id")) == "commit":
                         refused = REFUSED in out
                         rec["refused"] += refused
+                        if refused:
+                            rec["reasons"].update(set(refusal_reasons(out)))
                         if rec["commits"]:
                             rec["commits"][-1]["ok"] = not (b.get("is_error") or refused) and \
                                 (bool(MADE.search(out)) or not FAILED.search(out))
@@ -290,6 +312,11 @@ def report(sessions, tasks, rates, n_priced):
           f"and hold {share:.1%} of all dfs dollars (their work, review and critic sessions)\n")
     refused = [s for s in dfs if s["refused"]]
     w(f"  sessions with a refused commit {len(refused)} of {len(dfs)}, {sum(s['refused'] for s in dfs)} refusals\n")
+    reasons = collections.Counter()
+    for s in dfs:
+        reasons.update(s["reasons"])
+    w("  refusals by reason (a refusal lists every fault it found, so counts overlap): "
+      + ", ".join(f"{k} {v}" for k, v in reasons.most_common()) + "\n")
     w(f"  Read calls repeating an earlier read of the same slice: {sum(s['rereads'] for s in dfs)} "
       f"of {sum(s['reads'] for s in dfs)}\n")
     w("\nMost expensive tasks\n")

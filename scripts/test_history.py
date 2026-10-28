@@ -77,6 +77,28 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(rec["verdicts"], [("review", "issues")])
         self.assertAlmostEqual(rec["units"], 3 * 2 + 160_000 * 0.1 + 3_000 * 2 + 600 * 5)
 
+    def test_a_refusal_counts_once_under_each_reason_it_lists(self):
+        refusal = ("dfs_check: the roadmap broke its own rules.\n\n"
+                   "  - .dfs/items/W13.md is ~9,000 tokens, over the 8,000 budget, and this commit\n    grew it.\n"
+                   "  - .dfs/items/W13.md line 4 carries a coordinate, 'a.py:3'. x\n"
+                   "  - .dfs/items/W13.md line 9 carries a coordinate, 'b.py:7'. x\n"
+                   "  - W13.4 names Parent W13.9, which does not exist\n"
+                   "  - something else entirely\n")
+        self.assertEqual(history.refusal_reasons(refusal),
+                         ["over the size budget", "coordinate in a task file", "coordinate in a task file",
+                          "Parent does not exist", "other"])
+        rec = self.record([
+            user("Follow /x/SKILL.md. Work task W13. Everything", "2026-10-01T00:00:00Z"),
+            assistant("m1", [bash("t1", "git commit -m 'W13.4: a'")], "2026-10-01T00:01:00Z"),
+            user([result("t1", refusal, True)], "2026-10-01T00:02:00Z"),
+            # a grep that merely prints the guard's sentence is no refusal
+            assistant("m2", [bash("t2", "grep -rn broke scripts")], "2026-10-01T00:03:00Z"),
+            user([result("t2", refusal, False)], "2026-10-01T00:04:00Z"),
+        ])
+        self.assertEqual(rec["refused"], 1)
+        self.assertEqual(dict(rec["reasons"]), {"over the size budget": 1, "coordinate in a task file": 1,
+                                                 "Parent does not exist": 1, "other": 1})
+
     def commits(self, *outputs):
         """The `ok` of each commit, one per (command, result) pair."""
         recs = []
