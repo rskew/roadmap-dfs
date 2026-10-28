@@ -53,6 +53,13 @@ class Deciding(unittest.TestCase):
         self.assertIn("usage limit", why)
         self.assertEqual(TUI.WALK_HOLD, 3600)
 
+    def test_a_usage_limit_stops_the_walk_when_the_walk_was_told_to(self):
+        action, why = TUI.walk_decide("limit", False, "W7", stop_on_limit=True)
+        self.assertEqual(action, "stop")
+        self.assertIn("usage limit", why)
+        # the option is about limits only: a finished chain still goes on
+        self.assertEqual(TUI.walk_decide("done", True, "W8", stop_on_limit=True), ("run", "W8"))
+
     def test_an_ending_about_the_item_raises_on_it_and_never_holds(self):
         # ⚠️ A usage limit and a crash are both `rc 1`. If any of these ever fell
         # through to "hold", an unattended walk would retry a broken item hourly
@@ -320,6 +327,28 @@ class Ticking(Ticks, unittest.TestCase):
         self.assertGreater(ui.walk_until, time.time() + 3000,
                            "an unparseable reset falls back to the flat hour")
         self.assertIn("resets 3pm", ui.msg)
+
+    def test_a_limit_ends_the_walk_when_it_was_told_to_stop_on_one(self):
+        ui = self.ui(walk_stop_on_limit=True,
+                     walk_chains=[self.rec(dir="/runs/mine", content={"a", "b"})])
+        self.live(ui, [self.chain(stop="limit", resets="resets 3pm")])
+        ui.walk_tick()
+        self.assertEqual(ui.started, [])
+        self.assertFalse(ui.walk_on, "the walk is over, not held")
+        self.assertEqual(ui.walk_until, 0.0)
+        self.assertIn("usage limit", ui.walk_note)
+        self.assertIn("resets 3pm", ui.walk_note)
+
+    def test_the_stop_on_limit_option_is_this_walk_s_and_is_refused_unless_a_bool(self):
+        ui = self.ui()
+        ui.walk_on = False
+        ui.walk_begin = lambda budget, par=1, stop=False: ui.__dict__.setdefault("begun", []).append((budget, par, stop))
+        ui.walk_start(5, 1, True)
+        ui.walk_start(5)
+        self.assertEqual(ui.begun, [(5, 1, True), (5, 1, False)])
+        for bad in ("yes", 1, None):
+            with self.assertRaises(ValueError):
+                ui.walk_start(5, 1, bad)
 
     def test_a_parseable_reset_holds_until_it_not_an_hour(self):
         import calendar
@@ -773,6 +802,16 @@ class Parallel(Ticks, unittest.TestCase):
         self.live(ui, [self.chain(live=True)])
         ui.walk_tick()
         self.assertEqual([i for i, _ in ui.started], ["W9"])
+
+    def test_begin_sets_the_stop_on_limit_option_for_that_walk_only(self):
+        ui = self.two(walk_budget=10)
+        self.live(ui, [])
+        ui.walk_begin(4, 1, True)
+        self.assertTrue(ui.walk_stop_on_limit)
+        self.assertIn("usage limit", ui.msg)
+        ui.walk_off("stopped by hand")
+        ui.walk_begin(4)
+        self.assertFalse(ui.walk_stop_on_limit)
 
     def test_without_worktrees_the_walk_runs_one_chain_in_the_checkout_at_a_time(self):
         ui = self.two(walk_budget=10)
