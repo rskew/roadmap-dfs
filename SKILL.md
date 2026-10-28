@@ -111,6 +111,9 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   alone, your own reading of something offered as an observation, several pieces of
   evidence that are really one, a hypothesis that restates the approach instead of
   naming what it assumes, and a real alternative parked or refuted without a fair try.
+  An observation is of the thing the claim is about: name the version or object beside
+  the one you ran (a probe of kiro 2.24.0 says nothing of the 2.31.1 the chain pins),
+  and show a check red without the change.
 - Add nodes freely and keep them small. After each node, re-plan the open nodes ahead:
   edit, add or refute them. Backing up is normal.
 - **A determined node is history.** Once confirmed or refuted and committed, it is not
