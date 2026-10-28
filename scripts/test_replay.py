@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from contextlib import redirect_stdout
 from pathlib import Path
 
@@ -44,9 +45,16 @@ def git(cwd, *args):
                           check=True, capture_output=True, text=True).stdout.strip()
 
 
+can_exec = replay.hooks_can_run   # the real probe, kept before any test patches replay's
+
+
 class StartingPointTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        if not can_exec(self.tmp.name):   # /tmp is often noexec: the other tests do not need hooks
+            patch = mock.patch.object(replay, "hooks_can_run", return_value=True)
+            patch.start()
+            self.addCleanup(patch.stop)
         self.repo = Path(self.tmp.name) / "repo"
         self.repo.mkdir()
         git(self.repo, "init", "-q", "-b", "main")
@@ -90,9 +98,40 @@ class StartingPointTest(unittest.TestCase):
         self.assertNotIn("## Tree", (out / ".dfs" / "items" / "W5.md").read_text())
         self.assertEqual(git(out, "status", "--porcelain"), "")
         self.assertTrue((out / ".git" / "hooks" / "pre-commit").exists())
+        self.assertEqual(git(out, "config", "user.email"), "t@t")   # the checkout's identity
         self.assertEqual(json.loads((out / ".git" / "replay.json").read_text())["from"], self.start)
         with self.assertRaises(SystemExit):   # a replay starts from nothing
             replay.prepare(self.repo, "W5", dest)
+
+    def test_a_dest_where_hooks_cannot_run_is_refused_before_cloning(self):
+        dest = Path(self.tmp.name) / "dfs-replay-W5-noexec"
+        with mock.patch.object(replay, "hooks_can_run", return_value=False):
+            with self.assertRaises(SystemExit) as e:
+                replay.prepare(self.repo, "W5", dest)
+        self.assertIn("noexec", str(e.exception))
+        self.assertFalse(dest.exists())
+
+    def test_the_clone_holds_nothing_of_the_originals_later_work(self):
+        git(self.repo, "tag", "later")   # a tag on a commit after the starting point
+        out, _ = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-c",
+                                tool=Path(__file__).resolve().parent.parent)
+        self.assertEqual(git(out, "remote"), "")
+        self.assertEqual(git(out, "tag", "--list"), "")
+        self.assertEqual(git(out, "branch", "--all", "--format=%(refname)"), "refs/heads/main")
+        later = git(self.repo, "rev-parse", "HEAD")
+        self.assertNotEqual(subprocess.run(["git", "cat-file", "-e", later], cwd=out).returncode, 0)
+
+    def test_the_guard_refuses_a_commit_in_a_prepared_clone(self):
+        if not can_exec(self.tmp.name):
+            self.skipTest("this temp dir is noexec, so git would skip the hook; set TMPDIR to one that is not")
+        out, _ = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-d",
+                                tool=Path(__file__).resolve().parent.parent)
+        item = out / ".dfs" / "items" / "W5.md"
+        # a Status that is not open | parked | confirmed | refuted is a shape fault the guard refuses
+        item.write_text(item.read_text() + "\n## Tree\n\n### W5.1 · Do it\nStatus: done\nApproach: Do the thing in code.py.\n")
+        git(out, "add", ".dfs")
+        r = subprocess.run(["git", "commit", "-qm", "did it"], cwd=out, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
 
     def test_a_dest_not_named_as_a_replay_is_refused(self):
         with self.assertRaises(SystemExit):

@@ -80,7 +80,7 @@ subjects matched across tasks), and the author's time, which no transcript recor
 the run with the code that scored the original (`history.session()`, `tasks_of()`).
 
     python3 <scripts>/replay.py plan   W55                     # starting point and the original's numbers
-    python3 <scripts>/replay.py replay W55 /tmp/dfs-replay-W55-a [--cap N] [--tool DIR | --tool-ref REV] [--law FILE]
+    python3 <scripts>/replay.py replay W55 <exec-capable dir>/dfs-replay-W55-a [--cap N] [--tool DIR | --tool-ref REV] [--law FILE]
 
 `prepare`, `run` and `score` are the same three steps one at a time. What it does:
 
@@ -105,6 +105,13 @@ the run with the code that scored the original (`history.session()`, `tasks_of()
   leaves out of the history it mines.
 
 ### Proved on W55
+
+**Void until redone.** This replay ran on a noexec `/tmp`, so git skipped the dfs hooks
+(`pre-commit`, `pre-merge-commit`) and the replay ran without the guard; its clone had no
+git identity, and its commit count came from a score that counts failed commits. The
+table below shows what that run did, not what the current system does. `replay.py prepare`
+now refuses a DEST where scripts cannot run, gives the clone the original's identity and
+holds nothing of the original's later work; the W55 replay is to be run again from there.
 
 W55 ("Codex limits reached until reset time, time not parsed properly") is small: 5
 sessions and $1.30 originally, with a first review that found issues. Replayed on

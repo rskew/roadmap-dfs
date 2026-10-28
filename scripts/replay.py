@@ -40,7 +40,7 @@ sys.path.insert(0, str(HERE))
 import history  # noqa: E402
 
 KEEP = ("Goal", "Background")   # the sections the author writes; the rest is the sessions'
-IDENTITY = ("-c", "user.name=dfs replay", "-c", "user.email=replay@dfs.invalid")
+IDENTITY = {"user.name": "dfs replay", "user.email": "replay@dfs.invalid"}   # where the checkout has none
 
 
 def git(repo, *args, check=True):
@@ -101,15 +101,53 @@ def original(repo, task):
     return None
 
 
+def hooks_can_run(where):
+    """Whether a script written under `where` can be executed: git skips a hook on a noexec
+    mount ("hook was ignored because it's not set as executable"), and a replay with no
+    pre-commit hook runs without the dfs guard, a different system from the original."""
+    with tempfile.TemporaryDirectory(dir=where) as d:
+        probe = Path(d) / "probe"
+        probe.write_text("#!/bin/sh\nexit 0\n")
+        probe.chmod(0o755)
+        try:
+            return subprocess.run([str(probe)], capture_output=True).returncode == 0
+        except OSError:
+            return False
+
+
+def identity(repo):
+    """The author identity of the checkout being replayed, for the clone's config."""
+    return {k: git(repo, "config", k, check=False).strip() or d for k, d in IDENTITY.items()}
+
+
+def seal(dest):
+    """Leave nothing of the original's later work in the clone: no `origin` (its refs hold
+    the task's own nodes and every commit since), no tag, no reflog entry naming them, and
+    no object that is not reachable from the starting point."""
+    git(dest, "remote", "remove", "origin")
+    for tag in git(dest, "tag", "--list").split():
+        git(dest, "tag", "-d", tag)
+    git(dest, "reflog", "expire", "--expire=now", "--all")
+    git(dest, "gc", "-q", "--prune=now")
+
+
 def prepare(repo, task, dest, tool=None, tool_ref=None, law=None):
     dest = Path(dest).resolve()
     if "dfs-replay-" not in dest.name:
         raise SystemExit("replay: DEST's name must contain 'dfs-replay-' (history.py skips it by that)")
     if dest.exists():
         raise SystemExit(f"replay: {dest} exists; a replay starts from nothing")
+    if not dest.parent.is_dir() or not hooks_can_run(dest.parent):
+        raise SystemExit(f"replay: scripts cannot run under {dest.parent} (a noexec mount, as /tmp often is), "
+                         "so git would skip the dfs hooks and the replay would run without the guard; "
+                         "choose a DEST on a mount that can execute")
     sha, text = starting_point(repo, task)
+    ident = identity(repo)
     subprocess.run(["git", "clone", "-q", "--no-checkout", str(repo), str(dest)], check=True)
     git(dest, "checkout", "-q", "-B", "main", sha)
+    seal(dest)
+    for k, v in ident.items():
+        git(dest, "config", k, v)
     (dest / ".dfs" / "items").mkdir(parents=True, exist_ok=True)
     (dest / ".dfs" / "items" / f"{task}.md").write_text(text)
     if law:
@@ -123,7 +161,7 @@ def prepare(repo, task, dest, tool=None, tool_ref=None, law=None):
     subprocess.run([sys.executable, str(tool / "scripts" / "init.py")], cwd=dest, check=True,
                    env={**os.environ, "DFS_TOOL": str(tool)}, capture_output=True)
     git(dest, "add", "-A", ".dfs")
-    git(dest, *IDENTITY, "commit", "-q", "--allow-empty", "-m",
+    git(dest, "commit", "-q", "--allow-empty", "-m",
         f"replay: {task} as the author left it, from {sha[:8]}", "--no-verify")
     (dest / ".git" / "replay.json").write_text(json.dumps({"task": task, "from": sha, "tool": str(tool)}))
     return dest, tool
