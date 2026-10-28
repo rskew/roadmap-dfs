@@ -786,6 +786,11 @@ def _record_block(task, kind):
                 "and with the node it repairs as its Parent: siblings are alternatives "
                 "everywhere else, and a fix beside the work it fixes reads as one. Adding "
                 "it reopens the task, and the next session fixes it:", ""] + node_shape + [
+                "- **An assumption a node made without marking it** (item 4 of what to "
+                "review) is a node too, once: titled `Hypothesis: …`, with that node as "
+                "its Parent and an Approach that names the assumption, what would show it "
+                "wrong, and says to state it as a Hypothesis with its page. Add none for "
+                "an assumption that a Hypothesis or an open node already carries.", "",
                 "- **Everything else is MINOR and never a node of its own**: a wording, a "
                 "stale sentence in a doc or comment, a message that names the wrong "
                 "reason, a missing test for a guard, a style rule, tidying. NOT minor, "
@@ -938,10 +943,13 @@ def review_brief(task: str) -> str:
            "4. **Is every assumption that matters marked?** A node whose work rests on "
            "something the session decided and could not settle (a reading of the Goal, "
            "a design the author might choose differently, scope narrowed) carries a "
-           "`Hypothesis:`, which the author reads before accepting. If a live node makes "
-           "such an assumption without one, say so in your verdict body: the node, what "
-           "it assumed, and what to ask the author (a determined node is history, so it "
-           "is not edited).", "",
+           "`Hypothesis:`, which the author reads before accepting. An ordinary choice "
+           "the check settles is not one. If a node makes such an assumption without a "
+           "Hypothesis, state it once as an open node under that node (a determined node "
+           "is history, so it is not edited): its Approach names the node, the assumption "
+           "and what would show it wrong, and says to state it as a Hypothesis with its "
+           "page. Do not repeat an assumption that a Hypothesis or an open node already "
+           "carries.", "",
           ] + _round_note(t) + _record_block(task, "review") + [
            "### The task's commits, oldest first", ""]
     for nd in sorted(t["nodes"], key=lambda n: n["n"]):

@@ -2213,6 +2213,10 @@ class Chain(unittest.TestCase):
         b = brief()
         self.assertIn("only if it shows the Goal is not met", b)
         self.assertIn("never a node of its own", b)
+        # An unmarked assumption is one open node, stated once, not a note in every verdict.
+        self.assertIn("state it once as an open node under that node", b)
+        self.assertNotIn("what to ask the author", b)
+        self.assertIn("An assumption a node made without marking it", b)
         self.assertIn("This is review round 2", b)
         self.assertNotIn("raised to the author", b)
         # Later rounds are named too, and none warns of a raise.
