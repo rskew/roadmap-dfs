@@ -1932,8 +1932,9 @@ $("#chat-log").addEventListener("scroll", e => {
   const l = e.target; if (!CHAT.scope || CHAT.fresh) return;
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
-matchMedia(`(min-width: ${TABLE_MIN}px)`).addEventListener("change", () => render(true));
-{ let tw = tableWide(); new ResizeObserver(() => { const n = tableWide(); if (n !== tw) { tw = n; render(true); } }).observe(document.documentElement); }   // a scrollbar appearing or going changes the room without changing the media query
+// One redraw path for the table's room: the observer sees a viewport crossing and a classic scrollbar appearing or going (which leaves the media query unchanged); the media listener is only the fallback where there is no ResizeObserver, since both together redraw twice.
+if (typeof ResizeObserver === "function") { let tw = tableWide(); new ResizeObserver(() => { const n = tableWide(); if (n !== tw) { tw = n; render(true); } }).observe(document.documentElement); }
+else matchMedia(`(min-width: ${TABLE_MIN}px)`).addEventListener("change", () => render(true));
 addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
