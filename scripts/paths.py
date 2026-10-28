@@ -150,6 +150,19 @@ def runs() -> Path:
     return state() / "runs"
 
 
+def run_dirs():
+    """Every `runs/` that may hold the log of a session started here: this work root's,
+    and, inside an item's worktree (`<checkout>/.dfs/worktrees/<task>`), the main
+    checkout's. ⚠ A worktree's own `.dfs` has no `runs/`, because `runs/` is ignored and
+    so never checked out, while the chain writes every run log into the main checkout's:
+    a session that looked only at `runs()` found none and measured nothing."""
+    here = [runs()]
+    root = work_root()
+    if root.parent.name == "worktrees" and root.parent.parent.name == STATE_DIR_NAME:
+        here.append(root.parent.parent / "runs")
+    return here
+
+
 def playwright_shell() -> Path:
     """One line naming the nix dev shell that supplies `playwright` for the artefact
     check, when the project has one (`.#e2e`). Optional: without it the check takes

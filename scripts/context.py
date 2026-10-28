@@ -200,14 +200,50 @@ def kiro_session_id(records):
     return ""
 
 
+# ⚠ THIS KIRO SENDS NO `usage_update`. Read from a real run (KAS 0.66.34, 2026-10-28):
+# its stream carries `session_info_update` records whose `_meta.kiro.contextUsage`
+# holds `usagePercentage`, the share of the model's window in use, and the first of
+# them also a `breakdown` of tokens and percent per part (`tools`, `yourPrompts`...).
+# Read only for `usage_update`, every such session measured 0 and the runner wrote
+# `peak 0` into the Log for all of them — a figure that looked measured and was not,
+# and that kept the §1 L1 checkpoint from ever firing. The window is not in the
+# stream, so it is the one the breakdown implies (tokens / percent), snapped to the
+# nearest size a model has: percent is rounded to 0.1, so one entry is good to about
+# 15%, and the sizes are five times apart.
+WINDOWS = (128_000, 200_000, 1_000_000, 2_000_000)
+
+
+def kiro_context_usage(rec):
+    """[(usagePercentage, window estimates)] for the `contextUsage` blocks in one record."""
+    out = []
+    for d in _walk(rec):
+        cu = d.get("contextUsage")
+        if not isinstance(cu, dict) or not isinstance(cu.get("usagePercentage"), (int, float)):
+            continue
+        sizes = []
+        for part in (d.get("breakdown") or {}).values():
+            tok, pct = (part.get("tokens"), part.get("percent")) if isinstance(part, dict) else (0, 0)
+            if isinstance(tok, (int, float)) and isinstance(pct, (int, float)) and tok > 0 and pct >= 0.3:
+                sizes.append(tok * 100 / pct)
+        out.append((float(cu["usagePercentage"]), sizes))
+    return out
+
+
+def snap_window(estimates):
+    """The model window nearest (in ratio) to the median of `estimates`, or None."""
+    if not estimates:
+        return None
+    est = sorted(estimates)[len(estimates) // 2]
+    return min(WINDOWS, key=lambda w: max(w / est, est / w))
+
+
 def _kiro_log(session_id, root=None):
     """The newest chain run log under `.dfs/runs/` that names `session_id`, or None.
 
     Opencode's is found the same way: see the section below."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import paths as dfs_paths
-    runs = str(dfs_paths.runs())
-    logs = glob.glob(os.path.join(runs, "*", "run-*.json"))
+    logs = [f for d in dfs_paths.run_dirs() for f in glob.glob(os.path.join(str(d), "*", "run-*.json"))]
     logs.sort(key=lambda f: os.path.getmtime(f) if os.path.exists(f) else 0, reverse=True)
     needle = session_id.encode()
     for log in logs:
@@ -461,6 +497,7 @@ def files_written(path, provider="claude"):
 def peak_and_turns(path, provider):
     """Peak context and response count for a Claude or Codex rollout, or a Kiro or Opencode stream."""
     best, seen = 0, set()
+    percents, windows, best_pct = set(), [], 0.0
     with open(path, errors="replace") as fh:
         for line in fh:
             try:
@@ -481,6 +518,10 @@ def peak_and_turns(path, provider):
                     if u["sessionUpdate"] == "usage_update" and isinstance(u.get("used"), int):
                         seen.add(len(seen))
                         best = max(best, u["used"])
+                for pct, sizes in kiro_context_usage(rec):
+                    percents.add(pct)
+                    windows.extend(sizes)
+                    best_pct = max(best_pct, pct)
                 continue
             if provider == "codex":
                 if rec.get("type") != "event_msg":
@@ -504,6 +545,10 @@ def peak_and_turns(path, provider):
             # over 12,026 responses it totals 23,892 tokens, at most 2 per response.
             best = max(best, (usage.get("cache_read_input_tokens") or 0)
                              + (usage.get("cache_creation_input_tokens") or 0))
+    if provider == "kiro" and not seen and percents:
+        window = snap_window(windows)
+        if window:
+            return round(best_pct * window / 100), len(percents)
     return best, len(seen)
 
 
@@ -599,6 +644,10 @@ def main(argv):
         try:
             peak, turns = peak_and_turns(argv[1], argv[2])
         except (FileNotFoundError, IsADirectoryError):
+            peak, turns = -1, -1
+        # ⚠ No reading is not a reading of 0: a transcript with no usage in it was
+        # logged `peak 0` for a whole day, and 0 looked measured. -1 is "unavailable".
+        if peak == 0 and turns == 0:
             peak, turns = -1, -1
         print(peak, turns)
         return 0
