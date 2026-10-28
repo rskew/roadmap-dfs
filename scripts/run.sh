@@ -267,6 +267,25 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
            BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-3600000}"
            BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS:-21600000}")
 
+# One headless opencode turn, its `--format json` stream on stdout: the prompt is stdin, the rest
+# is `run`'s arguments. opencode 2.1.1's private server (`serve --stdio`) sometimes crashes in Bun
+# as it starts ("Bus error", while another opencode on the same store is going away), and the
+# run then ends in a `Transport:` `error` before any step began: nothing was asked of the model or
+# written to the session, so the turn is run again (twice at most). A stream that began a step is
+# never run again.
+opencode_turn() {
+  local prompt tries=0 out
+  prompt="$(cat; echo x)"; prompt="${prompt%x}"
+  out="$(mktemp)"
+  while :; do
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" || true
+    tries=$((tries + 1))
+    if [ "$tries" -ge 3 ] || grep -q '"type":"step_start"' "$out" || ! grep -q '"type":"error".*Transport:' "$out"; then break; fi
+    echo "dfs_run: opencode ended before it began the turn; running it again" >&2
+  done
+  cat "$out"; rm -f "$out"
+}
+
 # What an item's chat opens with, here and on the web page (--chat-turn's opening): short, in
 # this order, then the question. Concise on purpose: the author is often reading it on a phone.
 TREE_SUMMARY_ASK="Start with a concise summary, in short lines and no more than you need: (1) the tree, where the work is and what was refuted and why; (2) each assumption it rests on, in plain words, and what would make it wrong; (3) each open raise, what it asks of the author and the options with your recommendation. Say plainly if there are no assumptions or no raises. Then ask what the author wants to talk about."
@@ -332,7 +351,7 @@ if [ "$MODE" = chat ]; then
         "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json --no-interactive "${PERMISSION_ARGV[@]}" -- "$CHAT_PROMPT" 2>&1 < /dev/null \
           | python3 "$HERE/chat.py" --kiro-result > "$opening_json" || true
       else
-        printf '%s' "$CHAT_PROMPT" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" \
+        printf '%s' "$CHAT_PROMPT" | opencode_turn "${PERMISSION_ARGV[@]}" \
           | python3 "$HERE/chat.py" --opencode-result > "$opening_json" || true
       fi
       opening_field() { python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$opening_json" "$1" 2>/dev/null || true; }
@@ -407,7 +426,7 @@ if [ "$MODE" = chatturn ]; then
   if [ "$AGENT" = opencode ]; then
     # The prompt is on stdin here too: as an argument opencode wraps a message with spaces in
     # quotes, which the page would show; on stdin it is kept as written.
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" \
+    printf '%s' "$prompt" | opencode_turn "${PERMISSION_ARGV[@]}" "${session_flag[@]}" \
       | python3 "$HERE/chat.py" --opencode-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
   fi

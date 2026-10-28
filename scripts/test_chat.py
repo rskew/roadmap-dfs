@@ -83,6 +83,7 @@ echo "$@" >> "$CHAT_STUB_LOG"
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"not logged in","statusCode":401}}}'; exit 1; }
 shift
+[ -n "${CHAT_STUB_CRASH_ONCE:-}" ] && [ ! -e "$CHAT_STUB_CRASH_ONCE" ] && { touch "$CHAT_STUB_CRASH_ONCE"; echo '{"type":"error","sessionID":"ses_x","error":{"name":"UnknownError","data":{"message":"Transport: Unable to connect. Is the computer able to access the url?"}}}'; exit 1; }
 sid=""; while [ $# -gt 0 ]; do [ "$1" = --session ] && { sid="$2"; shift; }; shift; done
 prompt="$(cat)"; echo "stdin: $prompt" >> "$CHAT_STUB_LOG"
 [ -n "$sid" ] || sid="ses_$(python3 -c 'import uuid; print(uuid.uuid4().hex[:20])')"
@@ -621,6 +622,16 @@ class Chat(unittest.TestCase):
         self.assertEqual([m["role"] for m in st["messages"]], ["you", "error"])
         self.assertIn("not logged in", st["messages"][1]["text"])
         self.assertEqual(self.chats.sid("W1"), "ses_x", "opencode named a session before it failed: the message is in it, so it is kept")
+        self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 1, "a failure that is not a crash at start is not run again")
+
+    def test_an_opencode_run_that_crashed_before_its_turn_began_is_run_again_once_and__once(self):
+        self.use_opencode()
+        os.environ["CHAT_STUB_CRASH_ONCE"] = str(self.root / "crashed")
+        self.addCleanup(os.environ.pop, "CHAT_STUB_CRASH_ONCE", None)
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"]], ["prompt", "you", "agent"], "%s %s" % (st["messages"], self.calls()))
+        self.assertEqual(len([c for c in self.calls() if c.startswith("run ")]), 2, "run again after the crash, and no more")
 
     def test_the_screens_opencode_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
         self.use_opencode()
