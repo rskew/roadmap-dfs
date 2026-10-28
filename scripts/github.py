@@ -284,7 +284,7 @@ def land(task, url, head=""):
     print("dfs_github: %s: %s merged on GitHub; %s is at %s/%s%s" % (task, url, default, remote, default, kept))
 
 
-MARK = re.compile(r"\(github \w+ [^\s)]+\)$")
+MARK = dfs_tree.GITHUB_MARK
 
 
 def _known_marks(t):

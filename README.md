@@ -75,8 +75,9 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   text, the file and line, its link, and `(github <kind> <id>)` (ending the node's Approach) by which it
   is never added twice. An approval with no body adds nothing; every other comment does, your own
   replies and bots' included. Delete the node of a comment you do not want acted on and it is
-  dismissed: the watch does not add it again. The task is open again, so the walk works and raises on
-  the node as on any other; nothing is posted back to GitHub.
+  dismissed (shelved or not): the watch does not add it again, and editing such a node keeps its mark.
+  The task is open again, so the walk works and raises on the node as on any other; nothing is posted
+  back to GitHub.
 - **The push**: when that task is finished anew (the fix reviewed, or accepted) the hold pushes `dfs/<task>` to
   the pull request, so it shows reviewed work and not a half-done node. If the branch moved on GitHub (a
   suggestion committed there) the push is refused, and the task reopens with a node asking for a rebase onto

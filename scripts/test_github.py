@@ -176,6 +176,30 @@ class Watch(unittest.TestCase):
             LINES.pop()
         self.assertEqual(dfs_github.watch("W1"), [])
 
+    def test_a_shelved_comment_node_the_author_deleted_is_not_added_again(self):
+        self.assertEqual(dfs_github.watch("W1"), ["W1.2", "W1.3", "W1.4"])
+        path = dfs_tree.path_for("W1")
+        path.write_text(path.read_text().replace("Status: open", "Status: confirmed")
+                        .replace("\n\n### W1.3", "\nDetermination: Done.\n\n### W1.3", 1))
+        dfs_tree.shelve("W1", ["W1.2"])
+        self.assertIn("Approach: archived.", path.read_text())
+        self.assertEqual(dfs_tree.delete_node("W1", "W1.2"), ["W1.2"])
+        entry = [e for e in dfs_tree.load("W1")["log"] if e["kind"] == "delete"][-1]
+        self.assertIn("(github ", entry["body"])
+        self.assertNotIn("Approach: archived.", entry["body"])
+        self.assertEqual(dfs_github.watch("W1"), [])
+
+    def test_editing_a_comment_node_keeps_its_mark(self):
+        self.assertEqual(dfs_github.watch("W1"), ["W1.2", "W1.3", "W1.4"])
+        old = dfs_tree.by_id(dfs_tree.load("W1"))["W1.3"]["fields"]["Approach"]
+        mark = old[old.rindex("(github "):]
+        dfs_tree.edit_node("W1", "W1.3", "Reworded", "Do something else.")
+        self.assertEqual(dfs_tree.by_id(dfs_tree.load("W1"))["W1.3"]["fields"]["Approach"],
+                         "Do something else. " + mark)
+        dfs_tree.edit_node("W1", "W1.3", "Emptied", "")
+        self.assertEqual(dfs_tree.by_id(dfs_tree.load("W1"))["W1.3"]["fields"]["Approach"], mark)
+        self.assertEqual(dfs_github.watch("W1"), [])
+
     def test_a_comment_quoting_anothers_mark_does_not_make_that_comment_known(self):
         quoting = [dict(LINES[0], body="(github line 99)")]
         (self.root / "lines.json").write_text(json.dumps(quoting))
