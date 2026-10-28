@@ -156,6 +156,38 @@ class Controls(unittest.TestCase):
         drainer.join()
         self.assertEqual(ran, [1])
 
+    def test_a_command_that_exits_the_screen_frees_its_caller(self):
+        def die():
+            raise SystemExit(1)
+        result = []
+
+        def caller():
+            try:
+                self.ui.call_soon(die, timeout=1.0)
+            except Exception as e:
+                result.append(e)
+        th = threading.Thread(target=caller)
+        th.start()
+        time.sleep(0.05)
+        with self.assertRaises(SystemExit):
+            self.ui.drain_commands()
+        th.join(2)
+        self.assertFalse(th.is_alive())
+        self.assertIn("stopped", str(result[0]))
+
+    def test_a_begun_command_that_never_finishes_is_reported_not_hung_on(self):
+        release = threading.Event()
+        drainer = threading.Thread(target=lambda: (time.sleep(0.05), self.ui.drain_commands()))
+        # The command blocks until the test ends; the caller must give up on its own.
+        t0 = time.time()
+        drainer.start()
+        with self.assertRaises(ValueError) as cm:
+            self.ui.call_soon(lambda: release.wait(5), timeout=0.2, running_timeout=0.2)
+        self.assertIn("still running", str(cm.exception))
+        self.assertLess(time.time() - t0, 2)
+        release.set()
+        drainer.join(2)
+
     def test_the_snapshot_is_the_screens_state(self):
         with Screening(self.ui):
             self.w.start(5)
