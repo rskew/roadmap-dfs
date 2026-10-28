@@ -9,8 +9,10 @@
 # ours and the index is the merged result, so the merge is checked against ours, and
 # `--merge` says it is one: a merge brings in other branches' parts of a task, the one
 # time a commit may add to a part that is not this branch's. git has not written
-# MERGE_HEAD yet when this hook runs. A rebase, cherry-pick or revert runs neither
-# hook and is not judged, which is why a `.dfs` branch is merged, never rebased.
+# MERGE_HEAD yet when this hook runs. A rebase, cherry-pick or revert makes its own
+# commits with -n and so runs neither hook; a `git commit` made by hand during a
+# rebase's stop does run pre-commit, and check.py judges it without the writer,
+# Hypothesis and Ask rules, since the commit was judged where it was first made.
 #
 # The project's own hook finds the tool and calls this (init.py writes one that
 # does), or IS a link to it; what it checks lives here, with the tool, so it moves

@@ -1889,6 +1889,55 @@ class Branches(InARepo):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.git("rev-parse -q --verify HEAD^2").returncode, 0)
 
+    def hook_as(self, name):
+        hooks = self.root.parent / (self.root.name + "-hooks")
+        hooks.mkdir(exist_ok=True)
+        self.addCleanup(shutil.rmtree, hooks, True)
+        (hooks / name).symlink_to(HERE / "hook.sh")
+        self.git("config core.hooksPath %s" % hooks)
+
+    def conflicted_rebase(self):
+        """dfs/w1 adds a node and edits `f`; master edits `f` the other way: rebasing the
+        branch stops on a conflict, and `git rebase --continue` makes the commit."""
+        self.switch("checkout -qb dfs/w1")
+        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2),
+                        "- 2026-09-25T09:00:00Z · session · work\n"))
+        (self.root / "f").write_text("branch\n")
+        self.commit()   # no hook yet: the commit was judged where it was made
+        self.switch("checkout -q master")
+        (self.root / "f").write_text("master\n")
+        self.commit()
+        self.switch("checkout -q dfs/w1")
+        self.hook_as("pre-commit")
+        r = self.git("rebase master")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        (self.root / "f").write_text("both\n")
+        self.git("add f")
+
+    def test_a_commit_made_by_hand_in_a_rebase_is_not_judged_by_the_writer_rule(self):
+        """`git rebase --continue` commits with -n and so skips the hook; the author's or a
+        session's own `git commit` during the stop (the conflict, `edit`, a missing
+        identity) runs it, on a detached HEAD."""
+        self.conflicted_rebase()
+        self.assertIsNone(dfs_paths.branch())   # detached, as a rebase is
+        r = self.git("commit -qm 'resolved'")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        r = subprocess.run("git -c user.name=t -c user.email=t@t -c core.editor=true "
+                           "rebase --continue", shell=True, cwd=self.root,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("W1.3", (self.root / ".dfs/items/W1.md").read_text())
+
+    def test_the_same_commit_outside_a_rebase_is_still_refused_on_a_detached_head(self):
+        self.hook_as("pre-commit")
+        self.switch("checkout -q --detach")
+        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2),
+                        "- 2026-09-25T09:00:00Z · session · work\n"))
+        r = self.git("add -A")
+        r = self.git("commit -qm x")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("detached HEAD", r.stdout + r.stderr)
+
     OLD_HYPOTHESIS = ("## Tree\n\n### W1.1@fx · the other way\nParent: W1.1\nStatus: open\n"
                       "Hypothesis: It holds. Wrong if not.\n")
 

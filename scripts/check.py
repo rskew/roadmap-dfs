@@ -13,7 +13,8 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a node or log entry ADDED to a part other than this branch's (`dfs_paths.
       branch_tag`), or added at all on a detached HEAD: each branch writes only its
       own part, which is what lets two branches on one task merge without conflict.
-      Skipped while git is committing a merge, which brings other branches' parts
+      Skipped while git is committing a merge, which brings other branches' parts, and
+      while a rebase is in progress, which replays commits judged where they were made
     - a node id used twice, a Parent that does not exist or comes later, a Status
       that is not open | parked | confirmed | refuted, a Corrects naming no correction
       or backtrack
@@ -170,6 +171,21 @@ def merging():
     r = subprocess.run(["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
                        cwd=dfs_paths.state(), capture_output=True, text=True)
     return r.returncode == 0
+
+
+def rebasing():
+    """Whether git is replaying commits in a rebase (`git rebase`, or `--continue` after a
+    conflict): the commit in front of you was judged when it was first made. The rebase runs
+    on a detached HEAD, and onto a base that may not hold the task file yet, so every node
+    reads as added by it."""
+    for marker in ("rebase-merge", "rebase-apply"):
+        r = subprocess.run(["git", "rev-parse", "--git-path", marker],
+                           cwd=dfs_paths.state(), capture_output=True, text=True)
+        path = Path(r.stdout.strip())
+        if r.returncode == 0 and r.stdout.strip() and \
+                (path if path.is_absolute() else dfs_paths.state() / path).exists():
+            return True
+    return False
 
 
 def check_writer(task, tag, here, text, head):
@@ -627,7 +643,9 @@ def main() -> int:
         here = None
         if dfs_paths.branch() is not None:   # two branches with one tag, not detached
             fatal.append(str(e))
-    judge_writer = not merging()   # also: the other parent's commits were judged there
+    # also: the other parent's commits were judged there, and a rebase replays commits that
+    # were judged where they were made
+    judge_writer = not (merging() or rebasing())
     # A commit that first brings a committed roadmap's task files into git has nothing to
     # judge them against: what they hold was written before the guard saw them, under
     # whatever rules stood then. Their findings are grandfathered, shown and not refused,
