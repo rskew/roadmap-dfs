@@ -384,10 +384,6 @@ class PullRequests(unittest.TestCase):
         self.assertTrue(any("could not be read: gh is not logged in" in e[2] for e in self.w.events))
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
-
-
 class Models(unittest.TestCase):
     """The models chosen for the walk: kept in the run root, given to a chain as the
     variables run.sh reads, claude's own roles and nothing else."""
@@ -436,7 +432,7 @@ class Models(unittest.TestCase):
         with mock.patch.object(dfs_walk.dfs_runs, "live_for", return_value=None), \
                 mock.patch.object(dfs_walk.subprocess, "Popen") as popen:
             popen.return_value.pid = 1
-            w.start_chain("W1", 5)
+            w.start_chain("W1", "5")
         return popen.call_args.kwargs["env"]
 
     def test_a_chain_gets_the_chosen_models_as_the_variables_run_sh_reads(self):
@@ -450,3 +446,7 @@ class Models(unittest.TestCase):
             self.w.set_model("implement", "default")
             env = self.chain_env()
             self.assertEqual((env["PLAN_MODEL"], env["IMPLEMENT_MODEL"]), ("opus", ""))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
