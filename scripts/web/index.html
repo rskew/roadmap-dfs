@@ -363,7 +363,10 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
    the over-constrained box then drifts under the keys. Wider than 900px it is centred. */
 #chat[open] { bottom: auto; margin-block: 0; height: min(var(--vvh, 100dvh), 900px);
   top: calc(var(--vvt, 0px) + max(0px, (var(--vvh, 100dvh) - 900px) / 2)); }
-#form form { max-height: var(--vvh, 100dvh); overflow-y: auto; overscroll-behavior: contain; }
+/* One scroller: the form, whose height is the dialog's less its border, so the dialog itself never scrolls.
+   The scroll padding keeps a field the keyboard focuses clear of the sticky row of buttons. */
+#form { overflow: hidden; }
+#form form { max-height: calc(var(--vvh, 100dvh) - 2 * var(--rule)); overflow-y: auto; overscroll-behavior: contain; scroll-padding-bottom: calc(var(--hit) + var(--s2) + var(--s4) + var(--s2)); }
 #form .row-btns { position: sticky; bottom: calc(-1 * var(--s4)); margin-bottom: calc(-1 * var(--s4)); padding: var(--s2) 0 var(--s4); background: var(--panel); }
 @media (min-width: 900px) {
   body { padding-bottom: 0; }
@@ -1546,6 +1549,8 @@ function attachTo(box) {
     const log = $("#chat-log"), end = log && log.scrollHeight - log.scrollTop - log.clientHeight < 40;
     const s = document.documentElement.style; s.setProperty("--vvh", vv.height + "px"); s.setProperty("--vvt", vv.offsetTop + "px");
     if (end) log.scrollTop = log.scrollHeight;       // the newest message stays in view above the input
+    const at = document.activeElement;                // the field being typed in stays above the keyboard
+    if (at && at.closest && at.closest("#form") && at.matches("textarea, input")) at.scrollIntoView({ block: "nearest" });
   };
   vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); fit();
   // a phone moves the viewport while the keyboard slides, and not always with an event for the last frame
