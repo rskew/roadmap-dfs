@@ -25,6 +25,7 @@ import functools
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -61,8 +62,32 @@ def _git_net(*args, cwd=None):
     ssh = os.environ.get("GIT_SSH_COMMAND") or _git("config", "core.sshCommand", cwd=cwd).stdout.strip()
     if ssh or not os.environ.get("GIT_SSH"):
         env["GIT_SSH_COMMAND"] = (ssh or "ssh") + " -o BatchMode=yes"
-    return subprocess.run(["git", *args], cwd=cwd or dfs_paths.work_root(), env=env,
-                          capture_output=True, text=True)
+    return _run_bounded(["git", *args], cwd or dfs_paths.work_root(), env)
+
+
+# A git call to the remote that has not finished in this many seconds is a stalled network (a TCP
+# stall, an ssh with no keepalive): `_git_net` runs under the chains' lock, which every chain waits
+# on, and in the walk's poll thread, which would otherwise never poll again.
+GIT_NET_TIMEOUT = 300
+
+
+def _run_bounded(cmd, cwd, env):
+    """Run `cmd` for `GIT_NET_TIMEOUT` seconds at most. On the limit the whole process group is
+    killed (git's ssh and helper children hold its pipes open) and a failed CompletedProcess says
+    git did not answer, so each caller's own failure path reports it."""
+    proc = subprocess.Popen(cmd, cwd=cwd, env=env, text=True, start_new_session=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        out, err = proc.communicate(timeout=GIT_NET_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        out, err = proc.communicate()
+        err = "git did not answer within %d seconds; check the network. %s" % (GIT_NET_TIMEOUT, err or "")
+        return subprocess.CompletedProcess(cmd, 124, out or "", err)
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
 def _git_bytes(*args, cwd=None):

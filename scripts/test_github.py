@@ -6,9 +6,11 @@ Run:  python3 <scripts>/test_github.py
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -278,6 +280,31 @@ class NetworkCalls(unittest.TestCase):
     def test_the_authors_ssh_command_is_kept(self):
         got = self.env_of(GIT_SSH_COMMAND="ssh -F mine")
         self.assertEqual(got["GIT_SSH_COMMAND"], "ssh -F mine -o BatchMode=yes")
+
+    def test_a_call_that_does_not_answer_fails_and_frees_the_lock(self):
+        import fcntl
+        import time
+        import branch as dfs_branch
+        limit, started = dfs_branch.GIT_NET_TIMEOUT, time.time()
+        dfs_branch.GIT_NET_TIMEOUT = 1
+        repo = tempfile.mkdtemp()
+        subprocess.run(["git", "init", "-q", repo], check=True)
+
+        @dfs_branch.one_at_a_time
+        def stalled():
+            # the shell stays the parent of a sleep that holds git's pipes open past a plain kill
+            return dfs_branch._git_net("-c", "alias.hang=!sleep 20; true", "hang", cwd=repo)
+        try:
+            with mock.patch.object(dfs_paths, "work_root", return_value=Path(repo)):
+                r = stalled()
+                with open(Path(repo) / ".git" / dfs_branch.LOCK_NAME, "a") as fh:
+                    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)   # raises if still held
+        finally:
+            dfs_branch.GIT_NET_TIMEOUT = limit
+            shutil.rmtree(repo, ignore_errors=True)
+        self.assertLess(time.time() - started, 10)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("did not answer within 1 seconds", r.stderr)
 
 
 if __name__ == "__main__":
