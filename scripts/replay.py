@@ -7,6 +7,7 @@ Goal and Background) and nothing the sessions added. This clones the repo there,
 chain (run.sh) work the task, and measures the result with history.py's `session()` and
 `tasks_of()`, the code that measured the original, so the two columns are comparable.
 
+  python3 <scripts>/replay.py candidates [--repo PATH]       (tasks the loop's selection rule picks from)
   python3 <scripts>/replay.py plan    TASK [--repo PATH]
   python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE]
   python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M]
@@ -105,6 +106,25 @@ def original(repo, task):
     return None
 
 
+def candidates(repo, limit=3.0):
+    """The tasks of this repo that the loop's selection rule picks from the history: original
+    at most `limit` dollars, a first review that found issues, and a node commit to start
+    before. Whether a task's evidence lies in the repo is for a reader to check."""
+    tasks = history.load(transcripts(repo), {})[1]
+    mine = history.project_of(re.sub(r"[/.]", "-", str(Path(repo).resolve())))
+    rows = []
+    for (project, name), t in tasks.items():
+        if project != mine or t["first_review"] != "issues" or not t["sessions"].get("work") \
+                or not 0 < t["usd"] <= limit:
+            continue
+        try:
+            starting_point(repo, name)
+        except SystemExit:
+            continue
+        rows.append(t)
+    return sorted(rows, key=lambda t: t["usd"])
+
+
 def hooks_can_run(where):
     """Whether a script written under `where` can be executed: git skips a hook on a noexec
     mount ("hook was ignored because it's not set as executable"), and a replay with no
@@ -126,9 +146,12 @@ def identity(repo):
 
 def seal(dest):
     """Leave nothing of the original's later work in the clone: no `origin` (its refs hold
-    the task's own nodes and every commit since), no tag, no reflog entry naming them, and
+    the task's own nodes and every commit since), no branch but `main`, no tag, no reflog entry naming them, and
     no object that is not reachable from the starting point."""
     git(dest, "remote", "remove", "origin")
+    for branch in git(dest, "branch", "--format=%(refname:short)").split():
+        if branch != "main":   # a source on `trunk` clones with its tip, the original's later work, as a branch
+            git(dest, "branch", "-D", branch)
     for tag in git(dest, "tag", "--list").split():
         git(dest, "tag", "-d", tag)
     git(dest, "reflog", "expire", "--expire=now", "--all")
@@ -259,7 +282,7 @@ def compare(task, before, after):
 
 
 def main(argv):
-    if not argv or argv[0] not in ("plan", "prepare", "run", "score", "replay"):
+    if not argv or argv[0] not in ("plan", "prepare", "run", "score", "replay", "candidates"):
         sys.stdout.write(__doc__)
         return 2
     cmd, rest = argv[0], argv[1:]
@@ -272,7 +295,13 @@ def main(argv):
         else:
             pos.append(a)
     repo = opts["repo"]
-    if cmd == "plan":
+    if cmd == "candidates":
+        rows = candidates(repo)
+        sys.stdout.write(f"{len(rows)} tasks: original at most $3, first review said issues, a node commit to start before\n")
+        for t in rows:
+            sys.stdout.write(f"  {t['task']:6} ${t['usd']:5.2f}  sessions {sum(t['sessions'].values())}  "
+                             f"nodes {t['nodes']}  review issues {t['review_issues']}/{t['review_issues'] + t['review_ok']}\n")
+    elif cmd == "plan":
         task, = pos
         sha, text = starting_point(repo, task)
         before = original(repo, task)

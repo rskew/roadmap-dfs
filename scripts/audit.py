@@ -155,11 +155,14 @@ def report_findings(repo, out=None, sample=0):
 
 # ---------------------------------------------------------------- rounds
 
-TOKEN = re.compile(r"`([^`\n]{2,60})`|\b([A-Za-z_]\w*_\w+)\b|\b([A-Za-z_]\w*)\(\)")
+TOKEN = re.compile(r"`([^`\n]{2,60})`|\b([A-Za-z_]\w*_\w+)\b|\b([A-Za-z_]\w*)\(\)"
+                   r"|(?<![\w./-])([\w-]+\.(?:py|sh|mjs|js|json|toml|css|ts))\b")
+FILE = re.compile(r"[\w./-]*\w\.(?:py|sh|mjs|js|json|toml|css|ts)")
 
 
 def named_code(line):
-    """The names a finding line points at: backticked spans, snake_case words and `name()`.
+    """The names a finding line points at: backticked spans, snake_case words, `name()` and
+    file names such as branch.py or run.sh.
     A backticked span with spaces is prose, not a name, and a bare node id is not code."""
     out = set()
     for m in TOKEN.finditer(line):
@@ -196,6 +199,12 @@ def in_code(repo, rev, tok):
     return git(repo, "grep", "-q", "-F", "-e", tok, rev, "--", ".", ":!.dfs", ":!docs").returncode == 0
 
 
+def in_tree(repo, rev, name):
+    """Whether a file called `name` (a path or a bare file name) is tracked at `rev`."""
+    paths = git(repo, "ls-tree", "-r", "--name-only", rev).stdout.splitlines()
+    return any(p == name or p.endswith("/" + name) for p in paths)
+
+
 def classify(repo, line, window):
     """`window` is the node commits (oldest first) made in answer to the earlier review.
       present            every name the line points at was in the code before the window and
@@ -211,8 +220,12 @@ def classify(repo, line, window):
     base = window[0] + "^"
     patch = "".join(git(repo, "show", "--format=", "-U10", sha, "--", ".", ":!.dfs", ":!docs").stdout for sha in window)
     changed = [l for l in patch.splitlines() if not l.startswith(("+++", "---", "diff ", "index ", "@@"))]
-    if any(not in_code(repo, base, n) for n in names):
+    files = {n for n in names if FILE.fullmatch(n)}
+    if any(not (in_code(repo, base, n) or (n in files and in_tree(repo, base, n))) for n in names):
         return "introduced"
+    touched = {p for sha in window for p in git(repo, "show", "--format=", "--name-only", sha).stdout.splitlines()}
+    if any(p == n or p.endswith("/" + n) for p in touched for n in files):
+        return "maybe-introduced"
     return "maybe-introduced" if any(n in l for n in names for l in changed) else "present"
 
 

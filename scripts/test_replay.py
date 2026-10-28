@@ -121,6 +121,13 @@ class StartingPointTest(unittest.TestCase):
         later = git(self.repo, "rev-parse", "HEAD")
         self.assertNotEqual(subprocess.run(["git", "cat-file", "-e", later], cwd=out).returncode, 0)
 
+    def test_a_source_whose_branch_is_not_main_leaves_no_branch_holding_the_later_work(self):
+        git(self.repo, "branch", "-m", "trunk")
+        out, _ = replay.prepare(self.repo, "W5", Path(self.tmp.name) / "dfs-replay-W5-t",
+                                tool=Path(__file__).resolve().parent.parent)
+        self.assertEqual(git(out, "branch", "--all", "--format=%(refname)"), "refs/heads/main")
+        self.assertEqual(git(out, "log", "--all", "--format=%s", "--grep=W5.2"), "")
+
     def test_the_guard_refuses_a_commit_in_a_prepared_clone(self):
         if not can_exec(self.tmp.name):
             self.skipTest("this temp dir is noexec, so git would skip the hook; set TMPDIR to one that is not")
@@ -185,6 +192,27 @@ class TranscriptsOfOneReplayTest(unittest.TestCase):
                 (d / "s.jsonl").write_text("{}\n")
             found = {Path(f).parent.name for f in history._glob(replay.transcripts("/tmp/dfs-replay-W5-1"))}
             self.assertEqual(found, {"-tmp-dfs-replay-W5-1", "-tmp-dfs-replay-W5-1--dfs-worktrees-W5"})
+
+
+class CandidatesTest(unittest.TestCase):
+    def test_the_selection_rule_keeps_cheap_tasks_whose_first_review_found_issues(self):
+        def task(name, usd, first, work=1, project="-r"):
+            return (project, name), {"task": name, "usd": usd, "first_review": first,
+                                      "sessions": {"work": work}}
+        def start(repo, name):
+            if name == "W5":
+                raise SystemExit("no node commit")
+            return None, None
+
+        tasks = dict([task("W1", 2.0, "issues"), task("W2", 4.0, "issues"), task("W3", 1.0, "ok"),
+                      task("W4", 1.5, "issues", project="-other"), task("W5", 0.5, "issues"),
+                      task("W6", 1.0, "issues", work=0)])
+        with mock.patch.object(replay.history, "load", return_value=(None, tasks, None, None)), \
+                mock.patch.object(replay, "starting_point", side_effect=start), \
+                mock.patch.object(replay, "transcripts", return_value=[]), \
+                mock.patch.object(replay.history, "project_of", return_value="-r"):
+            rows = replay.candidates("/r")
+        self.assertEqual([t["task"] for t in rows], ["W1"])   # W2 dear, W3 passed, W4 elsewhere, W5 no node commit, W6 no work
 
 
 class OriginalIsTheRepoOwnTest(unittest.TestCase):

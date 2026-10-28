@@ -13,22 +13,22 @@ roadmap-dfs itself, chirpstack-docker, house and shop-app.
 |---|---|---|---|---|
 | Session transcripts | `$HOME/.claude/projects/<cwd>/<sid>.jsonl`, one directory per checkout and per worktree | ~1.4 GB, ~2,000 files: chirpstack-docker 832, roadmap-dfs 612, shop-app 402, house 151 | Every turn: tokens (cache read, cache write, output), timestamps, each tool call and its result, the prompt the session got (so its kind: work, review, critic, chat), every refused commit and the guard's message | Which node a session served, except by reading its `tree.py start` and commit commands; nothing about the outcome after the session ended |
 | Runner directories | `<repo>/.dfs/runs/dfs_run_*/` (`meta.json`, `run-N.json`, `console.log`), plus `activity.log` | roadmap-dfs only: 206 chains on 99 items since 2026-10-08 | Per session: item, kind, peak context, turns, stop reason, exit code, and `claude -p`'s own `total_cost_usd`, duration and usage; `sid` joins it to its transcript | Chains before 2026-10-08; the other projects' runs (their checkouts are not on this box) |
-| Task files and archive | `<repo>/.dfs/items/*.md`, `.dfs/archive/items/*.md` | roadmap-dfs: 101 tasks, 497 nodes; logs with 288 work, 216 review and 23 critic sessions | The tree as decided: node statuses, hypotheses, evidence, reviews ok/issues, critic ok/issues, author answers | Time or cost per node; anything the session tried and did not write down |
+| Task files and archive | `<repo>/.dfs/items/*.md`, `.dfs/archive/items/*.md` | roadmap-dfs: 101 tasks, 497 nodes on the 2026-10-22 survey (123 and 659 by the recount below); logs with 288 work, 216 review and 23 critic sessions | The tree as decided: node statuses, hypotheses, evidence, reviews ok/issues, critic ok/issues, author answers | Time or cost per node; anything the session tried and did not write down |
 | Git history | each repo | roadmap-dfs: 507 commits, 436 of them node commits, 2026-09-30 to 2026-10-21 | The code each node changed, in order, and the state of the repo before any task began: the starting point a replay needs | The other three projects: only their transcripts are on this box |
 | Old versions of the tool | `/nix/store/*-roadmap-dfs-<rev>` | 39 store paths | A past version of the skill, law and scripts to run a replay under, for a before/after comparison | Versions already garbage-collected |
 
 Two facts from the task files already bear on where to look (`python3 <scripts>/audit.py nodes`
-and `findings`, run 2026-10-28 over the 120 tasks and 644 nodes of the roadmap-dfs checkout; the
+and `findings`, run 2026-10-28 over the 123 tasks and 659 nodes of the roadmap-dfs checkout; the
 other three projects' task files are not on this box, so these counts are roadmap-dfs's alone):
 
-- **The tree is rarely used to back up, though not never.** As written, 3 of 644 nodes have
-  `Status: refuted` and 81 are parked. Read as the screen reads them, with the author's
+- **The tree is rarely used to back up, though not never.** As written, 3 of 659 nodes have
+  `Status: refuted` and 82 are parked. Read as the screen reads them, with the author's
   corrections and the critic's backtracks applied, 13 nodes are refuted (3 by their own
-  status, 10 by an author ruling), 7 critic backtracks withdraw 37 nodes, and 70 stay
+  status, 10 by an author ruling), 8 critic backtracks withdraw 41 nodes, and 70 stay
   parked. A final state cannot say how many parked nodes were later taken up, since
   they then stop being parked.
-- **A third of reviews send the work back.** The task logs hold 294 review verdicts
-  and 109 of them say issues.
+- **Reviews send the work back often.** The task logs hold 116 review verdicts that say
+  issues (`audit.py findings`); section 4 gives the first-review rate (30%).
 
 ## 2. Where the work goes
 
@@ -59,7 +59,7 @@ What it shows, most important first:
    one of its reviews has already said issues (40.7% counted in weighted tokens, so the
    share does not depend on the price). 71% of that dollar figure is estimated from
    tokens, all of it in the three projects with no runner prices; roadmap-dfs alone,
-   where the runner priced all of it, gives 41.2%. The reviews of roadmap-dfs said issues 109 times, and those
+   where the runner priced all of it, gives 41.2%. The reviews of roadmap-dfs said issues 116 times, and those
    reviews wrote 207 finding lines (`docs/dfs-review-findings.tsv`, one row each with its
    class): 101 defects, 78 batches of lesser findings and 28 assumptions the review left for
    the author (some repeat across rounds, as "still open"). Of the defects, 23 say the
@@ -71,8 +71,8 @@ What it shows, most important first:
    found issues. Quality, measured as review rounds with issues, is the largest cost
    as well as the largest failure.
 2. **The tree backs up rarely.** Section 1's recount: 13 nodes refuted once corrections
-   are applied and 7 backtracks, against 524 confirmed. That is the tree used to back
-   up on 18 of 120 tasks. A node refuted by its own evidence is rare (3 nodes), while the
+   are applied and 8 backtracks, against 535 confirmed. That is the tree used to back
+   up on 19 of 123 tasks. A node refuted by its own evidence is rare (3 nodes), while the
    author's rulings and the critic's backtracks catch more, which is consistent with
    sessions not looking hard for evidence against their own work but does not show it. The earlier count of `Status: refuted` strings in
    transcripts is dropped: it counted every re-read of a task file and the skill's own
@@ -120,7 +120,7 @@ the run with the code that scored the original (`history.session()`, `tasks_of()
   replay's transcripts live in a directory named `…-dfs-replay-…`, which `history.py`
   leaves out of the history it mines.
 
-### Proved on W55
+### Replayed on W55
 
 W55 ("Codex limits reached until reset time, time not parsed properly") is small: 5
 sessions and $1.30 originally, with a first review that found issues. It was replayed
@@ -162,6 +162,10 @@ What the proof does not show, and what a comparison has to allow for:
   was killed by hand (the three above did not, but a session in `a` spent 28 minutes in
   tool calls). Tasks whose evidence is outside the repo make poor replay candidates,
   and a replay should be given a timeout on a single Bash call.
+- **The starting point keeps only the title, Goal and Background.** Any nodes the author
+  wrote into the task before work began are dropped, so a task that began with
+  author-written nodes is not replayed from its real start; none of the candidate tasks
+  is known to have had any, which is unchecked.
 - **The tool is the current one**, not the original's, so the control arm is the current
   tool; the original column is the history, not a control.
 
@@ -190,9 +194,9 @@ it). Each names the file it changes and the replay that tests it.
 
 | # | Change | Evidence | Where | Test replay |
 |---|---|---|---|---|
-| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 101 of 207 review finding lines are defects; 40.9% of spend follows an issues review; 13 refuted nodes and 7 backtracks against 524 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
+| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 101 of 207 review finding lines are defects; 40.9% of spend follows an issues review; 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 28 of 207 review finding lines are unmarked assumptions (some repeat across rounds). | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `audit.py findings`, rows of class `assumption` in `docs/dfs-review-findings.tsv`) |
-| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (21 tasks; 26 have two or more issues reviews), 4 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 16 name code the fixes changed (either could hold), 16 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 4 to 20 present ones; the four are in W75 (2), W88 and W91 |
+| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (22 tasks; 26 have two or more issues reviews), 3 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 20 name code the fixes changed (either could hold), 13 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 3 to 23 present ones; the three are in W75, W88 and W91 |
 | 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,043 sessions hit a refusal, 304 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
 | 5 | **Cap a review loop.** After three issues rounds the task raises for the author instead of continuing. | 30 of 276 reviewed tasks (11%) had three or more issues rounds and hold 34.3% of all dfs dollars (`history.py`); the cap saves only what is spent after the third round, less than that. Does not improve quality, it limits the loss, and hands the author the tail. | `state.py` | none: read from history by counting what the cap would have saved |
 
@@ -267,11 +271,23 @@ changed, task by task, in one sitting, and not run as two batches on different d
 
 Candidate 3 was answered from the task logs, with no replay (row 3 above): the present
 evidence does not support it, so no replay budget goes to it first. Limits of that
-check: it places a finding by the names it points at (backticks, snake_case, `name()`)
-against the code before and the commits after the earlier review, so 16 of 43 lines
-cannot be placed, a fix that touches code near a name makes the line `maybe-introduced`,
-and it reads roadmap-dfs only (the other projects' repos are not on this box). Then
-run the control (the current tool) twice on the four chosen tasks, to see whether two
+check: it places a finding by the names it points at (backticks, snake_case, `name()`,
+file names such as `branch.py`) against the code before and the commits after the earlier
+review; a fix that touches code near a name, or the file a file name points at, makes the
+line `maybe-introduced`; 13 of 43 lines cannot be placed; and it reads roadmap-dfs only
+(the other projects' repos are not on this box). What a misplacement could do to the
+result: "most later findings were there at round one" needs at least 22 of 43 lines
+present, and the 3 present and 13 unplaced lines together are 16, so no misreading of
+the unplaced lines reaches it; the 20 `maybe-introduced` lines could, and are why the
+result is "not shown" and not "shown false".
+
+The tasks to replay are not yet chosen. `python3 <scripts>/replay.py candidates` lists
+what step 2's rule picks from the history (original at most $3, first review said
+issues, a node commit to start before): W22, W11, W10, W5, W76, W3, W36 and W40, with
+W55 (the task of section 3) dropped because its evidence was outside the repo. The
+rule's last clause, evidence inside the repo, is not decidable from the history; reading
+each task file for it, and taking four, is the first step. Then
+run the control (the current tool) twice on those four tasks, to see whether two
 control arms differ by four or more of twelve; then candidate 1 on the same four tasks,
 the first real run of the loop. It needs `claude` (from nixpkgs) and a DEST that can run
 scripts (inside the repo's ignored `.dfs/runs` works on the box used here).

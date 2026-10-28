@@ -100,9 +100,12 @@ class RoundsTest(unittest.TestCase):
         run("config", "user.email", "t@t")
         pad = "".join("# filler %d\n" % i for i in range(30))     # keeps keep_me out of the change's context
         Path(self.dir, "a.py").write_text("def keep_me():\n    pass\n" + pad + "def touched_one():\n    pass\n")
-        run("add", "a.py")
+        Path(self.dir, "other.py").write_text("x = 1\n")      # never mentioned inside any file
+        run("add", "a.py", "other.py")
         run("commit", "-qm", "W9.1: base")
         Path(self.dir, "a.py").write_text("def keep_me():\n    pass\n" + pad + "def touched_one():\n    return 1\n\ndef brand_new():\n    pass\n")
+        Path(self.dir, "fresh.py").write_text("y = 2\n")
+        run("add", "fresh.py")
         run("commit", "-qam", "W9.2: the fix")
         self.window = [audit.git(self.dir, "rev-parse", "HEAD").stdout.strip()]
 
@@ -119,6 +122,12 @@ class RoundsTest(unittest.TestCase):
     def test_a_line_naming_no_code_or_a_task_with_no_window_is_unplaced(self):
         self.assertEqual(self.kind("W9.3 added: the page stays blank"), "unplaced")
         self.assertEqual(audit.classify(self.dir, "W9.3 added: `keep_me` drops it", []), "unplaced")
+
+    def test_a_bare_file_name_is_a_name_and_is_placed_by_the_files_the_fix_touched(self):
+        self.assertEqual(audit.named_code("W9.3 added: other.py and fresh.py are wrong"), {"other.py", "fresh.py"})
+        self.assertEqual(self.kind("W9.3 added: other.py ignores the raise"), "present")        # in the tree, untouched
+        self.assertEqual(self.kind("W9.3 added: a.py loses the raise"), "maybe-introduced")      # the fix touched it
+        self.assertEqual(self.kind("W9.3 added: fresh.py loses the raise"), "introduced")        # not there before
 
     def test_names_come_from_backticks_snake_case_and_calls_only(self):
         self.assertEqual(audit.named_code("W9.3 added: `a.py` and some_name and call() but not Prose or `two words`"),
