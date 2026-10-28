@@ -102,9 +102,12 @@ class OpencodeCrossing(unittest.TestCase):
         return [(t, i[-6:], d[:90]) for t, i, d in rows]
 
     def state(self):
-        """The page's state, read at most once a second. Every read opens opencode's store, and a real opencode whose
-        private server is starting while one is made crashes in Bun (Bus error) now and then: on a loaded machine
-        1 to 7 of 8 turns polled every 0.1s, none of 28 left alone. The web page reads it every 4s."""
+        """The page's state, read at most once a second, as the web page reads it (every 4s). Every read opens
+        opencode's store, and a real opencode's private server crashes in Bun (Bus error) now and then; 5 of 8 turns
+        polled every 0.1s crashed once, and none of 28 left alone. That was not reproduced: 120 turns each with the
+        store read every 0.1s, every 4s and not at all, at host load 1 to 22, did not crash once in any arm (direct
+        `opencode run` and `run.sh --chat-turn`), so the polling is not shown to cause the crash. What survives a
+        crash is the retry in run.sh's opencode_turn and `start_until`'s restart."""
         if time.time() - self._read[0] >= 1.0:
             self._read = (time.time(), self.chats.state("project"))
         return self._read[1]

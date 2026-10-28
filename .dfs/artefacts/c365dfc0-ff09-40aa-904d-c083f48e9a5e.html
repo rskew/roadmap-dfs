@@ -38,6 +38,7 @@
   <div class="link">while</div>
   <div class="box"><b>opencode's private server (Bun)</b><span>sometimes dies with a Bus error</span></div>
   <div class="box bad"><b>Measured</b><span>reads every 0.1s: 5 of 8 turns crashed. No reads: 0 of 28. Reads every 1s: 0 of 8. Fixes landed together, so the full runs (7 of 7) do not separate them.</span></div>
+  <div class="box bad"><b>Rerun, same question</b><span>120 turns per arm (reads every 0.1s, every 4s, none), host load 1 to 22: no crash in any arm, the 0.1s one included. The earlier 5 of 8 was not reproduced, so polling is not shown to cause the crash.</span></div>
   <div class="box"><b>What covers a crash now</b><span>a headless turn is run again, up to five runs; the tests restart a lost screen. A real screen whose server dies still hangs.</span></div>
 </div>
 
