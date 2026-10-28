@@ -677,6 +677,12 @@ def append_log(task, kind, args=(), body=""):
                          "a control and a handler that POSTs {answer: <text>} to "
                          "/artefact-state/<its file name> (templates/_TEMPLATE_ANSWER.html's "
                          "answer form does)" % page)
+    if kind == "review" and args[:1] == ["issues"]:
+        seen = load(task)
+        if incomplete(seen) is None and not open_raises(seen):
+            raise ValueError("a review's `issues` is for a finding put in the tree as an open node or "
+                             "raised, and %s has neither: log `ok` once, with the minor findings in its "
+                             "body, or add the node first" % task)
     carry_attachments(task, body)
     p = ensure_part(task)
     t = parse(p.read_text(), task)

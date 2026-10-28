@@ -384,6 +384,24 @@ class AppendLog(InARepo):
         self.assertEqual(a, "2099-01-01T00:00:01Z")
         self.assertEqual(b, "2099-01-01T00:00:02Z")
 
+    def test_a_review_issues_with_no_node_and_no_raise_behind_it_is_refused(self):
+        # W116, 2026-10-28: the reviewer logged `ok` and then `issues` ("none: no node added").
+        self.write(task(node(1, "confirmed")))
+        dfs_tree.append_log("W1", "review", ["ok"], "a comment reads oddly")
+        with self.assertRaises(ValueError) as cm:
+            dfs_tree.append_log("W1", "review", ["issues"], "none: no node added, no raise")
+        self.assertIn("log `ok` once", str(cm.exception))
+        self.assertEqual([e["args"] for e in dfs_tree.load("W1")["log"] if e["kind"] == "review"], [["ok"]])
+
+    def test_a_review_issues_with_an_open_node_or_a_raise_behind_it_is_logged(self):
+        self.write(task(node(1, "confirmed") + node(2, parent=1)))
+        dfs_tree.append_log("W1", "review", ["issues"], "W1.2: a bug")
+        self.write(task(node(1, "confirmed")))
+        dfs_tree.append_log("W1", "raise", ["W1.1"], "which way?")
+        dfs_tree.append_log("W1", "review", ["issues"], "a finding")
+        self.assertEqual([e["args"] for e in dfs_tree.load("W1")["log"] if e["kind"] == "review"],
+                         [["issues"]])
+
     def test_an_unknown_kind_is_refused(self):
         self.write(task())
         with self.assertRaises(ValueError):
