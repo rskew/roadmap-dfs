@@ -15,7 +15,9 @@ chain (run.sh) work the task, and measures the result with history.py's `session
   python3 <scripts>/replay.py replay  TASK DEST [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
 
 The replay runs under the agent the screen is set to (`.dfs/runs/agent`: claude, codex, kiro or
-opencode), or the one `--agent` names; `prepare` records it. Only claude's transcripts are scored so far.
+opencode), or the one `--agent` names; `prepare` records it. `score` reads claude's transcripts and
+kiro's run logs (`.dfs/runs/dfs_run_*/run-N.json`, with credits where claude has dollars); codex and
+opencode replays can be run but not yet scored.
 
 The system that changes is the TOOL (`--tool DIR`: a roadmap-dfs checkout or store path,
 or `--tool-ref REV`: a revision of the repo being replayed, when that repo is roadmap-dfs
@@ -267,7 +269,7 @@ AGENT_BIN = {"claude": ("claude-code", "claude", "CLAUDE_CMD", "REPLAY_CLAUDE_CO
              "codex": ("codex", "codex", "CODEX_CMD", "REPLAY_CODEX"),
              "kiro": ("kiro-cli-unwrapped", "kiro-cli", "KIRO_CMD", "REPLAY_KIRO_CLI"),
              "opencode": ("opencode", "opencode", "OPENCODE_CMD", "REPLAY_OPENCODE")}
-SCORABLE = ("claude",)   # the agents whose transcripts `score` reads (history.py parses claude's)
+SCORABLE = ("claude", "kiro")   # the agents whose transcripts `score` reads (history.py parses claude's and kiro's)
 
 
 def configured_agent(repo=None, override=None):
@@ -489,7 +491,7 @@ def stopped_on(dest):
     return found[-1] if found else "other"
 
 
-REACH_FIELDS = ("command", "file_path", "path", "pattern", "notebook_path")
+REACH_FIELDS = ("command", "file_path", "path", "pattern", "notebook_path", "includePattern")
 
 
 def live_paths(repo):
@@ -517,24 +519,66 @@ def result_text(block):
 
 
 def answered_nothing(block):
+    """Whether a claude tool result came back with nothing (`nothing_text` of its text)."""
+    return nothing_text(result_text(block))
+
+
+def nothing_text(text):
     """Whether a tool result came back with nothing: no output, or only lines saying the path
     is not there. What the sandbox returns for a path it hides; a result with any other line is
     output, which a reader opens (a command can name a live path and print only what its
     in-sandbox part found). An error result is read by its text like any other: a command that
     reads a live file and then fails (`cat live/file; which codex`, exit 127) exits non-zero and
-    still printed the file, so `is_error` alone does not make it nothing. The `Exit code N` line
-    and the `<tool_use_error>` wrapper are not output."""
-    text = re.sub(r"</?tool_use_error>", "", result_text(block)).strip()
+    still printed the file, so a failure alone does not make it nothing. The `Exit code N` line,
+    kiro's `Output:` header and the `<tool_use_error>` wrapper are not output."""
+    text = re.sub(r"</?tool_use_error>", "", text or "").strip()
     if text in ("", "(Bash completed with no output)"):
         return True
-    lines = [l for l in text.splitlines() if l.strip() and not l.startswith("Exit code")]
+    lines = [l for l in text.splitlines()
+             if l.strip() and not re.match(r"Exit code\b|Output:\s*$", l, re.I)]
     return all("No such file or directory" in l or "cannot access" in l or "does not exist" in l
                or "File not found" in l or "No files found" in l for l in lines)
 
 
-def reached(dest, repo, files, tool=None):
-    """The tool calls in `files` (transcripts) that name a live path outside `dest` (or look in the
-    nix store for flake sources: `STORE_LOOK`), as
+def claude_calls(f):
+    """[(call id, tool, input, result block)] of a claude transcript, results joined by call id."""
+    calls, results = [], {}
+    with open(f, errors="replace") as fh:
+        for line in fh:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            msg = r.get("message") or {}
+            if not isinstance(msg.get("content"), list):
+                continue
+            for b in msg["content"]:
+                if not isinstance(b, dict):
+                    continue
+                if r.get("type") == "user" and b.get("type") == "tool_result":
+                    results[b.get("tool_use_id")] = b
+                elif r.get("type") == "assistant" and b.get("type") == "tool_use":
+                    calls.append((b.get("id"), b.get("name"), b.get("input") or {}))
+    return [(tid, name, inp, results.get(tid)) for tid, name, inp in calls]
+
+
+def kiro_calls(f):
+    """The same for a kiro run log (`history.acp_calls`): the result is the text the call printed."""
+    return [(c["id"], c["title"] or c["kind"], c["input"], c["text"]) for c in history.acp_calls(f) if not c["system"]]
+
+
+def calls_of(f, agent="claude"):
+    """[(session id, tool, input, answered nothing or None when the call has no result)] of a transcript."""
+    if agent == "kiro":
+        sid = os.path.basename(os.path.dirname(f)) + "/" + os.path.basename(f)[:-5]
+        return [(sid, name, inp, None if res is None else nothing_text(res)) for _, name, inp, res in kiro_calls(f)]
+    sid = os.path.basename(f)[:-6]
+    return [(sid, name, inp, None if res is None else answered_nothing(res)) for _, name, inp, res in claude_calls(f)]
+
+
+def reached(dest, repo, files, tool=None, agent="claude"):
+    """The tool calls in `files` (transcripts; a kiro replay's run logs) that name a live path
+    outside `dest` (or look in the nix store for flake sources: `STORE_LOOK`), as
     (session id, tool, text, answered nothing). DEST, its exported tool and what the tool the
     replay runs under is for (its SKILL.md, scripts, templates and docs) are cut out first,
     so a replay kept inside the live checkout, or run under it, does not count reading its own
@@ -551,28 +595,10 @@ def reached(dest, repo, files, tool=None):
     live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + "|" + STORE_LOOK + r")(?![\w-])")
     found = []
     for f in files:
-        sid = os.path.basename(f)[:-6]
-        calls, results = [], {}
-        with open(f, errors="replace") as fh:
-            for line in fh:
-                try:
-                    r = json.loads(line)
-                except ValueError:
-                    continue
-                msg = r.get("message") or {}
-                if not isinstance(msg.get("content"), list):
-                    continue
-                for b in msg["content"]:
-                    if not isinstance(b, dict):
-                        continue
-                    if r.get("type") == "user" and b.get("type") == "tool_result":
-                        results[b.get("tool_use_id")] = answered_nothing(b)
-                    elif r.get("type") == "assistant" and b.get("type") == "tool_use":
-                        inp = b.get("input") or {}
-                        text = " ".join(str(inp[k]) for k in REACH_FIELDS if inp.get(k))
-                        if live.search(own.sub("", text)):
-                            calls.append((b.get("id"), b.get("name"), text))
-        found += [(sid, name, text, results.get(tid, False)) for tid, name, text in calls]
+        for sid, name, inp, nothing in calls_of(f, agent):
+            text = " ".join(str(inp[k]) for k in REACH_FIELDS if inp.get(k))
+            if live.search(own.sub("", text)):
+                found.append((sid, name, text, bool(nothing)))
     return found
 
 
@@ -590,7 +616,7 @@ def original_lines(repo, task):
     return lines
 
 
-def answer_seen(dest, repo, task, files):
+def answer_seen(dest, repo, task, files, agent="claude"):
     """The original's conclusions (`original_lines`) that appear in a tool result of a
     replay's sessions and are not in the replay's own record (its committed task file and
     commit messages), as {line: [session ids]}: a replay that read them was shown the answer,
@@ -601,6 +627,14 @@ def answer_seen(dest, repo, task, files):
     own += git(dest, "log", "--all", "--format=%B", check=False)
     wanted = {l for l in original_lines(repo, task) if l not in own}
     seen = {}
+    if agent == "kiro":   # a result is the text a call printed
+        for f in files:
+            sid = os.path.basename(os.path.dirname(f)) + "/" + os.path.basename(f)[:-5]
+            for c in history.acp_calls(f):
+                for w in wanted:
+                    if w in c["text"] and sid not in seen.setdefault(w, []):
+                        seen[w].append(sid)
+        return seen
     for f in files:
         sid = os.path.basename(f)[:-6]
         with open(f, errors="replace") as fh:
@@ -627,27 +661,49 @@ def score(dest, task, repo=None):
     if info.get("task") != task:
         raise SystemExit(f"replay: {dest} replays {info.get('task')}, not {task}; "
                          "usage: replay.py score DEST TASK")
-    if info.get("agent", "claude") not in SCORABLE:
-        raise SystemExit(f"replay: {dest} ran under {info['agent']}, whose transcripts score cannot read yet "
+    agent = info.get("agent", "claude")
+    if agent not in SCORABLE:
+        raise SystemExit(f"replay: {dest} ran under {agent}, whose transcripts score cannot read yet "
                          f"(it reads {', '.join(SCORABLE)}); the replay's work is in {dest} and its run logs "
                          f"in {dest}/.dfs/runs")
-    enc = re.sub(r"[/.]", "-", str(dest))
-    repos = {enc: str(dest)}
-    cfg = replay_config(dest)
-    sessions, tasks, _, _ = history.load(transcripts(dest, cfg), repos, replays=True)
+    if agent == "kiro":
+        # no transcript but the chain's own run logs, in the replay's .dfs/runs
+        files = history._glob(os.path.join(glob.escape(str(dest)), ".dfs", "runs", "dfs_run_*", "run-*.json"))
+        sessions, tasks = history.load_streams(files, kinds=history.session_kinds(*task_logs(dest, task)))
+        where = f"{dest}/.dfs/runs"
+    else:
+        enc = re.sub(r"[/.]", "-", str(dest))
+        repos = {enc: str(dest)}
+        cfg = replay_config(dest)
+        sessions, tasks, _, _ = history.load(transcripts(dest, cfg), repos, replays=True)
+        files = history._glob(transcripts(dest, cfg))
+        where = ", ".join(transcripts(dest, cfg))
     t = next((t for (p, n), t in tasks.items() if n == task), None)
     if t is None:
         raise SystemExit(f"replay: no session of {task} in the transcripts of {dest} "
-                         f"({len(sessions)} sessions found under {', '.join(transcripts(dest, cfg))})")
+                         f"({len(sessions)} sessions found under {where})")
     t["stopped"] = stopped_on(dest)
     t["finished"] = merged(dest, task)
     repo = repo or main_checkout()
-    files = history._glob(transcripts(dest, cfg))
-    t["reach"] = reached(dest, repo, files, info.get("tool"))
+    t["reach"] = reached(dest, repo, files, info.get("tool"), agent)
     t["outside"] = sum(1 for *_, nothing in t["reach"] if not nothing)   # answered with output
     t["blocked"] = len(t["reach"]) - t["outside"]
-    t["answer"] = answer_seen(dest, repo, task, files)
+    t["answer"] = answer_seen(dest, repo, task, files, agent)
     return t
+
+
+def task_logs(dest, task):
+    """The texts of a replay's task file that hold the runner's log: the clone's, its worktree's
+    and what `main` and the item's branch committed (a replay's run directories have no console.log,
+    and the log is what says which session was a work, a review or a critic)."""
+    dest, rel = Path(dest), f".dfs/items/{task}.md"
+    texts = []
+    for f in [dest / rel, *dest.glob(f".dfs/worktrees/*/{rel}")]:
+        try:
+            texts.append(f.read_text(errors="replace"))
+        except OSError:
+            pass
+    return texts + [git(dest, "show", f"{ref}:{rel}", check=False) for ref in ("main", f"dfs/{task}")]
 
 
 def merged(dest, task):
@@ -659,14 +715,17 @@ def merged(dest, task):
 ROWS = [
     ("sessions", lambda t: sum(t["sessions"].values())),
     ("  work / review / critic", lambda t: "/".join(str(t["sessions"].get(k, 0)) for k in ("work", "review", "critic"))),
-    ("dollars", lambda t: f"{t['usd']:.2f}"),
+    # a credit is not a dollar: a kiro replay's cost is its own row, and the dollar rows say so
+    ("dollars", lambda t: f"{t['usd']:.2f}" if t.get("unit", "usd") == "usd" else "n/a"),
+    ("credits (kiro)", lambda t: (f"{t['credits']:.1f}" + (f"+{t['unpriced']}?" if t["unpriced"] else "")) if t.get("unit") == "credits" else "-"),
     ("nodes committed", lambda t: t["nodes"]),
     ("first review", lambda t: t["first_review"] or "none"),
     ("reviews with issues / rounds", lambda t: f"{t['review_issues']} / {t['review_ok'] + t['review_issues']}"),
     ("critic issues", lambda t: t["critic_issues"]),
     ("raises", lambda t: t["raises"]),
     ("refused commits", lambda t: t["refused"]),
-    ("spent after a review said issues", lambda t: f"{t['after_issues']:.2f}"),
+    ("spent after a review said issues", lambda t: f"{t['after_issues']:.2f}" if t.get("unit", "usd") == "usd" else "n/a"),
+    ("  credits after a review said issues", lambda t: f"{t['after_credits']:.1f}" if t.get("unit") == "credits" else "-"),
     ("calls naming a live path, answered nothing", lambda t: t.get("blocked", "-")),
     ("calls naming a live path, answered output", lambda t: t.get("outside", "-")),
     ("original's nodes shown in a result", lambda t: len(t["answer"]) if "answer" in t else "-"),

@@ -23,6 +23,7 @@ directory named `...-dfs-replay-...`, which the default pattern leaves out: a re
 experiment on a task, not another task.
 """
 import collections
+import datetime
 import glob
 import json
 import os
@@ -169,6 +170,146 @@ def session(path):
     return rec
 
 
+# ── kiro ─────────────────────────────────────────────────────────────────────────
+#
+# kiro-cli keeps no transcript file per session. What a chain has is its own capture of the run:
+# `<runs>/dfs_run_X/run-N.json`, ACP events as JSON Lines (with the CLI's own `[INFO]` lines
+# between them, which are skipped), one file per session. It carries no prompt, no timestamps and
+# no tokens: the kind of session is in the run directory's console.log header (`── run 2/20 ·
+# work (...)`), the task in meta.json, the cost in credits (`promptTurnSummaries`, one summary
+# when the turn completed, none for a session cut off), the context in percent of the window.
+
+KIRO_RUN = re.compile(r"run-(\d+)\.json$")
+RUN_HEADER = re.compile(r"^── run (\d+)/\d+ · (\w+)", re.M)
+
+
+def acp_updates(path):
+    """The session updates of a kiro run log, in order, each as its dict."""
+    with open(path, errors="replace") as fh:
+        for line in fh:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict) and r.get("type") == "sessionUpdate":
+                u = (r.get("data") or {}).get("update")
+                if isinstance(u, dict):
+                    yield u
+
+
+def acp_calls(path):
+    """The tool calls of a kiro run log as [{id, kind, title, input, output, text, failed}], in
+    order of first appearance: a call's `tool_call` and `tool_call_update`s share a toolCallId and
+    each carries only the fields that changed, so they are merged, later values winning."""
+    merged = {}
+    for u in acp_updates(path):
+        if u.get("sessionUpdate") not in ("tool_call", "tool_call_update"):
+            continue
+        m = merged.setdefault(u.get("toolCallId"), {})
+        for k, v in u.items():
+            if v not in (None, "", [], {}):
+                m[k] = v
+    out = []
+    for tid, m in merged.items():
+        raw_out = m.get("rawOutput") if isinstance(m.get("rawOutput"), dict) else {}
+        text = "\n".join(c["content"]["text"] for c in m.get("content") or []
+                         if isinstance(c, dict) and isinstance(c.get("content"), dict)
+                         and isinstance(c["content"].get("text"), str))
+        if not text and isinstance(raw_out.get("output"), str):
+            text = raw_out["output"]
+        out.append({"id": tid, "kind": m.get("kind"), "title": m.get("title"),
+                    "input": m.get("rawInput") if isinstance(m.get("rawInput"), dict) else {},
+                    "text": text, "status": m.get("status"),
+                    "failed": m.get("status") == "failed" or bool(raw_out.get("exitCode")),
+                    "system": not m.get("kind")})   # the CLI's own calls (fetching the cloud config)
+    return out
+
+
+SESSION_LINE = re.compile(r"^- \d{4}-[\dT:-]+Z · session · (\w+) · (dfs_run_[\w-]+/run-\d+)\s*$", re.M)
+
+
+def session_kinds(*texts):
+    """{"dfs_run_X/run-N": kind} from task files' logs, where the runner wrote a line for each
+    session it started (`session · work · dfs_run_X/run-N`)."""
+    return {m.group(2): m.group(1) for t in texts for m in SESSION_LINE.finditer(t)}
+
+
+def run_kind(path, kinds=None):
+    """(kind, task) of the session a kiro run log holds. The kind is in the task file's log line for
+    the session (`kinds`, from `session_kinds`) or the run directory's console.log header for run N;
+    a replay's run directory has no console.log, so its caller passes the log. The task is in
+    meta.json."""
+    d = os.path.dirname(path)
+    n = KIRO_RUN.search(path)
+    kind, task = (kinds or {}).get(os.path.basename(d) + "/run-" + (n.group(1) if n else ""), "other"), ""
+    if kind == "other":
+        try:
+            with open(os.path.join(d, "console.log"), errors="replace") as fh:
+                kind = dict(RUN_HEADER.findall(fh.read())).get(n.group(1) if n else "", "other")
+        except OSError:
+            pass
+    try:
+        with open(os.path.join(d, "meta.json")) as fh:
+            task = str(json.load(fh).get("item") or "")
+    except (OSError, ValueError):
+        pass
+    return (kind if kind in ("work", "review", "critic", "chat") else "other"), task
+
+
+def stream_session(path, kinds=None):
+    """A kiro run log's session record: `session()`'s fields, from the ACP events. The cost is in
+    credits (`credits`, `unit`), not dollars, so `usd` is 0 and `tasks_of` keeps the two apart;
+    `peak` is the context window's highest percentage (kiro reports no tokens)."""
+    kind, task = run_kind(path, kinds)
+    when = datetime.datetime.fromtimestamp(os.path.getmtime(path), datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    rec = {"sid": os.path.basename(os.path.dirname(path)) + "/" + os.path.basename(path)[:-5],
+           "project": "kiro", "kind": kind, "task": task, "start": when, "end": when, "model": None,
+           "responses": 0, "peak": 0, "input": 0, "read": 0, "write": 0, "output": 0,
+           "tools": collections.Counter(), "reads": 0, "rereads": 0, "errors": 0,
+           "commits": [], "refused": 0, "started": [], "verdicts": [],
+           "reasons": collections.Counter(), "unit": "credits", "credits": None, "usd": 0.0, "units": 0.0}
+    summaries = set()
+    for u in acp_updates(path):
+        k = (u.get("_meta") or {}).get("kiro") or {}
+        for s in k.get("promptTurnSummaries") or []:
+            if isinstance(s, dict) and isinstance(s.get("usage"), (int, float)):
+                summaries.add((s["usage"], tuple(k.get("requestIds") or ())))
+                rec["responses"] = max(rec["responses"], len(k.get("requestIds") or ()))
+        cu = k.get("contextUsage")
+        if isinstance(cu, dict):
+            rec["peak"] = max(rec["peak"], cu.get("usagePercentage") or 0)
+    if summaries:
+        rec["credits"] = sum(u for u, _ in summaries)
+    read_paths = set()
+    for c in acp_calls(path):
+        if c["system"]:
+            continue
+        rec["tools"][c["title"] or c["kind"]] += 1
+        rec["errors"] += c["failed"]
+        inp, text = c["input"], c["text"]
+        if c["kind"] == "read" and inp.get("path"):
+            rec["reads"] += 1
+            key = (inp["path"], inp.get("offset"), inp.get("limit"))
+            rec["rereads"] += key in read_paths
+            read_paths.add(key)
+        cmd = inp.get("command", "") if c["kind"] == "execute" else ""
+        for m in VERDICT.finditer(cmd):
+            rec["verdicts"].append((m.group(2), m.group(3) or ""))
+        for m in STARTED.finditer(cmd):
+            rec["started"].append(m.group(2))
+        m = SUBJECT.search(cmd)
+        if m and "--dry-run" not in cmd:
+            subj = (m.group(2) or m.group(3) or "").strip().splitlines()[0]
+            refused = REFUSED in text
+            rec["refused"] += refused
+            if refused:
+                rec["reasons"].update(set(refusal_reasons(text)))
+            rec["commits"].append({"subject": subj[:160], "ok": not (c["failed"] or refused) and
+                                   (bool(MADE.search(text)) or not FAILED.search(text))})
+    rec["tools"] = dict(rec["tools"])
+    return rec
+
+
 def runner_costs(repo):
     """{session id: total_cost_usd} from a repo's runner directories."""
     out = {}
@@ -219,12 +360,19 @@ def tasks_of(sessions, logs):
             continue
         t = out.setdefault((s["project"], s["task"]), {
             "project": s["project"], "task": s["task"], "sessions": collections.Counter(),
-            "usd": 0.0, "units": 0.0, "nodes": 0, "refused": 0, "rereads": 0,
+            "usd": 0.0, "units": 0.0, "credits": 0.0, "unit": "usd", "unpriced": 0, "nodes": 0, "refused": 0, "rereads": 0,
             "first_review": None, "review_ok": 0, "review_issues": 0, "critic_issues": 0, "raises": 0,
-            "after_issues": 0.0, "start": s["start"], "end": s["end"]})
+            "after_issues": 0.0, "after_credits": 0.0, "start": s["start"], "end": s["end"]})
         # Spent once a review has already found the work wanting: the price of the
         # first finished tree not being finished.
         t["after_issues"] += (s["usd"] or 0) if t["review_issues"] else 0
+        # A kiro session costs credits, not dollars: kept apart, never added into `usd`. A session
+        # cut off before its turn finished reports none (`unpriced`).
+        if s.get("unit") == "credits":
+            t["unit"] = "credits"
+            t["credits"] += s["credits"] or 0
+            t["unpriced"] += s["credits"] is None
+            t["after_credits"] += (s["credits"] or 0) if t["review_issues"] else 0
         t["sessions"][s["kind"]] += 1
         t["usd"] += s["usd"] or 0
         t["units"] += s["units"]
@@ -365,6 +513,15 @@ def load(pattern, repos, replays=False):
     rate, n_priced = price(sessions, costs)
     logs = {p: author_log(r) for p, r in repos.items()}
     return sessions, tasks_of(sessions, logs), rate, n_priced
+
+
+def load_streams(files, repos=None, kinds=None):
+    """(sessions, tasks) for kiro run logs (`run-N.json` files), as `load` makes them for claude's
+    transcripts. `repos` ({project: path}) supplies the author log as in `load`; `kinds` is
+    `session_kinds` of the task files that name each session's kind."""
+    sessions = [stream_session(f, kinds) for f in _glob(files)]
+    logs = {p: author_log(r) for p, r in (repos or {}).items()}
+    return sessions, tasks_of(sessions, logs)
 
 
 def main(argv):

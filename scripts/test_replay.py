@@ -509,14 +509,14 @@ class AgentTest(unittest.TestCase):
     def test_a_replay_under_an_agent_score_cannot_read_is_refused_before_it_spends(self):
         dest = self.t / "dfs-replay-W5-s"
         (dest / ".git").mkdir(parents=True)
-        (dest / ".git" / "replay.json").write_text(json.dumps({"task": "W5", "agent": "kiro"}))
+        (dest / ".git" / "replay.json").write_text(json.dumps({"task": "W5", "agent": "codex"}))
         with self.assertRaises(SystemExit) as e:
             replay.score(dest, "W5")
-        self.assertIn("ran under kiro", str(e.exception))
-        (self.repo / ".dfs" / "runs" / "agent").write_text("kiro")
+        self.assertIn("ran under codex", str(e.exception))
+        (self.repo / ".dfs" / "runs" / "agent").write_text("codex")
         with mock.patch.object(replay, "prepare") as pr, self.assertRaises(SystemExit) as e:
             replay.main(["replay", "W5", str(self.t / "dfs-replay-W5-n"), "--repo", str(self.repo)])
-        self.assertIn("the agent is kiro", str(e.exception))
+        self.assertIn("the agent is codex", str(e.exception))
         pr.assert_not_called()
 
 
@@ -749,6 +749,169 @@ class ReachOutsideDestTest(unittest.TestCase):
         seen = replay.answer_seen(self.dest, self.live, "W5", files)
         self.assertEqual(list(seen), ["the parser now reads a quoted pipe before the verb."[:60]])   # not the one it wrote itself
         self.assertEqual(replay.answer_seen(self.dest, self.live, "W5", self.transcript([("Bash", {"command": "x"})], ["nothing"])), {})
+
+
+def acp(update):
+    """One line of a kiro run log: a session update."""
+    return json.dumps({"type": "sessionUpdate", "data": {"sessionId": "sess_1", "update": update}}) + "\n"
+
+
+def acp_call(tid, kind, title, inp, text="", exit_code=0, status="completed"):
+    """The lines kiro writes for one tool call: the call, then its update with the output."""
+    return (acp({"sessionUpdate": "tool_call", "toolCallId": tid, "title": title, "kind": kind}) +
+            acp({"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": status, "rawInput": inp,
+                 "content": [{"type": "content", "content": {"type": "text", "text": text}}],
+                 "rawOutput": {"exitCode": exit_code}} if kind == "execute" else
+                {"sessionUpdate": "tool_call_update", "toolCallId": tid, "status": status, "rawInput": inp,
+                 "content": [{"type": "content", "content": {"type": "text", "text": text}}]}))
+
+
+def acp_summary(credits, requests=3):
+    return acp({"sessionUpdate": "session_info_update", "_meta": {"kiro": {
+        "kind": "turn_completion", "requestIds": [f"r{i}" for i in range(requests)],
+        "promptTurnSummaries": [{"unit": "credit", "usage": credits, "usedTools": []}]}}})
+
+
+def acp_context(pct):
+    return acp({"sessionUpdate": "session_info_update", "_meta": {"kiro": {"contextUsage": {"usagePercentage": pct}}}})
+
+
+def kiro_run_dir(root, name="dfs_run_a", task="W5", runs=(), console=True):
+    """A chain's run directory as kiro leaves it: console.log headers, meta.json and a run-N.json
+    per session (`runs` is [(kind, text of the log)]). The CLI's own `[INFO]` lines sit between events."""
+    d = Path(root) / ".dfs" / "runs" / name
+    d.mkdir(parents=True)
+    (d / "meta.json").write_text(json.dumps({"item": task, "agent": "kiro"}))
+    if console:
+        (d / "console.log").write_text("".join(f"\n── run {i}/20 · {kind} (current node {task}.1 · x) ──\n   exit 0\n"
+                                              for i, (kind, _) in enumerate(runs, 1)))
+    for i, (_, text) in enumerate(runs, 1):
+        (d / f"run-{i}.json").write_text('{"type":"runStarted","data":{}}\n[INFO] kas.server.starting {}\n' + text +
+                                         '{"type":"runFinished","data":{"status":"success"}}\n')
+    return d
+
+
+class KiroStreamTest(unittest.TestCase):
+    """A kiro session's transcript is the chain's run log: it is read into the record claude's
+    transcripts make, with credits where claude has dollars."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        work = (acp_context(4.5) + acp_call("c0", "read", "Read File", {"path": "/x/a.py"}, "text") +
+                acp_call("c1", "read", "Read File", {"path": "/x/a.py"}, "text") +
+                acp_call("c2", "execute", "Run Command", {"command": 'git commit -m "W5.1: did it"'},
+                         "[main abc1234] W5.1: did it\n\nExit Code: 0") +
+                acp_call("c3", "execute", "Run Command", {"command": 'git commit -m "W5.2: refused"'},
+                         "dfs_check: the roadmap broke its own rules\n  - W5.2 carries a coordinate\n\nExit Code: 1",
+                         exit_code=1, status="failed") +
+                acp_call("c4", "execute", "Run Command", {"command": 'git commit -m "W5.3: nothing"'},
+                         "nothing to commit, working tree clean\n\nExit Code: 0") +
+                acp_call("c5", "execute", "Run Command", {"command": "tree.py start W5 W5.4"}, "ok\n\nExit Code: 0") +
+                acp({"sessionUpdate": "tool_call", "toolCallId": "sys", "title": "Fetching your cloud config"}) +
+                acp_context(9.25) + acp_summary(12.5) + acp_summary(12.5))   # the same turn reported twice
+        review = (acp_call("r0", "execute", "Run Command", {"command": "python3 tree.py log W5 review issues"}, "Exit Code: 0") +
+                  acp_context(3))   # cut off: no summary
+        self.d = kiro_run_dir(self.tmp.name, runs=[("work", work), ("review", review)])
+
+    def test_a_run_log_is_a_session_with_its_kind_task_credits_and_context(self):
+        w = history.stream_session(str(self.d / "run-1.json"))
+        self.assertEqual((w["kind"], w["task"], w["unit"]), ("work", "W5", "credits"))
+        self.assertEqual(w["credits"], 12.5)   # a turn reported twice is one turn
+        self.assertEqual((w["usd"], w["peak"], w["responses"]), (0.0, 9.25, 3))
+        self.assertEqual((w["reads"], w["rereads"]), (2, 1))
+        self.assertEqual(w["started"], ["W5.4"])
+        self.assertEqual(sum(w["tools"].values()), 6)   # the CLI's own call is not the session's
+        r = history.stream_session(str(self.d / "run-2.json"))
+        self.assertEqual((r["kind"], r["credits"], r["verdicts"]), ("review", None, [("review", "issues")]))
+
+    def test_a_commit_counts_only_when_it_was_made(self):
+        w = history.stream_session(str(self.d / "run-1.json"))
+        self.assertEqual([(c["subject"], c["ok"]) for c in w["commits"]],
+                         [("W5.1: did it", True), ("W5.2: refused", False), ("W5.3: nothing", False)])
+        self.assertEqual((w["refused"], w["errors"], dict(w["reasons"])), (1, 1, {"coordinate in a task file": 1}))
+
+    def test_a_task_sums_credits_apart_from_dollars_and_counts_the_session_with_none(self):
+        sessions, tasks = history.load_streams(str(self.d / "run-*.json"))
+        t = tasks[("kiro", "W5")]
+        self.assertEqual((t["unit"], t["credits"], t["usd"], t["unpriced"]), ("credits", 12.5, 0.0, 1))
+        self.assertEqual((t["nodes"], t["first_review"], t["sessions"]), (1, "issues", {"work": 1, "review": 1}))
+
+    def test_a_log_with_no_console_header_is_another_kind_not_a_guess(self):
+        (self.d / "console.log").write_text("")
+        self.assertEqual(history.stream_session(str(self.d / "run-1.json"))["kind"], "other")
+
+    def test_the_task_files_log_names_the_kind_where_there_is_no_console_log(self):
+        (self.d / "console.log").unlink()
+        kinds = history.session_kinds("- 2026-10-28T15:33:36Z \u00b7 session \u00b7 review \u00b7 dfs_run_a/run-1\n"
+                                      "- 2026-10-28T15:36:42Z \u00b7 end \u00b7 review \u00b7 ok\n")
+        self.assertEqual(kinds, {"dfs_run_a/run-1": "review"})
+        self.assertEqual(history.stream_session(str(self.d / "run-1.json"), kinds)["kind"], "review")
+        self.assertEqual(history.stream_session(str(self.d / "run-2.json"), kinds)["kind"], "other")
+
+
+class KiroScoreTest(unittest.TestCase):
+    """`replay.py score` on a replay run under kiro: the same table from the run logs."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        tmp = Path(self.tmp.name)
+        self.live = tmp / "live"
+        (self.live / ".dfs" / "items").mkdir(parents=True)
+        (self.live / ".dfs" / "items" / "W5.md").write_text(
+            "# W5\n\n## Tree\n\n### W5.1 \u00b7 Fix the parser\nDetermination: the parser now reads a quoted pipe before the verb.\n")
+        self.dest = tmp / "dfs-replay-W5-k"
+        (self.dest).mkdir()
+        git(self.dest, "init", "-q", "-b", "main")
+        (self.dest / ".git" / "replay.json").write_text(json.dumps({"task": "W5", "agent": "kiro", "tool": str(tmp / "tool")}))
+        # a replay's run directory has no console.log: the task file's log says what each session was
+        (self.dest / ".dfs" / "items").mkdir(parents=True)
+        (self.dest / ".dfs" / "items" / "W5.md").write_text(
+            "# W5\n\n## Log\n\n- 2026-10-28T15:33:36Z \u00b7 session \u00b7 work \u00b7 dfs_run_a/run-1\n")
+        git(self.dest, "add", "-f", ".dfs/items")
+        git(self.dest, "commit", "-q", "-m", "W5.1: own")
+        git(self.dest, "commit", "-q", "--allow-empty", "-m", "W5: merge dfs/W5")
+        live = str(self.live)
+        text = (acp_call("a", "execute", "Run Command", {"command": f"ls {live}/.dfs/runs"}, "Output:\n\nExit Code: 0") +
+                acp_call("b", "execute", "Run Command", {"command": f"cat {live}/.dfs/items/W5.md"},
+                         "Output:\nDetermination: the parser now reads a quoted pipe before the verb.\n\nExit Code: 0") +
+                acp_call("c", "execute", "Run Command", {"command": f"grep -r x {live}/.dfs; which codex"},
+                         "Output:\n" + live + "/.dfs/items/W5.md:1: x\n\nExit Code: 127", exit_code=127, status="failed") +
+                acp_call("d", "read", "Read File", {"path": f"{self.dest}/a.py"}, "inside") +
+                acp_call("e", "execute", "Run Command", {"command": 'git commit -m "W5.1: own"'}, "[main a1b2c3d] W5.1: own\n\nExit Code: 0") +
+                acp_summary(7.0))
+        kiro_run_dir(self.dest, runs=[("work", text)], console=False)
+
+    def score(self):
+        return replay.score(self.dest, "W5", self.live)
+
+    def test_the_table_is_read_from_the_run_logs_with_credits_where_the_original_has_dollars(self):
+        t = self.score()
+        self.assertEqual((t["unit"], t["credits"], t["nodes"], t["finished"]), ("credits", 7.0, 1, True))
+        self.assertEqual(t["sessions"], {"work": 1})   # the kind is from the task file's log, the run dir has no console.log
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            replay.compare("W5", dict(t, unit="usd", usd=1.3, after_issues=0.0), t)
+        rows = {l[:46].strip(): l[46:].split() for l in buf.getvalue().splitlines() if len(l) > 46}
+        self.assertEqual(rows["dollars"], ["1.30", "n/a"])   # a credit is not put in the dollar row
+        self.assertEqual(rows["credits (kiro)"], ["-", "7.0"])
+
+    def test_the_breach_rows_read_the_run_logs_calls(self):
+        t = self.score()
+        self.assertEqual((t["blocked"], t["outside"]), (1, 2))   # a: nothing; b and c (a failing command after a read): output
+        self.assertEqual(list(t["answer"]), ["the parser now reads a quoted pipe before the verb."[:60]])
+
+    def test_kiros_own_wrapper_lines_are_not_output(self):
+        self.assertTrue(replay.nothing_text("Output:\n\nExit Code: 0"))
+        self.assertTrue(replay.nothing_text("Output:\nls: cannot access '/x': No such file or directory\n\nExit Code: 2"))
+        self.assertFalse(replay.nothing_text("Output:\nworktrees\n\nExit Code: 127"))
+
+    def test_a_replay_with_no_run_log_fails_loudly(self):
+        shutil.rmtree(self.dest / ".dfs")
+        with self.assertRaises(SystemExit) as e:
+            self.score()
+        self.assertIn("no session of W5", str(e.exception))
 
 
 class HistoryKeepsReplaysApartTest(unittest.TestCase):

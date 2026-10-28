@@ -237,11 +237,22 @@ What the proof does not show, and what a comparison has to allow for:
   `settings/cli.json`, and the engine kiro unpacks into `~/.local/share/kiro-cli` (node,
   bun, the TUI and the agent server, about 160 MB, program and not data), plus the host's
   `/usr/lib`, `/usr/lib64` and `/lib64` bound in, since that `node` wants the host's dynamic
-  loader. A one-line `kiro-cli chat` answered inside the sandbox. Not done yet: `score`
-  reads claude transcripts only, and kiro's are the chain's `run-*.json` streams, which
-  carry credits and context percentages but no tokens or dollars, so `replay.py replay`
-  refuses a non-claude agent before it spends and `score` says why; the first-review
-  verdict, which the keep rule uses, is in the task file and needs neither. A kiro
+  loader. A one-line `kiro-cli chat` answered inside the sandbox. `score` and `replay` read a kiro
+  replay's run logs (`.dfs/runs/dfs_run_*/run-N.json`, ACP events, one file per session, with
+  the CLI's own `[INFO]` lines between them: `history.stream_session`, `acp_calls`). They carry
+  no prompt, timestamps or tokens, so a session's kind comes from the task file's log
+  (`session · work · dfs_run_X/run-N`; a replay's run directory has no `console.log`), its cost is
+  credits (`promptTurnSummaries`, one summary per finished turn, none for a session cut off,
+  counted as "unpriced"), and its size is the context window's highest percentage. The score
+  table prints credits on their own row and `n/a` in the dollar rows, never a credit in a dollar
+  column, and the original's dollars are not comparable to them; the first-review verdict, which
+  the keep rule uses, is the same. The breach rows read the same calls (a kiro call is `execute`,
+  `read`, `search` or `edit`, with its `rawInput` and the text it printed). Commits and nodes are
+  counted by the same pattern as claude's, which misses `git commit -am` and `-q -am` and can
+  match the word inside a script a call writes, so `main`'s `W<n>.<m>:` commits are the check
+  for nodes. codex and opencode replays can be run but not scored: codex's rollouts and
+  opencode's logs are other shapes, and no replay under either has been run here to read one
+  against. A kiro
   replay refreshing its copied token may sign the author out of the live one, as for claude.
   A task whose Goal sends its sessions to evidence outside the repo gets nothing from the
   box now and has to work from the repo, so it is a poorer replay of that task, not a leak.
@@ -265,6 +276,16 @@ stopped with no output read. That last call is the reason the store is no longer
 file is, and held because that grep timed out. Nothing of the live checkout in any result. So the
 sandbox held on this replay, which ran under the old binds, is one sample and counts as a
 first-review pass of one.
+
+`dfs-replay-W55-k1` (2026-10-28, the store's tool, kiro-cli 2.31.1 under the sandbox, DEST in
+the worktree's ignored `.dfs/runs/replays`): 2 sessions (1 work, 1 review) in about five
+minutes, 5.7 credits (4.56 and 1.13; the original's $1.30 is another unit), 1 node commit
+(W55.1, as `main` holds), first review `ok`, merged, chain stopped on DONE. `score` prints
+0 calls naming a live path and 0 of the original's nodes shown. I checked that by reading the
+sessions' calls: every path they named outside DEST was the tool in the store (`SKILL.md`,
+`context.py`, `tree.py`) and the sandbox answered `context.py` with "no transcript". The
+sandbox held on this replay under the new binds, and it counts as a first-review pass of one,
+on a sample of one: the arm is kiro, so its pass rate is the kiro system's, not claude's.
 
 - **The starting point keeps only the title, Goal and Background.** Any nodes the author
   wrote into the task before work began are dropped, so a task that began with
