@@ -221,6 +221,21 @@ What the proof does not show, and what a comparison has to allow for:
   close the hole. The sandbox copies the sign-in, so after the access token's hours the
   replay's `claude` refreshes its own copy; whether that signs out the author's login is
   not checked here, and the fix is to sign in again.
+  The agent is the configured one. A replay runs under the agent the screen is set to
+  (`.dfs/runs/agent`: claude, codex, kiro or opencode; `replay.py --agent A` overrides it,
+  and `prepare` records it in `.git/replay.json`), because the loop's evidence should come
+  from the system the author runs. The sandbox gets that agent's package at the pin, its
+  command in `CLAUDE_CMD`/`CODEX_CMD`/`KIRO_CMD`/`OPENCODE_CMD`, and its sign-in only. For
+  kiro that is a copy of `data.sqlite3` with its conversation and history tables emptied,
+  `settings/cli.json`, and the engine kiro unpacks into `~/.local/share/kiro-cli` (node,
+  bun, the TUI and the agent server, about 160 MB, program and not data), plus the host's
+  `/usr/lib`, `/usr/lib64` and `/lib64` bound in, since that `node` wants the host's dynamic
+  loader. A one-line `kiro-cli chat` answered inside the sandbox. Not done yet: `score`
+  reads claude transcripts only, and kiro's are the chain's `run-*.json` streams, which
+  carry credits and context percentages but no tokens or dollars, so `replay.py replay`
+  refuses a non-claude agent before it spends and `score` says why; the first-review
+  verdict, which the keep rule uses, is in the task file and needs neither. A kiro
+  replay refreshing its copied token may sign the author out of the live one, as for claude.
   A task whose Goal sends its sessions to evidence outside the repo gets nothing from the
   box now and has to work from the repo, so it is a poorer replay of that task, not a leak.
 
@@ -411,6 +426,7 @@ rule's last clause, evidence inside the repo, is not decidable from the history;
 each task file for it, and taking four, is the first step. Then
 run the control (the current tool) twice on those four tasks, to see whether two
 control arms differ by four or more of twelve; then candidate 1 on the same four tasks,
-the first real run of the loop (its changed-arm path ran once, in section 3). It needs `claude` and `proot` (both from nixpkgs at the agent pin;
-`REPLAY_CLAUDE_CODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
+the first real run of the loop (its changed-arm path ran once, in section 3). It needs the configured agent's binary (claude, codex, kiro-cli or opencode) and `proot`
+(both from nixpkgs at the agent pin; `REPLAY_CLAUDE_CODE`, `REPLAY_KIRO_CLI`, `REPLAY_CODEX`,
+`REPLAY_OPENCODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
 (inside the repo's ignored `.dfs/runs` works on the box used here).

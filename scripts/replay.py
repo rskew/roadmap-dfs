@@ -9,10 +9,13 @@ chain (run.sh) work the task, and measures the result with history.py's `session
 
   python3 <scripts>/replay.py candidates [--repo PATH]       (tasks the loop's selection rule picks from)
   python3 <scripts>/replay.py plan    TASK [--repo PATH]
-  python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE]
-  python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M]    (inside proot)
+  python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE] [--agent A]
+  python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M] [--agent A]    (inside proot)
   python3 <scripts>/replay.py score   DEST TASK [--repo PATH]
   python3 <scripts>/replay.py replay  TASK DEST [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
+
+The replay runs under the agent the screen is set to (`.dfs/runs/agent`: claude, codex, kiro or
+opencode), or the one `--agent` names; `prepare` records it. Only claude's transcripts are scored so far.
 
 The system that changes is the TOOL (`--tool DIR`: a roadmap-dfs checkout or store path,
 or `--tool-ref REV`: a revision of the repo being replayed, when that repo is roadmap-dfs
@@ -164,7 +167,7 @@ def seal(dest):
     git(dest, "gc", "-q", "--prune=now")
 
 
-def prepare(repo, task, dest, tool=None, tool_ref=None, law=None):
+def prepare(repo, task, dest, tool=None, tool_ref=None, law=None, agent=None):
     dest = Path(dest).resolve()
     if "dfs-replay-" not in dest.name:
         raise SystemExit("replay: DEST's name must contain 'dfs-replay-' (history.py skips it by that)")
@@ -196,7 +199,8 @@ def prepare(repo, task, dest, tool=None, tool_ref=None, law=None):
     git(dest, "add", "-A", ".dfs")
     git(dest, "commit", "-q", "--allow-empty", "-m",
         f"replay: {task} as the author left it, from {sha[:8]}", "--no-verify")
-    (dest / ".git" / "replay.json").write_text(json.dumps({"task": task, "from": sha, "tool": str(tool)}))
+    (dest / ".git" / "replay.json").write_text(json.dumps({"task": task, "from": sha, "tool": str(tool),
+                                                            "agent": configured_agent(repo, agent)}))
     return dest, tool
 
 
@@ -221,6 +225,9 @@ def bash_bound(minutes):
 TOOL_ENTRIES = ("SKILL.md", "README.md", "LICENCE.txt", "scripts", "templates", "docs")   # what a tool is for
 SANDBOX_HOME = "/home/replay"
 ETC = ("/etc/resolv.conf", "/etc/ssl", "/etc/hosts", "/etc/nsswitch.conf", "/etc/passwd", "/etc/group")
+# kiro unpacks a generic Linux `node` that wants the host's dynamic loader at /lib64 and its libraries;
+# the store holds none of that for it. Libraries only: no home, no /var, no /etc beyond ETC.
+HOST_LIBS = {"kiro": (("/usr/lib64", "/lib64"), ("/usr/lib", "/lib"), ("/usr/lib", "/usr/lib"))}
 PASS_ENV = ("TERM", "LANG", "LC_ALL", "TZ", "ANTHROPIC_API_KEY")   # the rest of the box's environment stays out
 SIGN_IN_KEYS = ("hasCompletedOnboarding", "lastOnboardingVersion", "oauthAccount", "userID")
 _NIX_OUT = {}
@@ -253,11 +260,42 @@ def nix_bin(attr, binary, given, repo):
     return os.path.join(_NIX_OUT[key], "bin", binary)
 
 
-def tool_bins(repo):
-    """The programs the sandbox is built from, as paths in /nix/store (the one place it can see)."""
+AGENTS = ("claude", "codex", "kiro", "opencode")   # the agents run.sh can launch (walk.py's AGENTS)
+# per agent: nixpkgs attribute, the binary in it, the variable run.sh takes its command from, and the
+# variable that names a binary of your own
+AGENT_BIN = {"claude": ("claude-code", "claude", "CLAUDE_CMD", "REPLAY_CLAUDE_CODE"),
+             "codex": ("codex", "codex", "CODEX_CMD", "REPLAY_CODEX"),
+             "kiro": ("kiro-cli-unwrapped", "kiro-cli", "KIRO_CMD", "REPLAY_KIRO_CLI"),
+             "opencode": ("opencode", "opencode", "OPENCODE_CMD", "REPLAY_OPENCODE")}
+SCORABLE = ("claude",)   # the agents whose transcripts `score` reads (history.py parses claude's)
+
+
+def configured_agent(repo=None, override=None):
+    """The agent a replay runs under: `override` (`--agent`) if given, else the one the screen
+    keeps in `.dfs/runs/agent` (walk.py's `agent_file`; `$DFS_RUNS` first, then the checkout's own
+    runs), claude when there is no such file or it names nothing run.sh launches."""
+    if override:
+        if override not in AGENTS:
+            raise SystemExit(f"replay: --agent must be one of {', '.join(AGENTS)}, not {override!r}")
+        return override
+    for runs in (os.environ.get("DFS_RUNS"), os.path.join(repo or main_checkout(), ".dfs", "runs")):
+        if not runs:
+            continue
+        try:
+            name = Path(runs, "agent").read_text(errors="replace").strip()
+        except OSError:
+            continue
+        return name if name in AGENTS else "claude"
+    return "claude"
+
+
+def tool_bins(repo, agent="claude"):
+    """The programs the sandbox is built from, as paths in /nix/store (the one place it can see):
+    proot, the agent's own binary at the repo's pin (keyed by the agent's name), bash and env."""
+    attr, binary, _, given = AGENT_BIN[agent]
     found = {
         "proot": nix_bin("proot", "proot", os.environ.get("REPLAY_PROOT") or shutil.which("proot"), repo),
-        "claude": nix_bin("claude-code", "claude", os.environ.get("REPLAY_CLAUDE_CODE"), repo),
+        agent: nix_bin(attr, binary, os.environ.get(given), repo),
         "bash": shutil.which("bash"),
         "env": shutil.which("env"),
     }
@@ -269,21 +307,75 @@ def tool_bins(repo):
     return found
 
 
-def make_box(dest):
+def copy_private(src, dst):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(src, dst)
+    dst.chmod(0o600)
+
+
+def kiro_sign_in(home, box_home):
+    """kiro-cli's sign-in in the box: its settings, and a copy of its database with the
+    conversation and history tables emptied, so no earlier session of the author's comes along."""
+    import sqlite3
+    db = Path(home) / ".local" / "share" / "kiro-cli" / "data.sqlite3"
+    out = box_home / ".local" / "share" / "kiro-cli" / "data.sqlite3"
+    if db.is_file() and not out.exists():
+        out.parent.mkdir(parents=True, exist_ok=True)
+        src = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        dst = sqlite3.connect(out)
+        with dst:
+            src.backup(dst)
+            for (table,) in dst.execute("select name from sqlite_master where type='table'").fetchall():
+                if table in ("history", "conversations", "conversations_v2"):
+                    dst.execute(f'delete from "{table}"')
+        dst.close()
+        src.close()
+        out.chmod(0o600)
+    # The engine kiro-cli starts is not in the nix package: it unpacks a node, a bun, the TUI and
+    # the agent server (`kas`) into this directory, and a fresh home that lacks them fails to
+    # spawn the engine. They are the program, not the author's data (no sessions, logs or knowledge).
+    share, out_share = Path(home) / ".local" / "share" / "kiro-cli", out.parent
+    for entry in ("node", "node.sha256", "bun", "bun.sha256", "tui.js", "tui.js.sha256", "kas"):
+        if (share / entry).exists() and not (out_share / entry).exists():
+            if (share / entry).is_dir():
+                shutil.copytree(share / entry, out_share / entry, symlinks=True)
+            else:
+                shutil.copy2(share / entry, out_share / entry)
+    settings = Path(home) / ".kiro" / "settings" / "cli.json"
+    if settings.is_file() and not (box_home / ".kiro" / "settings" / "cli.json").exists():
+        copy_private(settings, box_home / ".kiro" / "settings" / "cli.json")
+
+
+def make_box(dest, agent="claude"):
     """The box of DEST: an empty proot root, a temp dir for proot, and a fresh home holding
-    only the sign-in (credentials, the account keys of `.claude.json`) and `settings.json`,
-    so the sessions find no `~/.claude/projects`, no history, no `~/.codex`."""
+    only the agent's sign-in (claude: credentials, the account keys of `.claude.json` and
+    `settings.json`; kiro: `kiro_sign_in`; codex: `auth.json` and `config.toml`; opencode: its
+    `auth.json` and config), so the sessions find no `~/.claude/projects`, no history and no
+    `~/.codex` sessions of the author's."""
     box = box_of(dest)
     for d in ("root/tmp", "tmp", "home/.claude"):
         (box / d).mkdir(parents=True, exist_ok=True)
+    home = Path(os.path.expanduser("~"))
+    box_home = box / "home"
+    if agent == "kiro":
+        kiro_sign_in(home, box_home)
+    elif agent == "codex":
+        for name in ("auth.json", "config.toml"):
+            if (home / ".codex" / name).is_file() and not (box_home / ".codex" / name).exists():
+                copy_private(home / ".codex" / name, box_home / ".codex" / name)
+    elif agent == "opencode":
+        for rel in (Path(".local/share/opencode/auth.json"), Path(".config/opencode/opencode.json")):
+            if (home / rel).is_file() and not (box_home / rel).exists():
+                copy_private(home / rel, box_home / rel)
+    if agent != "claude":
+        return box
     cfg = Path(config_dir())
     for name in (".credentials.json", "settings.json"):
-        if (cfg / name).is_file() and not (box / "home" / ".claude" / name).exists():
-            shutil.copy(cfg / name, box / "home" / ".claude" / name)
-            (box / "home" / ".claude" / name).chmod(0o600)
-    sign_in = box / "home" / ".claude.json"
+        if (cfg / name).is_file() and not (box_home / ".claude" / name).exists():
+            copy_private(cfg / name, box_home / ".claude" / name)
+    sign_in = box_home / ".claude.json"
     if not sign_in.exists():
-        for src in (cfg / ".claude.json", Path(os.path.expanduser("~/.claude.json"))):
+        for src in (cfg / ".claude.json", home / ".claude.json"):
             if src.is_file():
                 data = json.loads(src.read_text())
                 sign_in.write_text(json.dumps({k: data[k] for k in SIGN_IN_KEYS if k in data}))
@@ -292,17 +384,17 @@ def make_box(dest):
     return box
 
 
-def sandbox_env(tool, bins, bash_minutes=BASH_MINUTES):
+def sandbox_env(tool, bins, bash_minutes=BASH_MINUTES, agent="claude"):
     """What the sessions inside the sandbox are told: nothing of the live checkout (no
     `DFS_*`, no `XDG_*`, no `CLAUDE_CONFIG_DIR`), a PATH of store entries only."""
     path = ":".join(p for p in os.environ.get("PATH", "").split(":") if p.startswith("/nix/store/"))
-    env = {"PATH": path, "HOME": SANDBOX_HOME, "DFS_TOOL": str(tool), "CLAUDE_CMD": bins["claude"],
+    env = {"PATH": path, "HOME": SANDBOX_HOME, "DFS_TOOL": str(tool), AGENT_BIN[agent][2]: bins[agent],
            "SSL_CERT_FILE": "/etc/ssl/certs/ca-certificates.crt", **bash_bound(bash_minutes)}
     env.update({k: os.environ[k] for k in PASS_ENV if k in os.environ})
     return env
 
 
-def sandbox_argv(dest, tool, inner, bins, env):
+def sandbox_argv(dest, tool, inner, bins, env, agent="claude"):
     """The command that runs `inner` in a proot of DEST: an empty root, /nix, /proc and /dev, the
     nix `bash` as /bin/sh and `env` as /usr/bin/env, the network files of /etc, the box's home as
     HOME, DEST at its own path, and (unless the tool is in the store) the tool's own entries at
@@ -314,6 +406,9 @@ def sandbox_argv(dest, tool, inner, bins, env):
     for e in ETC:
         if os.path.exists(e):
             cmd += ["-b", e]
+    for src, at in HOST_LIBS.get(agent, ()):
+        if os.path.exists(src):
+            cmd += ["-b", f"{src}:{at}"]
     cmd += ["-b", f"{box / 'home'}:{SANDBOX_HOME}", "-b", f"{dest}:{dest}"]
     if not str(tool).startswith("/nix/store/"):
         for entry in TOOL_ENTRIES:
@@ -322,23 +417,26 @@ def sandbox_argv(dest, tool, inner, bins, env):
     return cmd + ["-w", str(dest), "/usr/bin/env", "-i", *[f"{k}={v}" for k, v in env.items()], *inner]
 
 
-def launch(dest, task, cap, tool, bash_minutes, repo=None):
-    """(argv, environment) of the chain's launch: run.sh inside the sandbox."""
+def launch(dest, task, cap, tool, bash_minutes, repo=None, agent="claude"):
+    """(argv, environment) of the chain's launch: run.sh inside the sandbox, told which agent
+    to run (`--kiro`, `--codex`, `--opencode`; none for claude, run.sh's default)."""
     dest = Path(dest).resolve()
-    make_box(dest)
-    bins = tool_bins(repo or main_checkout())
-    inner = ["bash", str(tool / "scripts" / "run.sh"), task, str(cap or 6)]
-    argv = sandbox_argv(dest, tool, inner, bins, sandbox_env(tool, bins, bash_minutes))
+    make_box(dest, agent)
+    bins = tool_bins(repo or main_checkout(), agent)
+    flag = [] if agent == "claude" else [f"--{agent}"]
+    inner = ["bash", str(tool / "scripts" / "run.sh"), *flag, task, str(cap or 6)]
+    argv = sandbox_argv(dest, tool, inner, bins, sandbox_env(tool, bins, bash_minutes, agent), agent)
     # proot unpacks its loader into PROOT_TMP_DIR, which has to be able to execute: the box is
     # beside DEST, on the mount DEST is on
     return argv, {"PROOT_TMP_DIR": str(box_of(dest) / "tmp"), "PATH": os.environ.get("PATH", "")}
 
 
-def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES, repo=None):
+def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES, repo=None, agent=None):
     dest = Path(dest).resolve()
     info = json.loads((dest / ".git" / "replay.json").read_text())
     tool = Path(tool or info["tool"])
-    cmd, env = launch(dest, task, cap, tool, bash_minutes, repo)
+    # the agent `prepare` recorded, unless this run names another
+    cmd, env = launch(dest, task, cap, tool, bash_minutes, repo, configured_agent(repo, agent) if agent else info.get("agent", "claude"))
     # The chain's own words are kept beside the replay: its last "dfs_run: DONE|BLOCKED|CAP"
     # line is why it stopped, which the runner's meta.json (the task's status) does not say.
     with subprocess.Popen(cmd, cwd=dest, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -494,6 +592,10 @@ def score(dest, task, repo=None):
     if info.get("task") != task:
         raise SystemExit(f"replay: {dest} replays {info.get('task')}, not {task}; "
                          "usage: replay.py score DEST TASK")
+    if info.get("agent", "claude") not in SCORABLE:
+        raise SystemExit(f"replay: {dest} ran under {info['agent']}, whose transcripts score cannot read yet "
+                         f"(it reads {', '.join(SCORABLE)}); the replay's work is in {dest} and its run logs "
+                         f"in {dest}/.dfs/runs")
     enc = re.sub(r"[/.]", "-", str(dest))
     repos = {enc: str(dest)}
     cfg = replay_config(dest)
@@ -551,7 +653,7 @@ def main(argv):
         sys.stdout.write(__doc__)
         return 2
     cmd, rest = argv[0], argv[1:]
-    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES}
+    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES, "agent": None}
     pos = []
     it = iter(rest)
     for a in it:
@@ -574,20 +676,24 @@ def main(argv):
         compare(task, before, None)
     elif cmd == "prepare":
         task, dest = pos
-        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"])
-        sys.stdout.write(f"prepared {dest} under tool {tool}\n")
+        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], opts["agent"])
+        sys.stdout.write(f"prepared {dest} under tool {tool}, agent {configured_agent(repo, opts['agent'])}\n")
     elif cmd == "run":
         dest, task = pos
-        return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"], repo)
+        return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"], repo, opts["agent"])
     elif cmd == "score":
         dest, task = pos
         compare(task, original(repo, task), score(dest, task, repo))
     elif cmd == "replay":
         task, dest = pos
-        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"])
+        agent = configured_agent(repo, opts["agent"])
+        if agent not in SCORABLE:   # refuse before spending: run it with `prepare` and `run`, score by hand
+            raise SystemExit(f"replay: the agent is {agent}, whose transcripts score cannot read yet; "
+                             "use prepare and run, or --agent claude")
+        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], agent)
         before = original(repo, task)
         cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
-        run(dest, task, cap, tool, opts["bash-minutes"], repo)
+        run(dest, task, cap, tool, opts["bash-minutes"], repo, agent)
         compare(task, before, score(dest, task, repo))
     return 0
 

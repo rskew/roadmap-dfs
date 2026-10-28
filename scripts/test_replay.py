@@ -351,6 +351,145 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertEqual([Path(f).parent.name for f in history._glob(replay.transcripts(self.dest, cfg))], [enc])
 
 
+class AgentTest(unittest.TestCase):
+    """A replay runs under the agent the screen is set to, not always claude."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.t = Path(self.tmp.name)
+        self.repo = self.t / "repo"
+        (self.repo / ".dfs" / "runs").mkdir(parents=True)
+
+    def agent(self, text=None, live=None, override=None):
+        """configured_agent with the checkout's agent file holding `text`, `$DFS_RUNS` at `live`."""
+        if text is not None:
+            (self.repo / ".dfs" / "runs" / "agent").write_text(text)
+        env = {"DFS_RUNS": str(live)} if live else {}
+        with mock.patch.dict(os.environ, env):
+            if not live:
+                os.environ.pop("DFS_RUNS", None)
+            return replay.configured_agent(self.repo, override)
+
+    def test_the_agent_is_the_one_the_screen_kept_claude_when_it_kept_none_or_an_unknown_one(self):
+        self.assertEqual(self.agent(), "claude")                     # no file
+        self.assertEqual(self.agent("kiro\n"), "kiro")
+        self.assertEqual(self.agent("codex"), "codex")
+        self.assertEqual(self.agent("opencode"), "opencode")
+        self.assertEqual(self.agent("gemini"), "claude")             # what run.sh cannot launch
+
+    def test_an_override_wins_and_a_bad_one_is_refused(self):
+        self.assertEqual(self.agent("kiro", override="claude"), "claude")
+        with self.assertRaises(SystemExit) as e:
+            self.agent("kiro", override="gemini")
+        self.assertIn("--agent must be one of", str(e.exception))
+
+    def test_dfs_runs_is_read_before_the_checkouts_own_runs(self):
+        live = self.t / "other-runs"
+        live.mkdir()
+        (live / "agent").write_text("codex")
+        self.assertEqual(self.agent("kiro", live=live), "codex")
+        empty = self.t / "empty-runs"
+        empty.mkdir()
+        self.assertEqual(self.agent("kiro", live=empty), "kiro")    # no file there: the checkout's
+
+    def launch_cmd(self, agent):
+        dest = self.t / "dfs-replay-W5-a"
+        (dest / ".git").mkdir(parents=True, exist_ok=True)
+        bins = {"proot": "/nix/store/p/bin/proot", agent: f"/nix/store/x/bin/{agent}",
+                "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
+        with mock.patch.object(replay, "tool_bins", return_value=bins) as tb, mock.patch.object(replay, "make_box") as mb:
+            cmd, _ = replay.launch(dest, "W5", 3, Path("/nix/store/t/share/x"), 15, self.repo, agent)
+        tb.assert_called_once_with(self.repo, agent)
+        mb.assert_called_once_with(dest.resolve(), agent)
+        return cmd
+
+    def test_each_agent_gets_its_flag_and_its_own_command_variable(self):
+        for agent, flag, var in (("kiro", "--kiro", "KIRO_CMD"), ("codex", "--codex", "CODEX_CMD"),
+                                 ("opencode", "--opencode", "OPENCODE_CMD")):
+            cmd = self.launch_cmd(agent)
+            self.assertEqual(cmd[-5:], ["bash", "/nix/store/t/share/x/scripts/run.sh", flag, "W5", "3"], agent)
+            self.assertIn(f"{var}=/nix/store/x/bin/{agent}", cmd)
+            self.assertFalse([c for c in cmd if c.startswith("CLAUDE_CMD=")], agent)
+        cmd = self.launch_cmd("claude")                              # claude is run.sh's default: no flag
+        self.assertEqual(cmd[-4:], ["bash", "/nix/store/t/share/x/scripts/run.sh", "W5", "3"])
+        self.assertIn("CLAUDE_CMD=/nix/store/x/bin/claude", cmd)
+
+    def test_only_kiro_is_given_the_hosts_loader_and_libraries(self):
+        args = lambda agent: replay.sandbox_argv(self.t / "d", "/nix/store/t/x", ["true"], {
+            "proot": "/nix/store/p/proot", "bash": "/nix/store/b", "env": "/nix/store/e"}, {}, agent)
+        kiro = args("kiro")
+        self.assertIn("/usr/lib64:/lib64", kiro)
+        self.assertNotIn("/usr/lib64:/lib64", args("claude"))
+        binds = [kiro[i + 1] for i, a in enumerate(kiro) if a == "-b"]
+        self.assertEqual([b for b in binds if "/home" in b], [f"{replay.box_of(self.t / 'd') / 'home'}:/home/replay"])
+
+    def test_the_kiro_box_has_the_sign_in_and_the_engine_and_none_of_the_authors_work(self):
+        import sqlite3
+        home = self.t / "home"
+        share = home / ".local" / "share" / "kiro-cli"
+        share.mkdir(parents=True)
+        db = sqlite3.connect(share / "data.sqlite3")
+        db.executescript("create table auth_kv (key text primary key, value text);"
+                         "create table conversations_v2 (key text, value text);"
+                         "create table history (key text, value text);"
+                         "insert into auth_kv values ('kirocli:odic:token', 'TOKEN');"
+                         "insert into conversations_v2 values ('/live', 'the author''s conversation');"
+                         "insert into history values ('/live', 'the author''s history');")
+        db.commit()
+        db.close()
+        (share / "node").write_bytes(b"\x7fELF")
+        (share / "kas" / "2.31.1").mkdir(parents=True)
+        (share / "kas" / "2.31.1" / "server.js").write_text("server\n")
+        (share / "knowledge_bases").mkdir()
+        (share / "knowledge_bases" / "mine.txt").write_text("the author's notes\n")
+        (home / ".kiro" / "settings").mkdir(parents=True)
+        (home / ".kiro" / "settings" / "cli.json").write_text("{}")
+        (home / ".kiro" / "sessions" / "abc").mkdir(parents=True)
+        (home / ".kiro" / "sessions" / "abc" / "s.json").write_text("the author's session\n")
+        dest = self.t / "dfs-replay-W5-k"
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            box = replay.make_box(dest, "kiro")
+        out = box / "home" / ".local" / "share" / "kiro-cli"
+        got = sqlite3.connect(out / "data.sqlite3")
+        self.assertEqual(got.execute("select value from auth_kv").fetchall(), [("TOKEN",)])
+        self.assertEqual(got.execute("select count(*) from conversations_v2").fetchone(), (0,))
+        self.assertEqual(got.execute("select count(*) from history").fetchone(), (0,))
+        got.close()
+        self.assertTrue((out / "node").is_file())
+        self.assertTrue((out / "kas" / "2.31.1" / "server.js").is_file())
+        self.assertTrue((box / "home" / ".kiro" / "settings" / "cli.json").is_file())
+        self.assertFalse((out / "knowledge_bases").exists())
+        self.assertFalse((box / "home" / ".kiro" / "sessions").exists())
+        # the live database is as it was
+        live = sqlite3.connect(share / "data.sqlite3")
+        self.assertEqual(live.execute("select count(*) from history").fetchone(), (1,))
+        live.close()
+
+    def test_prepare_records_the_agent_and_run_launches_under_it(self):
+        dest = self.t / "dfs-replay-W5-r"
+        (dest / ".git").mkdir(parents=True)
+        (dest / ".git" / "replay.json").write_text(json.dumps({"task": "W5", "tool": "/nix/store/t", "agent": "kiro"}))
+        with mock.patch.object(replay, "launch", side_effect=SystemExit("stop")) as lc:
+            for override, want in ((None, "kiro"), ("codex", "codex")):
+                with self.assertRaises(SystemExit):
+                    replay.run(dest, "W5", repo=self.repo, agent=override)
+                self.assertEqual(lc.call_args.args[-1], want)
+
+    def test_a_replay_under_an_agent_score_cannot_read_is_refused_before_it_spends(self):
+        dest = self.t / "dfs-replay-W5-s"
+        (dest / ".git").mkdir(parents=True)
+        (dest / ".git" / "replay.json").write_text(json.dumps({"task": "W5", "agent": "kiro"}))
+        with self.assertRaises(SystemExit) as e:
+            replay.score(dest, "W5")
+        self.assertIn("ran under kiro", str(e.exception))
+        (self.repo / ".dfs" / "runs" / "agent").write_text("kiro")
+        with mock.patch.object(replay, "prepare") as pr, self.assertRaises(SystemExit) as e:
+            replay.main(["replay", "W5", str(self.t / "dfs-replay-W5-n"), "--repo", str(self.repo)])
+        self.assertIn("the agent is kiro", str(e.exception))
+        pr.assert_not_called()
+
+
 class ScoreTest(unittest.TestCase):
     def test_a_replay_bounds_one_bash_call(self):
         b = replay.bash_bound(15)
