@@ -115,6 +115,17 @@ const FLOWS = {
     await task(page, "W9"); await page.click("[data-act=add]"); await dialog(page);
     await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
     assert(/#\/t\/W9$/.test(await hash()), `Esc in a form closed only the form, at ${await hash()}`);
+    // The artefact viewer and a run's log have a Back button, so Esc is it: it lands on the task they were opened from.
+    await page.click(".tile >> nth=0"); await page.waitForSelector("iframe.artview");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    assert(/#\/a\/W9\//.test(await hash()), `the viewer is open, at ${await hash()}`);
+    await page.keyboard.press("Escape"); await page.waitForSelector(".arts");
+    assert(/#\/t\/W9$/.test(await hash()) && !(await page.$("iframe.artview")), `Esc on an artefact goes back to its task, at ${await hash()}`);
+    await page.waitForSelector("a.runrow"); await page.click("a.runrow >> nth=0"); await page.waitForSelector("#runlog");
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    assert(/#\/r\/W9\//.test(await hash()), `the run log is open, at ${await hash()}`);
+    await page.keyboard.press("Escape"); await page.waitForSelector("a.runrow");
+    assert(/#\/t\/W9$/.test(await hash()) && !(await page.$("#runlog")), `Esc on a run log goes back to its task, at ${await hash()}`);
     same(errors, [], "no page errors");
     await ctx.close();
   },

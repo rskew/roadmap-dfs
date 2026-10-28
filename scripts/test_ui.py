@@ -346,7 +346,7 @@ class Flows(unittest.TestCase):
         self.flow("walkpin")
 
     def test_esc_backs_out_of_a_node_then_the_task_and_closes_only_a_form(self):
-        self.flow("escape")
+        self.with_runs("escape")      # runs, so Esc on a run log can be tried too
 
     def test_j_k_and_the_arrows_step_the_list_and_the_tree_and_left_right_fold(self):
         self.flow("keys")
