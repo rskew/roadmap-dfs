@@ -1157,7 +1157,7 @@ function drawTask() {
   let html = `<div class="head"><h2>${inline(t.goal)}</h2>
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
     ${(tags => tags ? `<p class="walktags">${tags}</p>` : "")(walkTags(walkOf(t.id)))}</div>
-    ${t.archived ? `<p class="hint archived-note" role="note">Archived: this task is kept for reading. Its files are under <code>.dfs/archive/archived</code>; move them back to <code>.dfs/items</code> to work on it again.</p>
+    ${t.archived ? `<p class="hint archived-note" role="note">Archived: this task is kept for reading. Its files are under <code>.dfs/archive/archived</code>: move <code>items/</code> back to <code>.dfs/items</code> and <code>archive/</code> to <code>.dfs/archive/items</code> to work on it again.</p>
     <div class="actions"><button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button></div>` : `<div class="actions">
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>
@@ -1796,7 +1796,8 @@ document.addEventListener("contextmenu", e => {
   if (!matchMedia("(hover: hover)").matches) return;      // a long-press on a touch screen keeps the browser's own menu
   e.preventDefault();
   const id = main.dataset.id, r = S.task.rows.find(x => x.id === id), m = $("#ctx");
-  m.innerHTML = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>
+  const open = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>`;
+  m.innerHTML = S.task.archived ? open : `${open}
     <button role="menuitem" data-act="correct" data-id="${esc(id)}">Refute/confirm</button>
     ${r && r.editable ? `<button role="menuitem" data-act="editnode" data-id="${esc(id)}">Edit</button>` : ""}
     <button role="menuitem" data-act="add" data-parent="${esc(id)}">Add under</button>

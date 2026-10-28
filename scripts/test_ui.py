@@ -318,6 +318,11 @@ class Flows(unittest.TestCase):
         self.assertFalse(dfs_tree.exists("W4"))
         self.assertTrue((self.root / ".dfs" / "archive" / "archived" / "items" / "W4.md").is_file())
 
+    def test_the_show_archived_option_and_the_read_only_task(self):
+        dfs_tree._retire("W4", dfs_tree.archived_dir(), "archived")
+        self.flow("archivedview")
+        self.assertFalse(dfs_tree.exists("W4"))
+
     def test_accepting_a_finished_tree(self):
         self.flow("accept")
         self.assertTrue(dfs_tree.accepted(dfs_tree.load("W4")))

@@ -720,6 +720,35 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Show archived: the button draws the archived task after the live ones and is kept across a reload; the archived task
+  // opens read-only, and its right-click menu offers only Open; a live task's menu keeps its write actions.
+  async archivedview(b) {
+    const { page, errors } = await open(b, DESKTOP);
+    const menu = async () => {
+      await page.click(".row .main[data-act=node]", { button: "right" });
+      await page.waitForSelector("#ctx:not([hidden]) button");
+      const acts = await page.$$eval("#ctx button", els => els.map(e => e.dataset.act));
+      await page.keyboard.press("Escape");
+      return acts;
+    };
+    assert(!(await page.$(".item[data-id=W4]")), "an archived task is not listed until the option is on");
+    await page.click("[data-act=archived]");
+    await page.waitForSelector(".item[data-id=W4]");
+    await page.reload(); await page.waitForSelector(".item[data-id=W4]");
+    await task(page, "W4");
+    await page.waitForSelector(".archived-note");
+    same(await page.$$("[data-act=accept], [data-act=edittask], [data-act=deletetask]"), [], "an archived task offers no write control");
+    same(await menu(), ["node"], "an archived task's node menu offers only Open");
+    await page.goto(URL_); await page.waitForSelector(".item[data-id=W3]");
+    await task(page, "W3");
+    const live = await menu();
+    for (const a of ["node", "correct", "add", "deletenode"]) assert(live.includes(a), "a live task's node menu keeps " + a);
+    await page.goto(URL_); await page.waitForSelector(".item[data-id=W3]");
+    await page.click("[data-act=archived]");
+    await page.waitForFunction(() => !document.querySelector(".item[data-id=W4]"));
+    same(errors, [], "no page errors");
+  },
+
   // Add a node under another.
   async add(b) {
     const { page, errors } = await open(b, PHONE);
