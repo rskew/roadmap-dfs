@@ -305,9 +305,11 @@ def original_lines(repo, task):
 
 def answer_seen(dest, repo, task, files):
     """The original's conclusions (`original_lines`) that appear in a tool result of a
-    replay's sessions and are not in the replay's own record (its task file and commits),
-    as {line: [session ids]}: a replay that read them was shown the answer, whether or not
-    it used it. Looks at what a tool printed, not at what the session then did."""
+    replay's sessions and are not in the replay's own record (its committed task file and
+    commit messages), as {line: [session ids]}: a replay that read them was shown the answer,
+    whether or not it used it. Looks at what a tool printed, not at what the session then
+    did; a conclusion the replay printed from its own uncommitted task file and wrote
+    identically counts as shown (negligible)."""
     own = git(dest, "log", "--all", "-p", "--format=%B", "--", ".dfs/items", check=False)
     own += git(dest, "log", "--all", "--format=%B", check=False)
     wanted = {l for l in original_lines(repo, task) if l not in own}

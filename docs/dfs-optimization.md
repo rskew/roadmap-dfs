@@ -67,8 +67,9 @@ What it shows, most important first:
    own tests missed a defect is not recorded in a review line, so "bugs the work did
    not test for" is not a measured class; the classes come from patterns in
    `audit.py` (`finding_rows`), and 30 sampled rows were each classed as a reader
-   would class them. The most reviewed task, roadmap-dfs W75, had 23 reviews and 16 of them
-   found issues (`history.py`, "Most expensive tasks"). Quality, measured as review rounds with issues, is the largest cost
+   would class them. The most expensive task and the one with most issues rounds, roadmap-dfs W75, had 23
+   reviews and 16 of them found issues (`history.py`, "Most expensive tasks"; chirpstack-docker
+   W108 also had 23 reviews, 3 with issues). Quality, measured as review rounds with issues, is the largest cost
    as well as the largest failure.
 2. **The tree backs up rarely.** Section 1's recount: 13 nodes refuted once corrections
    are applied and 8 backtracks, against 535 confirmed. That is the tree used to back
@@ -201,7 +202,9 @@ What the proof does not show, and what a comparison has to allow for:
   logs, transcripts and task file are on the same disk. A box that can (a container that
   mounts only the clone, `sandbox.sh run`, or a copy of the repo without `.dfs/runs`) is
   the fix, and until a replay runs in one its pass rate is an upper bound on a clean
-  replay's, with `score`'s two rows printed beside it. Tasks whose evidence lies outside
+  replay's, with `score`'s two rows printed beside it. Measuring the exposure and
+  calling the rate an upper bound, instead of hiding the answer, is a choice this box forced,
+  and the author may want the loop held until a box hides it (section 4, step 5, "undecided"). Tasks whose evidence lies outside
   the repo make poor candidates for the same reason, and a replay should be given a
   timeout on a single Bash call.
 - **The starting point keeps only the title, Goal and Background.** Any nodes the author
@@ -240,8 +243,8 @@ about how a session works, replayed on W55 as `dfs-replay-W55-arm1`.
   Determinations (see "The replay's box" above).
 
 That is one replay of one arm, and the marker changes nothing a review would judge, so it
-says only that the changed-arm path runs end to end and that the session reads the
-changed text; it says nothing about whether any change helps. `replay.py score` now
+says only that the changed-arm path ran end to end once (a reading: one run under one
+marker is taken as enough for that) and that the session reads the changed text; it says nothing about whether any change helps. `replay.py score` now
 refuses a DEST that is not a prepared replay of that task, and a replay whose transcripts
 hold no session of the task, where it used to print a table of dashes.
 
