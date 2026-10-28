@@ -2632,7 +2632,10 @@ class UI(WalkMixin):
                 # the selected row's status sitting one column right of every other
                 # row's, the hand-written offset the id column above is measured to
                 # avoid. The tag is the same distance further on.
-                st_at = (look("chrome") if state not in (it["status"], "✓ done")
+                # A draft is bold amber, not chrome: it is the author's own mark and
+                # was lost in the grey of the held rows' markers it shared a colour with.
+                st_at = (look("amber") | curses.A_BOLD if state == "draft"
+                         else look("chrome") if state not in (it["status"], "✓ done")
                          else self.status_attr(it["status"]))
                 self.put(y, 3 + idw, state.ljust(statw), st_at)
                 # ⚠️ Every later column is measured off the one before it, never

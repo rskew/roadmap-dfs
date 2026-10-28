@@ -144,6 +144,12 @@ pre.runlog .r-err { color: var(--attention); }
 .item.done .body { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); min-width: 0; }
 .item.done .goal { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item.done .meta { flex: 0 1 auto; min-width: 0; margin-top: 0; }
+/* a draft (an open task that is not held, which the walk passes over) is the one row marked in the list's own ink: a dashed stripe down its edge,
+   its goal in italics and a filled badge, so it reads as not yet released without a colour that already means "needs you" */
+.item.draft { position: relative; }
+.item.draft::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--rule-status); pointer-events: none; background: repeating-linear-gradient(180deg, var(--ink) 0 6px, transparent 6px 11px); }   /* a pseudo-element, so neither the hover wash nor the assumption's inset shadow on this edge covers it */
+.item.draft .goal { font-style: italic; }
+.item .meta .tag.draft { background: var(--ink); color: var(--paper); font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 1px var(--s2); }
 .item .why { grid-column: 2; margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); }
 /* Reorder: the row stops being one button (its controls are buttons too) and grows a strip of moves under its text */
 .item.reorder { cursor: default; }
@@ -954,12 +960,13 @@ function drawTasks(push) {
     seg = it.segment;
     if (S.only && !it.needs_you) continue;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
-    const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}`;
+    const draft = it.draft && it.status === "open" && !it.blocked_by && !it.waiting_on;
+    const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}${draft ? " draft" : ""}`;
     const wait = S.reorder && S.pending.has(it.id) ? `<span class="tag pending-tag" role="status">saving\u2026</span>` : "";
     const inner = `<span class="iid">${iidHtml(it.id)}</span>
       <span class="body">${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
-          ${walkTags(it)}${it.draft ? `<span class="tag">draft</span>` : ""}${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}
+          ${walkTags(it)}${draft ? `<span class="tag draft">draft</span>` : ""}${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}
           ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}

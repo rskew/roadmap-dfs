@@ -1732,6 +1732,14 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await toList(page);
     await page.waitForSelector(".item[data-id=W3]");
     assert((await tag("W3")) === true, "the list row says draft once marked");
+    assert(await page.$eval(".item[data-id=W3]", e => e.classList.contains("draft") && getComputedStyle(e.querySelector(".tag.draft")).backgroundColor !== "rgba(0, 0, 0, 0)"), "a draft's row is marked and its badge is filled");
+    assert(await page.$eval(".item[data-id=W3]", e => getComputedStyle(e, "::before").backgroundImage.includes("gradient")), "a draft's stripe is drawn by its own pseudo-element, which hover does not reset");
+    const rowBg = () => page.$eval(".item[data-id=W3]", e => getComputedStyle(e).backgroundColor);
+    await page.mouse.move(0, 0);
+    const resting = await rowBg();
+    await page.hover(".item[data-id=W3]");
+    assert((await rowBg()) !== resting, "hovering a draft row repaints it with the hover wash");
+    assert(await page.$eval(".item[data-id=W3]", e => getComputedStyle(e, "::before").backgroundImage.includes("gradient") && getComputedStyle(e, "::before").position === "absolute"), "a hovered draft row still draws its stripe");
     if (process.env.DFS_UI_SHOTS) await page.screenshot({ path: path.join(process.env.DFS_UI_SHOTS, "draft-list.png") });
     await task(page, "W3");
     await page.click("[data-act=draft]");
