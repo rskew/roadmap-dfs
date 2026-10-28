@@ -177,7 +177,10 @@ elif [ "$AGENT" = opencode ]; then
   # `--standalone`: the screen's chat, like every headless turn, runs on a private server. opencode's
   # shared background service (`serve --service`, one fixed port) outlives the terminal and belongs to
   # whichever HOME started it first, so a second HOME's run exits "port already in use" (and a TUI
-  # hangs at "Starting background server...").
+  # hangs at "Starting background server..."). Under one HOME the shared service works too (the screen,
+  # the page's turns and the screen again kept one session; tried with opencode 2.1.1), so this is for
+  # isolation: the service keeps the config and environment of whichever process started it (a later
+  # client given another model url hung on the first one's), and it is left running after the terminal.
   AGENT_SUB=(--standalone)
   PERMISSION_FLAGS="${PERMISSION_FLAGS---auto}"
 else
