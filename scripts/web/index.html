@@ -1890,10 +1890,10 @@ setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#cha
 const KEYS = [
   { id: "next", keys: ["j", "ArrowDown"], show: "j  ↓", does: "Next task on the list, next node in the tree", on: "both" },
   { id: "prev", keys: ["k", "ArrowUp"], show: "k  ↑", does: "Previous task, previous node", on: "both" },
-  { id: "unfold", keys: ["ArrowRight"], show: "→", does: "Unfold the focused node", on: "task" },
-  { id: "fold", keys: ["ArrowLeft"], show: "←", does: "Fold the focused node's children", on: "task" },
+  { id: "unfold", keys: ["ArrowRight"], show: "→", does: "Unfold the focused node (not while a search is set or only flagged nodes show)", on: "task" },
+  { id: "fold", keys: ["ArrowLeft"], show: "←", does: "Fold the focused node's children (not while a search is set or only flagged nodes show)", on: "task" },
   { id: "open", keys: ["Enter"], show: "Enter", does: "Open the focused task, or the first node", on: "both" },
-  { id: "back", keys: ["Escape"], show: "Esc", does: "Back out: in the search field clear it; close a form, leave a node for its task, a task for the list, a run log or artefact for where Back goes", on: "both" },
+  { id: "back", keys: ["Escape"], show: "Esc", does: "Back out: in the search field clear it; close a form, leave a node for its task, a task for the list, a run log or artefact for where Back goes; inside an artefact's own frame use the Back button", on: "both" },
   { id: "find", keys: ["/"], show: "/", does: "Search the tasks, or the nodes of a task", on: "both" },
   { id: "flag", keys: ["n"], show: "n", does: "Go to the next node that wants you", on: "task" },
   { id: "flagged", keys: ["f"], show: "f", does: "Show only the nodes that want you, or all", on: "task" },

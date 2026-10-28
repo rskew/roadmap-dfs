@@ -258,6 +258,9 @@ const FLOWS = {
     const table = await page.evaluate(() => KEYS.map(k => k.show.trim()));
     same(shown, table, "the dialog lists every key in the table");
     for (const k of ["/", "Esc", "?", "n", "c", "f"]) assert(shown.includes(k), `${k} is listed`);
+    const says = await page.$$eval("dialog[open] dl.keys dd", a => a.map(e => e.textContent));
+    assert(says.some(s => /search is set/.test(s) && /Fold/.test(s)), "← says it does nothing while a search is set");
+    assert(says.some(s => /artefact's own frame/.test(s)), "Esc says it is inert inside an artefact's frame");
     await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("dialog[open]"));
     same(await hash(), "", "Esc closed only the key list, on the list");
     // The table is what the handler reads: a key moved in it moves in the page.
