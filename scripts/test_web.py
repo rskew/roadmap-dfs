@@ -627,6 +627,18 @@ class Web(unittest.TestCase):
         self.assertEqual(html.count("Plain break"), 1, "W2 sits behind a stop break")
         self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
 
+    def test_start_walk_asks_nothing_and_its_note_carries_the_permission_warning(self):
+        """index.html read as text (no node needed): the walk starts at once, so no confirmation dialog
+        is left, and the note under Start walk says what a walk does, since no dialog does."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertNotIn("Start the walk?", src)
+        note = src[src.index('id="walkhow"'):]
+        note = note[:note.index("</p>")]
+        self.assertIn("permission prompts off", note)
+        start = src[src.index("async function walkStart()"):src.index("async function walkStop()")]
+        self.assertNotIn("form(", start, "Start walk opens no dialog")
+        self.assertIn("walkStarting", start, "a second click while the request is out sends nothing")
+
     def test_the_walk_panel_is_collapsed_until_the_reader_opens_it(self):
         """walkHtml() in index.html, run under node (skipped when there is none): closed
         even while a walk is on, and open only once the reader's own toggle said so."""

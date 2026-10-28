@@ -772,13 +772,16 @@ function walkFields() {
 /* Start walk acts at once, with the numbers in the box; Start and Stop both fold the box away, as the walk's state is in its summary. */
 // The button that was pressed leaves with the open box, so focus goes to the box's summary, where its state now reads.
 function collapseWalk() { S.walkOpen = false; try { sessionStorage.setItem("walkOpen", "0"); } catch (e) {} drawTasks(); $("#walkbox > summary")?.focus(); }
+let walkStarting = false;   // a second click or Enter while the request is out must not send another
 async function walkStart() {
   const bud = $("#bud"), par = $("#par");
-  if (!bud.reportValidity() || !par.reportValidity()) return;
+  if (walkStarting || !bud || !par || !bud.reportValidity() || !par.reportValidity()) return;
+  walkStarting = true;
   try {
     S.walk = await api("/api/walk/start", { budget: parseInt(bud.value, 10), parallel: parseInt(par.value, 10) });
     S.walkDraft = null; toast("Walking."); collapseWalk();
   } catch (e) { toast(e.message, true); }
+  finally { walkStarting = false; }
 }
 async function walkStop() {
   try { S.walk = await api("/api/walk/stop", {}); collapseWalk(); }
