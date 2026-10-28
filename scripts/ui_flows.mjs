@@ -121,10 +121,11 @@ const FLOWS = {
     assert(/#\/a\/W9\//.test(await hash()), `the viewer is open, at ${await hash()}`);
     await page.keyboard.press("Escape"); await page.waitForSelector(".arts");
     assert(/#\/t\/W9$/.test(await hash()) && !(await page.$("iframe.artview")), `Esc on an artefact goes back to its task, at ${await hash()}`);
-    await page.waitForSelector("a.runrow"); await page.click("a.runrow >> nth=0"); await page.waitForSelector("#runlog");
+    // The run row can draw zero-width where no font gives its text a width, so follow its link from the page rather than click a box playwright must see.
+    await page.waitForSelector("a.runrow", { state: "attached" }); await page.$eval("a.runrow", a => a.click()); await page.waitForSelector("#runlog");
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
     assert(/#\/r\/W9\//.test(await hash()), `the run log is open, at ${await hash()}`);
-    await page.keyboard.press("Escape"); await page.waitForSelector("a.runrow");
+    await page.keyboard.press("Escape"); await page.waitForSelector("a.runrow", { state: "attached" });
     assert(/#\/t\/W9$/.test(await hash()) && !(await page.$("#runlog")), `Esc on a run log goes back to its task, at ${await hash()}`);
     same(errors, [], "no page errors");
     await ctx.close();
