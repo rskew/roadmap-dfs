@@ -1641,6 +1641,13 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
             self.assertEqual(self.call("POST", "/api/walk/model", dict(role="review", model="opus"))[0], 409)
             self.assertEqual(self.call("POST", "/api/walk/model", dict(role="plan", model="--help"))[0], 409)
 
+    def test_the_snapshot_gives_the_defaults_of_the_agent_the_next_chain_uses(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
+            self.assertEqual(self.call("GET", "/api/walk")[1]["model_defaults"], dict(plan="opus", implement="sonnet"))
+            snap = self.call("POST", "/api/walk/agent", dict(agent="codex"))[1]
+            self.assertEqual(snap["model_defaults"], dict(plan="", implement=""))
+            self.call("POST", "/api/walk/agent", dict(agent="claude"))
+
     def test_stopping_the_walk_ends_its_chain(self):
         self.call("POST", "/api/walk/start", dict(budget=6))
         self.fake.run_dirs = [test_walker.run("d1", "W1", live=True, run_no="2")]

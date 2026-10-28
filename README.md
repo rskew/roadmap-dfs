@@ -130,7 +130,8 @@ choice away (the runner's opus and sonnet again), and `:model` alone shows the c
 the run root's `models` file, shared by the screen and the page, and reach every chain the walk starts afterwards
 as `PLAN_MODEL` and `IMPLEMENT_MODEL`, the variables `run.sh` reads (set them yourself for a run by
 hand). A name is letters, digits and `. _ : [ ] -`, not starting with `-`. They apply to claude only:
-codex, kiro and opencode read their model from their own config. The walk header does not show the
+codex, kiro and opencode read their model from their own config, so with one of them as the agent `:model`
+and the page's fields show "(codex's own, not set here)" where claude shows opus and sonnet. The walk header does not show the
 choices (it has no room); `:model` alone does.
 
 ## Running the sandbox as a daemon
