@@ -2733,7 +2733,8 @@ class UI(WalkMixin):
         out.append(("", 0))
         mine = [e for e in self.data["entries"]
                 if e["target"] == it["id"] and e["type"] != "NODE"]
-        answered = {e["disp"].split(" · ")[0] for e in mine if e["type"] == "ANSWER"}
+        # A `settled` entry (the tool's, when a raise's cause is put right) ends a raise as an answer does.
+        answered = {e["disp"].split(" · ")[0] for e in mine if e["type"] in ("ANSWER", "SETTLED")}
         for e in mine:
             head = "%s · %s%s" % (e["id"], e["type"].lower(),
                                   (" · " + e["disp"]) if e["disp"] else "")

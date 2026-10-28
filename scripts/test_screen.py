@@ -408,6 +408,26 @@ class HiddenFromGit(unittest.TestCase):
         self.assertIn(".gitignore:1  .*   hides .dfs/", text)
 
 
+class TheTaskLogPane(unittest.TestCase):
+    def pane(self, *entries):
+        look, pair = TUI.look, curses.color_pair
+        TUI.look, curses.color_pair = (lambda name: 0), (lambda n: 0)
+        try:
+            ui = a_screen([item("W1")], data={"items": [item("W1")], "entries": [
+                dict(id=i, type=t, target="W1", disp=d, body="") for i, t, d in entries]})
+            return "\n".join(t for t, _ in ui.lines_reglog(80, item("W1")))
+        finally:
+            TUI.look, curses.color_pair = look, pair
+
+    def test_a_raise_the_tool_settled_is_not_shown_open(self):
+        raised = ("2026-01-01T00:00:00Z", "RAISE", "")
+        self.assertIn("open, needs you", self.pane(raised))
+        self.assertNotIn("open, needs you", self.pane(
+            raised, ("2026-01-01T00:01:00Z", "SETTLED", "2026-01-01T00:00:00Z")))
+        self.assertNotIn("open, needs you", self.pane(
+            raised, ("2026-01-01T00:01:00Z", "ANSWER", "2026-01-01T00:00:00Z")))
+
+
 class TheActivityLog(unittest.TestCase):
     def test_a_started_chain_and_a_stopped_walk_are_recorded(self):
         ui = a_screen([item("W1")], walk_on=True, walk_until=0.0,

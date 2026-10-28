@@ -33,11 +33,20 @@ class GithubError(Exception):
     pass
 
 
+# A `gh` call that has not answered in this many seconds is a stalled network: `open_pr` runs one
+# under the chains' lock, and the walk's poll thread would otherwise wait on it for good.
+GH_TIMEOUT = 180
+
+
 def gh(*args, cwd=None):
-    """Run `gh` (or `DFS_GH`) and return its stdout; GithubError with its message when it fails."""
+    """Run `gh` (or `DFS_GH`) and return its stdout; GithubError with its message when it fails
+    or does not answer within `GH_TIMEOUT` seconds."""
     cmd = shlex.split(os.environ.get("DFS_GH") or "gh") + list(args)
     try:
-        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=GH_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        raise GithubError("gh %s did not answer within %d seconds; check the network and `gh auth status`"
+                          % (args[0] if args else "", GH_TIMEOUT))
     except OSError as e:
         raise GithubError("gh could not run (%s); install the GitHub CLI and `gh auth login`" % e)
     if r.returncode != 0:
@@ -140,10 +149,17 @@ def _pr_marks(t):
 CLOSED = "closed PR "
 
 
+def _tagged(raise_entry, tag):
+    """Whether the raise ends with `(tag)` on its last line, as `_raise_once` writes it: the
+    whole tag, so `.../pull/1` does not match `.../pull/12`."""
+    lines = raise_entry.get("body", "").strip().splitlines()
+    return bool(lines) and lines[-1].strip() == "(%s)" % tag
+
+
 def _raise_once(task, tag, text):
     """Raise `text` unless the task already holds an unanswered raise carrying `tag`, which a
     watch repeating every few minutes would otherwise log again."""
-    if any(tag in e.get("body", "") for e in dfs_tree.open_raises(dfs_tree.load(task))):
+    if any(_tagged(e, tag) for e in dfs_tree.open_raises(dfs_tree.load(task))):
         return
     dfs_tree.append_log(task, "raise", [], "%s\n(%s)" % (text, tag))
 
@@ -154,7 +170,7 @@ def _settle(task, tag):
     reopened to act on an answer nobody gave."""
     t = dfs_tree.load(task)
     for r in dfs_tree.open_raises(t):
-        if tag in r.get("body", ""):
+        if _tagged(r, tag):
             dfs_tree.append_log(task, "settled", [r["ts"]])
 
 

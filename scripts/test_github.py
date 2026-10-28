@@ -199,11 +199,58 @@ class Watch(unittest.TestCase):
         self.assertFalse(self.calls.exists())
 
 
+class Raises(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / ".dfs" / "items").mkdir(parents=True)
+        (self.root / ".dfs" / "items" / "W1.md").write_text(TASK)
+        self._wr = dfs_paths.work_root
+        dfs_paths.work_root = lambda: self.root
+
+    def tearDown(self):
+        dfs_paths.work_root = self._wr
+        shutil.rmtree(self.root, ignore_errors=True)
+
+    def test_a_raise_is_matched_by_its_whole_tag(self):
+        one, twelve = "merged PR https://github.com/o/r/pull/1", "merged PR https://github.com/o/r/pull/12"
+        dfs_github._raise_once("W1", twelve, "Cannot land twelve.")
+        dfs_github._raise_once("W1", one, "Cannot land one.")      # not mistaken for twelve's
+        self.assertEqual(len(dfs_tree.open_raises(dfs_tree.load("W1"))), 2)
+        dfs_github._raise_once("W1", one, "Cannot land one.")      # but once only
+        self.assertEqual(len(dfs_tree.open_raises(dfs_tree.load("W1"))), 2)
+        dfs_github._settle("W1", one)
+        left = dfs_tree.open_raises(dfs_tree.load("W1"))
+        self.assertEqual([e["body"].splitlines()[-1] for e in left], ["(%s)" % twelve])
+
+
+class GhTimeout(unittest.TestCase):
+    def test_a_gh_that_does_not_answer_is_a_github_error(self):
+        import time
+        fake = Path(tempfile.mkdtemp()) / "gh"
+        fake.write_text("#!/bin/sh\nsleep 5\n")
+        fake.chmod(0o755)
+        keep, limit = os.environ.get("DFS_GH"), dfs_github.GH_TIMEOUT
+        os.environ["DFS_GH"], dfs_github.GH_TIMEOUT = str(fake), 0.5
+        started = time.time()
+        try:
+            with self.assertRaises(dfs_github.GithubError) as got:
+                dfs_github.gh("pr", "view")
+        finally:
+            dfs_github.GH_TIMEOUT = limit
+            if keep is None:
+                os.environ.pop("DFS_GH", None)
+            else:
+                os.environ["DFS_GH"] = keep
+            shutil.rmtree(fake.parent, ignore_errors=True)
+        self.assertLess(time.time() - started, 4)
+        self.assertIn("did not answer", str(got.exception))
+
+
 class NetworkCalls(unittest.TestCase):
     def env_of(self, **env):
         """The environment `_git_net` hands git, read back through a git alias running `env`."""
         import branch as dfs_branch
-        keep = {k: os.environ.pop(k, None) for k in ("GIT_SSH_COMMAND", "GIT_TERMINAL_PROMPT")}
+        keep = {k: os.environ.pop(k, None) for k in ("GIT_SSH_COMMAND", "GIT_SSH", "GIT_TERMINAL_PROMPT")}
         os.environ.update(env)
         try:
             r = dfs_branch._git_net("-c", "alias.show-env=!env",
@@ -218,6 +265,15 @@ class NetworkCalls(unittest.TestCase):
         got = self.env_of()
         self.assertEqual(got["GIT_TERMINAL_PROMPT"], "0")
         self.assertIn("-o BatchMode=yes", got["GIT_SSH_COMMAND"])
+
+    def test_the_authors_ssh_program_is_left_in_charge(self):
+        got = self.env_of(GIT_SSH="/usr/local/bin/my-ssh")
+        self.assertNotIn("GIT_SSH_COMMAND", got)
+        self.assertEqual(got["GIT_SSH"], "/usr/local/bin/my-ssh")
+        self.assertEqual(got["GIT_TERMINAL_PROMPT"], "0")
+        # a command of theirs, which git prefers to the program anyway, still gets BatchMode
+        got = self.env_of(GIT_SSH="/usr/local/bin/my-ssh", GIT_SSH_COMMAND="ssh -F mine")
+        self.assertEqual(got["GIT_SSH_COMMAND"], "ssh -F mine -o BatchMode=yes")
 
     def test_the_authors_ssh_command_is_kept(self):
         got = self.env_of(GIT_SSH_COMMAND="ssh -F mine")

@@ -81,6 +81,8 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   the pull request, so it shows reviewed work and not a half-done node. If the branch moved on GitHub (a
   suggestion committed there) the push is refused, and the task reopens with a node asking for a rebase onto
   the remote branch.
+  A push that fails for the network or a credential (it never waits on a prompt) reopens it with a node
+  saying so instead.
 - **Merged or closed on GitHub**: the watch also reads the pull request's state. When it is merged, the watch
   fetches the remote and fast-forwards the default branch to it, carries the task's file (with the log entries
   no commit holds) across, removes the worktree and `dfs/<task>`, and logs `pr <url> merged`, so the task

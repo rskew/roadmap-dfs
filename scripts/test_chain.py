@@ -367,6 +367,21 @@ class Chain(unittest.TestCase):
             self.git("branch", "-D", "dfs/W1", cwd=bare)
         return default
 
+    def test_a_push_to_the_pull_request_that_fails_for_the_network_is_not_blamed_on_a_moved_branch(self):
+        bare, view, gh = self.github_task()
+        self.assertEqual(gh("pr", "W1").returncode, 0)
+        self.commit_in_worktree()
+        self.git("remote", "set-url", "hub", str(self.aside / "nowhere.git"))
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 3, r.stderr)
+        self.assertNotIn("moved on GitHub", r.stderr)
+        self.assertIn("the push to its pull request failed", r.stderr)
+        node = self.tree()["nodes"][-1]
+        self.assertIn("Push dfs/W1 to its pull request", node["title"])
+        self.assertIn("failed", node["fields"]["Approach"])
+        self.assertNotIn("moved on GitHub", node["fields"]["Approach"])
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "open")
+
     def test_github_mode_end_to_end_hold_open_pr_comment_fix_push_and_merge(self):
         bare, view, gh = self.github_task()
         url = self.PR
