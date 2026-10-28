@@ -102,7 +102,8 @@ import login as dfs_login    # noqa: E402
 
 INDEX = HERE / "web" / "index.html"
 STATIC = {"/sw.js": "text/javascript", "/design.css": "text/css", "/design": "text/html", "/icon-192.png": "image/png", "/icon-512.png": "image/png",
-          "/icon-maskable-512.png": "image/png", "/apple-touch-icon.png": "image/png"}
+          "/icon-1024.png": "image/png", "/icon-maskable-512.png": "image/png", "/icon-maskable-1024.png": "image/png",
+          "/apple-touch-icon.png": "image/png"}
 MAX_BODY = 64 * 1024
 IMAGE_BODY = dfs_paths.IMAGE_MAX * 4 // 3 + MAX_BODY      # a picture in base64, and the JSON around it
 LOCK = threading.Lock()       # one writer at a time: a task file is read, changed, written
@@ -1322,7 +1323,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/manifest.json":
             icons = [dict(src="/icon-192.png", sizes="192x192", type="image/png"),
                      dict(src="/icon-512.png", sizes="512x512", type="image/png"),
+                     dict(src="/icon-1024.png", sizes="1024x1024", type="image/png"),
                      dict(src="/icon-maskable-512.png", sizes="512x512", type="image/png",
+                          purpose="maskable"),
+                     dict(src="/icon-maskable-1024.png", sizes="1024x1024", type="image/png",
                           purpose="maskable")]
             return self.json(200, dict(name=project_title(), short_name=project_title()[:12], id="/", start_url="/",
                                        scope="/", display="standalone", orientation="portrait",
