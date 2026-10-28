@@ -832,6 +832,17 @@ def act(name, body):
         raise Refused("no task %s" % task, 404)
     t = dfs_tree.load(task)
     nodes = dfs_tree.by_id(t)
+    if name == "open_pr":
+        # as the terminal's `P`: GitHub mode's Open PR mark, which pushes the held branch and runs
+        # `gh pr create`; the url is in the log entry it writes. The push can take minutes, so it
+        # runs outside LOCK, which `open_pr` takes only to write that entry.
+        try:
+            dfs_github.open_pr(task, writing=LOCK)
+        except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError,
+                OSError, dfs_paths.NoBranch) as e:
+            raise Refused(str(e), 409)
+        HUB.notify()
+        return dict(task=task_json(task))
     with LOCK:
         if name == "answer":
             ts = need(body, "ts", "the raise")
@@ -872,14 +883,6 @@ def act(name, body):
                 # a walk chain already on it would work it to the end
                 if want and WALK["walker"] is not None:
                     WALK["walker"].draft_marked(task)
-        elif name == "open_pr":
-            # as the terminal's `P`: GitHub mode's Open PR mark, which pushes the held branch
-            # and runs `gh pr create`; the url is in the log entry it writes
-            try:
-                dfs_github.open_pr(task)
-            except (dfs_github.GithubError, dfs_github.dfs_branch.BranchError, ValueError,
-                    OSError, dfs_paths.NoBranch) as e:
-                raise Refused(str(e), 409)
         elif name == "delete_task":
             try:
                 dfs_tree.delete_task(task)

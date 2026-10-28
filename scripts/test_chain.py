@@ -599,6 +599,7 @@ class Chain(unittest.TestCase):
         raised = self.log("raise")
         self.assertEqual(len(raised), 1)
         self.assertIn("would be overwritten", raised[0]["body"])
+        self.assertIn("commit or stash your uncommitted edits", raised[0]["body"])   # not "move your commits"
         self.assertIn("git pull --ff-only hub %s" % default, raised[0]["body"])
         self.assertFalse(any(e["args"][1:2] == ["merged"] for e in self.log("pr")))
         # put right, the next watch lands it
@@ -650,6 +651,22 @@ class Chain(unittest.TestCase):
         self.assertIn("kept as dfs-merged/W1", r.stdout)
         self.assertFalse(self.wt.exists())
         self.assertIn("W1.9: never pushed", self.git("log", "--format=%s", "dfs-merged/W1"))
+
+    def test_a_landing_removes_the_branch_of_a_worktree_removed_by_hand(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        default = self.merge_on_github(bare)
+        shutil.rmtree(self.wt)      # the worktree is gone; git still lists it and dfs/W1 stays
+        self.assertNotEqual(self.git("branch", "--list", "dfs/W1"), "")
+        # the watch reads the task from its worktree, so land it as a watch that still can would
+        r = subprocess.run([sys.executable, "-c", "import github; github.land('W1', %r)" % self.PR],
+                           cwd=self.root, capture_output=True, text=True,
+                           env=dict(os.environ, PYTHONPATH=str(HERE)))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "", r.stdout + r.stderr)
+        self.assertEqual(self.git("worktree", "list", "--porcelain").count("worktree "), 1)
+        self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
+        self.assertEqual(self.git("rev-parse", default), self.git("rev-parse", "hub/" + default))
 
     def test_a_squash_merged_pull_request_whose_head_branch_was_pruned_is_not_kept_as_lacking_work(self):
         bare, view, gh = self.github_task()

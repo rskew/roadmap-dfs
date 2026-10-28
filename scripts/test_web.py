@@ -1416,13 +1416,21 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertEqual((row["pr"], row["pr_ready"]), ("https://github.com/o/r/pull/9", False))
 
     def test_open_pr_runs_github_open_pr_and_answers_with_the_task(self):
-        opened = []
+        opened, meanwhile = [], []
         real = dfs_web.dfs_github.open_pr
-        dfs_web.dfs_github.open_pr = lambda t: opened.append(t) or "https://github.com/o/r/pull/9"
+
+        def fake(t, writing=None):
+            opened.append(t)
+            # the push and `gh` run here: no other web write waits behind them
+            meanwhile.append((dfs_web.LOCK.locked(), writing is dfs_web.LOCK,
+                              self.call("POST", "/api/new", dict(name="Meanwhile"))[0]))
+            return "https://github.com/o/r/pull/9"
+        dfs_web.dfs_github.open_pr = fake
         self.addCleanup(setattr, dfs_web.dfs_github, "open_pr", real)
         task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
         status, data, _ = self.call("POST", "/api/open_pr", dict(task=task))
         self.assertEqual((status, opened, data["task"]["id"]), (200, [task], task))
+        self.assertEqual(meanwhile, [(False, True, 200)])
 
     def test_marking_a_draft_tells_the_walk_only_when_it_becomes_one(self):
         told = []

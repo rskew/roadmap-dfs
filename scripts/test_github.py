@@ -176,6 +176,19 @@ class Watch(unittest.TestCase):
             LINES.pop()
         self.assertEqual(dfs_github.watch("W1"), [])
 
+    def test_a_comment_quoting_anothers_mark_does_not_make_that_comment_known(self):
+        quoting = [dict(LINES[0], body="(github line 99)")]
+        (self.root / "lines.json").write_text(json.dumps(quoting))
+        self.assertEqual(dfs_github.watch("W1"), ["W1.2", "W1.3", "W1.4"])
+        # the quoting comment's node title ends in the mark too; deleting it must not hide 99 either
+        self.assertEqual(dfs_tree.delete_node("W1", "W1.4"), ["W1.4"])
+        later = quoting + [{"id": 99, "user": {"login": "cy"}, "body": "The real one.",
+                            "path": "app.py", "line": 20, "html_url": "https://github.com/o/r/pull/7#r99"}]
+        (self.root / "lines.json").write_text(json.dumps(later))
+        added = dfs_github.watch("W1")
+        self.assertEqual(len(added), 1)
+        self.assertIn("The real one.", dfs_tree.by_id(dfs_tree.load("W1"))[added[0]]["fields"]["Approach"])
+
     def test_line_comments_on_every_page_become_nodes(self):
         # `gh api --paginate` prints one array per page, back to back
         page2 = [{"id": 90 + i, "user": {"login": "cy"}, "body": "More %d." % i, "path": "app.py",
@@ -341,6 +354,25 @@ class NetworkCalls(unittest.TestCase):
             shutil.rmtree(repo, ignore_errors=True)
         self.assertLess(time.time() - started, 10)
         self.assertNotEqual(r.returncode, 0)
+        self.assertIn("did not answer within 1 seconds", r.stderr)
+
+    def test_a_descendant_outside_the_group_holding_the_pipes_does_not_hold_the_lock(self):
+        import time
+        import branch as dfs_branch
+        if shutil.which("setsid") is None:
+            self.skipTest("no setsid")
+        limit, grace, started = dfs_branch.GIT_NET_TIMEOUT, dfs_branch.GIT_PIPE_GRACE, time.time()
+        dfs_branch.GIT_NET_TIMEOUT = 1; dfs_branch.GIT_PIPE_GRACE = 1
+        repo = tempfile.mkdtemp()
+        subprocess.run(["git", "init", "-q", repo], check=True)
+        try:   # `setsid` starts a sleep in a session of its own, which killing git's group misses
+            r = dfs_branch._git_net("-c", "alias.hang=!setsid sleep 20 & sleep 20; true", "hang", cwd=repo)
+        finally:
+            dfs_branch.GIT_NET_TIMEOUT, dfs_branch.GIT_PIPE_GRACE = limit, grace
+            shutil.rmtree(repo, ignore_errors=True)
+            subprocess.run(["pkill", "-f", "^sleep 20$"], check=False)
+        self.assertLess(time.time() - started, 10)
+        self.assertEqual(r.returncode, 124)
         self.assertIn("did not answer within 1 seconds", r.stderr)
 
 

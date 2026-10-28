@@ -69,6 +69,7 @@ def _git_net(*args, cwd=None):
 # stall, an ssh with no keepalive): `_git_net` runs under the chains' lock, which every chain waits
 # on, and in the walk's poll thread, which would otherwise never poll again.
 GIT_NET_TIMEOUT = 300
+GIT_PIPE_GRACE = 5   # seconds to read what a killed git left in its pipes before letting them go
 
 
 def _run_bounded(cmd, cwd, env):
@@ -84,7 +85,15 @@ def _run_bounded(cmd, cwd, env):
             os.killpg(proc.pid, signal.SIGKILL)
         except OSError:
             pass
-        out, err = proc.communicate()
+        try:   # a descendant that left the group (setsid) may still hold the pipes: let go of them
+            out, err = proc.communicate(timeout=GIT_PIPE_GRACE)
+        except subprocess.TimeoutExpired:
+            out, err = "", ""
+            for pipe in (proc.stdout, proc.stderr):
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
         err = "git did not answer within %d seconds; check the network. %s" % (GIT_NET_TIMEOUT, err or "")
         return subprocess.CompletedProcess(cmd, 124, out or "", err)
     return subprocess.CompletedProcess(cmd, proc.returncode, out, err)

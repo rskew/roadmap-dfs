@@ -14,6 +14,7 @@ holds a finished item, its branch and worktree kept. The author's Open PR mark i
 `gh` must be logged in (`gh auth login`); `DFS_GH` names another command to run as it
 (the tests' fake). See README, "GitHub mode".
 """
+import contextlib
 import json
 import os
 import re
@@ -59,11 +60,13 @@ pr_url = dfs_tree.pr_url
 
 
 @dfs_branch.one_at_a_time
-def open_pr(task):
+def open_pr(task, writing=None):
     """Open the pull request of a finished item GitHub mode holds; returns its url. The branch
     is rebased onto the default branch first (a conflict reopens the item with a node, as a
     merge's does, and is a GithubError here), then pushed to the remote `.dfs/github` names
-    and handed to `gh pr create` with the merge commit's details as its body."""
+    and handed to `gh pr create` with the merge commit's details as its body. The push and `gh`
+    can take minutes: a caller that serialises writers of the task file passes its lock as
+    `writing`, which is held only for the log entry at the end."""
     remote = dfs_paths.read_github()
     if not remote:
         raise GithubError("GitHub mode is off: write the remote to push to into %s"
@@ -99,7 +102,8 @@ def open_pr(task):
     url = next((w for w in out.split() if w.startswith("http")), "")
     if not url:
         raise GithubError("gh pr create printed no url: %s" % " ".join(out.split())[:200])
-    dfs_tree.append_log(task, "pr", [url])
+    with writing or contextlib.nullcontext():
+        dfs_tree.append_log(task, "pr", [url])
     return url
 
 
@@ -225,26 +229,31 @@ def land(task, url, head=""):
                             % ", ".join(mine_dirty[:5]), edits=True)
     r = dfs_branch._git("merge", "--ff-only", "%s/%s" % (remote, default))
     if r.returncode != 0:
-        return pull_by_hand("it cannot be fast-forwarded to %s/%s (%s)" % (
-            remote, default, " ".join(dfs_branch.out_of(r).split())[:200]))
+        said = " ".join(dfs_branch.out_of(r).split())
+        return pull_by_hand("it cannot be fast-forwarded to %s/%s (%s)" % (remote, default, said[:200]),
+                            edits="local changes" in said)   # git: an uncommitted edit is in the way
     kept = ""
-    if wt is not None:
+    has_branch = dfs_branch._git("rev-parse", "-q", "--verify", "refs/heads/" + name).returncode == 0
+    if wt is not None or has_branch:
         mine = dfs_branch.task_paths(task)
-        stray = [l[3:] for l in dfs_branch._git("status", "--porcelain", cwd=wt).stdout.splitlines()
-                 if not any(l[3:].strip('"') == p or l[3:].startswith(p.rstrip("/") + "/") for p in mine)]
+        stray = []
+        if wt is not None:
+            stray = [l[3:] for l in dfs_branch._git("status", "--porcelain", cwd=wt).stdout.splitlines()
+                     if not any(l[3:].strip('"') == p or l[3:].startswith(p.rstrip("/") + "/") for p in mine)]
         # the work the pull request lacks: against its head as GitHub reports it, which a squash
         # merge and a pruned remote-tracking branch leave intact; else against what we pushed
         if not head or dfs_branch._git("cat-file", "-e", head + "^{commit}").returncode != 0:
             head = "refs/remotes/%s/%s" % (remote, name)
-        gone = dfs_branch._git("rev-list", name, "--not", default, head)
-        for p in dfs_branch._tracked_task_paths(task, wt):
-            src, dst = wt / p, dfs_paths.work_root() / p
-            if src.is_dir():
-                shutil.copytree(src, dst, dirs_exist_ok=True)
-            else:
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-        keep = bool(stray) or gone.returncode != 0 or bool(gone.stdout.split())
+        gone = dfs_branch._git("rev-list", name, "--not", default, head) if has_branch else None
+        if wt is not None:
+            for p in dfs_branch._tracked_task_paths(task, wt):
+                src, dst = wt / p, dfs_paths.work_root() / p
+                if src.is_dir():
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                else:
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+        keep = bool(stray) or (gone is not None and (gone.returncode != 0 or bool(gone.stdout.split())))
         keep_as = "dfs-merged/" + task
         n = 1
         while keep and dfs_branch._git("rev-parse", "-q", "--verify", "refs/heads/" + keep_as).returncode == 0:
@@ -253,9 +262,14 @@ def land(task, url, head=""):
         if keep:
             dfs_branch.keep_leftover_work(task, "merged")
             kept = "; %s holds work the pull request lacks, kept as %s" % (name, keep_as)
-        steps = [("its worktree", dfs_branch._git("worktree", "remove", "--force", str(wt))),
-                 ("its branch", dfs_branch._git("branch", "-m", name, keep_as) if keep
-                  else dfs_branch._git("branch", "-D", name))]
+        steps = []
+        if wt is not None:
+            steps.append(("its worktree", dfs_branch._git("worktree", "remove", "--force", str(wt))))
+        if has_branch:   # a worktree removed by hand leaves the branch behind, and git's entry for it
+            if wt is None:
+                dfs_branch._git("worktree", "prune")
+            steps.append(("its branch", dfs_branch._git("branch", "-m", name, keep_as) if keep
+                          else dfs_branch._git("branch", "-D", name)))
         for what, r in steps:   # not `release`, which takes the lock `land` holds
             if r.returncode != 0:
                 print("dfs_github: %s merged, but %s could not be removed: %s"
@@ -263,6 +277,27 @@ def land(task, url, head=""):
     dfs_tree.append_log(task, "pr", [url, "merged"])
     _settle(task, tag)
     print("dfs_github: %s: %s merged on GitHub; %s is at %s/%s%s" % (task, url, default, remote, default, kept))
+
+
+MARK = re.compile(r"\(github \w+ [^\s)]+\)$")
+
+
+def _known_marks(t):
+    """The `(github <kind> <id>)` marks `t` holds: where a node's Approach ends, in the tree and in
+    the text of a node the author deleted. Only there, so a comment that quotes another's mark in
+    its own text does not make that comment known."""
+    marks = set()
+    for nd in t["nodes"]:
+        m = MARK.search(nd["fields"].get("Approach", "").rstrip())
+        if m:
+            marks.add(m.group(0))
+    for e in t["log"]:
+        if e["kind"] == "delete":
+            for line in e["body"].splitlines():
+                m = MARK.search(line.rstrip()) if line.startswith("Approach:") else None
+                if m:
+                    marks.add(m.group(0))
+    return marks
 
 
 def watch(task):
@@ -287,8 +322,7 @@ def watch(task):
         dfs_tree.append_log(task, "pr", [url])   # reopened on GitHub: watched as before
         _settle(task, CLOSED + url)
     # A node the author deleted is dismissed: its text, mark included, is in the `delete` entry.
-    known = " ".join([nd["fields"].get("Approach", "") for nd in t["nodes"]]
-                     + [e["body"] for e in t["log"] if e["kind"] == "delete"])
+    known = _known_marks(t)
     added = []
     for kind, cid, who, text, where, link in comments:
         mark = "(github %s %s)" % (kind, cid)
