@@ -104,7 +104,7 @@ DETERMINED = ("confirmed", "refuted")
 # Who writes each kind is a convention the checker enforces only by shape; the
 # runner, the agent, the critic and the author's passes each append their own.
 KINDS = ("session", "end", "raise", "answer", "critic", "review", "correct", "backtrack",
-         "accept", "delete", "draft", "ready", "pr")
+         "accept", "delete", "draft", "ready", "pr", "settled")
 FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determination",
           "Ask", "Corrects")
 # Old names still read, as the field they became: determined nodes are history, so
@@ -1258,7 +1258,10 @@ def frontier(t):
 
 
 def open_raises(t):
-    answered = {e["args"][0] for e in t["log"] if e["kind"] == "answer" and e["args"]}
+    """The raises nobody has answered. A `settled <raise ts>` entry, which the tool writes when
+    the cause it raised on is put right (a pull request landed, one reopened), ends a raise as
+    an answer does but is not the author speaking: no work session is owed to it."""
+    answered = {e["args"][0] for e in t["log"] if e["kind"] in ("answer", "settled") and e["args"]}
     return [e for e in t["log"] if e["kind"] == "raise" and e["ts"] not in answered]
 
 

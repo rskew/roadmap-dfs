@@ -552,11 +552,16 @@ class Chain(unittest.TestCase):
         self.assertIn("closed on GitHub without being merged", raised[0]["body"])
         self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "closed"])
         self.assertTrue(self.wt.exists())
+        self.assertEqual(self.status()[0][0], "blocked")
         view.write_text(json.dumps({"state": "OPEN", "comments": [
             {"id": "IC_2", "author": {"login": "rev"}, "body": "back again", "url": self.PR + "#c2"}]}))
         r = gh("watch")
         self.assertIn("W1.2 from its pull request", r.stdout)
         self.assertEqual(self.log("pr")[-1]["args"], [self.PR])
+        # reopened: the closed raise is settled, not left blocking, so the new comment is worked
+        self.assertEqual(self.log("settled")[0]["args"], [raised[0]["ts"]])
+        self.assertEqual(self.status()[0][0], "open")
+        self.assertIn("W1.2", self.status()[0][1])
 
     def test_a_merged_pull_request_is_not_landed_over_an_edit_of_the_authors_it_overwrites_and_asks_once(self):
         bare, view, gh = self.github_task()
@@ -585,6 +590,8 @@ class Chain(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse(self.wt.exists())
         self.git("merge-base", "--is-ancestor", self.git("rev-parse", default, cwd=bare), default)
+        self.assertEqual(self.status()[0][0], "done")
+        self.assertEqual(self.log("settled")[0]["args"], [raised[0]["ts"]])
 
     def test_a_landing_keeps_the_authors_uncommitted_edit_of_the_tasks_file_and_asks_once(self):
         bare, view, gh = self.github_task()
@@ -608,6 +615,11 @@ class Chain(unittest.TestCase):
         r = gh("watch")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse(self.wt.exists())
+        # the landing settled the raise: done and merged, not blocked; no answer, so no work owed
+        self.assertEqual(self.status()[0][0], "done")
+        self.assertIn("merged", self.status()[0][1])
+        self.assertEqual(self.log("settled")[0]["args"], [raised[0]["ts"]])
+        self.assertEqual(self.log("answer"), [])
 
     def test_work_a_merged_pull_request_lacks_keeps_its_branch_as_dfs_merged(self):
         bare, view, gh = self.github_task()

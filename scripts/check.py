@@ -356,8 +356,8 @@ def check_shape(task, text, archive="", tag="", whole=None):
     for e in t["log"]:
         if e["kind"] not in dfs_tree.KINDS:
             bad.append("log entry %s has unknown kind %r" % (e["ts"], e["kind"]))
-        if e["kind"] == "answer" and (not e["args"] or e["args"][0] not in raises):
-            bad.append("the answer at %s names no raise" % e["ts"])
+        if e["kind"] in ("answer", "settled") and (not e["args"] or e["args"][0] not in raises):
+            bad.append("the %s at %s names no raise" % (e["kind"], e["ts"]))
         if e["kind"] in ("correct", "backtrack"):
             if not e["args"] or (e["args"][0] not in nums and e["args"][0] not in gone):
                 bad.append("the %s at %s names no node" % (

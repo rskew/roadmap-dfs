@@ -137,16 +137,25 @@ def _pr_marks(t):
     return [e["args"] for e in t["log"] if e["kind"] == "pr"]
 
 
+CLOSED = "closed PR "
+
+
 def _raise_once(task, tag, text):
     """Raise `text` unless the task already holds an unanswered raise carrying `tag`, which a
     watch repeating every few minutes would otherwise log again."""
-    t = dfs_tree.load(task)
-    for e in reversed(t["log"]):
-        if e["kind"] == "answer":
-            break
-        if e["kind"] == "raise" and tag in e.get("body", ""):
-            return
+    if any(tag in e.get("body", "") for e in dfs_tree.open_raises(dfs_tree.load(task))):
+        return
     dfs_tree.append_log(task, "raise", [], "%s\n(%s)" % (text, tag))
+
+
+def _settle(task, tag):
+    """The cause of the task's unanswered raises carrying `tag` is put right: log each as
+    `settled`, which ends it without an answer, so the task is neither blocked on it nor
+    reopened to act on an answer nobody gave."""
+    t = dfs_tree.load(task)
+    for r in dfs_tree.open_raises(t):
+        if tag in r.get("body", ""):
+            dfs_tree.append_log(task, "settled", [r["ts"]])
 
 
 def closed(task, url):
@@ -158,8 +167,8 @@ def closed(task, url):
     dfs_tree.append_log(task, "raise", [], "The pull request %s was closed on GitHub without being "
                         "merged, so %s's branch is not in the default branch. Reopen the pull "
                         "request on GitHub and the watch carries on with it, or tell me to drop "
-                        "the task (its worktree and branch are left as they are until then)."
-                        % (url, task))
+                        "the task (its worktree and branch are left as they are until then).\n(%s)"
+                        % (url, task, CLOSED + url))
 
 
 @dfs_branch.one_at_a_time
@@ -240,6 +249,7 @@ def land(task, url):
                 print("dfs_github: %s merged, but %s could not be removed: %s"
                       % (task, what, " ".join(dfs_branch.out_of(r).split())), file=sys.stderr)
     dfs_tree.append_log(task, "pr", [url, "merged"])
+    _settle(task, tag)
     print("dfs_github: %s: %s merged on GitHub; %s is at %s/%s%s" % (task, url, default, remote, default, kept))
 
 
@@ -262,6 +272,7 @@ def watch(task):
         return []
     if _pr_marks(t)[-1:] == [[url, "closed"]]:
         dfs_tree.append_log(task, "pr", [url])   # reopened on GitHub: watched as before
+        _settle(task, CLOSED + url)
     known = " ".join(nd["fields"].get("Approach", "") for nd in t["nodes"])
     added = []
     for kind, cid, who, text, where, link in comments:

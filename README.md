@@ -90,12 +90,13 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   be fast-forwarded (a commit only here, an edit in the way) it raises once, asking you to move your commits
   to a branch for a pull request and `git pull --ff-only <remote> <default>`, and lands on the watch after
   that. A branch holding commits the pull request never got, or a worktree holding changes beyond the task's
-  files, is kept as `dfs-merged/<task>` (`-2`, `-3` … if taken) and not
-  deleted. Comments still open when it merges are worked on a
-  fresh branch cut from the updated default branch, and their finished fix is held for a new pull request:
-  the Open PR mark applies again, as the merged one no longer counts as the task's pull request. A pull
-  request **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it on GitHub and the
-  watch carries on, or tell the walk to drop the task.
+  files, is kept as `dfs-merged/<task>` (`-2`, `-3` … if taken) and not deleted. Comments still open when it
+  merges are worked on a fresh branch cut from the updated default branch, and their finished fix is held
+  for a new pull request: the Open PR mark applies again, as the merged one no longer counts as the task's
+  pull request. A pull request **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it
+  on GitHub and the watch carries on, or tell the walk to drop the task. When the cause of a raise the
+  landing or the watch made is put right (the pull request lands, or is reopened), the tool logs it
+  `settled`: the task stops being blocked without an answer, so no work session is started on it.
 
 ## Parallel walks
 
