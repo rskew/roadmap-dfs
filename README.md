@@ -69,31 +69,38 @@ to push) and the GitHub CLI logged in (`gh auth login`); `DFS_GH` names another 
   request link). It is not the draft/ready mark, which only says whether the walk may pick a task up. A
   second mark is refused.
 - **The watch** reads each open pull request every five minutes while a walk runs (it stops when the
-  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand). Each new
-  conversation comment, review with a body and line comment becomes one open node at the root of the
-  task, as a reviewer's finding does: who wrote it, the text, the file and line, its link, and
-  `(github <kind> <id>)` by which it is never added twice. An approval with no body adds nothing; every
-  other comment does, your own replies and bots' included.
-  The task is open again, so the walk works and raises on the node as on any other; nothing is posted back
-  to GitHub.
+  walk's budget is spent or the walk is stopped; `github.py watch [<task>]` looks by hand and, like the
+  walk, passes over a task a work chain is on). Each new conversation comment, review with a body and line
+  comment becomes one open node at the root of the task, as a reviewer's finding does: who wrote it, the
+  text, the file and line, its link, and `(github <kind> <id>)` (ending the node's Approach) by which it
+  is never added twice. An approval with no body adds nothing; every other comment does, your own
+  replies and bots' included. Delete the node of a comment you do not want acted on and it is
+  dismissed (shelved or not): the watch does not add it again, and editing such a node keeps its mark.
+  The task is open again, so the walk works and raises on the node as on any other; nothing is posted
+  back to GitHub.
 - **The push**: when that task is finished anew (the fix reviewed, or accepted) the hold pushes `dfs/<task>` to
   the pull request, so it shows reviewed work and not a half-done node. If the branch moved on GitHub (a
   suggestion committed there) the push is refused, and the task reopens with a node asking for a rebase onto
   the remote branch.
+  A push that fails for the network or a credential (it never waits on a prompt) reopens it with a node
+  saying so instead.
 - **Merged or closed on GitHub**: the watch also reads the pull request's state. When it is merged, the watch
   fetches the remote and fast-forwards the default branch to it, carries the task's file (with the log entries
-  no commit holds) across and commits it there, removes the worktree and `dfs/<task>`, and logs
-  `pr <url> merged`, so the task reads done and merged and is no longer watched. That needs the main checkout
-  on the default branch with no tracked change and no merge or rebase of yours unfinished; otherwise it
-  raises once, asking you to `git pull --rebase <remote> <default>`, and lands on the watch after that. Commits
-  only here (an earlier landing's log, your unpushed work) are replayed on the remote's default branch first and
-  nothing is pushed; only a clash in an earlier landing's own log is settled for the remote's side, and a clash
-  in anything of yours is that raise, with the replay aborted and your commits untouched. A
-  branch holding commits the pull request never got, or a worktree holding changes beyond the task's files, is
-  kept as `dfs-merged/<task>` and not deleted. Comments still open when it merges are worked on a fresh branch
-  cut from the updated default branch, and their finished fix is held for a new pull request: the Open PR mark
-  applies again, as the merged one no longer counts as the task's pull request. A pull request
-  **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it on GitHub and the watch carries on, or tell the walk to drop the task.
+  no commit holds) across, removes the worktree and `dfs/<task>`, and logs `pr <url> merged`, so the task
+  reads done and merged and is no longer watched. The default branch must match its upstream, so the landing
+  commits nothing to it: the task's file is left modified and uncommitted in the main checkout, and the
+  fast-forward is all it does to the branch. That needs the main checkout on the default branch with no merge
+  or rebase of yours unfinished, and nothing of yours that the pull request overwrites; if the branch cannot
+  be fast-forwarded (a commit only here, an edit in the way) it raises once, asking you to move your commits
+  to a branch for a pull request and `git pull --ff-only <remote> <default>`, and lands on the watch after
+  that. A branch holding commits the pull request never got, or a worktree holding changes beyond the task's
+  files, is kept as `dfs-merged/<task>` (`-2`, `-3` … if taken) and not deleted. Comments still open when it
+  merges are worked on a fresh branch cut from the updated default branch, and their finished fix is held
+  for a new pull request: the Open PR mark applies again, as the merged one no longer counts as the task's
+  pull request. A pull request **closed unmerged** is a raise (logged once as `pr <url> closed`): reopen it
+  on GitHub and the watch carries on, or tell the walk to drop the task. When the cause of a raise the
+  landing or the watch made is put right (the pull request lands, or is reopened), the tool logs it
+  `settled`: the task stops being blocked without an answer, so no work session is started on it.
 
 ## Parallel walks
 

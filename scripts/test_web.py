@@ -1416,13 +1416,75 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertEqual((row["pr"], row["pr_ready"]), ("https://github.com/o/r/pull/9", False))
 
     def test_open_pr_runs_github_open_pr_and_answers_with_the_task(self):
-        opened = []
-        real = dfs_web.dfs_github.open_pr
-        dfs_web.dfs_github.open_pr = lambda t: opened.append(t) or "https://github.com/o/r/pull/9"
-        self.addCleanup(setattr, dfs_web.dfs_github, "open_pr", real)
+        opened, meanwhile = [], []
+        real = dfs_web.dfs_github.push_pr
+
+        def fake(t):
+            opened.append(t)
+            # the push and `gh` run here: no other web write waits behind them
+            meanwhile.append((dfs_web.LOCK.locked(), self.call("POST", "/api/new", dict(name="Meanwhile"))[0]))
+            return "https://github.com/o/r/pull/9"
+        dfs_web.dfs_github.push_pr = fake
+        self.addCleanup(setattr, dfs_web.dfs_github, "push_pr", real)
         task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
         status, data, _ = self.call("POST", "/api/open_pr", dict(task=task))
         self.assertEqual((status, opened, data["task"]["id"]), (200, [task], task))
+        self.assertEqual(meanwhile, [(False, 200)])
+        self.assertEqual(data["task"]["pr"], "https://github.com/o/r/pull/9")
+
+    def test_a_delete_and_an_accept_during_an_open_pr_push_wait_for_it_and_nothing_deadlocks(self):
+        """Open PR holds the git lock for its push and `gh`; a delete or an accept holds the web LOCK
+        and then wants the git lock. Open PR must not take LOCK while it holds the git lock, or both wait
+        for good. The real `open_pr` runs here, with its git and `gh` calls stubbed."""
+        task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
+        other = self.call("POST", "/api/new", dict(name="Delete me"))[1]["added"]
+        third = self.call("POST", "/api/new", dict(name="Accept me"))[1]["added"]
+        (self.root / ".dfs" / "github").write_text("hub\n")
+        wt = self.root / ".dfs" / "worktrees" / other        # a worked task: its delete releases the worktree
+        r = subprocess.run("git add -A && git -c user.name=t -c user.email=t@t commit -qm tasks && "
+                           "git -c user.name=t -c user.email=t@t worktree add -q %s -b dfs/%s" % (wt, other),
+                           shell=True, cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        inside, go = threading.Event(), threading.Event()
+
+        def gh(*args, cwd=None):
+            inside.set()
+            go.wait(20)
+            return "https://github.com/o/r/pull/9\n"
+        ok = subprocess.CompletedProcess([], 0, "", "")
+        gh_mod = dfs_web.dfs_github
+        patches = [(gh_mod.dfs_tree, "status_of", lambda t: ("done", "")),
+                   (gh_mod.dfs_paths, "worktree", lambda t, real=dfs_paths.worktree: self.root if t == task else real(t)),
+                   (gh_mod.dfs_branch, "_commit_task_files", lambda *a, **k: None),
+                   (gh_mod.dfs_branch, "_rebase", lambda *a, **k: True),
+                   (gh_mod.dfs_branch, "_git_net", lambda *a, **k: ok),
+                   (gh_mod, "gh", gh)]
+        for obj, name, fake in patches:
+            self.addCleanup(setattr, obj, name, getattr(obj, name))
+            setattr(obj, name, fake)
+        done = {}
+
+        def post(key, path, body):
+            done[key] = self.call("POST", path, body)[0]
+        opening = threading.Thread(target=post, args=("open", "/api/open_pr", dict(task=task)), daemon=True)
+        opening.start()
+        self.assertTrue(inside.wait(10), "Open PR never reached gh")
+        deleting = threading.Thread(target=post, args=("delete", "/api/delete_task", dict(task=other)), daemon=True)
+        deleting.start()
+        accepting = threading.Thread(target=post, args=("accept", "/api/accept", dict(task=third)), daemon=True)
+        accepting.start()                            # an accept also holds LOCK and then wants the git lock
+        for _ in range(100):                         # the delete holds LOCK, waiting on the git lock
+            if dfs_web.LOCK.locked():
+                break
+            threading.Event().wait(0.05)
+        self.assertTrue(dfs_web.LOCK.locked(), done)
+        go.set()
+        opening.join(10)
+        deleting.join(10)
+        accepting.join(10)
+        self.assertEqual((opening.is_alive(), deleting.is_alive(), accepting.is_alive()), (False,) * 3, "deadlock")
+        self.assertEqual(done, {"open": 200, "delete": 200, "accept": 200})
+        self.assertEqual(dfs_tree.pr_url(dfs_tree.load(task)), "https://github.com/o/r/pull/9")
 
     def test_marking_a_draft_tells_the_walk_only_when_it_becomes_one(self):
         told = []

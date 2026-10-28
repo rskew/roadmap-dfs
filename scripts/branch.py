@@ -23,7 +23,9 @@ commit exists yet, and outside git.
 import fcntl
 import functools
 import os
+import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -41,12 +43,64 @@ class BranchError(Exception):
 # GitHub mode, or nothing to merge), 3 it was not merged and the tree has an open node again,
 # 4 it is blocked on a raise.
 # Every result that is not a merge is 3 or 4, so a chain never takes an unmerged item for done.
-MERGE_EXIT = {"merged": 0, "none": 0, "held": 0, "dirty": 3, "pushed-over": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
+MERGE_EXIT = {"merged": 0, "none": 0, "held": 0, "dirty": 3, "pushed-over": 3, "push-failed": 3, "conflict": 3, "guard": 3, "refused": 4, "blocked": 4}
 
 
 def _git(*args, cwd=None):
     return subprocess.run(["git", *args], cwd=cwd or dfs_paths.work_root(),
                           capture_output=True, text=True)
+
+
+def _git_net(*args, cwd=None):
+    """`git` for a call that reaches the remote, which the chains' lock is held across: with no
+    prompt on /dev/tty (`GIT_TERMINAL_PROMPT=0`) and ssh in batch mode, so a credential that wants
+    typing fails and is reported instead of waiting unseen while every chain waits on the lock.
+    The author's ssh command (`GIT_SSH_COMMAND`, else `core.sshCommand`, else `ssh`) is kept. A
+    `GIT_SSH` program of theirs, which git would drop for `GIT_SSH_COMMAND`, is left in charge
+    when neither of those is set, and ssh is then not told `BatchMode`."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    ssh = os.environ.get("GIT_SSH_COMMAND") or _git("config", "core.sshCommand", cwd=cwd).stdout.strip()
+    if ssh or not os.environ.get("GIT_SSH"):
+        env["GIT_SSH_COMMAND"] = (ssh or "ssh") + " -o BatchMode=yes"
+    return _run_bounded(["git", *args], cwd or dfs_paths.work_root(), env)
+
+
+# A git call to the remote that has not finished in this many seconds is a stalled network (a TCP
+# stall, an ssh with no keepalive): `_git_net` runs under the chains' lock, which every chain waits
+# on, and in the walk's poll thread, which would otherwise never poll again.
+GIT_NET_TIMEOUT = 300
+GIT_PIPE_GRACE = 5   # seconds to read what a killed git left in its pipes before letting them go
+
+
+def _run_bounded(cmd, cwd, env):
+    """Run `cmd` for `GIT_NET_TIMEOUT` seconds at most. On the limit the whole process group is
+    killed (git's ssh and helper children hold its pipes open) and a failed CompletedProcess says
+    git did not answer, so each caller's own failure path reports it."""
+    proc = subprocess.Popen(cmd, cwd=cwd, env=env, text=True, start_new_session=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        out, err = proc.communicate(timeout=GIT_NET_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:   # a descendant that left the group (setsid) may still hold the pipes: let go of them
+            out, err = proc.communicate(timeout=GIT_PIPE_GRACE)
+        except subprocess.TimeoutExpired:
+            out, err = "", ""
+            for pipe in (proc.stdout, proc.stderr):
+                try:
+                    pipe.close()
+                except OSError:
+                    pass
+            try:   # the killed git is reaped now, not at garbage collection
+                proc.wait(timeout=GIT_PIPE_GRACE)
+            except subprocess.TimeoutExpired:
+                pass
+        err = "git did not answer within %d seconds; check the network. %s" % (GIT_NET_TIMEOUT, err or "")
+        return subprocess.CompletedProcess(cmd, 124, out or "", err)
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
 def _git_bytes(*args, cwd=None):
@@ -786,21 +840,31 @@ def _task_details(task):
 
 def _push_held(task, wt, name):
     """Push a held item's branch to its open pull request, "held" when it went (or there is no
-    pull request yet); a rejected push reopens the item with a node and is "pushed-over"."""
+    pull request yet); a rejected push reopens the item with a node and is "pushed-over", and one
+    that failed for the network or a credential is "push-failed", with a node saying so."""
     import tree as dfs_tree
     if not dfs_tree.pr_url(dfs_tree.load(task)):
         return "held"
     remote = dfs_paths.read_github()
-    r = _git("push", remote, name, cwd=wt)
+    r = _git_net("push", remote, name, cwd=wt)
     if r.returncode == 0:
         return "held"
-    _reopen_with(task, wt, "Rebase %s onto its pull request's branch on %s and push" % (name, remote),
-                 "The push of the finished fixes to the pull request was rejected: %s The branch "
-                 "moved on GitHub. Run `git pull --rebase %s %s` in this worktree, resolve any "
-                 "conflicts, run the tests and commit, and the next finish pushes again."
-                 % (_gist(out_of(r)), remote, name),
-                 "the push to the pull request was rejected")
-    return "pushed-over"
+    # Only a push git refused for the remote's newer commits means the branch moved; a network or
+    # credential failure (quick now that `_git_net` never prompts) is reported as what it is.
+    moved = re.search(r"non-fast-forward|fetch first|Updates were rejected|stale info", out_of(r))
+    if moved:
+        title = "Rebase %s onto its pull request's branch on %s and push" % (name, remote)
+        text = ("The push of the finished fixes to the pull request was rejected: %s The branch "
+                "moved on GitHub. Run `git pull --rebase %s %s` in this worktree, resolve any "
+                "conflicts, run the tests and commit, and the next finish pushes again."
+                % (_gist(out_of(r)), remote, name))
+    else:
+        title = "Push %s to its pull request on %s once the push can reach it" % (name, remote)
+        text = ("The push of the finished fixes to the pull request failed: %s Put that right "
+                "(the network, or the credential `git push %s %s` needs, which cannot be typed "
+                "here), and the next finish pushes again." % (_gist(out_of(r)), remote, name))
+    _reopen_with(task, wt, title, text, "the push to the pull request failed")
+    return "pushed-over" if moved else "push-failed"
 
 
 @one_at_a_time
@@ -813,7 +877,8 @@ def merge(task):
     branch is rebased onto the default branch (`_rebase`). Returns
     "held" in GitHub mode (`.dfs/github`), once the task's files are committed and the worktree
     is clean: the branch and worktree are kept for the pull request the author opens, and pushed
-    to it when it is open ("pushed-over" when GitHub refuses the push, `_push_held`). Else
+    to it when it is open ("pushed-over" when GitHub refuses the push, "push-failed" when it
+    cannot be made, `_push_held`). Else
     "none" when the task has no branch (one whose worktree was removed by hand is checked out
     again, `_restore`), "merged", "dirty" when the worktree holds
     uncommitted work that is not the task's (left in place, nothing merged; an open node
@@ -962,6 +1027,7 @@ def main(argv):
             "held": "not merged: GitHub mode holds dfs/%s, with its worktree, until you open its pull request"
                     % argv[2],
             "pushed-over": "not pushed: its pull request's branch moved on GitHub, so a node asks to rebase onto it",
+            "push-failed": "not pushed: the push to its pull request failed, so a node asks for it to be put right",
             "none": "no branch, nothing to merge"}[result]), file=sys.stderr)
         return MERGE_EXIT[result]
     if len(argv) == 3 and argv[1] == "enter":

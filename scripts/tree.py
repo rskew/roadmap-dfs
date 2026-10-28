@@ -104,7 +104,7 @@ DETERMINED = ("confirmed", "refuted")
 # Who writes each kind is a convention the checker enforces only by shape; the
 # runner, the agent, the critic and the author's passes each append their own.
 KINDS = ("session", "end", "raise", "answer", "critic", "review", "correct", "backtrack",
-         "accept", "delete", "draft", "ready", "pr")
+         "accept", "delete", "draft", "ready", "pr", "settled")
 FIELDS = ("Parent", "Status", "Approach", "Hypothesis", "Evidence", "Determination",
           "Ask", "Corrects")
 # Old names still read, as the field they became: determined nodes are history, so
@@ -948,6 +948,15 @@ def archive_task(task):
     return _retire(task, archived_dir(), "archived")
 
 
+def _with_archive_words(raw, loaded):
+    """A node's `raw` lines with each field the archive holds put back in place of its stub
+    (`loaded` is the node as `load` reads it), so a `delete` entry keeps the words and not
+    `archived.`."""
+    for key in sorted(loaded.get("from_archive", ())):
+        raw = _unfield(raw, key, loaded["fields"].get(key, SHELF_STUB))
+    return raw
+
+
 def delete_node(task, nid):
     """Delete a node and everything under it, whatever its status, from the part that holds
     it. The author's `delete` log entry names every id removed and carries their text
@@ -974,7 +983,7 @@ def delete_node(task, nid):
     named = [e for e in open_raises(whole) if e["args"] and e["args"][0] in cut]
     if named:
         raise ValueError("the raise at %s names %s; answer it first" % (named[0]["ts"], named[0]["args"][0]))
-    body = "\n\n".join("\n".join(mine[i]["raw"]) for i in cut)
+    body = "\n\n".join("\n".join(_with_archive_words(mine[i]["raw"], by_id(whole)[i])) for i in cut)
     t["nodes"] = [nd for nd in t["nodes"] if nd["id"] not in cut]
     latest = max((e["ts"] for e in whole["log"]), default="")
     ts = now_ts()
@@ -985,10 +994,16 @@ def delete_node(task, nid):
     return cut
 
 
+# The `(github <kind> <id>)` that ends the Approach of a node `github.watch` made from a pull
+# request comment: by it the comment is known, so the mark must outlive an edit of the node.
+GITHUB_MARK = re.compile(r"\(github \w+ [^\s)]+\)$")
+
+
 def edit_node(task, nid, title, approach=""):
     """Change the title and Approach of an open or parked node, in the part that holds it.
-    A confirmed or refuted node is history and is refused, as is one whose Approach was
-    shelved to the archive. The Approach is one paragraph: line breaks become spaces, as in
+    A pull request comment's node keeps its `(github <kind> <id>)` mark at the end of its
+    Approach, put back if the new Approach lacks it. A confirmed or refuted node is history and
+    is refused, as is one whose Approach was shelved to the archive. The Approach is one paragraph: line breaks become spaces, as in
     `add_node`. An empty approach removes the field. Returns `nid`;
     ValueError says what is wrong."""
     title = " ".join((title or "").split())
@@ -1008,6 +1023,9 @@ def edit_node(task, nid, title, approach=""):
                          % (nid, nd["status"]))
     if nd["fields"].get("Approach") == SHELF_STUB:
         raise ValueError("%s's Approach is in the archive" % nid)
+    mark = GITHUB_MARK.search((nd["fields"].get("Approach") or "").rstrip())
+    if mark and not approach.endswith(mark.group(0)):
+        approach = ("%s %s" % (approach, mark.group(0))).strip()
     kept, last, at = [], None, None
     for line in nd["raw"][1:]:
         fm = FIELD_RE.match(line)
@@ -1258,7 +1276,10 @@ def frontier(t):
 
 
 def open_raises(t):
-    answered = {e["args"][0] for e in t["log"] if e["kind"] == "answer" and e["args"]}
+    """The raises nobody has answered. A `settled <raise ts>` entry, which the tool writes when
+    the cause it raised on is put right (a pull request landed, one reopened), ends a raise as
+    an answer does but is not the author speaking: no work session is owed to it."""
+    answered = {e["args"][0] for e in t["log"] if e["kind"] in ("answer", "settled") and e["args"]}
     return [e for e in t["log"] if e["kind"] == "raise" and e["ts"] not in answered]
 
 

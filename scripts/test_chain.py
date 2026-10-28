@@ -120,6 +120,8 @@ echo '{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_t
 
 class Chain(unittest.TestCase):
     def setUp(self):
+        from test_github import skip_if_tmp_noexec
+        skip_if_tmp_noexec()
         self.root = Path(tempfile.mkdtemp())
         (self.root / ".dfs" / "items").mkdir(parents=True)
         (self.root / ".dfs" / "ROADMAP.md").write_text(ROADMAP)
@@ -367,6 +369,21 @@ class Chain(unittest.TestCase):
             self.git("branch", "-D", "dfs/W1", cwd=bare)
         return default
 
+    def test_a_push_to_the_pull_request_that_fails_for_the_network_is_not_blamed_on_a_moved_branch(self):
+        bare, view, gh = self.github_task()
+        self.assertEqual(gh("pr", "W1").returncode, 0)
+        self.commit_in_worktree()
+        self.git("remote", "set-url", "hub", str(self.aside / "nowhere.git"))
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 3, r.stderr)
+        self.assertNotIn("moved on GitHub", r.stderr)
+        self.assertIn("the push to its pull request failed", r.stderr)
+        node = self.tree()["nodes"][-1]
+        self.assertIn("Push dfs/W1 to its pull request", node["title"])
+        self.assertIn("failed", node["fields"]["Approach"])
+        self.assertNotIn("moved on GitHub", node["fields"]["Approach"])
+        self.assertEqual(dfs_tree.status_of(self.tree())[0], "open")
+
     def test_github_mode_end_to_end_hold_open_pr_comment_fix_push_and_merge(self):
         bare, view, gh = self.github_task()
         url = self.PR
@@ -400,12 +417,12 @@ class Chain(unittest.TestCase):
         r = gh("watch")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("merged on GitHub", r.stdout)
-        self.git("merge-base", "--is-ancestor", self.git("rev-parse", default, cwd=bare), default)   # plus the log's commit
+        self.assertEqual(self.git("rev-parse", default, cwd=bare), self.git("rev-parse", default))   # no commit of ours on it
         self.assertIn("W1.2: fixed", self.git("log", "--format=%s", default))
         self.assertFalse(self.wt.exists())
         self.assertEqual(self.git("branch", "--list", "dfs*/*"), "")
         self.assertEqual([e["args"] for e in self.log("pr")], [[url], [url, "merged"]])
-        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no"), "")   # the log is committed
+        self.assertIn(".dfs/items/W1.md", self.git("status", "--porcelain", "--untracked-files=no"))   # the log is not
         status = dfs_tree.status_of(self.tree())
         self.assertEqual(status[0], "done")
         self.assertIn("pull request is merged", status[1])
@@ -445,31 +462,27 @@ class Chain(unittest.TestCase):
         self.assertIn("pull request is merged", self.status()[0][1])
         self.assertFalse(self.wt.exists())
 
-    def test_two_pull_requests_land_in_turn_though_the_first_landing_and_the_authors_commit_are_unpushed(self):
+    def test_a_landing_adds_no_commit_to_the_default_branch_and_leaves_the_log_uncommitted(self):
         bare, view, gh = self.github_task()
-        default = self.git("symbolic-ref", "--short", "HEAD")
-        (self.root / "mine.txt").write_text("the author's own commit\n")
-        self.git("add", "mine.txt")
-        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "the author's unpushed commit")
         gh("pr", "W1")
-        view.write_text(json.dumps({"state": "OPEN", "comments": [
-            {"id": "IC_1", "author": {"login": "rev"}, "body": "rename the step", "url": self.PR + "#c1"}]}))
-        self.assertIn("W1.2 from its pull request", gh("watch").stdout)
-        self.merge_on_github(bare)      # without the author's commit: main and the remote diverge
+        default = self.merge_on_github(bare)
         view.write_text('{"state": "MERGED"}')
         r = gh("watch")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("merged on GitHub", r.stdout)
-        self.assertEqual(self.log("raise"), [])
-        self.git("merge-base", "--is-ancestor", "hub/" + default, default)
-        self.assertIn("the author's unpushed commit", self.git("log", "--format=%s", default))
-        # the comment's fix goes to a second pull request, squash-merged on GitHub; the first
-        # landing's commit is still only here, and the second lands too
+        self.assertEqual(self.git("rev-parse", default), self.git("rev-parse", "hub/" + default))
+        self.assertEqual(self.git("log", "--format=%s", "hub/" + default + "..", default), "")
+        self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
+        self.assertIn(".dfs/items/W1.md", self.git("status", "--porcelain", "--untracked-files=no"))
+
+    def test_two_pull_requests_land_in_turn_the_second_squash_merged_over_the_first_landings_log(self):
+        bare, view, gh = self.github_task()
+        default = self.first_pull_request_landed(gh, bare, view)
+        before = self.git("rev-parse", default)
         self.count.write_text("0")
         rc, meta, out = self.run_chain("fixn,rok", cap=2)
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
-        r = gh("pr", "W1")
-        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(gh("pr", "W1").returncode, 0)
         other = self.aside / "squasher"
         self.git("clone", "-q", str(bare), str(other))
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "--squash", "-q", "origin/dfs/W1", cwd=other)
@@ -480,11 +493,11 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.log("raise"), [])
         self.assertIn("merged on GitHub", r.stdout)
         self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
-        self.assertIn("W1 (#7)", self.git("log", "--format=%s", default))
-        self.assertIn("the author's unpushed commit", self.git("log", "--format=%s", default))
+        self.assertEqual(self.git("rev-parse", default), self.git("rev-parse", "hub/" + default))
+        self.git("merge-base", "--is-ancestor", before, default)
         self.assertFalse(self.wt.exists())
 
-    def second_pull_request_squashed(self, gh, bare, view):
+    def first_pull_request_landed(self, gh, bare, view):
         """Open the first pull request, comment on it, merge it on GitHub and land it, leaving
         the comment's node open. Returns the default branch."""
         default = self.git("symbolic-ref", "--short", "HEAD")
@@ -497,30 +510,33 @@ class Chain(unittest.TestCase):
         self.assertEqual(gh("watch").returncode, 0)
         return default
 
-    def squash_on_github(self, bare, default, app=None):
-        """The second pull request, squash-merged on GitHub: its roadmap file gains a log line
-        where the first landing's commit (only here) appended its own, so they clash, and
-        `app.txt` becomes `app` when given."""
-        other = self.aside / "squasher"
-        shutil.rmtree(other, ignore_errors=True)
-        self.git("clone", "-q", str(bare), str(other))
-        with (other / ".dfs" / "items" / "W1.md").open("a") as f:
-            f.write("- 2026-01-01T00:00:00Z · note · the squashed pull request's own log line\n")
-        if app:
-            (other / "app.txt").write_text(app)
-        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "W1 (#7)", cwd=other)
-        self.git("push", "-q", "origin", default, cwd=other)
-
-    def finish_fix_and_open_second(self, gh):
-        self.count.write_text("0")
-        rc, meta, out = self.run_chain("fixn,rok", cap=2)
-        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
-        self.assertEqual(gh("pr", "W1").returncode, 0)
+    def test_a_default_branch_with_a_commit_only_here_is_not_touched_and_asks_once(self):
+        bare, view, gh = self.github_task()
+        default = self.git("symbolic-ref", "--short", "HEAD")
+        gh("pr", "W1")
+        (self.root / "mine.txt").write_text("the author's own commit\n")
+        self.git("add", "mine.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "the author's unpushed commit")
+        mine = self.git("rev-parse", default)
+        self.merge_on_github(bare)      # without the author's commit: main and the remote diverge
+        view.write_text('{"state": "MERGED"}')
+        for _ in range(2):
+            r = gh("watch")
+            self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.git("rev-parse", default), mine)
+        self.assertEqual(self.git("log", "--format=%s", "-1", default), "the author's unpushed commit")
+        raised = self.log("raise")
+        self.assertEqual(len(raised), 1)
+        self.assertIn("must match hub/%s" % default, raised[0]["body"])
+        self.assertIn("git pull --ff-only hub %s" % default, raised[0]["body"])
+        self.assertTrue(self.wt.exists())
+        self.assertFalse(any(e["args"][1:2] == ["merged"] for e in self.log("pr")))
+        self.assertFalse((self.root / ".git" / "rebase-merge").exists())
 
     def test_a_landing_waits_for_a_chain_holding_the_lock(self):
-        # `land` rewrites the main checkout (fetch, fast-forward or rebase, worktree removal,
-        # commit): it holds the lock a chain's enter and merge hold, or a chain starting
-        # during its rebase would be worked in place in the main checkout.
+        # `land` rewrites the main checkout (fetch, fast-forward, worktree removal): it holds
+        # the lock a chain's enter and merge hold, or a chain starting during it would be
+        # cut a worktree beside the landing.
         import fcntl
         import time
         import branch as dfs_branch
@@ -542,57 +558,6 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
 
-    def test_a_clash_in_an_earlier_landings_log_alone_is_settled_and_the_pull_request_lands(self):
-        bare, view, gh = self.github_task()
-        default = self.second_pull_request_squashed(gh, bare, view)
-        self.finish_fix_and_open_second(gh)
-        self.squash_on_github(bare, default)
-        r = gh("watch")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(self.log("raise"), [])
-        self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
-        self.git("merge-base", "--is-ancestor", "hub/" + default, default)
-        self.assertEqual(self.git("log", "--format=%s", default).count("W1: the pull request is merged"), 1)
-
-    def test_a_landing_never_drops_the_authors_unpushed_code_when_a_landing_log_clashes_too(self):
-        bare, view, gh = self.github_task()
-        default = self.second_pull_request_squashed(gh, bare, view)
-        (self.root / "app.txt").write_text("app changed by the author\n")
-        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "author edits app.txt")
-        mine = self.git("rev-parse", default)
-        self.finish_fix_and_open_second(gh)
-        self.squash_on_github(bare, default, app="app changed on GitHub\n")
-        r = gh("watch")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(len(self.log("raise")), 1, r.stdout)
-        self.assertIn("git pull --rebase hub %s" % default, self.log("raise")[0]["body"])
-        self.assertNotEqual(self.log("pr")[-1]["args"][-1:], ["merged"])
-        self.assertEqual(self.git("rev-parse", default), mine)
-        self.assertEqual((self.root / "app.txt").read_text(), "app changed by the author\n")
-        self.assertIn("author edits app.txt", self.git("log", "--format=%s", default))
-        self.assertEqual(self.git("status", "--porcelain", "--untracked-files=no"), "")
-        self.assertFalse((self.root / ".git" / "rebase-merge").exists())
-
-    def test_a_landing_never_drops_the_authors_unpushed_edit_of_another_roadmap_file(self):
-        bare, view, gh = self.github_task()
-        default = self.second_pull_request_squashed(gh, bare, view)
-        (self.root / ".dfs" / "order.md").write_text("the author's order\n")
-        self.git("add", ".dfs/order.md")
-        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "author edits order.md")
-        self.finish_fix_and_open_second(gh)
-        other = self.aside / "squasher"
-        self.git("clone", "-q", str(bare), str(other))
-        (other / ".dfs").mkdir(exist_ok=True)
-        (other / ".dfs" / "order.md").write_text("the order on GitHub\n")
-        self.git("add", ".dfs/order.md", cwd=other)
-        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1 (#7)", cwd=other)
-        self.git("push", "-q", "origin", default, cwd=other)
-        r = gh("watch")
-        self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(len(self.log("raise")), 1, r.stdout)
-        self.assertIn("author edits order.md", self.git("log", "--format=%s", default))
-        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "the author's order\n")
-
     def test_a_pull_request_closed_unmerged_is_one_raise_and_reopening_it_resumes_the_watch(self):
         bare, view, gh = self.github_task()
         gh("pr", "W1")
@@ -604,15 +569,25 @@ class Chain(unittest.TestCase):
         self.assertIn("closed on GitHub without being merged", raised[0]["body"])
         self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "closed"])
         self.assertTrue(self.wt.exists())
+        self.assertEqual(self.status()[0][0], "blocked")
         view.write_text(json.dumps({"state": "OPEN", "comments": [
             {"id": "IC_2", "author": {"login": "rev"}, "body": "back again", "url": self.PR + "#c2"}]}))
         r = gh("watch")
         self.assertIn("W1.2 from its pull request", r.stdout)
         self.assertEqual(self.log("pr")[-1]["args"], [self.PR])
+        # reopened: the closed raise is settled, not left blocking, so the new comment is worked
+        self.assertEqual(self.log("settled")[0]["args"], [raised[0]["ts"]])
+        self.assertEqual(self.status()[0][0], "open")
+        self.assertIn("W1.2", self.status()[0][1])
 
-    def test_a_merged_pull_request_is_not_landed_over_the_authors_tracked_edits_and_asks_once(self):
+    def test_a_merged_pull_request_is_not_landed_over_an_edit_of_the_authors_it_overwrites_and_asks_once(self):
         bare, view, gh = self.github_task()
         gh("pr", "W1")
+        other = self.aside / "editor"       # the pull request changes app.txt too
+        self.git("clone", "-q", "-b", "dfs/W1", str(bare), str(other))
+        (other / "app.txt").write_text("app, as the pull request has it\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "W1: edits app.txt", cwd=other)
+        self.git("push", "-q", "origin", "dfs/W1", cwd=other)
         default = self.merge_on_github(bare)
         before = self.git("rev-parse", default)
         view.write_text('{"state": "MERGED"}')
@@ -623,8 +598,9 @@ class Chain(unittest.TestCase):
         self.assertTrue(self.wt.exists())
         raised = self.log("raise")
         self.assertEqual(len(raised), 1)
-        self.assertIn("uncommitted changes to tracked files", raised[0]["body"])
-        self.assertIn("git pull --rebase hub %s" % default, raised[0]["body"])
+        self.assertIn("would be overwritten", raised[0]["body"])
+        self.assertIn("commit or stash your uncommitted edits", raised[0]["body"])   # not "move your commits"
+        self.assertIn("git pull --ff-only hub %s" % default, raised[0]["body"])
         self.assertFalse(any(e["args"][1:2] == ["merged"] for e in self.log("pr")))
         # put right, the next watch lands it
         (self.root / "app.txt").write_text("app\n")
@@ -632,6 +608,36 @@ class Chain(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertFalse(self.wt.exists())
         self.git("merge-base", "--is-ancestor", self.git("rev-parse", default, cwd=bare), default)
+        self.assertEqual(self.status()[0][0], "done")
+        self.assertEqual(self.log("settled")[0]["args"], [raised[0]["ts"]])
+
+    def test_a_landing_keeps_the_authors_uncommitted_edit_of_the_tasks_file_and_asks_once(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        default = self.merge_on_github(bare)
+        view.write_text('{"state": "MERGED"}')
+        note = self.root / ".dfs" / "items" / "W1.md"
+        note.write_text(note.read_text() + "\nAUTHOR NOTE\n")
+        before = self.git("rev-parse", default)
+        for _ in range(2):
+            self.assertEqual(gh("watch").returncode, 0)
+        self.assertIn("AUTHOR NOTE", note.read_text())
+        self.assertEqual(self.git("rev-parse", default), before)
+        self.assertTrue(self.wt.exists())
+        raised = self.log("raise")
+        self.assertEqual(len(raised), 1)
+        self.assertIn("uncommitted edits to .dfs/items/W1.md", raised[0]["body"])
+        self.assertIn("commit or stash", raised[0]["body"])
+        self.assertFalse(any(e["args"][1:2] == ["merged"] for e in self.log("pr")))
+        self.git("checkout", "HEAD", "--", ".dfs/items/W1.md")   # put right, the next watch lands it
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(self.wt.exists())
+        # the landing settled the raise: done and merged, not blocked; no answer, so no work owed
+        self.assertEqual(self.status()[0][0], "done")
+        self.assertIn("merged", self.status()[0][1])
+        self.assertEqual(self.log("settled")[0]["args"], [raised[0]["ts"]])
+        self.assertEqual(self.log("answer"), [])
 
     def test_work_a_merged_pull_request_lacks_keeps_its_branch_as_dfs_merged(self):
         bare, view, gh = self.github_task()
@@ -645,6 +651,54 @@ class Chain(unittest.TestCase):
         self.assertIn("kept as dfs-merged/W1", r.stdout)
         self.assertFalse(self.wt.exists())
         self.assertIn("W1.9: never pushed", self.git("log", "--format=%s", "dfs-merged/W1"))
+
+    def test_a_landing_removes_the_branch_of_a_worktree_removed_by_hand(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        default = self.merge_on_github(bare)
+        shutil.rmtree(self.wt)      # the worktree is gone; git still lists it and dfs/W1 stays
+        self.assertNotEqual(self.git("branch", "--list", "dfs/W1"), "")
+        # the watch reads the task from its worktree, so land it as a watch that still can would
+        r = subprocess.run([sys.executable, "-c", "import github; github.land('W1', %r)" % self.PR],
+                           cwd=self.root, capture_output=True, text=True,
+                           env=dict(os.environ, PYTHONPATH=str(HERE)))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "", r.stdout + r.stderr)
+        self.assertEqual(self.git("worktree", "list", "--porcelain").count("worktree "), 1)
+        self.assertEqual(self.log("pr")[-1]["args"], [self.PR, "merged"])
+        self.assertEqual(self.git("rev-parse", default), self.git("rev-parse", "hub/" + default))
+
+    def test_a_squash_merged_pull_request_whose_head_branch_was_pruned_is_not_kept_as_lacking_work(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        head = self.git("rev-parse", "dfs/W1")
+        other = self.aside / "squasher"      # GitHub squashes, deletes the head branch; the author's fetch prunes
+        self.git("clone", "-q", str(bare), str(other))
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "--squash", "-q", "origin/dfs/W1", cwd=other)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1 (#7)", cwd=other)
+        self.git("push", "-q", "origin", self.git("symbolic-ref", "--short", "HEAD"), cwd=other)
+        self.git("branch", "-D", "dfs/W1", cwd=bare)
+        self.git("fetch", "--prune", "hub")
+        view.write_text(json.dumps({"state": "MERGED", "headRefOid": head}))
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("kept as", r.stdout)
+        self.assertEqual(self.git("branch", "--list", "dfs*/*"), "")
+
+    def test_a_second_branch_kept_as_dfs_merged_takes_a_free_name(self):
+        bare, view, gh = self.github_task()
+        gh("pr", "W1")
+        self.git("branch", "dfs-merged/W1", "HEAD")      # an earlier landing's keep
+        (self.wt / "app.txt").write_text("worked, never pushed\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "W1.9: never pushed", cwd=self.wt)
+        self.merge_on_github(bare)
+        view.write_text('{"state": "MERGED"}')
+        r = gh("watch")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("kept as dfs-merged/W1-2", r.stdout)
+        self.assertNotIn("could not be removed", r.stderr)
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+        self.assertIn("W1.9: never pushed", self.git("log", "--format=%s", "dfs-merged/W1-2"))
 
     def test_a_merge_that_conflicts_reopens_the_item_and_the_fix_is_reviewed_and_merged(self):
         main = self.git("symbolic-ref", "--short", "HEAD")
