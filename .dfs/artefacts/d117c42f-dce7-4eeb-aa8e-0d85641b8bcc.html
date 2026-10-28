@@ -1,0 +1,191 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W122: what the archive fix covers</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; margin: 0 0 20px; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .box b { display: block; font-size: 16px; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  .box.ok { border-color: #1d7a3a; background: #eef8f0; }
+  .box.bad { border-color: #b3261e; background: #fdf0ef; }
+  .link { display: flex; flex-direction: column; align-items: center; padding: 2px 0; color: #555; font-size: 14px; }
+  .link::after { content: "\2193"; font-size: 22px; line-height: 1; }
+  @media (min-width: 720px) {
+    .dg { flex-direction: row; align-items: center; }
+    .box { flex: 1 1 0; }
+    .link { padding: 0 10px; }
+    .link::after { content: "\2192"; }
+  }
+</style>
+
+<h1>What the archive fix covers</h1>
+<p>Two changes make a tap on archive archive: a 44px touch target, and a guard that runs the button the press began on.
+  Pick a case to see what each does, and where each stops.</p>
+
+<div class="tabs" role="group" aria-label="Case">
+  <button type="button" data-case="beside" aria-pressed="true">Press just beside the icon</button>
+  <button type="button" data-case="grow" aria-pressed="false">A row above grows mid-tap</button>
+  <button type="button" data-case="gone" aria-pressed="false">The pressed row is redrawn away</button>
+  <button type="button" data-case="key" aria-pressed="false">Keyboard or script click</button>
+  <button type="button" data-case="other" aria-pressed="false">Two buttons, same act and id</button>
+</div>
+
+<div class="dg" id="flow">
+  <div class="box" data-node="press"><b id="t-press"></b><span id="d-press"></span></div>
+  <div class="link" aria-hidden="true">list or finger</div>
+  <div class="box" data-node="click"><b id="t-click"></b><span id="d-click"></span></div>
+  <div class="link" aria-hidden="true">fix</div>
+  <div class="box" data-node="result" id="result"><b id="t-result"></b><span id="d-result"></span></div>
+</div>
+
+<h2>What is assumed</h2>
+<ul>
+  <li>The "sometimes" is mostly a finger landing beside the icon, and 44 CSS px high (about 7mm) is enough to catch it. The 9.2mm one-handed-thumb figure would be about 58px. Nothing was measured on a phone.</li>
+  <li>When the list moves between press and release, the pressed button should win over the one the click landed on.</li>
+  <li>Only pointer clicks (<code>detail</code> above 0) are corrected, and buttons are told apart by <code>data-act</code> and <code>data-id</code> alone.</li>
+  <li>A press whose click lands on no button is dropped: the tap does nothing, and the item does not open.</li>
+</ul>
+<h2>What would show it wrong</h2>
+<p>You find 44px too small and want about 58px. Or you want a tap whose click lands on no button to archive too. Or you want the guard to tell buttons apart by more than act and id. Refute, and the work goes to that.</p>
+
+<script>
+  var CASES = {
+    beside: { press: ["Press: 8px above the icon box", "the finger misses the 51x32px box"],
+              click: ["Before: task:W4. Now: archive:W4", "the 44px band now catches a press 6px above or 5px below the box"],
+              result: ["Archive dialog opens", "a miss of up to 13px from the icon is caught. Further out, the row opens: 44px is under 58px.", "ok"] },
+    grow: { press: ["Press: archive:W4", "pointerdown lands on the archive button"],
+            click: ["Click: task:W4 or the row below", "a raise added a line to a row above, so the list moved 72px under the finger"],
+            result: ["Archive dialog opens, route stays", "the pressed button differs from the clicked one, so the pressed one runs.", "ok"] },
+    gone: { press: ["Press: archive:W4", "pointerdown lands on the archive button"],
+            click: ["Click: no button", "a redraw removed the pressed row; the finger is over blank list"],
+            result: ["Nothing happens", "the click has no [data-act] element, so it is dropped. The item does not open, but the tap is lost.", "bad"] },
+    key:  { press: ["No pointer press", "Enter or a script's click() has detail 0"],
+            click: ["Click: archive:W4", "lands on the button it was aimed at"],
+            result: ["Archive dialog opens", "the guard is skipped for detail 0, so nothing is rewritten.", "ok"] },
+    other: { press: ["Press: move:W3 up", "a button that differs from its neighbour by data-move only"],
+             click: ["Click: move:W3 down", "the list shifted so the sibling lies under the finger"],
+             result: ["The sibling runs", "act and id match, so the guard sees one button and does not rewrite. Not reproduced in the app.", "bad"] }
+  };
+  function show(name) {
+    var c = CASES[name];
+    ["press", "click", "result"].forEach(function (k) {
+      document.getElementById("t-" + k).textContent = c[k][0];
+      document.getElementById("d-" + k).textContent = c[k][1];
+    });
+    document.getElementById("result").className = "box " + c.result[2];
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
+      b.setAttribute("aria-pressed", b.dataset.case === name ? "true" : "false");
+    });
+  }
+  var current = "beside";
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
+    b.addEventListener("click", function () { current = b.dataset.case; show(current); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return { c: current }; };
+  document.addEventListener("dfs-state", function (e) { if (e.detail && CASES[e.detail.c]) { current = e.detail.c; show(current); } });
+  show("beside");
+</script>
+
+<!-- ===== The answer form ===== -->
+<style>
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function said() { return $('dfs-note').value.trim(); }
+    var touched = false, saving;
+    function mine() { return { option: '', note: $('dfs-note').value, page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null }; }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = { choose: function () { keep(); }, keep: keep };
+    $('dfs-note').addEventListener('input', keep);
+    function done(status, text) { status.textContent = text; parent.postMessage({ dfs: 'answered' }, '*'); }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Write your answer first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched && s.note) $('dfs-note').value = s.note;
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
