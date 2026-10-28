@@ -355,6 +355,38 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertLessEqual(int(part("count")), len(needed))        # the closure and no more
         self.assertLess(len(needed), 1000)                           # a bind each: it stays a short list
 
+    def test_the_tools_docs_in_the_sandbox_hold_artefacts_md_and_not_the_findings_of_other_tasks(self):
+        """docs/dfs-review-findings.tsv holds the original's first-review defects; a tool bound
+        with its docs whole (a live checkout's entries, or a tool in the store) shows them."""
+        bins = self.bins()
+        with mock.patch.object(replay, "config_dir", return_value=str(self.cfg)):
+            replay.make_box(self.dest)
+        (self.tool / "docs").mkdir()
+        (self.tool / "docs" / "artefacts.md").write_text("how to write a page\n")
+        (self.tool / "docs" / "dfs-review-findings.tsv").write_text("W5\tdefect\tW5.2 added: the original's first-review defect\n")
+        (self.tool / "docs" / "dfs-optimization.md").write_text("W5 first review failed\n")
+        out = self.sandbox_out(f"echo '[ls]'; ls {self.tool}/docs; echo '[cat]'; cat {self.tool}/docs/artefacts.md; "
+                               f"cat {self.tool}/docs/dfs-review-findings.tsv 2>&1; true", bins)
+        part = lambda name: out.split(f"[{name}]\n")[1].split("\n[")[0]
+        self.assertEqual(part("ls").split(), ["artefacts.md"])
+        self.assertIn("how to write a page", part("cat"))
+        self.assertIn("No such file", part("cat"))
+        self.assertNotIn("first-review defect", out)
+        self.assertEqual(sorted(p.name for p in (replay.box_of(self.dest) / "docs").iterdir()), ["artefacts.md"])
+
+    def test_a_tool_in_the_store_keeps_its_bin_and_libexec_but_gets_the_trimmed_docs(self):
+        bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
+                "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
+        tool = self.tmp.name + "/store-like"
+        Path(tool, "docs").mkdir(parents=True)
+        Path(tool, "docs", "artefacts.md").write_text("a\n")
+        Path(tool, "docs", "dfs-review-findings.tsv").write_text("W5\n")
+        argv = replay.sandbox_argv(self.dest, tool, ["true"], bins, {}, store=["/nix/store/t-roadmap"])
+        binds = [argv[i + 1] for i, a in enumerate(argv) if a == "-b"]
+        self.assertIn("/nix/store/t-roadmap", binds)                                   # the package, as before
+        self.assertIn(f"{replay.box_of(self.dest) / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)   # docs laid over it, last
+        self.assertNotIn(f"{Path(tool).resolve() / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)
+
     def test_a_tool_in_the_store_is_not_bound_and_the_box_keeps_to_its_own_directories(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
                 "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
@@ -686,6 +718,14 @@ class ReachOutsideDestTest(unittest.TestCase):
         got = self.reached(calls, tool=self.live)
         self.assertEqual([n for n, _ in got], ["Bash", "Read", "Glob", "Bash"])
 
+    def test_a_read_of_the_tools_findings_in_a_live_checkout_tool_counts_and_artefacts_md_does_not(self):
+        live = str(self.live)
+        calls = [("Bash", {"command": f"cat {live}/docs/artefacts.md"}),                  # the tool's own use of docs
+                 ("Bash", {"command": f"cat {live}/docs/dfs-review-findings.tsv"}),       # every task's findings
+                 ("Bash", {"command": f"ls {live}/docs"})]
+        got = self.reached(calls, tool=self.live)
+        self.assertEqual([t.split("/")[-1] for _, t in got], ["dfs-review-findings.tsv", "docs"])
+
     def test_a_call_the_sandbox_answered_with_nothing_is_told_from_one_that_got_output(self):
         live = str(self.live)
         uses = [("Bash", {"command": f"grep -rl limit {live}/.dfs/runs | head"}),
@@ -733,6 +773,25 @@ class ReachOutsideDestTest(unittest.TestCase):
         path.write_text("".join(json.dumps(r) + "\n" for r in rows))
         got = [text for _, _, text, _ in replay.reached(self.dest, self.live, [str(path)])]
         self.assertEqual(got, store_calls)
+
+    def test_a_result_that_prints_a_review_finding_of_the_original_is_the_answer_seen(self):
+        (self.live / ".dfs" / "items" / "W5.md").write_text(
+            "# W5\n\n## Tree\n\n### W5.1 \u00b7 Fix the parser\nStatus: confirmed\n\n## Log\n\n"
+            "- 2026-10-10T03:28:33Z \u00b7 review \u00b7 issues\n"
+            "  W5.2 added: a limit takes an earlier \"resets \u2026\" anywhere in the stream (limit.py classify)\n"
+            "  W5.3 added: minor findings (reset read at hold time, whole-stream looseness)\n"
+            "- 2026-10-10T03:28:40Z \u00b7 end \u00b7 review \u00b7 ok \u00b7 peak 41605\n")
+        git(self.dest, "init", "-q")
+        (self.dest / "f").write_text("x")
+        git(self.dest, "add", "-A")
+        git(self.dest, "commit", "-q", "-m", "W5.1: x")
+        for raw in (True, False):   # a transcript writes the ellipsis raw or escaped
+            path = Path(self.tmp.name) / f"r{raw}.jsonl"
+            row = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t0", "content":
+                   "W5\tdefect\tW5.2 added: a limit takes an earlier \"resets \u2026\" anywhere in the stream (limit.py classify)\n"}]}}
+            path.write_text(json.dumps(row, ensure_ascii=raw) + "\n")
+            seen = replay.answer_seen(self.dest, self.live, "W5", [str(path)])
+            self.assertEqual(list(seen), ['W5.2 added: a limit takes an earlier "resets \u2026" anywhere in the stream (limit.py classify)'[:60]])
 
     def test_a_result_that_prints_the_originals_conclusion_is_the_answer_seen(self):
         (self.live / ".dfs" / "items" / "W5.md").write_text(

@@ -224,7 +224,11 @@ def bash_bound(minutes):
     return {"BASH_DEFAULT_TIMEOUT_MS": str(ms), "BASH_MAX_TIMEOUT_MS": str(2 * ms)}
 
 
-TOOL_ENTRIES = ("SKILL.md", "README.md", "LICENCE.txt", "scripts", "templates", "docs")   # what a tool is for
+TOOL_ENTRIES = ("SKILL.md", "README.md", "LICENCE.txt", "scripts", "templates")   # what a tool is for
+# `docs` holds every task's review findings (`dfs-review-findings.tsv`, `dfs-rounds.tsv`), the
+# original's first-review defects among them, so the sessions see a `docs` of the box's own with
+# only the file the tool uses at run time (SKILL.md names it).
+TOOL_DOCS = ("artefacts.md",)
 SANDBOX_HOME = "/home/replay"
 ETC = ("/etc/resolv.conf", "/etc/ssl", "/etc/hosts", "/etc/nsswitch.conf", "/etc/passwd", "/etc/group")
 # kiro unpacks a generic Linux `node` that wants the host's dynamic loader at /lib64 and its libraries;
@@ -413,6 +417,22 @@ def store_closure(paths):
     return sorted(set(r.stdout.split()))
 
 
+def tool_docs(dest, tool):
+    """The box's `docs`: a directory holding only `TOOL_DOCS` of the tool's docs (none of the
+    findings, rounds, break-it or optimization files, which name the original run's defects),
+    or None when the tool has no docs. Built afresh each launch."""
+    src = Path(tool) / "docs"
+    if not src.is_dir():
+        return None
+    out = box_of(dest) / "docs"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    for name in TOOL_DOCS:
+        if (src / name).is_file():
+            shutil.copy(src / name, out / name)
+    return out
+
+
 def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None):
     """The command that runs `inner` in a proot of DEST: an empty root, the store paths it runs from
     (`store_closure`; the rest of /nix/store, with its `*-source` copies of task files, is not there), /proc and /dev, the
@@ -440,6 +460,11 @@ def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None):
         for entry in TOOL_ENTRIES:
             if (tool / entry).exists():
                 cmd += ["-b", f"{tool / entry}:{tool / entry}"]
+    # a tool in the store is bound whole above (its bin and libexec are on the sessions' PATH),
+    # a live checkout's entries one by one: either way its docs are the box's trimmed copy
+    docs = tool_docs(dest, tool)
+    if docs:
+        cmd += ["-b", f"{docs}:{tool / 'docs'}"]
     return cmd + ["-w", str(dest), "/usr/bin/env", "-i", *[f"{k}={v}" for k, v in env.items()], *inner]
 
 
@@ -580,7 +605,7 @@ def reached(dest, repo, files, tool=None, agent="claude"):
     """The tool calls in `files` (transcripts; a kiro replay's run logs) that name a live path
     outside `dest` (or look in the nix store for flake sources: `STORE_LOOK`), as
     (session id, tool, text, answered nothing). DEST, its exported tool and what the tool the
-    replay runs under is for (its SKILL.md, scripts, templates and docs) are cut out first,
+    replay runs under is for (its SKILL.md, scripts, templates and docs/artefacts.md) are cut out first,
     so a replay kept inside the live checkout, or run under it, does not count reading its own
     tool. The rest of a tool that is the live checkout (its `.dfs/` runs, items and worktrees)
     still counts. A path built at run time (`cd ..`, a variable) is not seen, so this is a
@@ -590,7 +615,7 @@ def reached(dest, repo, files, tool=None, agent="claude"):
     cut = [re.escape(dest + "-tool"), re.escape(dest) + r"(?![\w-])"]
     if tool:
         base = re.escape(str(Path(tool).resolve()))
-        cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|(?:scripts|templates|docs)(?![\w-]))")
+        cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|docs/artefacts\.md|(?:scripts|templates)(?![\w-]))")
     own = re.compile("(?:" + "|".join(cut) + ")")
     live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + "|" + STORE_LOOK + r")(?![\w-])")
     found = []
@@ -604,7 +629,8 @@ def reached(dest, repo, files, tool=None, agent="claude"):
 
 def original_lines(repo, task):
     """What the original run concluded, as strings a tool result can be searched for: each
-    node's title and the head of its Determination, from the task file and its archive."""
+    node's title and the head of its Determination, and the lines of each review and critic
+    entry in its log (the findings: `W55.2 added: ...`), from the task file and its archive."""
     lines = set()
     for rel in (f".dfs/items/{task}.md", f".dfs/archive/items/{task}.md"):
         try:
@@ -613,6 +639,8 @@ def original_lines(repo, task):
             continue
         for m in re.finditer(r"(?m)^### (W\d+\.\d+ · .+)$|^Determination: (.{40,})$", text):
             lines.add((m.group(1) or m.group(2))[:60].strip())
+        for m in re.finditer(r"(?m)^- \S+ · (?:review|critic) · .*\n((?:  .*\n?)*)", text):
+            lines.update(l.strip()[:60] for l in m.group(1).splitlines() if len(l.strip()) >= 40)
     return lines
 
 
@@ -642,7 +670,9 @@ def answer_seen(dest, repo, task, files, agent="claude"):
                 if '"tool_result"' not in line:
                     continue
                 for w in wanted:
-                    if json.dumps(w)[1:-1] in line and sid not in seen.setdefault(w, []):
+                    # a transcript writes `…` raw or as \u2026, so either spelling counts
+                    if any(json.dumps(w, ensure_ascii=a)[1:-1] in line for a in (True, False)) \
+                            and sid not in seen.setdefault(w, []):
                         seen[w].append(sid)
     return seen
 

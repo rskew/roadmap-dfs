@@ -172,8 +172,8 @@ What the proof does not show, and what a comparison has to allow for:
   tool output), `.dfs/items` (the original `W55.md`), `.dfs/worktrees`, the codex session
   logs in `~/.codex/sessions` and every earlier session's transcript under `~/.claude` are
   readable. `replay.py score` now counts the tool calls that name them from outside DEST
-  (DEST, its exported tool and the tool it runs under, meaning that tool's `SKILL.md`, `scripts`, `templates` and `docs`, are cut out first; a tool that is the live checkout still counts a read of its `.dfs/`) and the original's
-  node titles and Determinations that a tool result printed and the replay did not write
+  (DEST, its exported tool and the tool it runs under, meaning that tool's `SKILL.md`, `scripts`, `templates` and `docs/artefacts.md`, are cut out first; a tool that is the live checkout still counts a read of its `.dfs/` or of its other `docs`) and the original's
+  node titles, Determinations and review and critic findings that a tool result printed and the replay did not write
   itself. Both are floors: a path built at run time (`cd ..`, a variable) is not seen, and
   a result that shows the answer is not a session that used it. Run on the four W55
   replays, the sessions that reached out were 1 of 3 (`a`), 3 of 5 (`b`), 1 of 3 (`c`)
@@ -202,8 +202,12 @@ What the proof does not show, and what a comparison has to allow for:
   one; not `/nix` whole, which holds 107,000 entries on this box, 4,166 of them flake
   `*-source` copies of repos made when nix built them, 18 of those the original W55 task
   file with its Determinations), `/proc`, `/dev`, the network files of `/etc`, DEST at its own path, the tool's own
-  entries (`SKILL.md`, `scripts`, `templates`, `docs`; never the tool as a whole, which
-  when it is the live checkout holds its `.dfs/`), and a fresh home (`DEST-box/home`, at
+  entries (`SKILL.md`, `scripts`, `templates`; never the tool as a whole, which
+  when it is the live checkout holds its `.dfs/`), a `docs` of the box's own holding only
+  `artefacts.md`, the one file the tool uses at run time (the tool's `docs` carries
+  `dfs-review-findings.tsv`, `dfs-rounds.tsv` and this document, which name every task's
+  review findings, the original W55's among them; a tool from the store is bound whole for
+  its `bin` and `libexec`, and the trimmed `docs` is laid over it), and a fresh home (`DEST-box/home`, at
   `/home/replay`) with a copy of the sign-in and `settings.json` and nothing else: no
   `~/.claude/projects`, no `~/.codex`, no history. Their environment is rebuilt (no
   `DFS_*`, no `XDG_*`). Of the live checkout they see the path down to DEST and nothing
