@@ -49,6 +49,17 @@ def _git(*args, cwd=None):
                           capture_output=True, text=True)
 
 
+def _git_net(*args, cwd=None):
+    """`git` for a call that reaches the remote, which the chains' lock is held across: with no
+    prompt on /dev/tty (`GIT_TERMINAL_PROMPT=0`) and ssh in batch mode, so a credential that wants
+    typing fails and is reported instead of waiting unseen while every chain waits on the lock.
+    The author's ssh command (`GIT_SSH_COMMAND`, else `core.sshCommand`, else `ssh`) is kept."""
+    ssh = os.environ.get("GIT_SSH_COMMAND") or _git("config", "core.sshCommand", cwd=cwd).stdout.strip() or "ssh"
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_SSH_COMMAND=ssh + " -o BatchMode=yes")
+    return subprocess.run(["git", *args], cwd=cwd or dfs_paths.work_root(), env=env,
+                          capture_output=True, text=True)
+
+
 def _git_bytes(*args, cwd=None):
     """`git`'s stdout as the bytes it wrote, for comparing a file's content exactly."""
     return subprocess.run(["git", *args], cwd=cwd or dfs_paths.work_root(),
@@ -791,7 +802,7 @@ def _push_held(task, wt, name):
     if not dfs_tree.pr_url(dfs_tree.load(task)):
         return "held"
     remote = dfs_paths.read_github()
-    r = _git("push", remote, name, cwd=wt)
+    r = _git_net("push", remote, name, cwd=wt)
     if r.returncode == 0:
         return "held"
     _reopen_with(task, wt, "Rebase %s onto its pull request's branch on %s and push" % (name, remote),

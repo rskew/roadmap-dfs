@@ -80,8 +80,8 @@ def open_pr(task):
                           % (name, default))
     # The lease is checked against the remote-tracking ref, which a pull request merged earlier
     # leaves behind once GitHub deletes its head branch; a failed fetch shows in the push.
-    dfs_branch._git("fetch", "--prune", remote, cwd=wt)
-    r = dfs_branch._git("push", "--force-with-lease", "-u", remote, name, cwd=wt)
+    dfs_branch._git_net("fetch", "--prune", remote, cwd=wt)
+    r = dfs_branch._git_net("push", "--force-with-lease", "-u", remote, name, cwd=wt)
     if r.returncode != 0:
         raise GithubError("git push %s %s failed: %s" % (remote, name, " ".join(dfs_branch.out_of(r).split())[:400]))
     title = "%s: %s" % (task, t["title"].lstrip("# ").split(" · ", 1)[-1])
@@ -113,14 +113,14 @@ def _paged(text):
 
 
 def _pull(url):
-    """The pull request at `url` as (state, comments): its state (OPEN, MERGED or CLOSED), and
-    every comment on it that asks something of the work, oldest first, as (kind, id, who, text,
+    """The pull request at `url` as (state, head, comments): its state (OPEN, MERGED or CLOSED),
+    the sha of its head commit as GitHub has it, and every comment on it that asks something of the work, oldest first, as (kind, id, who, text,
     where, link): its conversation comments and reviews with a body (`gh pr view`) and its line
     comments (`gh api .../pulls/<n>/comments`, every page of them)."""
     m = re.fullmatch(r"https://([^/]+)/([^/]+)/([^/]+)/pull/(\d+)/?", url)
     if not m:
         raise GithubError("%s is not a pull request's url" % url)
-    view = json.loads(gh("pr", "view", url, "--json", "comments,reviews,state") or "{}")
+    view = json.loads(gh("pr", "view", url, "--json", "comments,reviews,state,headRefOid") or "{}")
     lines = _paged(gh("api", "repos/%s/%s/pulls/%s/comments" % m.groups()[1:], "--paginate",
                       "--hostname", m.group(1)))
     who = lambda c, key="author": "@" + ((c.get(key) or {}).get("login") or "someone")
@@ -130,7 +130,7 @@ def _pull(url):
     out += [("line", c.get("id"), who(c, "user"), c.get("body"),
              "%s:%s" % (c.get("path"), c.get("line") or c.get("original_line") or "?"),
              c.get("html_url") or url) for c in lines]
-    return view.get("state") or "OPEN", [c for c in out if c[1] and (c[3] or "").strip()]
+    return view.get("state") or "OPEN", view.get("headRefOid") or "", [c for c in out if c[1] and (c[3] or "").strip()]
 
 
 def _pr_marks(t):
@@ -172,7 +172,7 @@ def closed(task, url):
 
 
 @dfs_branch.one_at_a_time
-def land(task, url):
+def land(task, url, head=""):
     """The pull request of `task` was merged on GitHub: bring the default branch up to it, then
     let go of the worktree and `dfs/<task>` and log `pr <url> merged`, so the task is done and
     merged. Fetches the remote and fast-forwards the default branch, and nothing else: the default
@@ -180,7 +180,7 @@ def land(task, url):
     it with no merge or rebase of the author's in progress, else it is a raise asking them to
     pull (once). The task's files are carried from the worktree, which holds the log entries no
     commit does, and left uncommitted in the checkout. A branch holding commits that never
-    reached the pull request's head, or a worktree holding changes beyond the task's files, is
+    reached the pull request's head (`head`, as `_pull` read it), or a worktree holding changes beyond the task's files, is
     kept as `dfs-merged/<task>` (`-2`, `-3` … when that name is taken), not deleted."""
     remote = dfs_paths.read_github()
     name, wt, default = dfs_paths.item_branch(task), dfs_paths.worktree(task), dfs_paths.branch()
@@ -200,7 +200,7 @@ def land(task, url):
         return pull_by_hand("the checkout is on %s" % default)
     if dfs_branch._in_progress():
         return pull_by_hand("a %s of yours is unfinished in the checkout" % dfs_branch._in_progress())
-    r = dfs_branch._git("fetch", remote)
+    r = dfs_branch._git_net("fetch", remote)
     if r.returncode != 0:
         raise GithubError("git fetch %s failed: %s" % (remote, " ".join(dfs_branch.out_of(r).split())[:400]))
     mine_dirty = [p for _, p in dfs_branch._dirty(dfs_branch.task_paths(task))] if wt is not None else []
@@ -218,10 +218,6 @@ def land(task, url):
                  if not any(l[3:].strip('"') == p or l[3:].startswith(p.rstrip("/") + "/") for p in mine)]
         # the work the pull request lacks: against its head as GitHub reports it, which a squash
         # merge and a pruned remote-tracking branch leave intact; else against what we pushed
-        try:
-            head = json.loads(gh("pr", "view", url, "--json", "headRefOid") or "{}").get("headRefOid") or ""
-        except (GithubError, ValueError):
-            head = ""
         if not head or dfs_branch._git("cat-file", "-e", head + "^{commit}").returncode != 0:
             head = "refs/remotes/%s/%s" % (remote, name)
         gone = dfs_branch._git("rev-list", name, "--not", default, head)
@@ -263,9 +259,9 @@ def watch(task):
     url = pr_url(t)
     if not url:
         return []
-    state, comments = _pull(url)
+    state, head, comments = _pull(url)
     if state == "MERGED":
-        land(task, url)
+        land(task, url, head)
         return []
     if state == "CLOSED":
         closed(task, url)

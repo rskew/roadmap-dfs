@@ -184,5 +184,30 @@ class Watch(unittest.TestCase):
         self.assertFalse(self.calls.exists())
 
 
+class NetworkCalls(unittest.TestCase):
+    def env_of(self, **env):
+        """The environment `_git_net` hands git, read back through a git alias running `env`."""
+        import branch as dfs_branch
+        keep = {k: os.environ.pop(k, None) for k in ("GIT_SSH_COMMAND", "GIT_TERMINAL_PROMPT")}
+        os.environ.update(env)
+        try:
+            r = dfs_branch._git_net("-c", "alias.show-env=!env",
+                                    "show-env", cwd=tempfile.gettempdir())
+        finally:
+            for k in keep:
+                os.environ.pop(k, None)
+            os.environ.update({k: v for k, v in keep.items() if v is not None})
+        return dict(l.split("=", 1) for l in r.stdout.splitlines() if "=" in l)
+
+    def test_a_call_to_the_remote_never_waits_on_a_prompt(self):
+        got = self.env_of()
+        self.assertEqual(got["GIT_TERMINAL_PROMPT"], "0")
+        self.assertIn("-o BatchMode=yes", got["GIT_SSH_COMMAND"])
+
+    def test_the_authors_ssh_command_is_kept(self):
+        got = self.env_of(GIT_SSH_COMMAND="ssh -F mine")
+        self.assertEqual(got["GIT_SSH_COMMAND"], "ssh -F mine -o BatchMode=yes")
+
+
 if __name__ == "__main__":
     unittest.main()
