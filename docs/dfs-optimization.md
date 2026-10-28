@@ -313,15 +313,28 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    `ok` names what it checked (the `ok` of two guarded W55 replays still listed three
    and four defects each). A candidate is **kept** if it passes the first review in at
    least **four** more replays of the twelve than the control does, and no task gets
-   worse by more than one replay of three, **on the pass rates of all replays and again on
-   only those whose `score` shows none of the original's conclusions in a result** (a
-   margin that holds only when the exposed replays are counted is the box's, not the
-   change's). **Dropped** otherwise, with the numbers in the candidate's row.
+   worse by more than one replay of three (**test 1**, on all replays), **and** the replays
+   whose `score` shows none of the original's conclusions in a result ("unexposed") do not
+   contradict it (**test 2**): each arm has at least two of them, and the changed arm's
+   pass fraction among them is not below the control's. **Dropped** if test 1 fails or the
+   unexposed replays point the other way, with the numbers in the candidate's row.
+   **Undecided** if test 1 passes and an arm has fewer than two unexposed replays: it is
+   not kept, and it waits for a box that hides the
+   answer (section 3), where every replay is unexposed and test 2 reduces to test 1.
+
+   *Why test 2 is a no-contradiction check and not a second margin.* Section 3 measured
+   three of four W55 replays (`a`, `b`, `arm1`) shown the original's conclusions. At that
+   rate (exposure 0.75) 24 replays leave about 6 unexposed, 3 an arm, and a lead of four
+   cannot be asked of 3 replays (a lead cannot exceed the arm). So test 2 only asks that
+   the unexposed replays do not point the other way. This is an assumption of W97.18, and
+   the table below says what it buys. It does not remove the exposure: a change that
+   works only by making sessions look the answer up is still kept about a quarter of the
+   time at that exposure, because three replays an arm hardly separate it from nothing.
 
    *Why four.* Assume each replay passes its first review with probability p, alone
    and independently, p between 0.5 and 0.7 (the history fails 30% of first reviews; the
    three guarded W55 replays passed 2 of 3, an upper bound on a clean replay's rate for the reason in section 3). Two arms of the same tool then differ by
-   the margin by chance this often (exact sums over every outcome, recomputed by the page named below):
+   the margin by chance this often (exact sums over every outcome, recomputed by `python3 <scripts>/chance.py` and by the page named below):
 
    | margin (of 12) | kept by chance, p=0.5 | p=0.7 | kept if p goes 0.5 to 0.9 | 0.5 to 0.75 |
    |---|---|---|---|---|
@@ -329,6 +342,24 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    | 3 | 14.8% | 12.9% | 86.8% | 58.0% |
    | 4 | 7.4% | 5.8% | 74.2% | 41.5% |
    | 5 | 3.2% | 2.1% | 56.5% | 25.8% |
+
+   That table is test 1 alone. With test 2 and a share of replays shown the original's
+   conclusions (`python3 <scripts>/chance.py`: 100,000 simulated runs, seed 97, 12 replays
+   an arm, a replay exposed with the probability in the first column), at margin four:
+
+   | exposure | arms with 2+ unexposed | null p=0.5 kept | null p=0.7 kept | 0.5 to 0.9 kept | 0.5 to 0.75 kept | lookup-only gain kept |
+   |---|---|---|---|---|---|---|
+   | 0 | 100% | 7.4% | 5.8% | 74.2% | 41.5% | n/a |
+   | 0.50 | 99.4% | 7.3% | 5.7% | 73.1% | 40.3% | 27.7% |
+   | 0.75 | 70.8% | 4.9% | 3.8% | 51.0% | 27.5% | 26.8% |
+   | 1.00 | 0% | 0% | 0% | 0% | 0% | 0% |
+
+   ("Lookup-only": the pass rate is 0.5 for both arms unless a replay is exposed, and the
+   changed arm passes 0.9 of the exposed ones.) At the measured 0.75, a false keep falls to
+   4 or 5%, a real 0.5 to 0.9 gain is kept half the time, not three in four, and in 29% of
+   runs an arm has too few unexposed replays to decide; at 1.0, nothing can be kept, and
+   all four W55 replays did reach into `.dfs/runs`. The 0.75 itself is three
+   replays of one task, so the 0.5 to 1.0 rows bound it.
 
    A margin of two keeps a change that does nothing one time in four, so the earlier
    rule was no test; four keeps it about one in sixteen and still finds a change that
