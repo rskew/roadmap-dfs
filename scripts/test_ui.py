@@ -351,6 +351,9 @@ class Flows(unittest.TestCase):
     def test_j_k_and_the_arrows_step_the_list_and_the_tree_and_left_right_fold(self):
         self.flow("keys")
 
+    def test_slash_searches_the_list_and_a_tasks_nodes_and_esc_clears_it(self):
+        self.flow("find")
+
     def test_navigation_is_under_the_thumbs(self):
         self.flow("thumbs")
 

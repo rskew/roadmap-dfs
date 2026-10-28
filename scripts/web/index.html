@@ -180,6 +180,11 @@ p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 .fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; min-height: calc(52px * var(--z)); padding: 0 var(--s5); }
 .fab-gap { height: 72px; }
 .top-actions { margin: var(--s2) 0 0; }
+/* The search field heads the list and a task's tree: `/` focuses it, Esc clears it. */
+#find { display: flex; align-items: center; gap: var(--s3); margin: 0 0 var(--s3); }
+#find input { flex: 1; min-width: 0; }
+#find .n { flex: none; color: var(--muted); font-size: var(--fs-label); letter-spacing: .04em; }
+#view [hidden] { display: none !important; }
 
 /* the walk */
 /* The walk's controls stay in reach on a long list: the box sticks under the bar (its measured height, `--bar-h`, as a long
@@ -410,7 +415,7 @@ const tagAt = id => String(id).indexOf("@");
 const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
 const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0 };
+const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0, q: "" };
 /* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
 const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
@@ -582,6 +587,68 @@ function focusKey(el) {
   if (!el || el === document.body) return null;
   const sel = el.id ? "#" + CSS.escape(el.id) : el.dataset.act ? `${el.tagName}[data-act="${el.dataset.act}"]` + (el.dataset.id ? `[data-id="${CSS.escape(el.dataset.id)}"]` : "") : "";
   return { sel, at: [...document.querySelectorAll(FOCUSABLE)].indexOf(el) };
+}
+/* Search. One field, kept between draws and put back at the head of the view: on the list it hides the rows that do not hold
+   every word typed (the task's id or goal), on a task it keeps the nodes whose id or title does, folded or not.
+   `S.q` is what is typed; leaving the list or the task clears it. */
+const FIND = { form: null, input: null, count: null, scope: "", sel: null };
+const hit = (q, ...parts) => { const h = parts.join(" ").toLowerCase(); return q.toLowerCase().split(/\s+/).filter(Boolean).every(w => h.includes(w)); };
+function findBuild() {
+  const f = FIND.form = document.createElement("form");
+  f.id = "find"; f.setAttribute("role", "search");
+  f.innerHTML = `<input class="field" id="find-q" type="search" autocomplete="off" spellcheck="false" aria-label="Search" aria-keyshortcuts="/"><span class="n" id="find-n" role="status"></span>`;
+  FIND.input = $("input", f); FIND.count = $(".n", f);
+  f.addEventListener("submit", e => { e.preventDefault(); findStep(); });
+  FIND.input.addEventListener("input", () => findSet(FIND.input.value));
+  FIND.input.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    e.preventDefault(); e.stopPropagation(); FIND.input.value = ""; findSet(""); FIND.input.blur();
+  });
+}
+// Before a draw: a new list or task starts with nothing typed. Says whether the field has focus, to give it back.
+function findEnter() {
+  if (!FIND.form) findBuild();
+  const r = route(), scope = r.view + "/" + (r.task || "");
+  if (FIND.scope !== scope) { FIND.scope = scope; S.q = ""; FIND.input.value = ""; }
+  const had = document.activeElement === FIND.input;
+  FIND.sel = had ? [FIND.input.selectionStart, FIND.input.selectionEnd] : null;
+  return had;
+}
+function findLeave(had) {
+  const v = $("#view");
+  if (v.firstChild !== FIND.form) v.prepend(FIND.form);
+  findApply();
+  if (had) { FIND.input.focus({ preventScroll: true }); if (FIND.sel) FIND.input.setSelectionRange(FIND.sel[0], FIND.sel[1]); }
+}
+function findApply() {
+  const q = S.q, v = route().view;
+  let shown, all;
+  if (v === "task") {
+    all = S.task ? S.task.rows.filter(r => r.kind === "node").length : 0;
+    shown = S.task ? visibleRows(S.task).filter(r => r.kind === "node").length : 0;
+  } else {
+    const rows = [...document.querySelectorAll("#view .item[data-act=task], #view .item[data-row]")];
+    all = rows.length; shown = 0;
+    for (const el of rows) {
+      const ok = !q || hit(q, ...["iid", "goal"].map(c => (el.querySelector("." + c) || {}).textContent || ""));
+      (el.closest(".arow") || el).hidden = !ok; if (ok) shown++;
+    }
+    document.querySelectorAll("#view .break").forEach(el => el.hidden = !!q);
+  }
+  const what = v === "task" ? "node" : "task";
+  const ph = "Search " + what + "s";
+  if (FIND.input.placeholder !== ph) FIND.input.placeholder = ph;      // rewriting it, even unchanged, moves the caret
+  FIND.count.textContent = q ? (shown ? `${shown} of ${all}` : `No ${what} matches`) : "";
+}
+function findSet(v) {
+  S.q = v.trim();
+  if (route().view === "task" && S.task) { S.sig = ""; drawTask(); } else findApply();
+}
+// Enter in the field leaves it for the first row left, so j and k go on from there.
+function findStep() {
+  FIND.input.blur();
+  const el = route().view === "task" ? $("#view .row .main") : [...document.querySelectorAll("#view button.item[data-act=task]")].find(x => !x.closest("[hidden]"));
+  if (el) { el.focus(); el.scrollIntoView({ block: "nearest" }); }
 }
 async function render(force) {
   const key = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
@@ -951,6 +1018,7 @@ function typingInBox() {
   return (a.id === "bud" || a.id === "par") && !S.walk.on;
 }
 function drawTasks(push) {
+  const had = findEnter();
   const items = S.state.items.filter(i => !S.only || i.needs_you);
   // A push (drawTasks(true)) redraws the list, and a redrawn number field puts the caret back at its start: digits typed after the push
   // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
@@ -1002,6 +1070,7 @@ function drawTasks(push) {
   const on = document.activeElement && document.activeElement.matches("#view button.item[data-act=task]") ? document.activeElement.dataset.id : null;
   if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }
   else $("#view").innerHTML = html;
+  findLeave(had);
   const kept = on && $(`#view button.item[data-id="${CSS.escape(on)}"]`); if (kept) kept.focus({ preventScroll: true });   // the keys' place survives a redraw
   if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
@@ -1152,6 +1221,8 @@ document.addEventListener("keydown", async e => {
 // A node the author is there for: an open raise or an assumption (an old Ask counts).
 const wantsYou = r => r.raises.length > 0 || r.assumes || r.ask;
 function visibleRows(t) {
+  // Searching: the nodes whose id or title hold every word, wherever they sit and folded or not.
+  if (S.q) return t.rows.filter(r => r.kind === "node" && (!S.flagged || wantsYou(r)) && hit(S.q, r.id, r.title));
   // Flagged only: the other nodes go, and with them the folds (one on a dropped node would hide a flagged one below it).
   if (S.flagged) return t.rows.filter(r => r.kind !== "node" || wantsYou(r));
   const folded = S.folded[t.id] || new Set(), byId = {};
@@ -1165,6 +1236,7 @@ const walkHere = id => !!(S.walk && S.walk.enabled && S.walk.candidates.some(c =
    begun to change code for it), not begun. A node the work has left (refuted, parked) has none; its chip says. */
 const PROGRESS_LABEL = { done: ["✓", "complete"], started: ["", "started"], open: ["", "not started"] };
 function drawTask() {
+  const had = findEnter();
   const t = S.task, folded = S.folded[t.id] || new Set();
   let html = `<div class="head"><h2>${inline(t.goal)}</h2>
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
@@ -1203,7 +1275,7 @@ function drawTask() {
         r.progress === "ruled" ? `<span class="tag">confirmed by you, not built</span>` : "",
         ["refuted", "parked", "dormant", "pruned"].includes(r.status) ? `<span class="tag ${r.status === "refuted" ? "red" : ""}">${esc(r.status)}</span>` : ""].join("");
       html += `<div class="${cls}" style="--i:${r.indent}">
-        <button class="fold ${r.kids && !S.flagged ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
+        <button class="fold ${r.kids && !S.flagged && !S.q ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
         <button class="main" data-act="node" data-id="${esc(r.id)}">
           <div class="line">${PROGRESS_LABEL[r.progress] ? `<span class="mk ${r.progress}" role="img" aria-label="${PROGRESS_LABEL[r.progress][1]}">${PROGRESS_LABEL[r.progress][0]}</span>` : ""}<span class="nid">${r.chain ? "↳ " : ""}${esc(r.id)}</span>${inline(r.title)}</div>
           ${chips ? `<div class="chips">${chips}</div>` : ""}
@@ -1211,6 +1283,7 @@ function drawTask() {
     }
   }
   $("#view").className = ""; $("#view").innerHTML = html + `</div>`;
+  findLeave(had);
   if (thumbScale) document.querySelectorAll("#view .thumb").forEach(el => thumbScale.observe(el));
 }
 /* An artefact opens in this page's own viewer, `#/a/<task>/<name>` (drawArtefact), not in a window of its own. */
@@ -1808,7 +1881,7 @@ setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#cha
    the page or a node row, so a node's own pane still scrolls with them. */
 const stepKey = e => e.key === "j" ? 1 : e.key === "k" ? -1 : e.key === "ArrowDown" ? 2 : e.key === "ArrowUp" ? -2 : 0;
 function stepList(d) {
-  const rows = [...document.querySelectorAll("#view button.item[data-act=task]")];
+  const rows = [...document.querySelectorAll("#view button.item[data-act=task]")].filter(x => !x.closest("[hidden]"));
   if (!rows.length) return;
   const i = rows.indexOf(document.activeElement), n = rows[i < 0 ? (d > 0 ? 0 : rows.length - 1) : Math.max(0, Math.min(rows.length - 1, i + d))];
   n.focus(); n.scrollIntoView({ block: "nearest" });
@@ -1829,6 +1902,8 @@ const FOCUS = { at: "" };
 addEventListener("keydown", e => {
   if (e.target.closest("dialog, input, textarea, [data-grip]") || e.metaKey || e.ctrlKey || e.altKey) return;
   const v = route().view, d = stepKey(e);
+  if (e.key === "/" && FIND.input && (v === "tasks" || (v === "task" && S.task))) { e.preventDefault(); FIND.input.focus(); FIND.input.select(); return; }
+  if (d) { MID.until = 0; MID.last = -Infinity; }          // a step the key chose is not the scroll the middle control follows
   if (v === "tasks") {
     if (d) { e.preventDefault(); stepList(d > 0 ? 1 : -1); }
     return;
@@ -1849,7 +1924,7 @@ addEventListener("keydown", e => {
   }
   else if (e.key === "n") nextFlag();
   else if (e.key === "Escape") up();                       // a node back to its task, a task back to the list
-  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onRow && cur && cur.kids && !S.flagged) {
+  else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && onRow && cur && cur.kids && !S.flagged && !S.q) {
     const s = S.folded[S.task.id] ||= new Set(), folded = s.has(cur.id);
     if (e.key === "ArrowLeft" ? !folded : folded) { folded ? s.delete(cur.id) : s.add(cur.id); S.focusId = cur.id; S.sig = ""; render(true); }
   }

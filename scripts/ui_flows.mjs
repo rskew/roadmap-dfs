@@ -161,6 +161,51 @@ const FLOWS = {
     await ctx.close();
   },
 
+  // `/` focuses the search field on the list and on a task; typing keeps the rows that hold every word; Esc clears it.
+  find: async browser => {
+    const { ctx, page, errors } = await open(browser, DESKTOP);
+    const shown = sel => page.$$eval(sel, a => a.filter(e => !e.closest("[hidden]")).map(e => e.dataset.id));
+    const focusedField = () => page.evaluate(() => document.activeElement && document.activeElement.id === "find-q");
+    const all = await shown("#view button.item[data-act=task]");
+    assert(all.length > 3, "the fixture lists tasks");
+    await page.keyboard.press("/");
+    assert(await focusedField(), "/ focuses the search field on the list");
+    const word = await page.$eval(`#view button.item[data-id="${all[1]}"] .goal`, e => e.textContent.trim().split(/\s+/).sort((a, b) => b.length - a.length)[0].toLowerCase());
+    const want = await page.$$eval("#view button.item[data-act=task]", (a, w) => a.filter(e => (e.querySelector(".iid").textContent + " " + e.querySelector(".goal").textContent).toLowerCase().includes(w)).map(e => e.dataset.id), word);
+    await page.fill("#find-q", word);        // fill sets the value and fires `input`; this chromium's keyboard drops all but the last character typed into a field
+    same(await shown("#view button.item[data-act=task]"), want, `typing "${word}" keeps the tasks that hold it`);
+    assert(want.includes(all[1]) && want.length < all.length, "and it is a real filter");
+    await page.fill("#find-q", word + " zzzqq");
+    same(await shown("#view button.item[data-act=task]"), [], "a word nothing holds leaves no task");
+    assert(/No task matches/.test(await page.textContent("#find-n")), "and the field says so");
+    await page.keyboard.press("Escape");
+    same(await shown("#view button.item[data-act=task]"), all, "Esc clears the filter");
+    assert(!(await focusedField()) && (await page.inputValue("#find-q")) === "", "and leaves the field empty and unfocused");
+    assert(!/#\/t\//.test(await page.evaluate(() => location.hash)), "Esc in the field does not leave the list");
+    // Enter leaves the field for the first task left, and j goes on from it.
+    await page.keyboard.press("/"); await page.fill("#find-q", word); await page.keyboard.press("Enter");
+    same(await page.evaluate(() => document.activeElement.dataset.id), want[0], "Enter focuses the first task left");
+    // On a task: nodes by id or title, folded ones included.
+    await page.goto(URL_ + "#/t/W9"); await page.waitForSelector(".row");
+    const ids = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
+    const folded = await page.$eval("#view .row:has(.fold:not(.none)) .fold", e => e.dataset.id);
+    await page.click(`#view .fold[data-id="${folded}"]`); await page.waitForFunction(n => document.querySelectorAll("#view .row").length < n, ids.length);
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    const hidden = await page.evaluate(f => S.task.rows.find(r => r.kind === "node" && r.parent === f).id, folded);
+    await page.keyboard.press("/");
+    assert(await focusedField(), "/ focuses the search field on a task");
+    await page.fill("#find-q", hidden);
+    await page.waitForFunction(i => [...document.querySelectorAll("#view .row .main")].some(e => e.dataset.id === i), hidden);
+    assert((await shown("#view .row .main")).includes(hidden), "a node under a folded one is found");
+    assert(await focusedField(), "typing in a task's field keeps focus through the redraw");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(n => document.querySelectorAll("#view .row").length === n, (await page.$$("#view .row")).length);
+    same((await page.$$("#view .row")).length < ids.length, true, "Esc restores the fold");
+    assert(/#\/t\/W9$/.test(await page.evaluate(() => location.hash)), "and stays on the task");
+    same(errors, [], "no page errors");
+    await ctx.close();
+  },
+
   // The list, its filter, the project's name, and nothing in the console.
   async list(b) {
     const { page, errors } = await open(b, PHONE);
