@@ -842,6 +842,25 @@ def rel(p) -> str:
 
 
 def main() -> int:
+    if "--task-items-rel" in sys.argv[1:]:
+        # `--task-items-rel <task>`: the `items/` that holds <task>'s files, relative to the
+        # work root: its item worktree's when it has one (the top-level copy is stale once
+        # the task is worked on its branch), else this checkout's.
+        i = sys.argv.index("--task-items-rel")
+        if i + 1 >= len(sys.argv):
+            print("usage: paths.py --task-items-rel <task>", file=sys.stderr)
+            return 2
+        print(rel(task_items(sys.argv[i + 1])))
+        return 0
+    if "--task-worktree-items-rel" in sys.argv[1:]:
+        # `--task-worktree-items-rel <task>`: where <task>'s `items/` is once it has an item
+        # worktree, whether or not it has one yet.
+        i = sys.argv.index("--task-worktree-items-rel")
+        if i + 1 >= len(sys.argv):
+            print("usage: paths.py --task-worktree-items-rel <task>", file=sys.stderr)
+            return 2
+        print(rel(worktrees() / sys.argv[i + 1] / STATE_DIR_NAME / "items"))
+        return 0
     if "--require" in sys.argv[1:]:
         if has_roadmap():
             return 0

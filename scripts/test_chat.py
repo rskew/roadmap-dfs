@@ -381,6 +381,35 @@ class Chat(unittest.TestCase):
         self.assertNotIn("Do not edit", first)
         self.assertIn("hello", first)
 
+    def test_a_task_chat_reads_the_task_from_its_worktree_not_the_stale_top_level_file(self):
+        top, wt = ".dfs/items/W1.md", ".dfs/worktrees/W1/.dfs/items/W1.md"
+        self.chats.send("W1", "first")
+        self.settle("W1")
+        self.assertIn(top, self.calls()[0], "a task with no worktree is read where it is")
+        self.assertNotIn(" " + wt, self.calls()[0])
+        self.assertIn("whenever .dfs/worktrees/W1/.dfs/items exists it holds the task's current files", self.calls()[0],
+                      "a chat begun before the worktree is cut is told where the task will be")
+        self.chats.clear("W1")
+        self.log.unlink()
+        (self.root / ".dfs" / "worktrees" / "W1" / ".dfs" / "items").mkdir(parents=True)
+        (self.root / ".dfs" / "worktrees" / "W1" / ".dfs" / "items" / "W1.md").write_text(
+            "# W1 · sample\n\n## Goal\n\nDo it.\n\n## Tree\n\n### W1.1 · a node\nStatus: open\nApproach: x\n")
+        (self.root / ".dfs" / "worktrees" / "W1" / ".git").write_text("gitdir: elsewhere\n")
+        self.chats.send("W1", "again")
+        self.settle("W1")
+        page = self.calls()[0]
+        self.assertIn(wt, page)
+        self.assertIn(".dfs/worktrees/W1/.dfs/items/W1/", page, "and its parts directory")
+        self.assertNotIn(" " + top, page, "not the checkout's copy")
+        # the screen's own chat opens with the same pointer
+        self.log.unlink()
+        r = subprocess.run([str(HERE / "run.sh"), "--chat", "W1"], cwd=self.root, text=True, capture_output=True,
+                           env=dict(os.environ, CHAT_SID="00000000-0000-4000-8000-000000000001"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        screen = self.calls()[0]
+        self.assertIn(wt, screen)
+        self.assertNotIn(" " + top, screen)
+
     def test_the_second_turn_resumes_the_session_and_is_just_the_message(self):
         self.chats.send("W1", "first")
         self.settle("W1")
