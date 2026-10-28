@@ -486,12 +486,15 @@ def result_text(block):
 
 
 def answered_nothing(block):
-    """Whether a tool result came back with nothing: an error, no output, or only lines saying
-    the path is not there. What the sandbox returns for a path it hides; a result with any
-    other line is output, which a reader opens (a command can name a live path and print only
-    what its in-sandbox part found)."""
-    text = result_text(block).strip()
-    if block.get("is_error") or text in ("", "(Bash completed with no output)"):
+    """Whether a tool result came back with nothing: no output, or only lines saying the path
+    is not there. What the sandbox returns for a path it hides; a result with any other line is
+    output, which a reader opens (a command can name a live path and print only what its
+    in-sandbox part found). An error result is read by its text like any other: a command that
+    reads a live file and then fails (`cat live/file; which codex`, exit 127) exits non-zero and
+    still printed the file, so `is_error` alone does not make it nothing. The `Exit code N` line
+    and the `<tool_use_error>` wrapper are not output."""
+    text = re.sub(r"</?tool_use_error>", "", result_text(block)).strip()
+    if text in ("", "(Bash completed with no output)"):
         return True
     lines = [l for l in text.splitlines() if l.strip() and not l.startswith("Exit code")]
     return all("No such file or directory" in l or "cannot access" in l or "does not exist" in l

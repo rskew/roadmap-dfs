@@ -677,6 +677,20 @@ class ReachOutsideDestTest(unittest.TestCase):
         got = replay.reached(self.dest, self.live, [str(path)])
         self.assertEqual([nothing for *_, nothing in got], [True, True, True, True, False, False])   # output, and unknown, are not "nothing"
 
+    def test_an_error_result_is_read_by_its_text_so_a_read_then_a_failing_command_is_output(self):
+        def nothing(text, is_error=True):
+            return replay.answered_nothing({"content": text, "is_error": is_error})
+        # `cat live/file; which codex` exits 127 and still printed the file: output, not nothing
+        self.assertFalse(nothing("Exit code 127\nthe original's Determination\n/usr/bin/which: no codex in (/nix)"))
+        self.assertFalse(nothing("Exit code 1\nworktrees\n/workspace/x/.dfs/runs"))
+        self.assertFalse(nothing("<tool_use_error>Permission denied: /live/x</tool_use_error>"))
+        # an error that says only that the path is absent, or says nothing, still is
+        self.assertTrue(nothing("Exit code 2\nls: cannot access '/live': No such file or directory"))
+        self.assertTrue(nothing("<tool_use_error>File does not exist.</tool_use_error>"))
+        self.assertTrue(nothing("Exit code 1"))
+        self.assertTrue(nothing("", is_error=True))
+        self.assertTrue(nothing("(Bash completed with no output)", is_error=False))
+
     def test_a_result_that_prints_the_originals_conclusion_is_the_answer_seen(self):
         (self.live / ".dfs" / "items" / "W5.md").write_text(
             "# W5\n\n## Tree\n\n### W5.1 \u00b7 Fix the parser\nDetermination: the parser now reads a quoted pipe before the verb.\n"

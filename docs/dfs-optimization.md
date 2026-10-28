@@ -244,11 +244,12 @@ What the proof does not show, and what a comparison has to allow for:
 `dfs-replay-W55-p1` (2026-10-28, the store's tool, claude 2.1.308, run once the account's
 five-hour limit had reset): 2 sessions (1 work, 1 review), $2.36 against $1.30, 1 node
 commit, first review `ok`, merged. `score` prints 0 of the original's nodes shown in a
-result and 5 calls naming a live path: 3 answered nothing (greps of `/workspace/roadmap-dfs/.dfs`
-and `~/.codex` for the usage-limit logs, which the task is about) and 2 answered with
-output, which were read in the box's transcripts and show only lines from the clone's own
-`scripts/test_limit.py`, `replays` (the path down to DEST) and a listing of the nix store,
-nothing of the live checkout. So the sandbox held on this replay. It is one sample and
+result and 5 calls naming a live path: 2 answered nothing (greps of `/workspace/roadmap-dfs/.dfs`
+and `~/.codex` for the usage-limit logs, which the task is about) and 3 answered with
+output, which were read in the box's transcripts: lines from the clone's own
+`scripts/test_limit.py`; `worktrees`, the path down to DEST and a `which: command not found`
+(an error result, exit 127, that an earlier version of `score` counted as nothing); and
+`replays` (the path down to DEST) with a listing of the nix store. Nothing of the live checkout in any. So the sandbox held on this replay. It is one sample and
 counts as a first-review pass of one.
 
 - **The starting point keeps only the title, Goal and Background.** Any nodes the author
