@@ -276,9 +276,8 @@ def _kiro_files_written(path):
 # a sqlite database (`opencode.db`, under its data directory), and what a chain
 # captured is `opencode run --format json`: one JSON object per line, each with a
 # `type` (`step_start`, `text`, `tool_use`, `step_finish`, `error`) and the
-# `sessionID` at the top. Captured against opencode 1.18.34 (2.1.1 prints the same shapes, but often ends without a
-# `step_finish`); the shapes read here are
-# those:
+# `sessionID` at the top. Captured against opencode 1.18.34 (2.1.1 prints the same
+# shapes, but often ends without a `step_finish`); the shapes read here are those:
 #
 #   tool_use     part.tool (`bash`, `edit`, `write`, ...), part.state.{status,input,output},
 #                emitted once, when the call has finished (`completed` or `error`)

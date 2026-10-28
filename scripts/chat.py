@@ -182,7 +182,8 @@ def codex_turns(rec):
     `item_completed` events: a `UserMessage` is what was typed, without the environment and
     instructions codex sends beside it as user messages of its own, and an `AgentMessage`
     is what it said (a `commentary` phase between tool calls as well as the final answer).
-    Read from codex-cli 0.162.0's rollout (and found to read the same under 0.163.0), `exec` and `exec resume` both appending to one file."""
+    Read from codex-cli 0.162.0's rollout (and found to read the same under 0.163.0), `exec`
+    and `exec resume` both appending to one file."""
     payload = rec.get("payload") if rec.get("type") == "event_msg" else None
     if not isinstance(payload, dict) or payload.get("type") != "item_completed":
         return []
@@ -264,9 +265,10 @@ def kiro_home():
 
 
 def kiro_messages(sid):
-    """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions (read the same under 2.31.1) are
-    `sess_<uuid>` directories (`session.json`, `messages.jsonl`) under `.kiro/sessions/`, in a
-    bucket per workspace (as a real run writes them); its sqlite database holds only auth and history."""
+    """The `messages.jsonl` of a kiro session, or None. kiro-cli 2.27.1's `--v3` sessions
+    (read the same under 2.31.1) are `sess_<uuid>` directories (`session.json`,
+    `messages.jsonl`) under `.kiro/sessions/`, in a bucket per workspace (as a real run
+    writes them); its sqlite database holds only auth and history."""
     if not sid or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}", sid) or ".." in sid:
         return None
     root = os.path.join(kiro_home(), ".kiro", "sessions")
@@ -811,9 +813,10 @@ def save(scope, sid, agent):
 
 
 def main(argv):
-    """`--codex-result [sid]`, `--opencode-result [sid]`, `--kiro-result [sid]`: that agent's JSON stream of a turn on
-    stdin, the turn's one JSON line on stdout (exit 1 if it failed). `--opencode-answers sid`: how many answers
-    opencode's store holds for a session. `--save scope sid agent`: record a scope's conversation."""
+    """`--codex-result [sid]`, `--opencode-result [sid]`, `--kiro-result [sid]`: that agent's
+    JSON stream of a turn on stdin, the turn's one JSON line on stdout (exit 1 if it failed).
+    `--opencode-answers sid`: how many answers opencode's store holds for a session.
+    `--save scope sid agent`: record a scope's conversation."""
     results = {"--codex-result": codex_result, "--opencode-result": opencode_result, "--kiro-result": kiro_result}
     if argv[:1] and argv[0] in results:
         out = results[argv[0]](sys.stdin, argv[1] if len(argv) > 1 else "")
@@ -825,7 +828,8 @@ def main(argv):
     if argv[:1] == ["--save"] and len(argv) == 4:
         save(*argv[1:])
         return 0
-    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --kiro-result [sid] | --opencode-answers sid | --save scope sid agent", file=sys.stderr)
+    print("usage: chat.py --codex-result [sid] | --opencode-result [sid] | --kiro-result [sid]"
+          " | --opencode-answers sid | --save scope sid agent", file=sys.stderr)
     return 2
 
 
