@@ -29,6 +29,23 @@ def result(tid, text, error=False):
     return {"type": "tool_result", "tool_use_id": tid, "content": text, "is_error": error}
 
 
+class ReviewTailTest(unittest.TestCase):
+    def task(self, usd, first, issues, ok=0):
+        return {"usd": usd, "first_review": first, "review_issues": issues, "review_ok": ok}
+
+    def test_counts_and_shares_of_the_tasks_with_issues_rounds(self):
+        tasks = {
+            "a": self.task(10, "ok", 0, 1),         # passed first time
+            "b": self.task(20, "issues", 1, 1),     # one issues round
+            "c": self.task(60, "issues", 3, 1),     # three
+            "d": {"usd": 10, "first_review": None, "review_issues": 0, "review_ok": 0},  # no review
+        }
+        tail = history.review_tail(tasks, 100)
+        self.assertEqual((tail["reviewed"], tail["first_issues"]), (3, 2))
+        self.assertEqual(tail[1], (2, 0.8))
+        self.assertEqual(tail[3], (1, 0.6))
+
+
 class SessionTest(unittest.TestCase):
     def record(self, records):
         with tempfile.TemporaryDirectory() as tmp:

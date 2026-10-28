@@ -232,6 +232,21 @@ def q(v, p):
     return v[min(int(len(v) * p), len(v) - 1)] if v else 0
 
 
+def review_tail(tasks, total):
+    """How review loops concentrate the spend: counts over the tasks that had a review.
+
+    `total` is all dfs dollars. A task's dollars are all its dfs sessions (work, review,
+    critic), and an "issues round" is one review verdict of `issues`.
+    """
+    rev = [t for t in tasks.values() if t["review_ok"] + t["review_issues"]]
+    out = {"reviewed": len(rev),
+           "first_issues": sum(t["first_review"] == "issues" for t in rev)}
+    for n in (1, 3):
+        hit = [t for t in rev if t["review_issues"] >= n]
+        out[n] = (len(hit), sum(t["usd"] for t in hit) / (total or 1))
+    return out
+
+
 def report(sessions, tasks, rates, n_priced):
     w = sys.stdout.write
     dfs = [s for s in sessions if s["kind"] in ("work", "review", "critic")]
@@ -266,6 +281,13 @@ def report(sessions, tasks, rates, n_priced):
         w(f"  {k:28} {sum(s['usd'] for s in dfs if s['kind'] == k) / total:6.1%}\n")
     after = sum(t["after_issues"] for t in tasks.values())
     w(f"  {'after a review found issues':28} {after / total:6.1%}  (every session on a task once one of its reviews said issues)\n")
+    tail = review_tail(tasks, total)
+    w(f"  review loops: {tail['reviewed']} tasks had a review; the first review said issues on "
+      f"{tail['first_issues']} ({tail['first_issues'] / (tail['reviewed'] or 1):.0%})\n")
+    for n, label in ((1, "at least one"), (3, "three or more")):
+        k, share = tail[n]
+        w(f"  {k} tasks ({k / (tail['reviewed'] or 1):.0%} of those) had {label} issues rounds "
+          f"and hold {share:.1%} of all dfs dollars (their work, review and critic sessions)\n")
     refused = [s for s in dfs if s["refused"]]
     w(f"  sessions with a refused commit {len(refused)} of {len(dfs)}, {sum(s['refused'] for s in dfs)} refusals\n")
     w(f"  Read calls repeating an earlier read of the same slice: {sum(s['rereads'] for s in dfs)} "
