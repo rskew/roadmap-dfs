@@ -812,6 +812,32 @@ class ReachOutsideDestTest(unittest.TestCase):
         got = [text for _, _, text, _ in replay.reached(self.dest, self.live, [str(path)])]
         self.assertEqual(got, store_calls)
 
+    def test_a_call_that_fetches_the_replayed_repos_public_remote_is_counted(self):
+        git(self.live, "init", "-q")
+        git(self.live, "remote", "add", "origin", "git@github.com:rskew/roadmap-dfs")
+        counted = ["git clone https://github.com/rskew/roadmap-dfs /tmp/x",
+                   "git ls-remote git@github.com:rskew/roadmap-dfs",
+                   "curl -s https://raw.githubusercontent.com/rskew/roadmap-dfs/main/scripts/limit.py",
+                   "git fetch https://github.com/rskew/roadmap-dfs.git main",
+                   "gh api repos/rskew/roadmap-dfs/contents/.dfs/items/W5.md",
+                   "gh repo clone rskew/roadmap-dfs"]
+        fine = ["git clone https://github.com/rskew/other-repo /tmp/y", "git clone https://github.com/someone/roadmap-dfs /tmp/z",
+                "curl https://raw.githubusercontent.com/openai/codex/main/error.rs", "git clone https://github.com/rskew/roadmap-dfs-notes /tmp/n",
+                "git push origin HEAD", "git remote get-url origin"]
+        rows = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": f"t{i}", "name": "Bash", "input": {"command": c}}]}} for i, c in enumerate(counted + fine)]
+        rows.append({"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "w", "name": "WebFetch", "input": {"url": "https://github.com/rskew/roadmap-dfs/blob/main/.dfs/items/W5.md"}}]}})
+        path = Path(self.tmp.name) / "net.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        got = [text for _, _, text, _ in replay.reached(self.dest, self.live, [str(path)])]
+        self.assertEqual(got, counted + ["https://github.com/rskew/roadmap-dfs/blob/main/.dfs/items/W5.md"])
+
+    def test_a_repo_with_no_origin_has_no_remote_to_fetch(self):
+        git(self.live, "init", "-q")
+        self.assertEqual(replay.remote_paths(self.live), [])
+        self.assertEqual(replay.remote_paths(Path(self.tmp.name) / "not-a-repo"), [])
+
     def test_a_result_that_prints_a_review_finding_of_the_original_is_the_answer_seen(self):
         (self.live / ".dfs" / "items" / "W5.md").write_text(
             "# W5\n\n## Tree\n\n### W5.1 \u00b7 Fix the parser\nStatus: confirmed\n\n## Log\n\n"

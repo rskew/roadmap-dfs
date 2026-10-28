@@ -543,7 +543,7 @@ def stopped_on(dest):
     return found[-1] if found else "other"
 
 
-REACH_FIELDS = ("command", "file_path", "path", "pattern", "notebook_path", "includePattern")
+REACH_FIELDS = ("command", "file_path", "path", "pattern", "notebook_path", "includePattern", "url")
 
 
 def live_paths(repo):
@@ -554,6 +554,27 @@ def live_paths(repo):
     paths = [str(Path(repo).resolve()), os.path.join(home, ".codex"), os.path.join(config_dir(), "projects")]
     # a session writes the home as `~` or `$HOME` as often as in full
     return paths + [p.replace(home, h, 1) for p in paths[1:] if p.startswith(home) for h in ("~", "$HOME")]
+
+
+def remote_paths(repo):
+    """Where the replayed repo's answer is public: its `origin` (the URL as written, and as
+    `owner/name` on any host reached by https, ssh or `git@`), `raw.githubusercontent.com/owner/name`,
+    the API's `repos/owner/name` and `gh ... owner/name`. The sandbox leaves the network open for the
+    agent's own API, so a session can `git clone`, `curl` or fetch these; as regexes, [] when the
+    repo has no origin. `seal` removes the clone's origin and these are the same refs."""
+    try:
+        url = git(repo, "remote", "get-url", "origin", check=False).strip()
+    except OSError:
+        return []
+    if not url:
+        return []
+    found = [re.escape(url)]
+    m = re.search(r"([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", url)
+    if m:
+        slug = re.escape(m.group(1) + "/" + m.group(2))
+        found += [r"(?:https?://|ssh://|git@)[^\s\"']*" + slug, r"githubusercontent\.com/" + slug,
+                  r"repos/" + slug, r"\bgh\s[^|;&\n]*" + slug]
+    return found
 
 
 # The store holds copies of repos' `.dfs/items` (the flake sources nix made when it built them), so a
@@ -630,8 +651,8 @@ def calls_of(f, agent="claude"):
 
 def reached(dest, repo, files, tool=None, agent="claude"):
     """The tool calls in `files` (transcripts; a kiro replay's run logs) that name a live path
-    outside `dest` (or look in the nix store for flake sources: `STORE_LOOK`), as
-    (session id, tool, text, answered nothing). DEST, its exported tool and what the tool the
+    outside `dest` (or look in the nix store for flake sources: `STORE_LOOK`, or fetch the repo's
+    public remote: `remote_paths`), as (session id, tool, text, answered nothing). DEST, its exported tool and what the tool the
     replay runs under is for (its SKILL.md, scripts, templates and docs/artefacts.md) are cut out first,
     so a replay kept inside the live checkout, or run under it, does not count reading its own
     tool. The rest of a tool that is the live checkout (its `.dfs/` runs, items and worktrees)
@@ -644,7 +665,7 @@ def reached(dest, repo, files, tool=None, agent="claude"):
         base = re.escape(str(Path(tool).resolve()))
         cut.append(base + r"/(?:SKILL\.md|README\.md|LICENCE\.txt|docs/(?!" + re.escape(HIDDEN_DOCS) + r")|(?:scripts|templates)(?![\w-]))")
     own = re.compile("(?:" + "|".join(cut) + ")")
-    live = re.compile("(?:" + "|".join(re.escape(p) for p in live_paths(repo)) + "|" + STORE_LOOK + r")(?![\w-])")
+    live = re.compile("(?:" + "|".join([re.escape(p) for p in live_paths(repo)] + [STORE_LOOK, *remote_paths(repo)]) + r")(?![\w-])")
     found = []
     for f in files:
         for sid, name, inp, nothing in calls_of(f, agent):

@@ -232,11 +232,26 @@ What the proof does not show, and what a comparison has to allow for:
   live path and print only what its in-sandbox part found), and "original's nodes shown in
   a result". A call that names a `*-source` directory or the store as a whole
   (`ls /nix/store`, `grep -r x /nix/store/*-source/`) counts as a call naming a live path too
-  (`STORE_LOOK`), since that is where a flake source of the repo would be. A replay with any call answered with live output, or any of the original's
+  (`STORE_LOOK`), since that is where a flake source of the repo would be, and so does a call
+  that names the replayed repo's public remote (`remote_paths`: its `origin` as `git clone`,
+  `curl`, `gh` or a web fetch would write it, and `raw.githubusercontent.com/owner/name`). A replay with any call answered with live output, or any of the original's
   conclusions shown, is void: it is dropped from the count and a Fix node is opened to
   close the hole. The sandbox copies the sign-in, so after the access token's hours the
   replay's `claude` refreshes its own copy; whether that signs out the author's login is
   not checked here, and the fix is to sign in again.
+  The network is open and is not narrowed. The agents need their API, and `/etc/hosts` or a
+  proxy could stop a session reaching `github.com`, but not an IP literal, a mirror or a
+  search tool that runs on the agent's side of the API (`WebSearch`), and the original's
+  sessions had GitHub (a kiro replay read the codex repo's issues on it). So the sandbox does
+  not hide a public remote: when the replayed repo is public, the original's task file, review
+  findings and fixed code are one `git clone` away. Nothing in the clone points there (`seal`
+  removes `origin`), and the row above counts a call that names it, but a fetch that spells
+  the repo another way would go unseen. All six stored W55 replays (`a`, `b`, `c`, `arm1`,
+  `p1`, `k1`) were scanned, calls and results, for `rskew`, `raw.githubusercontent.com/rskew`
+  and `github.com/rskew`: none names it (the other `github.com` lines are search results about
+  ollama and the codex repo), and `score` on each prints the same rows as before. A task is
+  replayable only if its answer is not on the public remote or a fetch of it would show in
+  those rows; W55's is on the remote, so its replays carry that exposure, measured here as nil.
   The agent is the configured one. A replay runs under the agent the screen is set to
   (`.dfs/runs/agent`: claude, codex, kiro or opencode; `replay.py --agent A` overrides it,
   and `prepare` records it in `.git/replay.json`), because the loop's evidence should come
@@ -390,8 +405,10 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    dataset. Pick the failure class and the tasks it appears in.
 2. **Choose** one candidate and a replayable set: roadmap-dfs tasks that are small
    (original at most $3), whose evidence lies in the repo (not `~/.codex`, not the
-   network: the sandbox hides every other source, so a task that sends its sessions to
-   the original's run logs can only be guessed at, as W55's is), and whose original first
+   network: the sandbox hides the checkout, the home and the store but not the public remote
+   or the web, so a task whose answer is on the remote shows in the breach rows or not at all;
+   and a task that sends its sessions to the original's run logs can only be guessed at, as
+   W55's is), and whose original first
    review found issues, so the control has something to move. Take at least four. `replay.py plan TASK` prints the starting
    point and the original's numbers.
 3. **Change** the tool, on a branch of this repo, one candidate at a time: the changed
