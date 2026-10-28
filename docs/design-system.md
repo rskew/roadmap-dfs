@@ -18,6 +18,8 @@ decoration**, and there are three meanings:
 
 Each has an **ink** (text), a **wash** (the tint a whole row or card takes) and, for amber, a
 **fill**. Red wins over amber where both apply: a blocker is more urgent than an assumption.
+The wash tints a node-tree row; a task-list or rail row that rests on an assumption is left unfilled
+(the page shows through) and carries the amber stripe alone.
 One more colour is not a meaning but a name: **`--project`**, the project's own colour
 (`.dfs/theme`, else made from its name), set by the server on `<html>`. It marks which
 project this is (the stripe along the top of the bar, the browser's `theme-color`, the

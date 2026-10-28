@@ -7,6 +7,7 @@ Run:  python3 roadmap-dfs/scripts/test_web.py
 import http.client
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -545,6 +546,16 @@ class Web(unittest.TestCase):
         self.assertFalse(out[3], "the same name under another task is drawn afresh")
         self.assertIn("No such artefact: gone.html", out[4])
         self.assertNotIn("<iframe", out[4])
+
+    def test_an_assumption_row_in_the_list_and_rail_is_unfilled(self):
+        """The task list and the rail mark an assumption by its stripe, so the page shows through."""
+        src = (HERE / "web" / "index.html").read_text()
+        for sel in (".item.assumes", ".railitem.assumes"):
+            rule = re.search(r"^" + re.escape(sel) + r" \{([^}]*)\}", src, re.M)
+            self.assertTrue(rule, sel + " has a rule")
+            self.assertNotIn("background", rule.group(1), sel + " must not fill the row")
+        # a row is a blocker or an assumption, never both, so the red fill never meets the amber stripe
+        self.assertEqual(src.count("assumes = !blocks && it.assumptions.length > 0"), 2)
 
     def test_flagged_only_keeps_the_nodes_that_want_the_author(self):
         """visibleRows() in index.html, run under node (skipped when there is none)."""
