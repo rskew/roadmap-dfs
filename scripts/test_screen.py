@@ -288,9 +288,9 @@ class Commanding(unittest.TestCase):
 
     def test_model_chooses_the_models_the_walk_gives_its_chains(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
-            ui = a_screen([item("W1")])
+            ui = a_screen([item("W1")], agent="claude")
             ui.command_run("model")
-            self.assertEqual(ui.msg, "models: plan (runner's default), implement (runner's default)")
+            self.assertEqual(ui.msg, "models: plan (opus), implement (sonnet)")
             ui.command_run("model plan opus")
             ui.command_run("model implement default")
             self.assertEqual(ui.models(), dict(plan="opus", implement="default"))
@@ -303,6 +303,17 @@ class Commanding(unittest.TestCase):
             ui.command_run("model review opus")
             self.assertIn("plan or implement", ui.msg)
             self.assertEqual(ui.models(), dict(plan="", implement="default"))
+
+    def test_model_says_another_agent_reads_its_own_config_and_not_opus_and_sonnet(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
+            ui = a_screen([item("W1")], agent="codex")
+            ui.command_run("model")
+            self.assertEqual(ui.msg, "models: plan (codex's own, not set here), implement (codex's own, not set here)")
+            ui.command_run("model plan")
+            self.assertEqual(ui.msg, "plan model: (codex's own, not set here)")
+            self.assertEqual(ui.model_defaults(), dict(plan="", implement=""))
+            ui.agent = "claude"
+            self.assertEqual(ui.model_defaults(), dict(plan="opus", implement="sonnet"))
 
     def test_a_confirmation_is_never_answered_for_you(self):
         # `:stop W1 y`-less: K asks, and with only ⏎ typed it must not stop.

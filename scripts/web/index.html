@@ -866,11 +866,13 @@ async function setAgent(agent) {
 }
 /* The model a claude session runs on, per role: plan (the first session on a task, the critic and the review)
    and implement (every other). Empty keeps the runner's own opus and sonnet; "default" is claude's own default.
-   It applies to the next chain; the other agents read their model from their own config. */
+   It applies to the next chain; the other agents read their model from their own config, which the placeholder says. */
 function modelFields(w) {
   const m = Object.assign({}, w.models, S.walkDraft && S.walkDraft.models);   // typed, not yet kept
+  const own = (w.agent || "the agent") + "'s own";   // another agent gets no model flag: its config decides
+  const d = w.model_defaults || {};
   const field = (role, label, hint) => `<div class="row2"><label for="model-${role}">${label}</label><input type="text" id="model-${role}" data-role="${role}" value="${esc(m[role] || "")}" placeholder="${hint}" maxlength="64" autocapitalize="none" autocomplete="off" spellcheck="false"></div>`;
-  return field("plan", "Plan model", "opus") + field("implement", "Implement model", "sonnet");
+  return field("plan", "Plan model", d.plan || own) + field("implement", "Implement model", d.implement || own);
 }
 async function setModel(role, model) {
   try { S.walk = await api("/api/walk/model", { role, model: model.trim() }); if (S.walkDraft && S.walkDraft.models) delete S.walkDraft.models[role]; toast(model.trim() ? "The " + role + " model is " + model.trim() + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }

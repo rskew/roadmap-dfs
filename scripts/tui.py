@@ -3561,6 +3561,12 @@ class UI(WalkMixin):
         finally:
             self.answers = []
 
+    def model_default_text(self, role):
+        """What a role with no chosen model runs on, as `:model` words it: run.sh's own
+        for claude, and for another agent that it reads its own config."""
+        d = self.model_defaults()[role]
+        return "(%s)" % d if d else "(%s's own, not set here)" % self.agent
+
     def command_model(self, args):
         """`:model` shows the models chosen for the walk's claude sessions; `:model plan opus`
         and `:model implement sonnet` choose them for the next chain, `:model plan default`
@@ -3568,10 +3574,10 @@ class UI(WalkMixin):
         runner's opus to plan and sonnet to implement). Kept like the agent, for the next screen."""
         if not args:
             m = self.models()
-            self.msg = "models: " + ", ".join("%s %s" % (r, m[r] or "(runner's default)")
+            self.msg = "models: " + ", ".join("%s %s" % (r, m[r] or self.model_default_text(r))
                                               for r in MODEL_ROLES)
         elif len(args) == 1 and args[0] in MODEL_ROLES:
-            self.msg = "%s model: %s" % (args[0], self.models()[args[0]] or "(runner's default)")
+            self.msg = "%s model: %s" % (args[0], self.models()[args[0]] or self.model_default_text(args[0]))
         elif len(args) == 2:
             try:
                 self.set_model(args[0], "" if args[1] == "none" else args[1])

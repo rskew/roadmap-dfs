@@ -65,6 +65,7 @@ def read_agent(path):
 
 MODEL_ROLES = ("plan", "implement")      # the two things run.sh gives a claude session a model for
 MODEL_ENV = {"plan": "PLAN_MODEL", "implement": "IMPLEMENT_MODEL"}
+MODEL_DEFAULTS = {"plan": "opus", "implement": "sonnet"}   # what run.sh runs a claude session on when none is chosen
 MODEL_NAME = re.compile(r"[A-Za-z0-9._:\[\]][A-Za-z0-9._:\[\]-]*\Z")   # never a flag: no leading "-"
 
 
@@ -862,6 +863,12 @@ class WalkMixin:
         """The models chosen for the chains the walk starts next, per role."""
         return read_models()
 
+    def model_defaults(self):
+        """What a role runs on when none is chosen, for the agent the next chain uses:
+        run.sh's opus and sonnet for claude, "" for the others, which get no model flag
+        and read their model from their own config."""
+        return dict(MODEL_DEFAULTS) if self.agent == "claude" else {r: "" for r in MODEL_ROLES}
+
     def set_model(self, role, name):
         """Choose the model a claude session runs on for `role` (plan: the first session
         on a task, the critic and the review; implement: every other work session), kept
@@ -937,6 +944,7 @@ class WalkMixin:
             budget=self.walk_budget, used=self.walk_used(), parallel=self.walk_parallel,
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS), models=self.models(),
+            model_defaults=self.model_defaults(),
             pinned=self.walk_next, auto=auto, auto_goal=goal,
             chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],
                          progress=dfs_runs.progress(r), live=r["live"])
