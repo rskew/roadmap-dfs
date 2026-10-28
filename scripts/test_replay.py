@@ -481,7 +481,7 @@ class ReachOutsideDestTest(unittest.TestCase):
         return [str(path)]
 
     def reached(self, calls, tool=None):
-        return [(n, t) for _, n, t in replay.reached(self.dest, self.live, self.transcript(calls), tool)]
+        return [(n, t) for _, n, t, _ in replay.reached(self.dest, self.live, self.transcript(calls), tool)]
 
     def test_calls_inside_dest_are_not_reach_and_calls_outside_it_are(self):
         d, live = str(self.dest), str(self.live)
@@ -516,6 +516,27 @@ class ReachOutsideDestTest(unittest.TestCase):
                  ("Bash", {"command": f"cat {live}/scripts-old/x"})]                       # not the tool's scripts
         got = self.reached(calls, tool=self.live)
         self.assertEqual([n for n, _ in got], ["Bash", "Read", "Glob", "Bash"])
+
+    def test_a_call_the_sandbox_answered_with_nothing_is_told_from_one_that_got_output(self):
+        live = str(self.live)
+        uses = [("Bash", {"command": f"grep -rl limit {live}/.dfs/runs | head"}),
+                ("Bash", {"command": f"ls {live}/.dfs"}),
+                ("Read", {"file_path": f"{live}/.dfs/items/W5.md"}),
+                ("Bash", {"command": f"cat {live}/.dfs/items/W5.md"}),
+                ("Bash", {"command": f"ls {live}/.dfs/worktrees; ls {self.dest}"}),
+                ("Bash", {"command": f"ls {live}/.dfs/archive"})]    # no result recorded at all
+        answers = [("t0", "(Bash completed with no output)", False), ("t1", "ls: cannot access '/x': No such file or directory", False),
+                   ("t2", "File does not exist.", True), ("t3", "Exit code 1\ncat: /x: No such file or directory", False),
+                   ("t4", "W5\nW6", False)]
+        rows = [{"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": f"t{i}", "name": n, "input": inp}]}} for i, (n, inp) in enumerate(uses)]
+        rows += [{"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": i, "content": [{"type": "text", "text": c}] if i == "t3" else c,
+             "is_error": err}]}} for i, c, err in answers]
+        path = Path(self.tmp.name) / "r.jsonl"
+        path.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        got = replay.reached(self.dest, self.live, [str(path)])
+        self.assertEqual([nothing for *_, nothing in got], [True, True, True, True, False, False])   # output, and unknown, are not "nothing"
 
     def test_a_result_that_prints_the_originals_conclusion_is_the_answer_seen(self):
         (self.live / ".dfs" / "items" / "W5.md").write_text(

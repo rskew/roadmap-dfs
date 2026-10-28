@@ -380,14 +380,35 @@ def live_paths(repo):
     return paths + [p.replace(home, h, 1) for p in paths[1:] if p.startswith(home) for h in ("~", "$HOME")]
 
 
+def result_text(block):
+    c = block.get("content")
+    if isinstance(c, list):
+        c = " ".join(x.get("text", "") for x in c if isinstance(x, dict))
+    return c if isinstance(c, str) else ""
+
+
+def answered_nothing(block):
+    """Whether a tool result came back with nothing: an error, no output, or only lines saying
+    the path is not there. What the sandbox returns for a path it hides; a result with any
+    other line is output, which a reader opens (a command can name a live path and print only
+    what its in-sandbox part found)."""
+    text = result_text(block).strip()
+    if block.get("is_error") or text in ("", "(Bash completed with no output)"):
+        return True
+    lines = [l for l in text.splitlines() if l.strip() and not l.startswith("Exit code")]
+    return all("No such file or directory" in l or "cannot access" in l or "does not exist" in l
+               or "File not found" in l or "No files found" in l for l in lines)
+
+
 def reached(dest, repo, files, tool=None):
     """The tool calls in `files` (transcripts) that name a live path outside `dest`, as
-    (session id, tool, text). DEST, its exported tool and what the tool the replay runs
-    under is for (its SKILL.md, scripts, templates and docs) are cut out first, so a replay
-    kept inside the live checkout, or run under it, does not count reading its own tool.
-    The rest of a tool that is the live checkout (its `.dfs/` runs, items and worktrees)
-    still counts. A path built at run time (`cd ..`, a variable) is not seen, so this is
-    a floor."""
+    (session id, tool, text, answered nothing). DEST, its exported tool and what the tool the
+    replay runs under is for (its SKILL.md, scripts, templates and docs) are cut out first,
+    so a replay kept inside the live checkout, or run under it, does not count reading its own
+    tool. The rest of a tool that is the live checkout (its `.dfs/` runs, items and worktrees)
+    still counts. A path built at run time (`cd ..`, a variable) is not seen, so this is a
+    floor. Under the sandbox a call is an attempt: `answered nothing` is true when its result
+    was empty or an error (`answered_nothing`)."""
     dest = str(Path(dest).resolve())
     cut = [re.escape(dest + "-tool"), re.escape(dest) + r"(?![\w-])"]
     if tool:
@@ -398,6 +419,7 @@ def reached(dest, repo, files, tool=None):
     found = []
     for f in files:
         sid = os.path.basename(f)[:-6]
+        calls, results = [], {}
         with open(f, errors="replace") as fh:
             for line in fh:
                 try:
@@ -405,15 +427,19 @@ def reached(dest, repo, files, tool=None):
                 except ValueError:
                     continue
                 msg = r.get("message") or {}
-                if r.get("type") != "assistant" or not isinstance(msg.get("content"), list):
+                if not isinstance(msg.get("content"), list):
                     continue
                 for b in msg["content"]:
-                    if not isinstance(b, dict) or b.get("type") != "tool_use":
+                    if not isinstance(b, dict):
                         continue
-                    inp = b.get("input") or {}
-                    text = " ".join(str(inp[k]) for k in REACH_FIELDS if inp.get(k))
-                    if live.search(own.sub("", text)):
-                        found.append((sid, b.get("name"), text))
+                    if r.get("type") == "user" and b.get("type") == "tool_result":
+                        results[b.get("tool_use_id")] = answered_nothing(b)
+                    elif r.get("type") == "assistant" and b.get("type") == "tool_use":
+                        inp = b.get("input") or {}
+                        text = " ".join(str(inp[k]) for k in REACH_FIELDS if inp.get(k))
+                        if live.search(own.sub("", text)):
+                            calls.append((b.get("id"), b.get("name"), text))
+        found += [(sid, name, text, results.get(tid, False)) for tid, name, text in calls]
     return found
 
 
@@ -481,7 +507,8 @@ def score(dest, task, repo=None):
     repo = repo or main_checkout()
     files = history._glob(transcripts(dest, cfg))
     t["reach"] = reached(dest, repo, files, info.get("tool"))
-    t["outside"] = len(t["reach"])
+    t["outside"] = sum(1 for *_, nothing in t["reach"] if not nothing)   # answered with output
+    t["blocked"] = len(t["reach"]) - t["outside"]
     t["answer"] = answer_seen(dest, repo, task, files)
     return t
 
@@ -503,19 +530,20 @@ ROWS = [
     ("raises", lambda t: t["raises"]),
     ("refused commits", lambda t: t["refused"]),
     ("spent after a review said issues", lambda t: f"{t['after_issues']:.2f}"),
-    ("tool calls naming the live checkout", lambda t: t.get("outside", "-")),
+    ("calls naming a live path, answered nothing", lambda t: t.get("blocked", "-")),
+    ("calls naming a live path, answered output", lambda t: t.get("outside", "-")),
     ("original's nodes shown in a result", lambda t: len(t["answer"]) if "answer" in t else "-"),
 ]
 
 
 def compare(task, before, after):
     w = sys.stdout.write
-    w(f"\n{task}: original against replay\n{'':36} {'original':>10} {'replay':>10}\n")
+    w(f"\n{task}: original against replay\n{'':46} {'original':>10} {'replay':>10}\n")
     for name, f in ROWS:
-        w(f"{name:36} {str(f(before)) if before else '-':>10} {str(f(after)) if after else '-':>10}\n")
+        w(f"{name:46} {str(f(before)) if before else '-':>10} {str(f(after)) if after else '-':>10}\n")
     if after:
-        w(f"{'chain stopped on':36} {'':>10} {after.get('stopped') or '-':>10}\n")
-        w(f"{'review passed and merged':36} {'':>10} {'yes' if after.get('finished') else 'no':>10}\n")
+        w(f"{'chain stopped on':46} {'':>10} {after.get('stopped') or '-':>10}\n")
+        w(f"{'review passed and merged':46} {'':>10} {'yes' if after.get('finished') else 'no':>10}\n")
 
 
 def main(argv):
