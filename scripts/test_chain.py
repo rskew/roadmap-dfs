@@ -296,6 +296,26 @@ class Chain(unittest.TestCase):
         self.assertEqual(status[0], "done")
         self.assertIn("held unmerged for its pull request", status[1])
 
+    def test_a_github_mode_item_held_for_its_pull_request_is_not_acceptable_once_accepted(self):
+        (self.root / ".dfs" / "github").write_text("origin\n")
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertTrue(self.wt.exists(), out)
+        import state as dfs_state
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            self.assertTrue(dfs_tree.acceptable(dfs_tree.load("W1")), "the first accept is offered")
+            subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                           cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
+            t = dfs_tree.load("W1")
+            self.assertTrue(dfs_tree.accepted(t))
+            self.assertTrue(self.wt.exists(), "GitHub mode keeps the worktree until the pull request merges")
+            self.assertFalse(dfs_tree.acceptable(t), "a second accept only re-pushes the held branch")
+            self.assertEqual(dfs_state.state_for("W1")["standing"], [])
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+
     def test_in_github_mode_open_pr_pushes_the_held_branch_and_logs_the_pull_request(self):
         (self.root / ".dfs" / "github").write_text("hub\n")
         bare = self.aside / "hub.git"
@@ -1616,7 +1636,12 @@ class Chain(unittest.TestCase):
         """Run the chain from a copy of the scripts whose `script` starts with `code`.
         Returns (rc, meta, output)."""
         copy = self.aside / "scripts-copy"
-        shutil.copytree(HERE.parent, copy, ignore=shutil.ignore_patterns("__pycache__", ".git", ".dfs"))
+        # TMPDIR may sit inside the checkout (a sandbox with no other executable directory), and
+        # the copy is made inside TMPDIR: leave TMPDIR out, or it copies itself without end
+        tmp = Path(tempfile.gettempdir()).resolve()
+        names = shutil.ignore_patterns("__pycache__", ".git", ".dfs")
+        skip = lambda d, ns: list(names(d, ns)) + [n for n in ns if (Path(d) / n).resolve() == tmp]
+        shutil.copytree(HERE.parent, copy, ignore=skip)
         path = copy / "scripts" / script
         lines = path.read_text().split("\n")
         lines.insert(1, code)

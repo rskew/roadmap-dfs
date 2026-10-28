@@ -1554,9 +1554,13 @@ def acceptable(t):
     accepted but its item branch is still unmerged with no chain left to merge it. A chain
     killed outright runs no exit trap, so an accept held back for it (`append_log`) would
     otherwise sit done and unmerged with the screen and web page refusing a second accept;
-    accepting again finds no live chain and merges."""
+    accepting again finds no live chain and merges. In GitHub mode the worktree is kept on
+    purpose until the pull request merges (`branch.merge` returns "held"), so an accepted
+    task is never offered again there: a second accept would only re-push the branch."""
     import runs as dfs_runs
     if status_of(t)[0] != "done":
+        return False
+    if accepted(t) and dfs_paths.read_github():
         return False
     return not accepted(t) or bool(dfs_paths.worktree(t["task"]) and not dfs_runs.live_for(t["task"]))
 

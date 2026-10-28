@@ -784,10 +784,10 @@ def _set_aside(task, paths):
     when nothing was set aside. An untracked path is left out: git refuses over one only when
     the branch adds that path, so the stash could never be applied back over the file the
     merge brings, and the author's copy stays where it is for `_unmerged` to raise for. A path
-    under `.dfs` is left out too: the roadmap's files are written by the sessions through links,
-    so an edit there was not made on the branch's version and the merge over it is the author's to settle. The
-    entry is found by its sha, never by position or a bare `git stash`, since the stack is
-    shared with every other checkout."""
+    under `.dfs` is left out too: the roadmap's files are written by the sessions through
+    links, so an edit there was not made on the branch's version and the merge over it is the
+    author's to settle. The entry is found by its sha, never by position or a bare
+    `git stash`, since the stack is shared with every other checkout."""
     tracked = _git("ls-files", "-z", "--", *paths).stdout.split("\0")
     paths = [p for p in paths if p in tracked and not p.startswith(dfs_paths.STATE_DIR_NAME + "/")]
     tag = "dfs-merge-%s" % task
