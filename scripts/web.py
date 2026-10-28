@@ -166,9 +166,17 @@ def archived_rows():
     return rows
 
 
-def state_json(archived=False):
-    """The task list: the rows `state.py --json` gives the terminal, plus `rev`. With
-    `archived`, the archived tasks follow the live ones."""
+def archived_json():
+    """The archived tasks as list rows, and how many there are: what the list's Show archived
+    option draws after the live rows. A read of `archived_dir()` alone, so it is cheap beside
+    `state_json`."""
+    rows = archived_rows()
+    return dict(items=rows, archived_count=len(rows))
+
+
+def state_json():
+    """The task list: the rows `state.py --json` gives the terminal, plus `rev` and how many
+    tasks are archived (`archived_json` has those)."""
     data = dfs_state.full()
     running, nxt = walk_marks(data)
     items = []
@@ -184,8 +192,7 @@ def state_json(archived=False):
             uncommitted=it.get("uncommitted") or "", archivable=bool(it.get("archivable")),
             draft=bool(it.get("draft")), pr=it.get("pr") or "", pr_ready=bool(it.get("pr_ready")),
             running=running.get(it["id"], ""), next=it["id"] == nxt))
-    shown = archived_rows() if archived else []
-    return dict(items=items + shown, archived_count=len(dfs_tree.archived_task_ids()), next_item=data.get("next_item"),
+    return dict(items=items, archived_count=len(dfs_tree.archived_task_ids()), next_item=data.get("next_item"),
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
                 background=dfs_paths.read_background(), palettes=dfs_paths.background_palettes(),
@@ -344,20 +351,21 @@ def artefacts_for(text):
     return [entry(n) for n in named]
 
 
-def task_json(task, archived=False):
-    """One task for the page. With `archived`, an archived task read from `archived_dir()`,
-    marked `archived: true`; nothing the page posts reaches it, since `dfs_tree.exists` is
+def task_json(task, include_archived=False):
+    """One task for the page. A live task is read as ever. With `include_archived`, a task that
+    is not live is looked for among the archived ones (read from `archived_dir()`), and the
+    answer says `archived: true`; nothing the page posts reaches it, since `dfs_tree.exists` is
     false for it."""
-    if archived:
-        if task not in dfs_tree.archived_task_ids():
-            raise Refused("no archived task %s" % task, 404)
+    archived = False
+    if dfs_tree.exists(task):
+        t = dfs_tree.load(task)
+        archive, commits = archive_text(task), commits_for(task)
+    elif include_archived and task in dfs_tree.archived_task_ids():
+        archived = True
         t = dfs_tree.load_archived(task)
         archive, commits = dfs_tree.archived_archive_text(task), dfs_tree.node_commits(task)
     else:
-        if not dfs_tree.exists(task):
-            raise Refused("no task %s" % task, 404)
-        t = dfs_tree.load(task)
-        archive, commits = archive_text(task), commits_for(task)
+        raise Refused("no task %s" % task, 404)
     status, why = dfs_tree.status_of(t)
     accepted = dfs_tree.accepted(t)
     rows = []
@@ -1281,12 +1289,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/login":
             return self.json(200, login_state())
         if path == "/api/state":
-            return self.json(200, state_json(archived=self.flag("archived")))
+            return self.json(200, state_json())
+        if path == "/api/archived":
+            return self.json(200, archived_json())
         if path == "/api/assumptions":
             return self.json(200, assumptions_json())
         if path.startswith("/api/task/"):
             return self.json(200, task_json(segment(path, "/api/task/", dfs_tree.TASK_RE, "task"),
-                                            archived=self.flag("archived")))
+                                            include_archived=self.flag("archived")))
         if path.startswith("/api/run/"):
             query = parse_qs(urlparse(self.path).query)
             from_, session = query.get("from", [""])[0], query.get("session", [None])[0]

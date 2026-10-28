@@ -174,6 +174,14 @@ with everything under it, whatever its status, and is logged: a `delete` entry i
 text verbatim, a work session's briefing shows it, and the numbers are not reused. A task a live session is
 working, or a node an unanswered raise names, is refused until that is settled.
 
+## Archiving
+
+A finished, reviewed and pushed task can be archived from the web page's task list (the box beside its row). Its
+files move under `.dfs/archive/archived/` (move them back to restore it), it leaves `order.md`, and the walk
+no longer sees it. The list's **Show archived** button (the choice is kept in the browser) draws the archived tasks
+after the live ones, marked `archived`; one opens read-only, with its tree, nodes and artefacts but no
+answer, accept, edit, add or delete control. The screen (`tui.py`) does not list archived tasks.
+
 ## The web page on a phone
 
 `python3 scripts/web.py` serves the roadmap as a phone-sized page and an installable app.

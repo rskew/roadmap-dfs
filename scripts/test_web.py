@@ -1342,17 +1342,17 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         dest.mkdir(parents=True)
         (self.root / ".dfs" / "items" / ("%s.md" % task)).rename(dest / ("%s.md" % task))
 
-    def test_archived_tasks_are_listed_and_read_only_when_asked_for(self):
+    def test_archived_tasks_are_listed_apart_and_read_only(self):
         self.archive_by_hand()
         status, data, _ = self.call("GET", "/api/state")
         self.assertEqual((status, [i["id"] for i in data["items"]], data["archived_count"]), (200, [], 1))
-        status, data, _ = self.call("GET", "/api/state?archived=1")
-        self.assertEqual([(i["id"], i["archived"]) for i in data["items"]], [("W1", True)])
-        self.assertEqual(data["items"][0]["goal"], self.call("GET", "/api/task/W1?archived=1")[1]["goal"])
+        status, data, _ = self.call("GET", "/api/archived")
+        self.assertEqual([(i["id"], i["archived"], i["status"]) for i in data["items"]], [("W1", True, "blocked")])
+        self.assertEqual(data["archived_count"], 1)
         status, task, _ = self.call("GET", "/api/task/W1?archived=1")
-        self.assertEqual((status, task["archived"], task["id"]), (200, True, "W1"))
+        self.assertEqual((status, task["archived"], task["id"], task["goal"]), (200, True, "W1", data["items"][0]["goal"]))
         self.assertIn("W1.3", [r.get("id") for r in task["rows"]])
-        # A live task is not an archived one, and an archived one is not a live one.
+        # An archived task is looked for only when asked, and a task that is neither is not found.
         self.assertEqual(self.call("GET", "/api/task/W1")[0], 404)
         self.assertEqual(self.call("GET", "/api/task/W2?archived=1")[0], 404)
         # Nothing the page posts reaches it.
@@ -1361,13 +1361,13 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertTrue((self.root / ".dfs" / "archive" / "archived" / "items" / "W1.md").is_file())
         self.assertFalse(dfs_tree.exists("W1"))
 
-    def test_a_live_task_is_listed_beside_archived_ones_with_the_live_first(self):
+    def test_a_live_task_is_the_live_one_even_when_archived_ones_are_asked_for(self):
         text = (self.root / ".dfs" / "items" / "W1.md").read_text()
         (self.root / ".dfs" / "items" / "W2.md").write_text(text.replace("W1", "W2"))
         self.archive_by_hand("W1")
-        _, data, _ = self.call("GET", "/api/state?archived=1")
-        self.assertEqual([(i["id"], bool(i.get("archived"))) for i in data["items"]], [("W2", False), ("W1", True)])
-        self.assertEqual(self.call("GET", "/api/task/W2")[1]["archived"], False)
+        self.assertEqual([i["id"] for i in self.call("GET", "/api/state")[1]["items"]], ["W2"])
+        self.assertEqual([i["id"] for i in self.call("GET", "/api/archived")[1]["items"]], ["W1"])
+        self.assertIs(self.call("GET", "/api/task/W2?archived=1")[1]["archived"], False)
 
     def test_a_new_task_is_written_as_run_open_writes_it(self):
         status, data, _ = self.call("POST", "/api/new", dict(name="Cache the lookups", goal="Hits above 90%."))
