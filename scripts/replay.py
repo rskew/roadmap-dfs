@@ -11,8 +11,12 @@ chain (run.sh) work the task, and measures the result with history.py's `session
   python3 <scripts>/replay.py plan    TASK [--repo PATH] [--recorded-as PATH]
   python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE] [--agent A]
   python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M] [--agent A]    (inside proot)
-  python3 <scripts>/replay.py score   DEST TASK [--repo PATH]
-  python3 <scripts>/replay.py replay  TASK DEST [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
+  python3 <scripts>/replay.py score   DEST TASK [--repo PATH] [--recorded-as PATH]
+  python3 <scripts>/replay.py replay  TASK DEST [--recorded-as PATH] [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
+
+`--recorded-as PATH` names the path the checkout's sessions were recorded under, when `--repo` is a
+copy (optimisation-data/shop-app): the original to compare with, and the replay's session cap, are
+read from there. `prepare` and `run` look up no original and refuse it.
 
 The replay runs under the agent the screen is set to (`.dfs/runs/agent`: claude, codex, kiro or
 opencode), or the one `--agent` names; `prepare` records it. `score` reads claude's transcripts and
@@ -870,6 +874,9 @@ def main(argv):
         else:
             pos.append(a)
     repo = opts["repo"]
+    if opts["recorded-as"] and cmd in ("prepare", "run"):   # they never look up an original: say so rather than drop it
+        raise SystemExit(f"replay: --recorded-as does nothing for {cmd}; it names where the original's sessions were "
+                         "recorded, for candidates, plan, score and replay")
     if cmd == "candidates":
         limit = float(opts["limit"])
         rows = candidates(repo, limit, recorded_as=opts["recorded-as"])
@@ -894,7 +901,7 @@ def main(argv):
         return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"], repo, opts["agent"])
     elif cmd == "score":
         dest, task = pos
-        compare(task, original(repo, task), score(dest, task, repo))
+        compare(task, original(repo, task, opts["recorded-as"]), score(dest, task, repo))
     elif cmd == "replay":
         task, dest = pos
         agent = configured_agent(repo, opts["agent"])
@@ -902,7 +909,7 @@ def main(argv):
             raise SystemExit(f"replay: the agent is {agent}, whose transcripts score cannot read yet; "
                              "use prepare and run, or --agent claude")
         dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], agent)
-        before = original(repo, task)
+        before = original(repo, task, opts["recorded-as"])
         cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
         run(dest, task, cap, tool, opts["bash-minutes"], repo, agent)
         compare(task, before, score(dest, task, repo))

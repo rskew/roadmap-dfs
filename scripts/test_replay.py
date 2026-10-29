@@ -719,6 +719,45 @@ class RecordedUnderAnotherPathTest(unittest.TestCase):
             self.assertEqual(replay.recorded_hint("/tmp/orig-shop"), "")
 
 
+class RecordedAsReachesEveryCommandTest(unittest.TestCase):
+    """`--recorded-as` is passed on by every command that compares with the original, and refused by those that do not."""
+    def main(self, *argv):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            return replay.main(list(argv))
+
+    def test_score_and_replay_look_the_original_up_under_the_recorded_path(self):
+        with mock.patch.object(replay, "original", return_value=None) as original, \
+                mock.patch.object(replay, "score", return_value=None), \
+                mock.patch.object(replay, "compare"):
+            self.main("score", "/tmp/dfs-replay-W5-a", "W5", "--repo", "/tmp/data/shop", "--recorded-as", "/tmp/orig-shop")
+            self.assertEqual(original.call_args, mock.call("/tmp/data/shop", "W5", "/tmp/orig-shop"))
+        with mock.patch.object(replay, "original", return_value=None) as original, \
+                mock.patch.object(replay, "configured_agent", return_value="claude"), \
+                mock.patch.object(replay, "prepare", return_value=("/tmp/dfs-replay-W5-a", "/tool")), \
+                mock.patch.object(replay, "run"), mock.patch.object(replay, "score", return_value=None), \
+                mock.patch.object(replay, "compare"):
+            self.main("replay", "W5", "/tmp/dfs-replay-W5-a", "--repo", "/tmp/data/shop", "--recorded-as", "/tmp/orig-shop")
+            self.assertEqual(original.call_args, mock.call("/tmp/data/shop", "W5", "/tmp/orig-shop"))
+
+    def test_the_replay_cap_comes_from_the_original_found_under_that_path(self):
+        before = {"sessions": {"work": 5, "review": 2}}
+        found = lambda repo, task, recorded_as=None: before if recorded_as == "/tmp/orig-shop" else None
+        with mock.patch.object(replay, "original", side_effect=found), \
+                mock.patch.object(replay, "configured_agent", return_value="claude"), \
+                mock.patch.object(replay, "prepare", return_value=("/tmp/dfs-replay-W5-a", "/tool")), \
+                mock.patch.object(replay, "run") as run, mock.patch.object(replay, "score", return_value=None), \
+                mock.patch.object(replay, "compare"):
+            self.main("replay", "W5", "/tmp/dfs-replay-W5-a", "--repo", "/tmp/data/shop", "--recorded-as", "/tmp/orig-shop")
+            self.assertEqual(run.call_args[0][2], 14)   # 2 * 7 sessions, not the 6 of no original
+
+    def test_prepare_and_run_refuse_it_by_name(self):
+        for argv in (("prepare", "W5", "/tmp/dfs-replay-W5-a"), ("run", "/tmp/dfs-replay-W5-a", "W5")):
+            with self.assertRaises(SystemExit) as e:
+                self.main(*argv, "--recorded-as", "/tmp/orig-shop")
+            self.assertIn("--recorded-as", str(e.exception))
+
+
 class OriginalIsTheRepoOwnTest(unittest.TestCase):
     def test_a_task_of_the_same_name_in_another_project_is_not_the_original(self):
         lines = [
