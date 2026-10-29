@@ -42,6 +42,13 @@ class VerdictsTest(unittest.TestCase):
             self.assertEqual(history.verdicts(cmd), [("review", "issues")], use)
         self.assertEqual(history.verdicts("export S=%s; python3 $S log W5 critic ok" % self.S), [("critic", "ok")])
 
+    def test_a_variable_set_from_a_command_substitution_with_spaces(self):
+        for assign in ('S=$(dirname "$X")/tree.py', 'S="$(cd /a b && pwd)/scripts/tree.py"', "S=$(dirname $(realpath $0))/tree.py"):
+            self.assertEqual(history.verdicts("%s\npython3 $S log W22 review issues" % assign), [("review", "issues")], assign)
+        for other in ('S=$(dirname "$X")/other.py\npython3 $S log W22 review issues',
+                      "S=/a; python3 /b/tree.py status\npython3 $S log W22 review issues"):
+            self.assertEqual(history.verdicts(other), [], other)
+
     def test_both_forms_in_one_command_come_out_in_order(self):
         cmd = "S=%s\npython3 $S log W5 raise W5.1 <<'EOF'\nx\nEOF\npython3 %s log W5 review ok" % (self.S, self.S)
         self.assertEqual(history.verdicts(cmd), [("raise", ""), ("review", "ok")])

@@ -652,15 +652,17 @@ present, and the 3 present and 13 unplaced lines together are 16, so no misreadi
 the unplaced lines reaches it; the 20 `maybe-introduced` lines could, and are why the
 result is "not shown" and not "shown false".
 
-The tasks to replay are not yet chosen. `python3 <scripts>/replay.py candidates` lists
-what step 2's rule picks from the history (original at most $3, first review said
-issues, a node commit to start before): W22, W11, W10, W5, W76, W3, W36 and W40, with
-W55 (the task of section 3) dropped because its evidence was outside the repo. The
-rule's last clause, evidence inside the repo, is not decidable from the history; reading
-each task file for it, and taking four, is the first step. Then
-run the control (the current tool) twice on those four tasks, to see whether two
-control arms differ by four or more of twelve; then candidate 1 on the same four tasks,
-the first real run of the loop (its changed-arm path ran once, in section 3). It needs the configured agent's binary (claude, codex, kiro-cli or opencode) and `proot`
+The loop has been run once from a box with kiro (the first real run of it). Its replays were
+W22, W11, W5 and W36, the four tasks of `replay.py candidates` whose files name no evidence outside
+the repo; the control ran three times on each and candidate 1 once on W22, W11 and W5 and
+once on W36, judged by pairs (step 5), with no change kept. The shop-app tasks are listed by `python3 <scripts>/replay.py candidates --repo optimisation-data/shop-app
+--recorded-as /workspace/shop-app --limit 3.5` (W32 and W14; `score` and `replay` take the same `--recorded-as`; whether
+each has a starting commit to replay from is not checked); farm-app's tasks have no starting commit and cannot be replayed.
+What is next is a candidate of the remaining ones (2, 3, 4, 5) run as a pair against a
+same-sitting control, on the tasks whose control fails in the class the candidate targets (the
+kiro control fails the first review in 5 of 12 replays, none in W11).
+
+A replay needs the configured agent's binary (claude, codex, kiro-cli or opencode) and `proot`
 (both from nixpkgs at the agent pin; `REPLAY_CLAUDE_CODE`, `REPLAY_KIRO_CLI`, `REPLAY_CODEX`,
 `REPLAY_OPENCODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
 (inside the repo's ignored `.dfs/runs` works on the box used here).

@@ -475,6 +475,9 @@ def remove_tree(path):
     directory is made owner-writable first, since removing a file needs write on its directory."""
     if not os.path.lexists(path):
         return
+    if os.path.islink(path) or not os.path.isdir(path):   # a file or a link (to a directory too): rmtree refuses both
+        os.unlink(path)
+        return
     for base, dirs, _ in os.walk(path):
         os.chmod(base, os.stat(base).st_mode | 0o700)
     shutil.rmtree(path)

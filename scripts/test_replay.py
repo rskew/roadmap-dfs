@@ -428,6 +428,24 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertEqual((second / "sub" / "b.md").read_text(), "b\n")
         self.assertTrue(os.access(second / "sub", os.W_OK))
 
+    def test_remove_tree_takes_a_file_a_link_and_a_read_only_tree_alike(self):
+        base = Path(self.tmp.name) / "rm"
+        real = base / "real"
+        (real / "sub").mkdir(parents=True)
+        (real / "sub" / "f").write_text("x\n")
+        (real / "sub").chmod(0o555)
+        self.addCleanup(lambda: (real / "sub").exists() and (real / "sub").chmod(0o755))
+        (base / "file").write_text("y\n")
+        (base / "link").symlink_to(real, target_is_directory=True)
+        replay.remove_tree(base / "link")        # the link goes, not the directory it points at
+        self.assertFalse(os.path.lexists(base / "link"))
+        self.assertTrue((real / "sub" / "f").exists())
+        replay.remove_tree(base / "file")
+        self.assertFalse((base / "file").exists())
+        replay.remove_tree(real)
+        self.assertFalse(real.exists())
+        replay.remove_tree(base / "never")       # absent is fine
+
     def test_building_the_command_writes_nothing_to_the_box(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
                 "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}

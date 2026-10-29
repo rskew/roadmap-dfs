@@ -1,4 +1,4 @@
-# python3 docs/dfs-replay-verdicts.py /workspace/roadmap-dfs/.dfs/runs/replays --pairs   (2026-10-29; the replays are in the live checkout, ignored by git)
+# python3 docs/dfs-replay-verdicts.py /workspace/roadmap-dfs/.dfs/runs/replays --pairs   (regenerated after history.verdicts read the variable form; the replays are in the live checkout, ignored by git)
 task tag  score first  task file first  issues reviews  credits
 W11  b1a           ok               ok               0     13.2
 W11  c1a           ok               ok               0     14.0
@@ -8,7 +8,7 @@ W11  c2a           ok               ok               0      9.8
 W22  b1a       issues           issues               1     14.4+
 W22  c1a           ok               ok               0      5.9
 W22  c1b           ok               ok               0      8.6
-W22  c1c           ok           issues               1     10.0   <- score misses the issues review
+W22  c1c       issues           issues               1     10.0
 W22  c2a           ok               ok               0     11.2
 W36  b4a           ok               ok               0     25.4
 W36  c1a           ok               ok               0     11.5+
@@ -18,14 +18,14 @@ W36  c4a       issues           issues               1     22.9
 W5   b1a       issues           issues               1     27.1
 W5   c1a       issues           issues               2     23.4
 W5   c1b       issues           issues               1     12.2
-W5   c1c           ok           issues               1     14.3   <- score misses the issues review
+W5   c1c       issues           issues               1     14.3
 W5   c2a       issues           issues               1     15.9
 
-control c1a-c1c, first review passed (task file): 7 of 12; by score: 9 of 12
+control c1a-c1c, first review passed (task file): 7 of 12; by score: 7 of 12
    W11: task file 3 of 3, score 3 of 3
-   W22: task file 2 of 3, score 3 of 3
+   W22: task file 2 of 3, score 2 of 3
    W36: task file 2 of 3, score 2 of 3
-   W5: task file 0 of 3, score 1 of 3
+   W5: task file 0 of 3, score 0 of 3
 
 pairs of two different control replays of one task (both orders); the changed replay's credits are
 multiplied by f (f=1 is a change that does nothing); kept = the sequence of step 5
