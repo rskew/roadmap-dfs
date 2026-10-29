@@ -687,6 +687,38 @@ class CandidatesTest(unittest.TestCase):
         self.assertEqual([t["task"] for t in rows], ["W1"])   # W2 dear, W3 passed, W4 elsewhere, W5 no node commit, W6 no work
 
 
+class RecordedUnderAnotherPathTest(unittest.TestCase):
+    """A copy of a project (optimisation-data/shop-app) was recorded under the path it had before."""
+    def lines(self):
+        return [
+            {"type": "user", "timestamp": "2026-10-01T00:00:00Z", "message": {"content": "You are the implementation reviewer for task W5. x"}},
+            {"type": "assistant", "timestamp": "2026-10-01T00:01:00Z", "message": {"id": "m", "model": "m", "usage": {"input_tokens": 1, "output_tokens": 1}, "content": [
+                {"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "tree.py log W5 review issues"}}]}},
+        ]
+
+    def test_the_original_is_found_by_the_path_it_was_recorded_under(self):
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            d = Path(cfg) / "projects" / "-tmp-orig-shop"
+            d.mkdir(parents=True)
+            (d / "s.jsonl").write_text("\n".join(json.dumps(x) for x in self.lines()) + "\n")
+            self.assertIsNone(replay.original("/tmp/elsewhere/data/shop", "W5"))
+            self.assertEqual(replay.original("/tmp/elsewhere/data/shop", "W5", recorded_as="/tmp/orig-shop")["task"], "W5")
+
+    def test_candidates_read_the_same_path_and_say_when_there_is_nothing_to_read(self):
+        tasks = {("-tmp-orig-shop", "W5"): {"task": "W5", "usd": 1.0, "first_review": "issues", "sessions": {"work": 1}}}
+        with mock.patch.object(replay.history, "load", return_value=(None, tasks, None, None)) as load, \
+                mock.patch.object(replay, "starting_point", return_value=(None, None)):
+            rows = replay.candidates("/tmp/elsewhere/data/shop", recorded_as="/tmp/orig-shop")
+            self.assertEqual(load.call_args[0][1], {"-tmp-orig-shop": "/tmp/elsewhere/data/shop"})   # prices come from the copy
+            self.assertEqual([t["task"] for t in rows], ["W5"])
+            self.assertEqual(replay.candidates("/tmp/elsewhere/data/shop"), [])
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            (Path(cfg) / "projects" / "-tmp-orig-shop").mkdir(parents=True)
+            (Path(cfg) / "projects" / "-tmp-orig-shop" / "s.jsonl").write_text("{}\n")
+            self.assertIn("-tmp-orig-shop", replay.recorded_hint("/tmp/elsewhere/data/shop"))
+            self.assertEqual(replay.recorded_hint("/tmp/orig-shop"), "")
+
+
 class OriginalIsTheRepoOwnTest(unittest.TestCase):
     def test_a_task_of_the_same_name_in_another_project_is_not_the_original(self):
         lines = [
