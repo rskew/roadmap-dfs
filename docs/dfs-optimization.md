@@ -671,7 +671,10 @@ two better and one same, is needed). The verdict "not shown" stands, reached on 
 a W11 pair that hold, and not for the reason given below, since the issues reviews that made W22 and
 W5 "worse" are no longer the measure. The one gain that carries is W5's: two Goal clauses (lists,
 fences) that one control tree left out and the node's tree had, not the edge-case clauses a break-it
-node would favour.
+node would favour. It needs both: the rubric's reading of "Render rich text" is an assumption (the
+starting chat renderer already draws fences but not lists), and with either clause dropped the pair is a
+tie of exactly 1.5 clauses that credits (1.70 times) call worse. The verdict does not turn on it, since
+a W5 that is worse leaves none of the first three better, and a W5 that is better leaves one.
 
 Run under kiro in the sandbox, each pair in one sitting, control then changed. The changed arm
 is the store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
