@@ -1,0 +1,289 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W130.9 keep a change by pairs against the control</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin: 10px 0; }
+  .box { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 8px 12px; }
+  .box.ok { background: #e6f3e6; } .box.no { background: #f6e3e0; }
+  .link { text-align: center; color: #555; line-height: 1.3; padding: 2px 0; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0; }
+  .tabs button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .sl { display: block; margin: 10px 0; }
+  .sl input[type=range] { width: 100%; min-height: 44px; }
+  .res { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .res div { flex: 1 1 140px; border: 1px solid #999; border-radius: 6px; padding: 8px; background: #fff; }
+  .res b { display: block; font-size: 22px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td, th { border: 1px solid #bbb; padding: 4px 6px; text-align: left; }
+  .tw { overflow-x: auto; }
+</style>
+
+<h1>Keep a change by comparing it with the control, pair by pair</h1>
+<p>The first-review pass count cannot keep a change when the control already passes 9 of 12.
+  The proposal: one <i>pair</i> is one task replayed twice in the same sitting, once under the
+  control and once under the change, and each pair is judged better, same or worse.</p>
+
+<div class="dg">
+  <div class="box" data-node="pair"><b>One pair</b>: the same task, control then change, same sitting.
+    Count the reviews that said issues, and the credits to a finished, reviewed task.</div>
+  <div class="link">&darr; judged</div>
+  <div class="box" data-node="verdict"><b>Better</b> if the change had fewer issues reviews, or the same number and
+    at most 70% of the control's credits (<b>worse</b>: more issues reviews, or the same and at least 1/0.7 = 1.43 times the credits; otherwise <b>same</b>).
+    A pair with an unpriced session is run again.</div>
+  <div class="link">&darr; three pairs, on W5, W36 and W22</div>
+  <div class="box ok" data-node="three"><b>3 of 3 better: keep.</b></div>
+  <div class="link">&darr; two better and one same (anything else stops here: 4 of 5 can no longer happen)</div>
+  <div class="box" data-node="five">Two more pairs, on W11 and W5. <b>4 of 5 better and none worse: keep.</b></div>
+  <div class="link">&darr; otherwise</div>
+  <div class="box no" data-node="reject"><b>Reject.</b> Recorded as "not shown", never "shown useless".</div>
+</div>
+
+<h2>How often it keeps a change</h2>
+<p>From the 15 control replays below, every pair of two different replays of one task is a
+  no-change pair. Set the margin, and what a working change would do to its replays.</p>
+<div class="tabs" role="group" aria-label="Margin on credits">
+  <button type="button" data-m="0.2" aria-pressed="false">margin 20%</button>
+  <button type="button" data-m="0.3" aria-pressed="true">margin 30% (proposed)</button>
+  <button type="button" data-m="0.4" aria-pressed="false">margin 40%</button>
+  <button type="button" data-m="0.5" aria-pressed="false">margin 50%</button>
+</div>
+<div class="sl"><label for="f">Credits of the changed replay, against the control</label> <output id="fo">100%</output>
+  <input id="f" type="range" min="40" max="130" step="5" value="100"></div>
+<div class="tabs" role="group" aria-label="Issues reviews">
+  <button type="button" id="dr" aria-pressed="false">The change also removes one issues review where there is one</button>
+</div>
+<div class="res">
+  <div>A pair is better<b id="rb">-</b></div>
+  <div>same<b id="rs">-</b></div>
+  <div>worse<b id="rw">-</b></div>
+</div>
+<div class="res">
+  <div>The change is kept<b id="ra">-</b></div>
+  <div>Expected pairs run<b id="rp">-</b></div>
+  <div>Expected credits<b id="rc">-</b></div>
+</div>
+<p id="note"></p>
+
+<h2>The 15 control replays</h2>
+<div class="tw"><table>
+  <tr><th>task</th><th>reviews with issues</th><th>credits</th></tr>
+  <tr><td>W22</td><td>0 0 0 0</td><td>5.9 8.6 10.0 11.2</td></tr>
+  <tr><td>W11</td><td>0 0 0 0</td><td>14.0 14.0 9.6 9.8</td></tr>
+  <tr><td>W36</td><td>0 0 1</td><td>11.5 17.0 14.5</td></tr>
+  <tr><td>W5</td><td>2 1 0 1</td><td>23.4 12.2 14.3 15.9</td></tr>
+</table></div>
+<p>The earlier candidate, a closing "break it" node, in three pairs: W22 worse (one issues review
+  against none), W11 same (13.2 against 9.8 credits), W5 worse (27.1 against 15.9, both with one issues review).
+  0 of 3 better: rejected by this rule too, with no new replay.</p>
+
+<script>
+  var C = {W22: [[0,5.9],[0,8.6],[0,10.0],[0,11.2]], W11: [[0,14.0],[0,14.0],[0,9.6],[0,9.8]],
+           W36: [[0,11.5],[0,17.0],[1,14.5]], W5: [[2,23.4],[1,12.2],[0,14.3],[1,15.9]]};
+  var m = 0.3, f = 1.0, dr = false;
+  function verdict(ch, ct) {
+    if (ch[0] < ct[0]) return 'b';
+    if (ch[0] > ct[0]) return 'w';
+    var r = ch[1] / ct[1];
+    if (r <= 1 - m + 1e-9) return 'b';
+    if (r >= 1 / (1 - m) - 1e-9) return 'w';
+    return 's';
+  }
+  function dist() {
+    var tot = {b: 0, w: 0, s: 0}, tasks = Object.keys(C);
+    tasks.forEach(function (t) {
+      var v = C[t], k = 0, cnt = {b: 0, w: 0, s: 0};
+      v.forEach(function (ct, i) { v.forEach(function (x, j) {
+        if (i === j) return;
+        var ch = [dr ? Math.max(0, x[0] - 1) : x[0], x[1] * f];
+        cnt[verdict(ch, ct)]++; k++;
+      }); });
+      for (var q in cnt) tot[q] += cnt[q] / k / tasks.length;
+    });
+    return tot;
+  }
+  function seq(d) {
+    var acc = 0, ext = 0, S = ['b','w','s'], i, j, k, a, b;
+    for (i = 0; i < 3; i++) for (j = 0; j < 3; j++) for (k = 0; k < 3; k++) {
+      var s3 = [S[i], S[j], S[k]], p = d[S[i]] * d[S[j]] * d[S[k]];
+      var nb = s3.filter(function (x) { return x === 'b'; }).length;
+      var nw = s3.filter(function (x) { return x === 'w'; }).length;
+      if (nb === 3) { acc += p; continue; }
+      if (nb !== 2 || nw) continue;
+      ext += p;
+      for (a = 0; a < 3; a++) for (b = 0; b < 3; b++) {
+        var s5 = s3.concat([S[a], S[b]]);
+        if (s5.filter(function (x) { return x === 'b'; }).length >= 4 && s5.indexOf('w') < 0) acc += p * d[S[a]] * d[S[b]];
+      }
+    }
+    return {acc: acc, ext: ext};
+  }
+  function pct(v) { return (100 * v).toFixed(1) + '%'; }
+  function calc() {
+    var d = dist(), r = seq(d), pairs = 3 + 2 * r.ext;
+    document.getElementById('rb').textContent = pct(d.b);
+    document.getElementById('rs').textContent = pct(d.s);
+    document.getElementById('rw').textContent = pct(d.w);
+    document.getElementById('ra').textContent = pct(r.acc);
+    document.getElementById('rp').textContent = pairs.toFixed(1);
+    document.getElementById('rc').textContent = Math.round(pairs * 12.8 * (1 + f));
+    document.getElementById('fo').textContent = Math.round(f * 100) + '%';
+    var noop = f === 1 && !dr;
+    document.getElementById('note').textContent = noop
+      ? 'A change that does nothing is kept this often: the false keep rate. Credits assume 12.8 per replay, the control mean.'
+      : 'A change that works as set is kept this often: its power. Credits assume 12.8 per control replay.';
+    Array.prototype.forEach.call(document.querySelectorAll('[data-m]'), function (b) {
+      b.setAttribute('aria-pressed', +b.getAttribute('data-m') === m ? 'true' : 'false');
+    });
+    document.getElementById('dr').setAttribute('aria-pressed', dr ? 'true' : 'false');
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[data-m]'), function (b) {
+    b.addEventListener('click', function () { m = +b.getAttribute('data-m'); calc(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  });
+  document.getElementById('dr').addEventListener('click', function () { dr = !dr; calc(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  document.getElementById('f').addEventListener('input', function (e) { f = +e.target.value / 100; calc(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  window.dfsPageState = function () { return {m: m, f: f, dr: dr}; };
+  document.addEventListener('dfs-state', function (e) {
+    var s = e.detail || {}; m = s.m || m; f = s.f || f; dr = !!s.dr;
+    document.getElementById('f').value = Math.round(f * 100); calc();
+  });
+  calc();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

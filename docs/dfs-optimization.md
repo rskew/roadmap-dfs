@@ -418,8 +418,10 @@ as an end in itself (candidate 1 is the version of it with a purpose).
 3. **Change** the tool, on a branch of this repo, one candidate at a time: the changed
    arm is that revision (`--tool-ref REV`), the control is the revision it branched from.
    A change to the law goes as `--law FILE`, with the same revision for the tool.
-4. **Replay** each task under each arm **three times**: 4 tasks × 2 arms × 3 = 24 replays,
-   at the W55 figures ($1.95 to $3.44 a replay) roughly $47 to $83. Run them one at a
+4. **Replay in pairs.** A pair is one task replayed twice in one sitting, control then
+   changed (W5, W36, W22, W11, W5 in that order, as many pairs as step 5 asks for, at most
+   five). Under kiro a replay cost 5.9 to 23.4 credits (mean 12.8), so a pair is about 26
+   credits and five pairs about 130. Run them one at a
    time: each is a chain in its own scratch clone, and the three W55 replays run side by
    side used up the account's usage limit in about half an hour and were stopped for 2h20m. Each replay is bounded:
    `--cap` sessions, and `--bash-minutes M` (default 15) is the most one Bash call may
@@ -437,35 +439,48 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    names the path would go unseen. A replay with a call answered with live output (read
    by hand) or a conclusion shown is void: it is dropped from the count, the arm is run
    again, and a Fix node is opened to close the hole.
-5. **Compare** the arms per task, never pooled: first-review pass rate (out of 3),
-   median dollars, refused commits, replays that stopped BLOCKED or on the cap. Then
-   read the reviews of the changed arm's passes: a pass counts only if the review's
-   `ok` names what it checked (the `ok` of two guarded W55 replays still listed three
-   and four defects each). A candidate is **kept** if it passes the first review in **all
-   twelve** of its replays (three of each task), the control replayed in the same sitting
-   passes at most eleven of its twelve (else the sitting was easy and nothing is shown),
-   and its twelve replays cost at most 176 credits (the control's 155.0 and two spreads of
-   a difference of two twelve-replay totals, 10.4 each). **Dropped** if it does not, with the numbers
-   in the candidate's row: "not shown", not "shown useless" (a modest gain is missed more
-   often than not, below). The lead guards against reviewer noise and small samples,
-   which the sandbox does not remove: the first review's verdict varies between replays
-   of one tool.
+5. **Compare** the changed replay with the control replay of each pair, and judge the pair
+   **better**, **same** or **worse**. Both arms end with the review passed (the chain's
+   DONE), so the comparison is what it took to get there. The changed replay is *better* if
+   it has fewer reviews that said issues; or the same number and at most 70% of the
+   control's credits. *Worse* is the mirror: more issues reviews, or the same number and
+   at least 1/0.7 (1.43) times the credits. Otherwise *same*. A pair that credits would decide, in which either replay
+   has an unpriced session (a cut-off), is run again, and so is a pair void under step 4.
+   A candidate is **kept** if it is better in **3 of 3** pairs. If not, and the first three
+   were two better and one same, run two more pairs: kept if **4 of 5** are better and none
+   is worse. Anything else is **dropped** (after three pairs with fewer than two better,
+   4 of 5 cannot happen, so stop there). Dropped is "not shown", not "shown useless": the
+   rule keeps only a clear win. Read the reviews of the changed replays that count as
+   better too: a pass counts only if the review's `ok` names what it checked.
 
-   *Why all twelve (W130.8).* The first rule below, four more passes of twelve than
-   the control, assumed a control near 0.5 to 0.7. The sandboxed control passed 9 of 12
-   (W22 3, W11 3, W36 2, W5 1; 95% interval for the rate 0.43 to 0.95), so four more
-   would be 13 of 12 and no change could ever be kept. With the control at 9, all twelve
-   is three more; a change that does nothing passes all twelve with probability p^12 (3.2%
-   at p=0.75, 1.4% at 0.70), and kept only if the same-sitting control does not also pass
-   all twelve, at most 25% anywhere in the control's interval. A change that lifts p to
-   0.95 is kept 54% of the time, to 0.90 28%: "not shown" is common, as before. Rejected:
-   restricting to W5 and W36 (picked because the control failed there, so their rate
-   regresses upward and six of six is common by chance), cost alone (the issues rounds are
-   13.5 of the control's 155 credits, below its spread), and five replays a task (about
-   340 credits an arm). Hypothesis of W130.8, page
-   `.dfs/artefacts/1b9b28c6-5f6a-49cc-b988-4638ffc650c5.html`.
+   *Why pairs and this margin (W130.9).* The first-review pass rate was the earlier
+   measure and the control passes it 9 times in 12 (W22 3, W11 3, W36 2, W5 1), so there
+   is little left for a change to improve and counting passes can neither keep nor reject
+   anything. Credits to a reviewed finish already include rework after an issues review,
+   but one control replay of a task differs from another by up to 2.0 times (W5 12.2 to
+   23.4, W22 5.9 to 11.2), so a pair is judged by the review count first and by credits
+   only past a margin. The margin was chosen on the 15 control replays: every pair of two
+   different replays of one task is a pair with no change, and how often the rule keeps
+   those is its false keep rate.
 
-   *Why four (the earlier rule).* Assume each replay passes its first review with probability p, alone
+   | margin on credits | no-change pair: better / same / worse | no-change kept | kept if the change costs 30% less | 50% less |
+   |---|---|---|---|---|
+   | 20% | 42% / 17% / 42% | 8.7% | 25% | 50% |
+   | **30%** | 33% / 33% / 33% | **4.9%** | 21% | 33% |
+   | 40% | 23% / 54% / 23% | 1.7% | 11% | 28% |
+   | 50% | 19% / 63% / 19% | 0.9% | 8% | 21% |
+
+   30% keeps a change that does nothing about one time in twenty and a change that cuts
+   credits by half one time in three; 20% keeps a no-op nearly one in eleven; 40% rarely
+   keeps anything. Power is low on purpose: three pairs with this much noise can only show
+   a large effect, and a smaller one goes back as "not shown". The figures are recomputed
+   on the page `.dfs/artefacts/8e49a572-ecd0-40de-b489-efaccd8b2798.html`. Hypothesis of W130.9; it is wrong
+   if the control's pair-to-pair spread in a later sitting is wider than these 15 replays
+   show (a no-op is then better more often than 5%), or if the pairs of one sitting share
+   their noise (the pairs are then not independent). Cost: three pairs about 78 credits,
+   five about 130, against about 310 an arm for the twelve-replay rule it replaces.
+
+   *Why four (the first rule, replaced by W130.9).* Assume each replay passes its first review with probability p, alone
    and independently, p between 0.5 and 0.7 (the history fails 30% of first reviews; the
    three W55 replays before the sandbox passed 2 of 3, an upper bound on a sandboxed replay's rate, and the one sandboxed replay passed). Two arms of the same tool then differ by
    the margin by chance this often (exact sums over every outcome, recomputed by `python3 <scripts>/chance.py` and by the page named below):
@@ -486,7 +501,7 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    of one task are alike (a task that passes 3 of 3 or fails 3 of 3 under both arms
    carries no information and the true noise is above the table's), or if the control
    replayed twice differs by four or more of twelve: run the control twice before the
-   first candidate, and if that happens, the margin and the 24 replays are not enough.
+   first candidate, and if that happens, the margin and the replays are not enough.
 6. **Keep** means merged into the tool and recorded here (the row, the arms, the
    figures) and the control for the next candidate is now the changed tool. Candidates
    are tested one at a time for that reason: two changes in one arm cannot be told apart.
@@ -512,7 +527,7 @@ store tool the control ran. First reviews, credits per replay:
 
 The change was followed (a node titled "Break it" came before the first review in all three
 changed trees), and two of its three first reviews still said issues, so the rule of
-step 5 (all twelve pass) cannot be met and the candidate is **not shown**. The run stopped
+step 5 (3 of 3 pairs better) is not met and the candidate is **not shown**. The run stopped
 after these six replays, at 91.6 credits, because no later replay could change that. It
 shows nothing about whether the node helps: three replays an arm cannot separate a
 modest gain from the control's own spread, and the changed arm cost more on every task.
@@ -521,6 +536,10 @@ W22's changed replay was cut off once by the host's 30-minute call limit and res
 output" count (1, 3 and 6 calls in the changed arm) is the changed tool's own path, which
 lies inside the live checkout and is not cut out of `reached` when passed as `--tool`; the
 one call that named the live items directory printed only "No such file or directory".
+
+Read as pairs (step 5, margin 30%): W22 worse (one issues review against none), W11 same
+(13.2 against 9.8 credits), W5 worse (27.1 against 15.9, one issues review each). Zero of
+three better, so the pair rule also drops it, with no new replay.
 
 ### Next
 
