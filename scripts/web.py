@@ -1017,7 +1017,7 @@ def walk_act(name, body):
     w = walker()
     try:
         if name == "walk/start":
-            w.start(body.get("budget"), body.get("parallel", 1))
+            w.start(body.get("budget"), body.get("parallel", 1), body.get("stop_on_limit", False))
         elif name == "walk/stop":
             w.stop()
         elif name == "walk/pin":

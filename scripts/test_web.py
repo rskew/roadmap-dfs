@@ -1637,6 +1637,19 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         snap = self.call("GET", "/api/walk")[1]
         self.assertEqual([(c["item"], c["live"]) for c in snap["chains"]], [("W1", True), ("W2", True)])
 
+    def test_the_walk_can_be_told_to_stop_at_a_usage_limit_and_says_so(self):
+        self.assertFalse(self.call("GET", "/api/walk")[1]["stop_on_limit"])
+        status, snap, _ = self.call("POST", "/api/walk/start", dict(budget=6, stop_on_limit=True))
+        self.assertEqual((status, snap["on"], snap["stop_on_limit"]), (200, True, True))
+        self.call("POST", "/api/walk/stop", {})
+        status, snap, _ = self.call("POST", "/api/walk/start", dict(budget=6))
+        self.assertEqual((status, snap["stop_on_limit"]), (200, False), "the option is one walk's")
+
+    def test_a_stop_on_limit_that_is_not_true_or_false_is_refused(self):
+        for bad in ("yes", 1, None):
+            self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=6, stop_on_limit=bad))[0], 409, bad)
+        self.assertFalse(self.fake.walk_on)
+
     def test_a_number_of_chains_that_is_not_a_walk_is_refused(self):
         for bad in (0, "two", None, -1, 17):
             self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=6, parallel=bad))[0], 409, bad)
