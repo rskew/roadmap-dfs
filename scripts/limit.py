@@ -17,6 +17,9 @@ would have lifted. That is this repo's own rule about reading a marker's definit
 before putting a conclusion on it, applied to a phrase the provider is free to
 reword.
 
+⚠ A walk begun with `stop` (`walk_begin(..., stop_on_limit=True)`) ends at this fact instead of
+holding for it, for every kind of limit this module finds; it does not tell them apart.
+
 So the STRUCTURED field is read first and the prose is a fallback:
 
   claude  `-p --output-format json` writes one object. `api_error_status` is the HTTP

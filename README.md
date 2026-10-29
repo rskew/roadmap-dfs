@@ -122,6 +122,17 @@ never exceeds the sessions left, and the walk's header names every live chain. A
 of its chains), or turning the walk off, ends every chain after the run it is in. Merges and worktree cuts run one at a time
 under a lock in the git common directory, so two chains finishing together merge in turn.
 
+## When the agent hits its limit
+
+By default a walk holds when a chain ends on a usage limit: it waits until the reset the provider
+stated (an hour when it stated none) and then runs the same task again first. To end the walk at the
+limit instead, type `stop` after the numbers at `w` (`20 stop`, `20 3 stop`, or `:walk 20 3 stop`), or
+tick "Stop the walk if the agent hits its usage limit" in the web page's walk box. The option belongs to
+that one walk and is off for the next. Any limit the runner records as a limit stops it (a session,
+weekly or monthly limit, or a rate limit), since the runner does not tell them apart. The walk turns off,
+names the task, the limit and its reset time, and ends every other chain after the run it is in; the
+task stays open, so the next walk picks it up.
+
 ## Choosing the models
 
 A claude session runs on one of two models: the **plan** model for the session that opens a task with
