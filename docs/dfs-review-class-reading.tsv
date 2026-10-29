@@ -1,0 +1,14 @@
+arm	task	replay	review	finding (shortened)	class	in the break-it node's narrow cases
+original (claude)	W22	-	1	draw_footer's isupper() test no longer finds "w stop walk" after the text was lowercased	dependent behaviour broken by the change	no
+original (claude)	W11	-	1	edit_task writes a Goal containing a `## ` line verbatim, splitting the task file	input case (a delimiter in text)	no
+original (claude)	W5	-	1	node titles and skim lines still show markdown markers	missed place (a Goal clause not met somewhere)	no
+original (claude)	W36	-	1	Stop on a screen-run chat leaves a never-typed message shown as sent	interrupt	yes
+control (kiro)	W22	c1c	1	the terminal screen still draws all-caps text (WALK badge, STOP WALK, MISSING, RAISE)	missed place	no
+control (kiro)	W5	c1a	1	Assumptions view, answer-form quote, task head and skim still show typed markers	missed place	no
+control (kiro)	W5	c1a	2	task status line, task-list reasons and Accept dialog still show typed markers	missed place	no
+control (kiro)	W5	c1b	1	web blocks() collapses numbered lists, tables and quotes into one paragraph	input case (a kind of markup)	no
+control (kiro)	W5	c1c	1	inline() breaks bold around code and double-backtick spans	input case (nested markup)	no
+control (kiro)	W5	c2a	1	a refused http(s) picture becomes a link instead of staying text	input case (a refused value)	no
+control (kiro)	W36	c1c	1	a late interrupt leaves a stale stopped flag that kills the next turn	interrupt	yes
+changed (kiro)	W22	b1a	1	footer's red "stop walk" highlight lost (isupper); one shouted "SESSIONS" left	dependent behaviour + missed place	no
+changed (kiro)	W5	b1a	1	Assumptions list prints node titles as typed (drawAsm uses esc(a.title))	missed place	no

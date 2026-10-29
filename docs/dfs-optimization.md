@@ -585,6 +585,19 @@ aimed at a class mined from the history can only be tested on a task whose contr
 fail in that class, and the metric (fewer issues reviews, then credits) is blind to a class
 that does not occur; `docs/dfs-replay-verdicts.txt` lists each replay's verdicts.
 
+Read against candidate 1's class (W130.13, `docs/dfs-review-class-reading.tsv`, one row per issues
+review, my reading of its first finding line): of the four originals' first reviews one is in the
+node's narrow cases (W36's Stop on a chat, an interruption) and of the control's seven issues
+reviews one is (W36's late interrupt leaving a stale flag); the other six are a place where a Goal
+clause is still not met (3: W22, W5 twice), or an input kind the code mishandled (3: W5's lists,
+nested markup and refused picture). The two issues reviews of the changed arm (W22, W5) were of the
+first kind, and in those two trees the "Break it" node did run the per-clause check for it (W22: a
+grep for caps, an AST walk for shouted words; W5: a read of each place that prints task prose) and
+missed what the review then found; in W11 the node found three faults and the review passed. W36,
+the one task whose control fails in the narrow cases, was not run under the changed arm. So the
+first three pairs say the node does not reliably finish the per-clause search, and say nothing
+about its interrupted, repeated and empty cases.
+
 ### Next
 
 Candidate 3 was answered from the task logs, with no replay (row 3 above): the present
