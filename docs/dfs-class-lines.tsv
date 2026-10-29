@@ -1,0 +1,686 @@
+row	project	task	review	first_or_later	round	class	line
+task	roadmap-dfs	W1	2026-10-08T04:41:43Z	ok	1	292651;1350368	
+task	roadmap-dfs	W2	2026-10-08T04:48:19Z	ok	0	;500110	
+task	roadmap-dfs	W3	2026-10-08T04:53:42Z	issues	2	302266,467075;1390375	
+task	roadmap-dfs	W4	2026-10-08T05:19:53Z	ok	0	;727210	
+task	roadmap-dfs	W5	2026-10-08T05:37:48Z	issues	1	402926;1232820	
+task	roadmap-dfs	W6	2026-10-08T05:46:13Z	ok	0	;282728	
+task	roadmap-dfs	W7	2026-10-08T05:51:13Z	issues	1	253857;1668102	
+task	roadmap-dfs	W8	2026-10-08T05:56:56Z	ok	0	;171999	
+task	roadmap-dfs	W9	2026-10-08T06:00:20Z	ok	0	;363382	
+task	roadmap-dfs	W10	2026-10-08T06:07:41Z	issues	1	332419;950446	
+task	roadmap-dfs	W11	2026-10-08T06:20:19Z	issues	1	300125;775777	
+task	roadmap-dfs	W12	2026-10-08T06:29:21Z	ok	0	;339865	
+task	roadmap-dfs	W13	2026-10-08T08:22:51Z	issues	1	286304;656074	
+task	roadmap-dfs	W14	2026-10-08T08:39:22Z	ok	0	;291439	
+task	roadmap-dfs	W15	2026-10-08T08:49:07Z	ok	0	;544110	
+task	roadmap-dfs	W16	2026-10-08T08:57:00Z	ok	0	;466123	
+task	roadmap-dfs	W17	2026-10-08T09:10:32Z	issues	2	312255,1135038;2245982	
+task	roadmap-dfs	W18	2026-10-08T22:42:08Z	ok	0	;616633	
+task	roadmap-dfs	W19	2026-10-08T22:48:38Z	ok	0	;592875	
+task	roadmap-dfs	W20	2026-10-08T23:12:01Z	ok	0	;443845	
+task	roadmap-dfs	W21	2026-10-08T23:26:41Z	issues	2	394675,333922;4325330	
+task	roadmap-dfs	W22	2026-10-09T00:41:20Z	issues	1	198966;624746	
+task	roadmap-dfs	W23	2026-10-09T01:21:03Z	issues	1	505156;1107320	
+task	roadmap-dfs	W24	2026-10-09T01:51:41Z	ok	0	;532913	
+task	roadmap-dfs	W25	2026-10-09T01:55:37Z	ok	0	;229767	
+task	roadmap-dfs	W26	2026-10-09T02:01:17Z	ok	0	;636661	
+task	roadmap-dfs	W27	2026-10-09T02:05:20Z	ok	0	;654208	
+task	roadmap-dfs	W28	2026-10-09T04:13:30Z	ok	0	;195708	
+task	roadmap-dfs	W29	2026-10-09T04:28:58Z	ok	0	;203864	
+task	roadmap-dfs	W30	2026-10-09T04:49:04Z	issues	2	218610,275908;1204768	
+task	roadmap-dfs	W31	2026-10-09T04:59:20Z	ok	0	;594692	
+task	roadmap-dfs	W32	2026-10-09T04:12:48Z	ok	0	;1377819	
+task	roadmap-dfs	W33	2026-10-09T03:47:32Z	ok	0	;190131	
+task	roadmap-dfs	W34	2026-10-09T05:13:01Z	ok	0	;668828	
+task	roadmap-dfs	W35	2026-10-09T05:16:55Z	ok	0	;300014	
+task	roadmap-dfs	W36	2026-10-09T06:15:46Z	issues	1	348279;1407651	
+task	roadmap-dfs	W37	2026-10-09T06:35:10Z	ok	0	;604580	
+task	roadmap-dfs	W38	2026-10-09T06:44:04Z	ok	0	;858081	
+task	roadmap-dfs	W39	2026-10-09T07:03:00Z	ok	0	;472827	
+task	roadmap-dfs	W40	2026-10-09T08:53:01Z	issues	1	494184;1450922	
+task	roadmap-dfs	W41	2026-10-09T09:15:55Z	ok	1	264256;1642157	
+task	roadmap-dfs	W42	2026-10-09T09:29:44Z	ok	0	;503427	
+task	roadmap-dfs	W43	2026-10-09T11:55:01Z	ok	0	;553832	
+task	roadmap-dfs	W44	2026-10-09T11:08:07Z	ok	0	;764087	
+task	roadmap-dfs	W45	2026-10-09T11:38:50Z	ok	0	;1200108	
+task	roadmap-dfs	W46	2026-10-09T12:09:02Z	ok	0	;798585	
+task	roadmap-dfs	W47	2026-10-09T12:25:12Z	ok	0	;972623	
+task	roadmap-dfs	W48	2026-10-09T14:21:40Z	ok	5	328997,173549,874021,613718,2461652;4721984	
+task	roadmap-dfs	W49	2026-10-09T18:32:46Z	ok	0	;426894	
+task	roadmap-dfs	W50	2026-10-09T14:18:07Z	ok	0	;1228235	
+task	roadmap-dfs	W51	2026-10-09T18:35:49Z	ok	0	;310838	
+task	roadmap-dfs	W52	2026-10-09T18:52:00Z	ok	0	;1591305	
+task	roadmap-dfs	W53	2026-10-10T02:50:41Z	ok	0	;623835	
+task	roadmap-dfs	W54	2026-10-10T02:54:35Z	issues	1	303013;664094	
+task	roadmap-dfs	W55	2026-10-10T03:28:33Z	issues	1	234262;651916	
+task	roadmap-dfs	W56	2026-10-10T07:55:26Z	ok	0	;816249	
+task	roadmap-dfs	W57	2026-10-10T08:08:14Z	ok	0	;379117	
+task	roadmap-dfs	W58	2026-10-10T08:12:17Z	ok	0	;330538	
+task	roadmap-dfs	W59	2026-10-10T08:16:59Z	issues	1	340330;1010526	
+task	roadmap-dfs	W60	2026-10-10T09:29:09Z	ok	2	837083,758252;3320957	
+task	roadmap-dfs	W61	2026-10-10T10:28:14Z	ok	5	257789,541068,809023,279228,583800;2748062	
+task	roadmap-dfs	W62	2026-10-10T17:22:33Z	ok	0	;888593	
+task	roadmap-dfs	W63	2026-10-10T17:24:22Z	ok	0	;218367	
+task	roadmap-dfs	W64	2026-10-11T01:13:34Z	ok	0	;199360	
+task	roadmap-dfs	W65	2026-10-11T03:43:24Z	ok	2	335227,294069;1494258	
+task	roadmap-dfs	W66	2026-10-11T08:41:27Z	ok	0	;451599	
+task	roadmap-dfs	W67	2026-10-11T10:16:55Z	ok	11	603772,261945,157757,479261,312502,258540,447798,256843,406969,268350,297691;4131647	
+task	roadmap-dfs	W68	2026-10-11T13:49:21Z	issues	5	579825,274124,1154925,525444,1241266;4564250	
+task	roadmap-dfs	W69	2026-10-11T20:30:40Z	ok	0	;986579	
+task	roadmap-dfs	W70	2026-10-14T23:38:12Z	ok	0	;1717715	
+task	roadmap-dfs	W71	2026-10-14T23:53:41Z	ok	0	;738852	
+task	roadmap-dfs	W72	2026-10-15T03:35:40Z	issues	1	694540;2426201	
+task	roadmap-dfs	W73	2026-10-15T08:34:51Z	issues	1	778330;1982227	
+task	roadmap-dfs	W74	2026-10-15T09:04:44Z	issues	3	848732,1193479,1150590;4150369	
+task	roadmap-dfs	W75	2026-10-15T22:44:41Z	issues	17	821758,948208,947574,1990438,1095148,1412738,989023,1045437,424134,1637206,708409,1518511,1503114,687025,1919071,1072537,0;27706770	
+task	roadmap-dfs	W76	2026-10-16T06:30:34Z	issues	1	323933;880511	
+task	roadmap-dfs	W77	2026-10-16T08:24:34Z	ok	0	;1350187	
+task	roadmap-dfs	W78	2026-10-16T10:16:10Z	ok	0	;661976	
+task	roadmap-dfs	W79	2026-10-16T10:23:50Z	ok	0	;682374	
+task	roadmap-dfs	W80	2026-10-14T17:54:41Z	ok	0	;1226159	
+task	roadmap-dfs	W81	2026-10-16T19:36:25Z	issues	2	1351991,1131683;9533452	
+task	roadmap-dfs	W82	2026-10-17T08:07:22Z	ok	0	;337521	
+task	roadmap-dfs	W83	2026-10-17T08:23:24Z	ok	0	;1198158	
+task	roadmap-dfs	W84	2026-10-17T11:16:42Z	ok	0	;1687560	
+task	roadmap-dfs	W85	2026-10-17T16:41:47Z	issues	1	644383;1682265	
+task	roadmap-dfs	W86	2026-10-28T15:56:45Z	ok	0	;759112	
+task	roadmap-dfs	W87	2026-10-19T10:15:12Z	issues	5	701148,734841,560568,789563,942578;6183792	
+task	roadmap-dfs	W88	2026-10-19T14:45:23Z	issues	2	701609,832543;2505682	
+task	roadmap-dfs	W89	2026-10-20T01:08:06Z	issues	4	437685,692196,571495,390748;4749406	
+task	roadmap-dfs	W90	2026-10-20T06:14:24Z	issues	3	939845,367564,1399903;3871286	
+task	roadmap-dfs	W91	2026-10-20T09:39:31Z	issues	3	1210844,752242,602981;5895078	
+task	roadmap-dfs	W92	2026-10-20T11:34:54Z	ok	0	;640030	
+task	roadmap-dfs	W93	2026-10-22T12:19:44Z	issues	1	2374802;12593160	
+task	roadmap-dfs	W94	2026-10-20T11:55:29Z	ok	0	;809120	
+task	roadmap-dfs	W95	2026-10-22T03:35:46Z	ok	1	730329;2039187	
+task	roadmap-dfs	W96	2026-10-22T03:53:20Z	ok	0	;1160306	
+task	roadmap-dfs	W97	2026-10-22T06:00:53Z	issues	6	218356,0,0,0,0,0;1956507	
+task	roadmap-dfs	W98	2026-10-25T07:02:34Z	ok	0	;587731	
+task	roadmap-dfs	W99	2026-10-25T07:23:03Z	ok	0	;967305	
+task	roadmap-dfs	W100	2026-10-25T07:36:10Z	ok	0	;629729	
+task	roadmap-dfs	W101	2026-10-20T16:06:27Z	ok	0	;464486	
+task	roadmap-dfs	W102	2026-10-25T10:14:38Z	ok	0	;692612	
+task	roadmap-dfs	W103	2026-10-25T12:37:57Z	issues	1	353981;2174184	
+task	roadmap-dfs	W104	2026-10-25T17:33:03Z	issues	1	1638998;7901320	
+task	roadmap-dfs	W105	2026-10-25T18:40:26Z	ok	0	;612108	
+task	roadmap-dfs	W106	2026-10-25T20:32:12Z	ok	0	;724155	
+task	roadmap-dfs	W107	2026-10-21T22:28:33Z	issues	1	475477;1701182	
+task	roadmap-dfs	W108	2026-10-22T11:26:34Z	issues	3	574613,395858,424365;2084179	
+task	roadmap-dfs	W109	2026-10-25T05:14:03Z	issues	2	906789,381856;2733073	
+task	roadmap-dfs	W110	2026-10-26T13:18:39Z	ok	0	;1458960	
+task	roadmap-dfs	W111	2026-10-28T04:20:25Z	issues	5		
+task	roadmap-dfs	W112	2026-10-26T13:58:37Z	ok	0	;779123	
+task	roadmap-dfs	W113	2026-10-28T15:08:46Z	issues	1		
+task	roadmap-dfs	W114	2026-10-26T07:58:48Z	issues	2	589353,710294;2671582	
+task	roadmap-dfs	W115	2026-10-26T20:38:53Z	issues	1	499141;2314018	
+task	roadmap-dfs	W116	2026-10-27T06:57:10Z	issues	11	2080875,467537,1093820,217862,0,0,0,0,0,0,0;7906160	
+task	roadmap-dfs	W117	2026-10-27T09:14:54Z	ok	0	;1466688	
+task	roadmap-dfs	W118	2026-10-28T01:01:03Z	ok	0		
+task	roadmap-dfs	W119	2026-10-28T00:47:36Z	ok	1		
+task	roadmap-dfs	W120	2026-10-28T01:06:38Z	ok	3		
+task	roadmap-dfs	W121	2026-10-28T01:40:14Z	issues	1		
+task	roadmap-dfs	W122	2026-10-28T01:49:15Z	ok	3		
+task	roadmap-dfs	W123	2026-10-28T01:58:44Z	ok	11		
+task	roadmap-dfs	W124	2026-10-28T09:46:31Z	issues	5		
+task	roadmap-dfs	W125	2026-10-28T00:55:21Z	issues	2		
+task	roadmap-dfs	W126	2026-10-28T05:06:10Z	ok	3		
+task	roadmap-dfs	W127	2026-10-28T06:43:00Z	ok	1		
+task	roadmap-dfs	W128	2026-10-28T12:37:03Z	ok	0		
+task	roadmap-dfs	W129	2026-10-28T12:42:42Z	ok	2		
+task	roadmap-dfs	W132	2026-10-29T01:18:16Z	ok	0		
+task	roadmap-dfs	W133	2026-10-28T23:26:31Z	ok	0		
+line	roadmap-dfs	W1	2026-10-08T08:29:55Z	later	1	defect	W1.7 added: dark error toast is white (#fff --on-attention) on the lightened --attention #f5a094, 2.03:1, worse than before.
+line	roadmap-dfs	W1	2026-10-08T08:29:55Z	later	1	minor	W1.8 added: minor findings (no test pinning dark palette, stale-figure check, commit wording, no on-device look).
+line	roadmap-dfs	W3	2026-10-08T04:53:42Z	first	1	defect	W3.4 added: agent.py --rev (stream=True, stderr None) still prints "Command ... exit status 1", so the fix misses the page-started walk path
+line	roadmap-dfs	W3	2026-10-08T04:53:42Z	first	1	minor	W3.5 added: minor findings (rstrip(")") over-strips; test docstring path)
+line	roadmap-dfs	W3	2026-10-08T04:56:29Z	later	2	defect/maybe-introduced	W3.6 added: a walk started from the page still shows only "the chain it started is no longer on the box"; the dfs_agent cause stays in console.log, so the Summary's claim about the message line is false
+line	roadmap-dfs	W3	2026-10-08T04:56:29Z	later	2	minor	W3.7 added: minor findings (nix() timeout path joins readers unbounded; reason() matches "error:" anywhere)
+line	roadmap-dfs	W5	2026-10-08T05:37:48Z	first	1	defect	W5.3 added: node titles and skim lines still show markdown markers on the web page and the terminal tree.
+line	roadmap-dfs	W5	2026-10-08T05:37:48Z	first	1	minor	W5.4 added: minor findings from the review.
+line	roadmap-dfs	W7	2026-10-08T05:51:13Z	first	1	defect	W7.5 · Fix: the page the TUI serves ignores DFS_WEB_ALLOW_HOST (so the tailscale-serve route is dead for a TUI-served page)
+line	roadmap-dfs	W7	2026-10-08T05:51:13Z	first	1	minor	W7.6 · Minor findings from the review (JS untested, toast easily missed, docstring omits --allow-host, chat test env failure)
+line	roadmap-dfs	W10	2026-10-08T06:07:41Z	first	1	defect	Added W10.6 (Fix: the terminal's project colour collapses to six muted shades).
+line	roadmap-dfs	W10	2026-10-08T06:07:41Z	first	1	minor	Added W10.7 (minor findings from the review).
+line	roadmap-dfs	W11	2026-10-08T06:20:19Z	first	1	defect	W11.4 added: edit_task writes a Goal containing a `## ` line verbatim, which splits the task file into a new section and loses the rest of the goal on the next save.
+line	roadmap-dfs	W11	2026-10-08T06:20:19Z	first	1	minor	W11.5 added: minor findings (flattened multi-line Approach, "archived." literal check, missing tests, dialog JS never run in a browser).
+line	roadmap-dfs	W11	2026-10-08T06:20:19Z	first	1	assumption	Assumption without a Hypothesis (W11.2): it flattens a multi-line Approach to one line and refuses a node whose Approach was shelved to the archive; ask the author whether either is wanted.
+line	roadmap-dfs	W13	2026-10-08T08:22:51Z	first	1	defect	W13.3 added: Fix: the page stays on "Loading…" when the first load fails
+line	roadmap-dfs	W13	2026-10-08T08:22:51Z	first	1	minor	W13.4 added: Minor findings from the review
+line	roadmap-dfs	W17	2026-10-08T09:10:32Z	first	1	defect	W17.7 added: page turns in flight (own session since W17.3) are not stopped when the screen or web.py ends
+line	roadmap-dfs	W17	2026-10-08T09:10:32Z	first	1	minor	W17.8 added: minor findings from the review
+line	roadmap-dfs	W17	2026-10-08T09:16:19Z	later	2	defect/maybe-introduced	W17.9 added: web.py killed by SIGTERM or SIGHUP skips handle.stop(), so the page's turns (own session since W17.3) keep running
+line	roadmap-dfs	W17	2026-10-08T09:16:19Z	later	2	minor	W17.10 added: minor findings from the review
+line	roadmap-dfs	W21	2026-10-08T23:26:41Z	first	1	defect	W21.4 added: check_assumptions judges old nodes with shelved Hypotheses as new and refuses commits touching their task
+line	roadmap-dfs	W21	2026-10-08T23:26:41Z	first	1	minor	W21.5 added: minor findings from the review
+line	roadmap-dfs	W21	2026-10-09T01:10:40Z	later	2	defect/maybe-introduced	W21.9 added: check_assumptions refuses a merge that brings in a branch's older Hypotheses (merging() is not honoured)
+line	roadmap-dfs	W21	2026-10-09T01:10:40Z	later	2	minor	W21.10 added: minor findings from the review
+line	roadmap-dfs	W22	2026-10-09T00:41:20Z	first	1	defect	W22.3 · Fix: draw_footer's isupper() test no longer finds "w stop walk" after W22.2 lowercased it, so the red highlight is lost
+line	roadmap-dfs	W22	2026-10-09T00:41:20Z	first	1	minor	W22.4 · Minor findings from the review (startup warning's "START AGENTS" in web.py is still all-caps; note on W22.2)
+line	roadmap-dfs	W23	2026-10-09T01:21:03Z	first	1	defect	W23.7 added: a timed-out headless turn drops the agent's partial output, so the log shows no cause for a hang
+line	roadmap-dfs	W23	2026-10-09T01:21:03Z	first	1	defect	W23.8 added: tests write fake chat events into the real run root's chat logs (scripts/.dfs/runs/chat/*.log left behind)
+line	roadmap-dfs	W23	2026-10-09T01:21:03Z	first	1	minor	W23.9 added: minor findings from the review
+line	roadmap-dfs	W30	2026-10-09T04:49:04Z	first	1	defect	W30.2 added: All in the bar is a dead button while Reorder is on
+line	roadmap-dfs	W30	2026-10-09T04:49:04Z	first	1	minor	W30.3 added: minor findings (untested paths, screenshot without text, unused /api/assumptions, task screen on a phone)
+line	roadmap-dfs	W30	2026-10-09T04:50:42Z	later	2	defect/unplaced	W30.4 added: Reorder in the bar toggles Reorder off when pressed from Chats or a wide task screen
+line	roadmap-dfs	W30	2026-10-09T04:50:42Z	later	2	minor	W30.5 added: minor findings (unused S.asm, new flows never run)
+line	roadmap-dfs	W36	2026-10-09T06:15:46Z	first	1	minor	Added W36.5 (Fix: Stop on a screen-run chat leaves a never-typed message shown as sent) and W36.6 (minor findings).
+line	roadmap-dfs	W40	2026-10-09T08:53:01Z	first	1	defect	W40.3 added: an artefact link in a chat reply opens the viewer behind the modal chat dialog.
+line	roadmap-dfs	W40	2026-10-09T08:53:01Z	first	1	minor	W40.4 added: minor findings from the review.
+line	roadmap-dfs	W48	2026-10-10T04:30:08Z	later	4	defect/unplaced	W48.7 added: attach redraws upward over rows the chat never drew, no clear or replay on attach
+line	roadmap-dfs	W48	2026-10-10T04:30:08Z	later	4	minor	W48.8 added: minor findings from the review
+line	roadmap-dfs	W54	2026-10-10T02:54:35Z	first	1	defect	W54.4 added: artefact_check refuses live sliders whose redraw is deferred (requestAnimationFrame/setTimeout) or lives in a root-element CSS variable.
+line	roadmap-dfs	W54	2026-10-10T02:54:35Z	first	1	minor	W54.5 added: minor findings (missing Hypotheses on W54.1/W54.2 for the narrowed reading of "pointless", `<output>` treated as readout, test skips when no browser).
+line	roadmap-dfs	W55	2026-10-10T03:28:33Z	first	1	defect	W55.2 added: a codex limit takes an earlier "resets …" anywhere in the stream over its own "try again at" (limit.py classify)
+line	roadmap-dfs	W55	2026-10-10T03:28:33Z	first	1	minor	W55.3 added: minor findings (reset read at hold time, whole-stream looseness)
+line	roadmap-dfs	W59	2026-10-10T08:16:59Z	first	1	defect	W59.3 added: failed daemon start (sidecar not up, bad OLLAMA_SOCKET) leaves the restart-policy sidecar running
+line	roadmap-dfs	W59	2026-10-10T08:16:59Z	first	1	minor	W59.4 added: minor findings
+line	roadmap-dfs	W60	2026-10-10T12:56:16Z	later	2	defect/unplaced	W60.13 added: the d-pad cannot reach controls below the fold (phone viewport: W9 unreachable behind the fixed tabs) and focus can sit behind the fixed bottom bar
+line	roadmap-dfs	W60	2026-10-10T12:56:16Z	later	2	minor	W60.14 added: minor findings (Alt+key guard, non-standard pad mapping, stale PAD.held, missing Hypotheses on W60.11 and W60.12)
+line	roadmap-dfs	W61	2026-10-10T10:33:10Z	later	2	defect/unplaced	W61.3 added: Top is dead at the end of a chat whose last message is shorter than the view
+line	roadmap-dfs	W61	2026-10-10T10:33:10Z	later	2	minor	W61.4 added: minor findings from the review
+line	roadmap-dfs	W67	2026-10-11T10:43:12Z	later	9	minor	W67.11 added (index.html:1104 empty-chat text still says the chat "changes nothing" though it now has full permissions); W67.12 holds the minor findings
+line	roadmap-dfs	W68	2026-10-11T13:49:21Z	first	1	defect	W68.2 added: the local preview of a root-level move across a break differs from the server's order.
+line	roadmap-dfs	W68	2026-10-11T13:49:21Z	first	1	minor	W68.3 added: minor findings from the review.
+line	roadmap-dfs	W68	2026-10-11T19:20:33Z	later	5	defect/unplaced	W68.8 added: the read-back step added to reorderpending is flaky (failed 2 of 7 and 3 of 8 runs; stray SSE-triggered /api/state reads are counted and held).
+line	roadmap-dfs	W68	2026-10-11T19:20:33Z	later	5	minor	W68.9 added: minor findings from the review (the read-back guard S.inflight === 1 vs mine === SENT, a move guessed on top of a refused guess, a comment).
+line	roadmap-dfs	W72	2026-10-15T03:35:40Z	first	1	defect	W72.7 · Fix: a pinned draft whose chain hits a usage limit is dropped after the hold (continue_last refuses the draft once the pin is spent)
+line	roadmap-dfs	W72	2026-10-15T03:35:40Z	first	1	defect	W72.8 · Fix: marking the item the walk's own live chain is on a draft does not take the walk off it (no cap lowered, run.sh has no draft stop)
+line	roadmap-dfs	W72	2026-10-15T03:35:40Z	first	1	defect	W72.9 · Fix: the walk forecast (lines_plan) shows a draft as "a fence, until raft is done" and omits a pinned draft as the certain first item
+line	roadmap-dfs	W72	2026-10-15T03:35:40Z	first	1	minor	W72.10 · Minor findings from the review, including that W72.4/W72.5 mark EXISTING tasks drafts with `s` without a Hypothesis: ask the author whether that scope and key are wanted
+line	roadmap-dfs	W73	2026-10-15T08:34:51Z	first	1	defect	W73.5 · Fix: commit the picture or file the author attached along with the text that names it (nothing stages an upload in .dfs/artefacts, so a push or clone loses it; uploads no text names pile up)
+line	roadmap-dfs	W73	2026-10-15T08:34:51Z	first	1	minor	W73.6 · Minor findings from the review (attached file's tile shows its uuid name; ART_RE drops a plain link's text; paste/drop untested; SKILL.md line wrap)
+line	roadmap-dfs	W73	2026-10-15T08:34:51Z	first	1	assumption	Unmarked assumption, W73.2: a pdf is served as a download (Content-Disposition: attachment) rather than shown, because the sandbox blocks the browser's viewer. Ask the author whether a download is acceptable or they want pdfs viewable on the page.
+line	roadmap-dfs	W74	2026-10-15T09:04:44Z	first	1	defect	W74.3 · Fix: reaching the pinned Walk box from the keyboard scrolls the list away (the root scroll-padding-top includes the box's own height, so focusing the summary or Tabbing through its controls scrolls the page up by 200 to 600px)
+line	roadmap-dfs	W74	2026-10-15T09:04:44Z	first	1	minor	W74.4 · Minor findings from the review (drag scroll band under the box, mismatched CSS fallbacks, no wide-screen check in walkpin)
+line	roadmap-dfs	W74	2026-10-15T09:37:53Z	later	2	defect/maybe-introduced	W74.5 · Fix: a focused grip, move or archive button is left hidden under the pinned Walk box (W74.3 moved the box's clearance onto `.item` alone; Shift+Tab and the controller leave reorder-row controls under the box, which W74.1 cleared)
+line	roadmap-dfs	W74	2026-10-15T09:37:53Z	later	2	minor	W74.6 · Minor findings from the review (fixed 600ms wait in walkpin, the `.walk` comment to name the controls the clearance covers)
+line	roadmap-dfs	W74	2026-10-16T03:59:25Z	later	3	defect/unplaced	W74.8 · Fix: walkpin fails about half its runs, because its own drag check reorders the fixture (the release after the scroll drops a row; the order write's push redraws the list in the middle of the next Tab or Shift+Tab loop)
+line	roadmap-dfs	W74	2026-10-16T03:59:25Z	later	3	defect/unplaced	W74.9 · Fix: with the Walk box open on a short screen, a dragged row has nowhere to rest (the drag scroll band's top edge passes its bottom edge under about 500px tall)
+line	roadmap-dfs	W74	2026-10-16T03:59:25Z	later	3	minor	W74.10 · Minor findings from the review (safe-area inset missing from the list's scroll clearance; a push redraw takes keyboard focus out of the pinned box)
+line	roadmap-dfs	W75	2026-10-15T22:44:41Z	first	1	defect+reproduced	W75.10: a task file never committed on the default branch is moved into its worktree, and `tree.task_ids()` reads only the main checkout, so the task drops out of the screen, the web page and the walk until the merge (reproduced in a scratch repo).
+line	roadmap-dfs	W75	2026-10-15T22:44:41Z	first	1	defect+reproduced	W75.11: `run.sh` treats a `branch.py merge` exit 1 (a dirty worktree, a BranchError) as done, so a passing review can leave the branch unmerged on every later run (reproduced with the stub recipe work,confirm,rmeddle). A pre-merge-commit hook's refusal is also taken for a conflict.
+line	roadmap-dfs	W75	2026-10-15T22:44:41Z	first	1	minor	W75.12: the minor findings (screen artefact pane, the wording of the overlap raise, uncommitted/unpushed marks reading main, rebased SHAs dangling).
+line	roadmap-dfs	W75	2026-10-15T22:44:41Z	first	1	assumption	Unmarked assumption: W75.6 decided, with no Hypothesis, that the author's accept merges the branch as a passing review does. Its Approach left this to be decided. Ask the author whether an accept should merge, or whether only a passing review should.
+line	roadmap-dfs	W75	2026-10-16T03:34:42Z	later	2	defect+reproduced/maybe-introduced	W75.13: an attachment the author adds while a task is in its worktree lands only in the main checkout's .dfs/artefacts, so the session cannot open it or see it to commit, and main's guard then refuses every merge with a node the worktree session cannot act on (reproduced in a scratch repo: branch.py merge exit 3, node says to `git add` a file absent from the worktree).
+line	roadmap-dfs	W75	2026-10-16T03:34:42Z	later	2	defect/maybe-introduced	W75.14: the author's accept from a checkout off main/master only prints the merge's BranchError to stderr (unseen in the screen and web page), leaving the task accepted and done with dfs/<task> never merged; run.sh raises in the same case.
+line	roadmap-dfs	W75	2026-10-16T03:34:42Z	later	2	minor	W75.15: the minor findings (empty commit subject on a refused task-file commit, truncated hook message, unchecked worktree removal, a test assertion that cannot fail, the hook test skipping under noexec TMPDIR, no test for the screen's worktree artefacts, uncommitted/unpushed marks reading main).
+line	roadmap-dfs	W75	2026-10-16T03:34:42Z	later	2	assumption	Unmarked assumption, still open: W75.6 decided, with no Hypothesis, that the author's accept merges the branch as a passing review does. Ask the author whether an accept should merge, or only a passing review.
+line	roadmap-dfs	W75	2026-10-16T05:24:49Z	later	3	defect/introduced	W75.16: an attachment named through add_node, edit_node or edit_task (the Goal and Approach boxes, which have Attach buttons) while the task is in its worktree stays in the main checkout. In a scratch repo, main's guard then refused the merge (branch.merge returned "guard"), with a node the worktree session cannot act on. carry_attachments runs only in append_log.
+line	roadmap-dfs	W75	2026-10-16T05:24:49Z	later	3	defect+reproduced/maybe-introduced	W75.17: deleting a task that has a worktree moves only main's stale copy, or nothing if the task was never committed. The task stays in task_ids() with its worktree and dfs/<task> live (reproduced for a committed and a never-committed task).
+line	roadmap-dfs	W75	2026-10-16T05:24:49Z	later	3	minor	W75.18: the minor findings: the staged-index merge refusal is called an overlap and names no path; the uncommitted and not-on-origin marks read only main; the hook-refusal test skips under a noexec TMPDIR.
+line	roadmap-dfs	W75	2026-10-16T05:24:49Z	later	3	assumption	Unmarked assumption, still open: W75.6 decided, with no Hypothesis, that the author's accept merges the branch as a passing review does. Ask the author whether an accept should merge, or only a passing review.
+line	roadmap-dfs	W75	2026-10-16T05:59:47Z	later	4	defect+reproduced/maybe-introduced	W75.19: an attachment named in a task before its first run (create_task, edit_task, add_node with no worktree yet) stays untracked in the main checkout, because branch.enter's carry_uncommitted moves only task_paths; the session never sees it and main's guard refuses every merge (reproduced in a scratch repo: branch.merge returned "guard" with a node asking the worktree to stage a file it lacks).
+line	roadmap-dfs	W75	2026-10-16T05:59:47Z	later	4	defect+reproduced/maybe-introduced	W75.20: delete_task on a worked task runs `git worktree remove --force`, erasing the attachments carry_attachments moved there and any uncommitted session edits, against delete_task's "nothing is erased" (reproduced: the png existed nowhere afterwards, and the archived task file still names it).
+line	roadmap-dfs	W75	2026-10-16T05:59:47Z	later	4	minor	W75.21: the minor findings (archive_task renames a worked task's branch to dfs-deleted/; delete_task/release docstrings).
+line	roadmap-dfs	W75	2026-10-16T05:59:47Z	later	4	assumption	Unmarked assumption, still open: W75.6 decided, with no Hypothesis, that the author's accept merges the branch as a passing review does. Ask the author whether an accept should merge, or only a passing review.
+line	roadmap-dfs	W75	2026-10-16T08:49:56Z	later	5	defect+reproduced/maybe-introduced	W75.23 (Fix, under W75.7): branch.py merge, run while the author's own checkout is mid-merge, takes the author's MERGE_HEAD for its own, runs `git merge --abort` and throws away their conflict resolutions (reproduced), then adds a bogus rebase node naming the author's file.
+line	roadmap-dfs	W75	2026-10-16T08:49:56Z	later	5	defect+reproduced/maybe-introduced	W75.24 (Fix, under W75.5): in a repo with no commit yet, branch.py enter fails on "invalid reference: HEAD" and run.sh exits 2 before any session; the chain ran there before W75 (reproduced with def98036c4^ scripts).
+line	roadmap-dfs	W75	2026-10-16T08:49:56Z	later	5	minor	W75.25: the minor findings (unused default_branch(), merge "none" with a live branch whose worktree was removed, untracked junk counted as a dirty worktree, accepted() staying true after a reopening accept, untested W75.15 reporting, the hook-refusal test skipping under noexec TMPDIR).
+line	roadmap-dfs	W75	2026-10-16T08:49:56Z	later	5	assumption	Unmarked assumption, for the author: W75.5 (and `branch.enter`) works an item in place, with no branch and no merge, when `.dfs` is gitignored or the checkout is not on main/master; no live node states this narrowing as a Hypothesis. Ask the author whether items in a repo with a gitignored roadmap should still get a branch for their code.
+line	roadmap-dfs	W75	2026-10-16T09:40:43Z	later	6	defect/unplaced	W75.27 · Fix: a merge while the author's checkout has a detached HEAD (their own rebase of main) crashes on NoBranch, logs no raise, and the task reads done with dfs/W75 unmerged
+line	roadmap-dfs	W75	2026-10-16T09:40:43Z	later	6	minor	W75.28 · Minor findings from the review
+line	roadmap-dfs	W75	2026-10-16T21:01:33Z	later	7	defect+reproduced/introduced	W75.30 · Fix (under W75.29): in a gitignored roadmap, `share_ignored_state` links only the `.dfs` entries the main checkout already has, so a first `.dfs/archive` (shelve or compact) or `.dfs/artefacts` page written in the worktree is a real ignored directory that `git worktree remove --force` erases on merge (reproduced: shelved Approach lost, the task file still reads "archived.").
+line	roadmap-dfs	W75	2026-10-16T21:01:33Z	later	7	assumption	Unmarked assumption, for the author: W75.29's Approach keeps an item worked in place, with no branch and no merge, when the checkout is off main/master or no commit exists yet. W75.26's Hypothesis covered those cases, but the author refuted that node over the gitignored case alone, and no live node now marks them as a Hypothesis (only the Summary mentions them). Ask the author whether those two cases may stay in place.
+line	roadmap-dfs	W75	2026-10-17T06:53:16Z	later	8	defect/present	W75.31: when only `.dfs/items/` is gitignored, `_commit_task_files` skips the tracked archive, so a shelve in the worktree stops the passing review's merge as "dirty" with a node calling the task's own archive not the task's
+line	roadmap-dfs	W75	2026-10-17T06:53:16Z	later	8	minor	W75.32: minor findings (top-level ignored files not rescued; `.from-worktree` sidecars unreported)
+line	roadmap-dfs	W75	2026-10-17T11:29:16Z	later	9	defect/unplaced	W75.34 · Fix: a chain run off main/master on a task that already has a worktree ends done with its branch never merged
+line	roadmap-dfs	W75	2026-10-17T11:29:16Z	later	9	minor	W75.35 · Minor findings from the review (SKILL.md and README omit the in-place cases)
+line	roadmap-dfs	W75	2026-10-19T02:21:27Z	later	10	defect+reproduced/present	W75.37 · Fix: the author's accept merges the branch and removes the worktree while a chain is still running a session in it (reproduced: the review's finding and verdict were lost and run.sh died with rc 1 and no stop)
+line	roadmap-dfs	W75	2026-10-19T02:21:27Z	later	10	defect+reproduced/unplaced	W75.38 · Fix: sessions in an item's worktree read the law as it was when the branch was cut, not the author's current ROADMAP.md (reproduced: an L2 committed on main after enter is missing from --brief in the worktree)
+line	roadmap-dfs	W75	2026-10-19T02:21:27Z	later	10	minor	W75.39 · Minor findings from the review (README omits the rebase; _dirty misreads a staged rename's old-path field; merge_item ends done when a hand-removed worktree's branch exists and the checkout is off main/master)
+line	roadmap-dfs	W75	2026-10-19T04:33:27Z	later	11	defect+reproduced/unplaced	W75.42 · Fix: an accept held back for a chain that is then killed outright is never merged (reproduced: kill -9 after the accept left W1 done, accepted and unmerged, and a second accept is refused)
+line	roadmap-dfs	W75	2026-10-19T04:33:27Z	later	11	minor	W75.43 · Minor findings from the review (settle_accept can merge under a backgrounded agent still exiting; docs and the screen do not say a running chain does the merge)
+line	roadmap-dfs	W75	2026-10-19T04:50:41Z	later	12	defect+reproduced/present	W75.44 · Fix: the web page never shows the second accept for a chain killed outright (task_json still sends acceptable = done and not accepted, so index.html draws no Accept button; only the POST check uses tree.acceptable)
+line	roadmap-dfs	W75	2026-10-19T04:50:41Z	later	12	minor	W75.45 · Minor findings from the review (state.py standing ignores tree.acceptable; wait_agent kills only the pid and skips without ps; wait_agent untested)
+line	roadmap-dfs	W75	2026-10-19T20:25:37Z	later	13	defect/maybe-introduced	W75.48 · Fix: a stash that cannot be put back crashes `branch.py merge` (KeyError 'blocked', run.sh cd's into the removed worktree), and an untracked file set aside lands in a stash the raise's `git stash apply` cannot apply
+line	roadmap-dfs	W75	2026-10-19T20:25:37Z	later	13	minor	W75.49 · Minor findings from the review (stash@{0} drop fallback, accept message on "blocked", stale docstring/comment, stale-tag stash lookup, test_tree error under noexec /tmp)
+line	roadmap-dfs	W75	2026-10-19T21:09:05Z	later	14	defect/introduced	W75.51 · Fix: a task created by a session inside an item worktree still takes an id the main checkout or another worktree already holds (from the worktree, worktree_task_ids() is empty and main's untracked W91–W94 are unseen)
+line	roadmap-dfs	W75	2026-10-19T21:09:05Z	later	14	minor	W75.52 · Minor findings from the review (untracked-file raise wording, _set_aside stash race, W75.50 commit lacks trailers)
+line	roadmap-dfs	W75	2026-10-19T21:09:05Z	later	14	assumption	Assumptions without a Hypothesis, for the author (named by the last reviews and critic, still unmarked): W75.37 holds an accept made while a chain runs and leaves the merge to the chain rather than stopping it; W75.40 merges in the exit trap even on Ctrl-C or a failed session; W75.42 (with W75.44, W75.45) makes a killed chain's accept need a second accept; W75.38 briefs sessions from the main checkout's ROADMAP.md, uncommitted edits included; W75.50 left the captured W95 out of the author's task list until the merge, a narrowing of what its Approach asked. Ask the author whether each is what they want.
+line	roadmap-dfs	W75	2026-10-21T22:58:01Z	later	15	defect/present	W75.54 · Fix: dfs/W75 cannot merge into current main: the captured size-rule task (W94, then W95) collides with the author's W94 and W95 on main, and scripts/branch.py (main's W87 shared-edit window, W91 gets_worktree) and README.md conflict; renumber the capture and reconcile the two set-aside mechanisms
+line	roadmap-dfs	W75	2026-10-21T22:58:01Z	later	15	minor	W75.55 · Minor findings from the review (_put_back treats an --index-only failure as a conflict; the _set_aside stash race and its untested subject check)
+line	roadmap-dfs	W75	2026-10-21T22:58:01Z	later	15	assumption	For the author: these assumptions still have no Hypothesis: W75.37 holds an accept made while a chain runs, for the chain to merge; W75.40 merges in the exit trap even after Ctrl-C or a failed session; W75.42/44/45 need a second accept after a chain is killed; W75.38 briefs from the main checkout's ROADMAP.md, uncommitted edits included; W75.50 keeps a task captured in a worktree off the task list until the merge. Ask the author whether each is what they want.
+line	roadmap-dfs	W75	2026-10-21T23:46:50Z	later	16	defect+reproduced/unplaced	W75.56 · Fix: an interrupt during the merge leaves the author's set-aside edits only in a stash, with no raise naming it (reproduced: KeyboardInterrupt in the second join left app.txt reverted and the edit only in stash@{0} dfs-merge-W1)
+line	roadmap-dfs	W75	2026-10-21T23:46:50Z	later	16	minor	W75.57 · Minor findings from the review (_unmerged ignores restore()'s result; the refused-path raise names only the second refusal's paths; the --index retry unstages silently)
+line	roadmap-dfs	W75	2026-10-21T23:46:50Z	later	16	assumption	For the author: these assumptions still have no Hypothesis: W75.37 holds an accept made while a chain runs, for the chain to merge; W75.40 merges in the exit trap even after Ctrl-C or a failed session; W75.42/44/45 need a second accept after a chain is killed; W75.38 briefs from the main checkout's ROADMAP.md, uncommitted edits included; W75.50 keeps a task captured in a worktree off the task list until the merge; W75.55 puts a stash whose staged half will not apply back as unstaged edits rather than raising. Ask the author whether each is what they want.
+line	roadmap-dfs	W75	2026-10-28T23:40:11Z	later	17	defect/present	W75.68 · Fix: acceptable() keeps a GitHub-mode held item acceptable for the whole life of its pull request
+line	roadmap-dfs	W75	2026-10-28T23:40:11Z	later	17	minor	W75.69 · Minor findings from the review
+line	roadmap-dfs	W76	2026-10-16T06:30:34Z	first	1	defect	W76.3 · Fix: the project chat's prompt (scripts/run.sh default_chat_prompt for --chat project) still has the agent propose and write a first linear chain of todo nodes for a new task
+line	roadmap-dfs	W76	2026-10-16T06:30:34Z	first	1	minor	W76.4 · Minor findings from the review: check.py standalone_notes docstring says --open writes nodes; create_task docstring line overlong
+line	roadmap-dfs	W81	2026-10-16T19:36:25Z	first	1	defect	W81.14: the screen's background chat (tui.py start_chat/chat_env) runs whatever `x` names now, not the conversation's agent; once they differ, claim raises, chat_env returns None and every page message for that scope goes to an unrecorded new session (also breaks existing claude conversations while `x` is another agent, which worked before W81).
+line	roadmap-dfs	W81	2026-10-16T19:36:25Z	first	1	defect+reproduced	W81.15: a page message sent while the screen's codex/opencode/kiro chat runs its headless opening turn is typed into a terminal nothing reads and never reaches the model (reproduced with real codex 0.162 and opencode 1.18.35 against the stand-in models).
+line	roadmap-dfs	W81	2026-10-16T19:36:25Z	first	1	minor	W81.16: minor findings (stale claude-only and codex-only docstrings, the "run.sh execs the agent" comment, a failed or stopped first non-claude page turn leaving its message unrecorded).
+line	roadmap-dfs	W81	2026-10-16T19:36:25Z	first	1	assumption	Unmarked assumptions, for the author: W81.4 chose to run a new non-claude chat's opening turn headless before the interactive session (the screen shows nothing until the summary is done), with no Hypothesis; W81.12 has ptyrelay answer codex's "Trust and continue" (trusting a folder) and kiro's trust-all-tools acceptance on the author's behalf, with no Hypothesis. Ask whether the author accepts both.
+line	roadmap-dfs	W81	2026-10-16T20:39:26Z	later	2	defect+reproduced/maybe-introduced	W81.17: when the screen's codex, opencode or kiro chat fails its headless opening turn (run.sh exits 1, e.g. a usage limit or no login), the relay ends, the page message is dropped untyped, and the page keeps showing it as sent with no error and no reason; reproduced with test_chat's codex stub (CHAT_STUB_FAIL) through a real ChatHost and tui.UI. With no screen, the same failure shows its reason on the page.
+line	roadmap-dfs	W81	2026-10-16T20:39:26Z	later	2	minor	W81.18: minor findings: the "message was not kept" note also appears on a failed opening turn that had no message; a failed first turn that names a session_id has that session dropped; no test for a stopped first non-claude turn; no kiro slow-opening test.
+line	roadmap-dfs	W81	2026-10-16T20:39:26Z	later	2	assumption	Unmarked assumptions, still without a Hypothesis, for the author: W81.4 runs a new non-claude chat's opening turn headless before the interactive session (W81.17's failure comes from this choice), and W81.12 has ptyrelay answer codex's "Trust and continue" and kiro's trust-all-tools acceptance for the author. Ask whether the author accepts both.
+line	roadmap-dfs	W85	2026-10-17T16:41:47Z	first	1	defect	W85.6 · Fix: the shared answer form's ids clash with the free page above it (a page using id="answer" or id="note" above the form leaves the author unable to send the answer, and can_answer still passes it)
+line	roadmap-dfs	W85	2026-10-17T16:41:47Z	first	1	minor	W85.7 · Minor findings from the review (stale "both templates" docs line and no drawing styles in the answer template, undocumented dfsAnswer.keep and load order, placeholder options never refused)
+line	roadmap-dfs	W87	2026-10-19T10:15:12Z	first	1	defect	W87.5 · Fix: entering a task whose force-tracked file has uncommitted edits crashes on the link (`carry_uncommitted` raises SameFileError, and no stop is recorded)
+line	roadmap-dfs	W87	2026-10-19T10:15:12Z	first	1	defect	W87.6 · Fix: a reused worktree whose branch committed a force-tracked planning file reads the main checkout's stale copy
+line	roadmap-dfs	W87	2026-10-19T10:15:12Z	first	1	minor	W87.7 · Minor findings from the review (briefing stderr hidden on success, the ignore-rule clause of the W87.2 cause untested, the build_prompt failure path untested)
+line	roadmap-dfs	W87	2026-10-19T10:15:12Z	first	1	assumption	Unmarked assumption in W87.1 (no Hypothesis): a force-tracked planning file is now treated as ignored. Sessions edit the main checkout's copy through the link, `_tracked_task_paths` skips it, and the branch never commits the tree; after the merge, the main checkout is left with the task file modified and uncommitted, whereas before, the node commits carried it. Ask the author whether that is acceptable, or whether the merge should commit the force-tracked task file.
+line	roadmap-dfs	W87	2026-10-19T10:38:40Z	later	2	defect/introduced	W87.8 · Fix: the merge writes the author's uncommitted `.dfs` edits back over the branch's committed changes (`_set_aside_shared_edits` applies to every project; a tracked roadmap's merge no longer raises and silently reverts the branch's change in the working copy)
+line	roadmap-dfs	W87	2026-10-19T10:38:40Z	later	2	minor	W87.9 · Minor findings from the review (a false "changed both" message after the merge's rebase, CRLF read as a clash in `_carry_branch_edits`, W87.1's unmarked assumption still unasked)
+line	roadmap-dfs	W87	2026-10-19T11:02:26Z	later	3	defect+reproduced/maybe-introduced	W87.10 · Fix: a merge that fails loses the raise or node it writes into a set-aside task file (`_unmerged` writes before `_put_back_shared_edits`, which overwrites it; reproduced: "raised for the author" with no raise in W1.md)
+line	roadmap-dfs	W87	2026-10-19T11:02:26Z	later	3	minor	W87.11 · Minor findings from the review (an unclosed file in a W87.9 test)
+line	roadmap-dfs	W87	2026-10-19T11:16:32Z	later	4	defect+reproduced/maybe-introduced	W87.12 · Fix: an interrupted merge loses the shared task-file edits it set aside (held only in memory between `_set_aside_shared_edits`'s reset and the put-back; Stop chain's SIGINT during `git merge` or the guard drops them; reproduced)
+line	roadmap-dfs	W87	2026-10-19T11:16:32Z	later	4	minor	W87.13 · Minor findings from the review (the conflict and guard paths of `_unmerged`'s put-back are untested)
+line	roadmap-dfs	W87	2026-10-20T16:35:57Z	later	5	defect+reproduced/maybe-introduced	W87.16 · Fix: main's `catch_up` fast-forward replaces the worktree's shared `.dfs/items` link with a stale real directory (reproduced on the merge of main and dfs/W87: after main force-commits a new task file, the next `enter` leaves a real `.dfs/items` holding only the committed copy, without the main checkout's uncommitted edit or the other task files; and where main changed an already-hidden path, `catch_up` refuses quietly)
+line	roadmap-dfs	W87	2026-10-20T16:35:57Z	later	5	minor	W87.17 · Minor findings from the review (the SIGINT window inside `_set_aside_shared_edits`, SKILL.md/README silent on force-tracked files under a blanket rule, an `enter` failure still recorded as no stop)
+line	roadmap-dfs	W88	2026-10-19T14:45:23Z	first	1	defect	W88.6 Fix: a new roadmap's first task commits are taken for an adoption and pass unjudged (HEAD with no task file is also every fresh roadmap's state, so a first node's Hypothesis/Ask/Parent faults are grandfathered)
+line	roadmap-dfs	W88	2026-10-19T14:45:23Z	first	1	minor	W88.7 Minor findings from the review (briefing's false "check.py refuses" for old attachments, adoption note in working-tree mode, coordinate warning not diffed, message-text shape diff, README's "never blocks" vs the size budget)
+line	roadmap-dfs	W88	2026-10-19T14:51:50Z	later	2	defect/present	W88.8 Fix: a session's first node worked in place, off main or in a repo with no commit, is still taken for an adoption (branch name alone does not tell an adoption from a session; checked: Parent/Hypothesis/writer faults pass on a `feature` branch and on an unborn master)
+line	roadmap-dfs	W88	2026-10-19T14:51:50Z	later	2	minor	W88.9 Minor findings from the review (briefing's per-task vs guard's per-part attachment comparison, coordinate warning naming the old line, README line wrap)
+line	roadmap-dfs	W89	2026-10-20T01:08:06Z	first	1	defect	W89.4 · Fix: hidden() reports a roadmap kept as planning by `.dfs/*`, `.dfs/**` or `**/.dfs/`. ignored() says True for these, but init, each chain start and the TUI header warn, and the code's own /* and /** exemption is unreachable.
+line	roadmap-dfs	W89	2026-10-20T01:08:06Z	first	1	minor	W89.5 · Minor findings from the review: the TUI's hidden state is not refreshed when the ignore rules change; an over-long docstring line in hidden(); W89.3's record says test_screen OK, but its 12 errors predate W89.
+line	roadmap-dfs	W89	2026-10-20T01:20:30Z	later	2	defect/maybe-introduced	W89.6 · Fix: a `.dfs/` rule cannot silence the warning when a broader rule like `.*` also hides the roadmap. hidden() looks only at the last rule git names, so `.dfs/` followed by `.*`, or `.*` in .gitignore with `.dfs/` in .git/info/exclude, warns at every chain start and in the header, and init asks the author to settle a rule they cannot fix without editing the shared .gitignore.
+line	roadmap-dfs	W89	2026-10-20T01:20:30Z	later	2	minor	W89.7 · Minor findings from the review: `.dfs/**/*` is not recognised; watch_signature() reads `.git/info/exclude` straight from the work root, which is wrong where `.git` is a file; W89.5's record says test_screen has no errors, but its 12 errors from before W89 are back; test_init's outside-git test depends on TMPDIR.
+line	roadmap-dfs	W89	2026-10-20T01:20:30Z	later	2	assumption	Unmarked assumption: W89.3 chose to warn at a chain's start rather than refuse to run (run.sh: "Said, not refused"), and it has no Hypothesis. Ask the author whether a chain should run over a roadmap whose tasks git will not add.
+line	roadmap-dfs	W89	2026-10-20T01:41:00Z	later	3	defect/introduced	W89.8 · Fix: hidden()'s planning exemption must follow what git actually does with .dfs. Any pattern naming .dfs silences the report even when a negation re-includes .dfs (with `.dfs/` in info/exclude and `!.dfs/` plus `*.html` in .gitignore, ignored() is False, yet init, chains and the header say nothing about the artefact). And when core.excludesFile is unset, the default ~/.config/git/ignore is not read, so `.*` in .gitignore plus `.dfs/` there still warns everywhere.
+line	roadmap-dfs	W89	2026-10-20T01:41:00Z	later	3	minor	W89.9 · Minor findings from the review: watch_signature() now runs two git subprocesses per one-second poll, which makes its docstring's cost claim false; test_init's outside-git test depends on TMPDIR.
+line	roadmap-dfs	W89	2026-10-20T01:41:00Z	later	3	assumption	Unmarked assumption, still open: W89.3 chose to warn at a chain's start rather than refuse (run.sh "Said, not refused") with no Hypothesis. Ask the author whether a chain should run over a roadmap whose tasks git will not add.
+line	roadmap-dfs	W89	2026-10-20T04:54:52Z	later	4	defect/introduced	W89.10 · Fix: hidden()'s all-rules-name-.dfs exemption must also need git to ignore the roadmap. With `.dfs/*` then `!.dfs/items/` and nothing tracked, ignored() is False and git adds only the items, yet hidden() is [] and init says only "Commit what it wrote", so ROADMAP.md, order.md and the artefacts stay out of git; W89.8 guarded only the any-pattern branch with ignored().
+line	roadmap-dfs	W89	2026-10-20T04:54:52Z	later	4	minor	W89.11 · Minor findings from the review: ignore_files() infers an unset core.excludesFile from len(paths) < 3; README line 41 runs past the paragraph width.
+line	roadmap-dfs	W89	2026-10-20T04:54:52Z	later	4	assumption	Unmarked assumption, still open: W89.3 chose to warn at a chain's start rather than refuse (run.sh "Said, not refused") with no Hypothesis. Ask the author whether a chain should run over a roadmap whose tasks git will not add.
+line	roadmap-dfs	W90	2026-10-20T06:14:24Z	first	1	defect+test-gap	W90.4 · Fix: check the second Enter of a claude chat's first message against the real claude, which this machine has (/nix/store/*-claude-code-*/bin/claude, credentials in $HOME/.claude). W90.3's premise "no claude binary here" is false. Its trigger, silence for 2s after the Enter, is untested against a claude that draws while it loads. The prompt-screen alternative was parked for a false reason.
+line	roadmap-dfs	W90	2026-10-20T06:14:24Z	first	1	defect+reproduced	W90.5 · Fix: a message the page sent stays shown until it is recorded, even when one sent before it is recorded first. Reproduced: send "first", send "second", record "first" and the start of its answer, and "second" disappears from the page.
+line	roadmap-dfs	W90	2026-10-20T06:14:24Z	first	1	minor	W90.6 · Minor findings from the review: the _resubmit docstring wrongly says every chat's first message failed; RESUBMIT's "claude ignores an Enter on an empty prompt" is unchecked; the Summary claims more than was checked.
+line	roadmap-dfs	W90	2026-10-20T06:14:24Z	first	1	assumption	Unmarked assumption: W90.3 carries no Hypothesis: line, yet its fix assumes (a) claude ignores an Enter on an empty prompt and (b) a claude that ignored the Enter draws nothing for SUBMIT_WAIT afterwards. Ask the author whether a second Enter on a claude's first message is acceptable at all, or whether they prefer to wait for claude's prompt screen, even if a wrong guess delays the first message.
+line	roadmap-dfs	W90	2026-10-20T06:46:42Z	later	2	defect+reproduced/unplaced	W90.8 · Fix: a message the page sent clears by text only when the author message holding it is not an earlier pending message's own. Reproduced: send "Can you look at it now", then "no"; once the first is recorded, "no" (inside "now") vanishes from the page unrecorded; the same for "yes" sent twice.
+line	roadmap-dfs	W90	2026-10-20T06:46:42Z	later	2	minor	W90.9 · Minor findings from the review: Chats.interrupt drops the whole pending list when only some messages went untyped; the tree's Determinations are shifted one node down (W90.5 has none, W90.7 has two); test_claude_chat covers only a fresh claude, not the resume and one-write cases W90.4 claims.
+line	roadmap-dfs	W90	2026-10-20T06:46:42Z	later	2	assumption	Unmarked assumption: W90.4 keeps `Relay._resubmit`, which it calls "harmless and unproven" since the failure never reproduced, with no Hypothesis: line. Ask the author whether to keep a guard for a cause nobody has seen, or remove it until the failure recurs (W90.7's trigger).
+line	roadmap-dfs	W90	2026-10-20T07:02:07Z	later	3	defect+reproduced/unplaced	W90.10 · Fix: a message the page sent stays shown on every poll after an earlier one is recorded, not only the first. Reproduced: send "Can you look at it now", then "no", and record the first. The first poll shows "no", and the next poll (the page polls every 1.5s) drops it, because the cleared entry leaves pending and "no" then matches inside "now". "yes" sent twice behaves the same. W90.8's tests poll only once.
+line	roadmap-dfs	W90	2026-10-20T07:02:07Z	later	3	assumption	Unmarked assumption, still open from the last review: W90.4 keeps `Relay._resubmit` as "harmless and unproven" with no Hypothesis: line. Ask the author whether to keep a guard for a cause nobody has reproduced, or remove it until the failure recurs.
+line	roadmap-dfs	W91	2026-10-20T09:39:31Z	first	1	defect	W91.6 · Fix: a child task starts while its done parent's chain is still merging (next_items' `held` ignores a parent in `busy`)
+line	roadmap-dfs	W91	2026-10-20T09:39:31Z	first	1	defect	W91.7 · Fix: a parallel walk where no worktree is cut (off main/master, no commit, outside git) runs its chains in one checkout
+line	roadmap-dfs	W91	2026-10-20T09:39:31Z	first	1	defect	W91.8 · Fix: the walk's carry list restarts a task that was made a draft, or that the order now holds (regression even at parallel 1)
+line	roadmap-dfs	W91	2026-10-20T09:39:31Z	first	1	defect	W91.9 · Fix: with a gitignored roadmap, a parallel chain's own unfinished work is briefed as another task's (`foreign_dirt` assumes serial sessions)
+line	roadmap-dfs	W91	2026-10-20T09:39:31Z	first	1	defect	W91.10 · Fix: `:walk 20 3` starts a walk of one chain, though README says it does what `w` with `20 3` does
+line	roadmap-dfs	W91	2026-10-20T09:39:31Z	first	1	minor	W91.11 · Minor findings from the review
+line	roadmap-dfs	W91	2026-10-20T09:39:31Z	first	1	assumption	Unmarked assumption: W91.3 decided, with no Hypothesis, that a new chain's cap is an even share of the unreserved budget, that a capped or limited task goes before the order, and that at most 16 chains may run at once. Ask the author whether an even split is the budget policy they want and whether 16 is the right ceiling.
+line	roadmap-dfs	W91	2026-10-20T10:08:28Z	later	2	defect/maybe-introduced	W91.12 · Fix: the walk's continuation starts a child while its done parent's chain is still merging (next_items never asks `held` of its `first` entries, and continue_last falls back to next_item, which names the child)
+line	roadmap-dfs	W91	2026-10-20T10:08:28Z	later	2	minor	W91.13 · Minor findings from the review
+line	roadmap-dfs	W91	2026-10-20T22:09:35Z	later	3	defect/present	W91.15 · Fix: an in-place chain's own unfinished work is briefed as foreign when a worktree chain runs beside it (off main, `foreign_dirt` counts the worktree chain's later session)
+line	roadmap-dfs	W91	2026-10-20T22:09:35Z	later	3	minor	W91.16 · Minor findings from the review
+line	roadmap-dfs	W91	2026-10-20T22:09:35Z	later	3	assumption	Unmarked assumption: W91.3 decided, with no Hypothesis, that stopping one chain of a parallel walk by hand (the page's Stop chain, or K) is a walk stop: the walk turns off and every other walk chain ends after its run (checked: with W7 interrupted and W8 live at parallel 2, a tick turns the walk off and lowers W8). Ask the author whether stopping one chain should end only that chain and let the walk refill its slot.
+line	roadmap-dfs	W93	2026-10-22T12:19:44Z	first	1	defect	W93.18 · Fix: test_ui's draft flow fails in 2 of 3 runs under test_all.py's parallel pass, passes serially; no W93 run ever ran the 60 browser flows (skipped with no playwright on PATH).
+line	roadmap-dfs	W93	2026-10-22T12:19:44Z	first	1	defect	W93.19 · Fix: test_all.py's test-times cache, shared by every worktree, keeps every test id ever run and nothing evicts it.
+line	roadmap-dfs	W93	2026-10-22T12:19:44Z	first	1	minor	W93.20 · Minor findings from the review (docstring, header count, the scripts/.dfs check only prints, orphans on shard timeout, an unused variable, a false comment about test_kiro, yous() merging duplicates, end_hosts timing out silently).
+line	roadmap-dfs	W93	2026-10-22T12:19:44Z	first	1	assumption	For the author: W93.3 removed test_chat's real-kiro page test with no Hypothesis, partly because "test_kiro still runs a real kiro", which is false (test_kiro is a stand-in). Now no test runs a real kiro through the page's headless turn and resume, only the kiro-cli 2.27.1 fixtures. Should that test come back in test_kiro_chat, outside the default run?
+line	roadmap-dfs	W93	2026-10-22T12:19:44Z	first	1	assumption	For the author: the ptyrelay change makes kiro and opencode wait up to 90s (was 25s) before a message is typed anyway. That is product behaviour. Its kiro evidence is from W93.8 (pruned) and W93.12 re-showed only codex. Is the longer wait acceptable?
+line	roadmap-dfs	W93	2026-10-22T12:19:44Z	first	1	assumption	For the author: --real-agents at load ~2 failed 2 of 15, both opencode crossing tests losing the page's turn from opencode.db (W93.16). It is not only a load effect. No task holds it yet; your "c" answer calls for one.
+line	roadmap-dfs	W95	2026-10-24T19:21:41Z	later	1	defect+reproduced	W95.4 · Fix: a push while typing in the walk box's Budget or Chains scrambles the number. After a redraw the caret lands at the start of the field, so typing "1", then a push, then "2" gives "21". Reproduced at desktop and phone sizes.
+line	roadmap-dfs	W95	2026-10-24T19:21:41Z	later	1	minor	W95.5 · Minor findings from the review (two untested guards, a side effect in walkHtml).
+line	roadmap-dfs	W95	2026-10-24T19:21:41Z	later	1	defect	W95.2 still has no Hypothesis for keeping a confirm dialog (now with no field) on the strength of tui.py's walk_toggle docstring. The 2026-10-22 answer covered only the merge, so this is still open for the author: should the web's Start walk keep the fieldless "Start the walk?" confirm, or start on one tap now that the box holds every field?
+line	roadmap-dfs	W97	2026-10-22T06:00:53Z	first	1	defect	W97.5 Fix: a replay runs without the dfs guard (hooks ignored on noexec /tmp), without a git identity, and with the original's answer in origin/main; the W55 table must be redone
+line	roadmap-dfs	W97	2026-10-22T06:00:53Z	first	1	defect	W97.6 Fix: replay score counts failed or refused commits as nodes (W55 replay: 7 counted, 5 made) and transcripts() prefix glob merges replays named -1 and -10
+line	roadmap-dfs	W97	2026-10-22T06:00:53Z	first	1	minor	W97.7 Minor findings: inconsistent figures in the doc, a 0.0 runner cost replaced by an estimate, unclosed files, original() not tied to the repo
+line	roadmap-dfs	W97	2026-10-22T06:00:53Z	first	1	assumption	Unmarked assumptions for the author: W97.4 reads the Goal as met by a harness and a plan, with no change yet tested by replay (ask whether "experimenting with changes" needs at least one candidate run through the loop); W97.4's keep rule (two more first-review passes out of twelve, three replays per arm) is a design choice with no Hypothesis; W97.3's starting point keeps only Goal and Background, dropping any nodes the author wrote before work began (ask whether author-written nodes belong in the starting point).
+line	roadmap-dfs	W97	2026-10-28T09:42:27Z	later	2	defect+reproduced/unplaced	W97.12 added under W97.4: the "12% of tasks hold 42% of spend" figure and the rest of section 4's measure come from no script and do not reproduce (34% on a recount).
+line	roadmap-dfs	W97	2026-10-28T09:42:27Z	later	2	minor	W97.13 added under W97.4: minor findings (stale heading, "four chosen tasks" never chosen, section 1 counts, replay seal keeps a non-main source branch, file names not read as code names), plus unmarked assumptions in W97.3, W97.4, W97.9 and W97.11 for the author.
+line	roadmap-dfs	W97	2026-10-28T10:50:51Z	later	3	defect/unplaced	W97.15 added under W97.8: the four W55 replays could read the live repo's runs, items and scripts (replay b globbed them), and the doc says the clone carries none of the original's evidence.
+line	roadmap-dfs	W97	2026-10-28T10:50:51Z	later	3	minor	W97.16 added under W97.4: minor findings (a false "shop-app W13" worst case, refusal-reason counts from no script, 22 vs 21 tasks, nodes vs commits, one break-it row class).
+line	roadmap-dfs	W97	2026-10-28T11:10:55Z	later	4	defect/maybe-introduced	W97.17 added under W97.15: replay.reached cuts the whole tool directory, which is the live checkout when replay.py runs from it, so the outside-reach row reads 0 for a replay that read the live runs and items.
+line	roadmap-dfs	W97	2026-10-28T11:10:55Z	later	4	defect/unplaced	W97.18 added under W97.15: the keep rule's second test (margin of four on only unexposed replays) cannot be met at the exposure section 3 measured, and its chance table is for 12 per arm.
+line	roadmap-dfs	W97	2026-10-28T11:10:55Z	later	4	minor	W97.19 added under W97.4: minor findings (a tie called "most reviewed", live nodes W97.14, W97.15 and W97.16 without a Hypothesis for choices the author may make differently, one docstring).
+line	roadmap-dfs	W97	2026-10-28T15:56:23Z	later	5	defect/maybe-introduced	W97.28 added under W97.20: the sandbox binds the tool's `docs` (all tasks' review findings, W55's original defect among them) and neither `reached` nor `answer_seen` can see a read of it.
+line	roadmap-dfs	W97	2026-10-28T15:56:23Z	later	5	minor	W97.29 added under W97.20: minor findings (chance figure wording, W97.24 without a Hypothesis for its kiro copy choices, W97.27 scope narrowed to claude and kiro, kiro_sign_in reuse).
+line	roadmap-dfs	W97	2026-10-28T16:08:35Z	later	6	defect/unplaced	W97.30 added under W97.28: the sandbox's docs allowlist is artefacts.md alone, so a changed tool using any other doc runs without it and nothing says so.
+line	roadmap-dfs	W97	2026-10-28T16:08:35Z	later	6	minor	W97.31 added under W97.28: minor findings (tool_docs side effect in sandbox_argv, artefacts.md cut has no boundary, W97.28's allowlist reading has no Hypothesis, proot tests not re-run here).
+line	roadmap-dfs	W103	2026-10-25T12:37:57Z	first	1	defect	W103.6 · Fix: a walk whose slots were all taken when it started must still record the stop break it waits at (walk_tick records held stop breaks only after its free<1 and hold returns, so a walk started beside a hand-started chain on the last task before the break works past it)
+line	roadmap-dfs	W103	2026-10-25T12:37:57Z	first	1	minor	W103.7 · Minor findings from the review (README omits the web button; the stop-break walk_off ignores a chain it did not start that is still merging)
+line	roadmap-dfs	W104	2026-10-25T17:33:03Z	first	1	defect	W104.15 added (Parent W104.4): inbox.py ignores the hook input, so a claude subagent's PostToolUse takes the author's message. Probed with a real claude 2.1.308 and a stand-in model: a message sent during a subagent's Bash call reached only the subagent, never the main loop, and `runs.messages` said delivered. The subagent's hook input carries `agent_id`. Check codex and kiro's sub-agent too.
+line	roadmap-dfs	W104	2026-10-25T17:33:03Z	first	1	minor	W104.16 added (Parent W104.15): the minor findings. README's "a review session takes no message" is false for a chain's review; the opencode plugin claims before a prompt whose failure it swallows; inbox.py's and runs.py's docstrings still say "the claude hook"; DFS_INBOX and OPENCODE_CONFIG_CONTENT are inherited by everything the agent runs, unlike RUNDIR; run_message has no length cap; the run_message UI flow was not re-run.
+line	roadmap-dfs	W104	2026-10-25T17:33:03Z	first	1	assumption	Assumptions with no Hypothesis, for the author: W104.14 starts every kiro work session under the custom agent `dfs-inbox` in place of the default, or whatever agent the user's kiro config makes default (its MCP servers, resources, prompt and model go unused). It also assumes a real model asks again for a held-back tool call. Ask whether replacing the user's kiro agent is acceptable. W104.9 passes `--dangerously-bypass-hook-trust` to every codex work session, which skips codex's trust review for every hook, including any the worked repository's own codex config defines. Ask whether that is acceptable. W104.10 runs every opencode work session `--standalone`, off the shared service. Ask whether anything the author relies on lives only in that service's config.
+line	roadmap-dfs	W107	2026-10-21T22:28:33Z	first	1	defect	W107.5 · Fix: the refused commit's gist keeps the guard's per-task over-budget notes, which check.py prints before the faults. With four over-budget task files elsewhere, the 400-character gist names only those tasks and drops the fault that refused the commit.
+line	roadmap-dfs	W107	2026-10-21T22:28:33Z	first	1	minor	W107.6 · Minor findings: (1) `--only` fails with a pathspec error when an empty `.dfs/items/<task>/` directory exists; (2) the node's pointer to `check.py --staged` judges more than the runner's commit did; (3) W107.2 and W107.4 carry no Hypothesis. Ask the author whether the cause was really another task's files staged in the W97 worktree, which was inferred from a reproduction and not checked in the reporter's repo. Also ask whether a staged non-task file should now reopen the item as dirty, and whether the node should carry a rewritten 400-character gist.
+line	roadmap-dfs	W108	2026-10-22T11:26:34Z	first	1	defect+reproduced	W108.4 · Fix: adopting old task files into a roadmap git already partly holds is refused, even with DFS_ADOPT=1. check.py's `adoptable` needs HEAD to hold no task file, but the reporter's `.*` project has some task files force-added. Reproduced: `DFS_ADOPT=1 git commit` exits 1 with the old findings, so Goal part 2 is not met for that project.
+line	roadmap-dfs	W108	2026-10-22T11:26:34Z	first	1	minor	W108.5 · Minor findings: hidden_message's new "an item's worktree links the main checkout's copy" is false for a page hidden inside a tracked dir by `*.html`. hidden()'s docstring and run.sh's preflight comment still say worktrees go without the hidden parts. The message test does not check this wording.
+line	roadmap-dfs	W108	2026-10-22T11:26:34Z	first	1	assumption	For the author: W108.2 accepted W88's shape without a Hypothesis. Adoption must be declared with DFS_ADOPT=1 and is not detected from files with no history, and a file adopted over the token budget refuses every later commit that grows it, a session's log line included, until it is shelved. Ask whether that meets "treat files with no history as grandfathered".
+line	roadmap-dfs	W108	2026-10-22T11:41:37Z	later	2	defect+reproduced/maybe-introduced	W108.6 · Fix: since W108.4, DFS_ADOPT=1 grandfathers any staged task file HEAD lacks, which includes every new task's first node committed by a session on dfs/<task>; the refusal there prints the DFS_ADOPT hint (reproduced: refused without, passes with both findings grandfathered). Keep adoption and the hint off item branches.
+line	roadmap-dfs	W108	2026-10-22T11:41:37Z	later	2	minor	W108.7 · Minor findings: DFS_ADOPT=0 also adopts, though every text says DFS_ADOPT=1.
+line	roadmap-dfs	W108	2026-10-22T11:41:37Z	later	2	assumption	For the author: W108.4 widened adoption to every staged task file git lacks once DFS_ADOPT is set, with no Hypothesis. The other option was detecting old files with no step. The round-1 question is still open too: does declared adoption, with growth refused for a file adopted over budget, meet "treat files with no history as grandfathered"?
+line	roadmap-dfs	W108	2026-10-22T11:47:24Z	later	3	defect+reproduced/maybe-introduced	W108.8 · Fix: adoption and the DFS_ADOPT hint are turned off only on dfs/<task>, but a session also commits a new task's first node in place on any branch off main. Reproduced on `feature`: refused with the hint, then passes with DFS_ADOPT=1 and all findings grandfathered, the branch-partition check included. README, init.py and the docstring say "on the default branch", which nothing enforces.
+line	roadmap-dfs	W108	2026-10-22T11:47:24Z	later	3	minor	W108.9 · Minor findings: the item-branch test's "without" leg does not unset an outer DFS_ADOPT, and test_only_dfs_adopt_1_adopts does not assert the hint W108.7 claims for DFS_ADOPT=0 or empty.
+line	roadmap-dfs	W108	2026-10-22T11:47:24Z	later	3	assumption	For the author: still open from rounds 1 and 2. Does declared adoption meet "treat files with no history as grandfathered", given a file adopted over budget refuses growth until shelved? And W108.4/W108.6 chose adoption for any staged task file git lacks, on the default branch only, with no Hypothesis.
+line	roadmap-dfs	W109	2026-10-25T05:14:03Z	first	1	defect	W109.7 · Fix: carry the attachments a moved task file names into a worktree that already exists (branch.enter's existing-worktree path skips carry_named_attachments)
+line	roadmap-dfs	W109	2026-10-25T05:14:03Z	first	1	minor	W109.8 · Minor findings from the review (an untested new_only guard; and W109.2 has no Hypothesis for leaving a changed, already-present task file or order.md in the main checkout on reuse, so ask the author whether a changed task file must reach a reused worktree too)
+line	roadmap-dfs	W109	2026-10-25T06:01:21Z	later	2	defect/maybe-introduced	W109.9 · Fix: carry only untracked attachments into a worktree that already exists, never one the main checkout tracks (W109.7's carry_named_attachments on the existing-worktree path moves a page tracked on the default branch out of the author's checkout, left deleted after the merge)
+line	roadmap-dfs	W109	2026-10-25T06:01:21Z	later	2	minor	W109.10 · Minor findings from the review (run.sh's brief-stop comment and message no longer say what reaches a worktree; the existing-worktree attachment move is silent on stderr)
+line	roadmap-dfs	W111	2026-10-28T04:20:25Z	first	1	defect	W111.7 added: list arrow/j/k handler hijacks the walk box selects
+line	roadmap-dfs	W111	2026-10-28T04:20:25Z	first	1	minor	W111.8 added: minor findings
+line	roadmap-dfs	W111	2026-10-28T04:31:23Z	later	2	defect/unplaced	W111.9 added: Esc does nothing on the run log and artefact views (they have a Back button and up() handles them)
+line	roadmap-dfs	W111	2026-10-28T04:31:23Z	later	2	minor	W111.10 added: minor findings
+line	roadmap-dfs	W113	2026-10-28T15:08:46Z	first	1	defect	W113.11 · Fix: an unmeasured session has no ceiling, because its turn count is -1
+line	roadmap-dfs	W113	2026-10-28T15:08:46Z	first	1	defect	W113.12 · Hypothesis: the window of a kiro session is the nearest of four fixed sizes
+line	roadmap-dfs	W113	2026-10-28T15:08:46Z	first	1	minor	W113.13 · Minor findings from the review
+line	roadmap-dfs	W114	2026-10-26T07:58:48Z	first	1	defect	W114.5 · Fix: close lost runs when the standalone web screen starts too (web.py run alone never calls close_lost, though it is the screen the README runs as a daemon), and only runs from the screen's own pid namespace (a screen on the host or in another container closes a containerised walk's live chains as lost)
+line	roadmap-dfs	W114	2026-10-26T07:58:48Z	first	1	minor	W114.6 · Minor findings from the review (compact/shelve write order, temp files left by SIGKILL, HEAD:<rel> path below the git toplevel, finished timestamp format, a WALK_STOP entry no walk reaches, a blank-line nit)
+line	roadmap-dfs	W114	2026-10-26T08:47:42Z	later	2	defect/unplaced	W114.7 · Fix: close a record whose chain died with a restarted container: the pidns guard skips every record from another namespace, and a container (the README's `sandbox daemon dfs-web`, the Goal's "restarted in a new container") comes back in a new one, so item 2 of the Goal no longer happens there
+line	roadmap-dfs	W114	2026-10-26T08:47:42Z	later	2	minor	W114.8 · Minor findings from the review (the standalone-page test calls close_lost_runs itself, so it cannot catch web.main dropping the call)
+line	roadmap-dfs	W114	2026-10-26T08:47:42Z	later	2	defect/introduced	W114.5 made a design choice without a Hypothesis: records without `pidns` are judged as before, and a record from another namespace is never closed. Ask the author whether one screen per repo across containers is supported at all, since that decides how much W114.7 must cover.
+line	roadmap-dfs	W115	2026-10-26T20:38:53Z	first	1	defect	W115.5 · Fix: the dialog's "who is signed in" is read once per server and never again (stale after a terminal sign-in, a lapsed login or a failed first read)
+line	roadmap-dfs	W115	2026-10-26T20:38:53Z	first	1	defect	W115.6 · Fix: `--no-walk` leaves the sign-in open, so anyone who can reach the page can replace the machine's claude login
+line	roadmap-dfs	W115	2026-10-26T20:38:53Z	first	1	minor	W115.7 · Minor findings from the review (misplaced flow comment, wrong expiry reason, double first read, README sandbox caveat, --no-walk help text, success path never exercised)
+line	roadmap-dfs	W116	2026-10-27T06:57:10Z	first	1	defect+reproduced	W116.9: a pull request merged while comment nodes are open strands their fix (pushed to the merged PR's branch, never on main, reads "merged", Open PR refused); reproduced.
+line	roadmap-dfs	W116	2026-10-27T06:57:10Z	first	1	defect+reproduced	W116.10: landing commits the log on local main unpushed, so the next merged PR cannot be fast-forwarded and the raise's advised `git pull --ff-only` fails too; reproduced.
+line	roadmap-dfs	W116	2026-10-27T06:57:10Z	first	1	defect	W116.11: `gh api .../pulls/<n>/comments` without --paginate reads only the first 30 line comments; later ones never become nodes.
+line	roadmap-dfs	W116	2026-10-27T06:57:10Z	first	1	defect	W116.12: a held task reads done, so the order's children start from a default branch without its code.
+line	roadmap-dfs	W116	2026-10-27T06:57:10Z	first	1	minor	W116.13: minor findings (closed PR status wording, poll-thread exceptions and busy race, GHE host, blocking P, README, a rewrapped comment).
+line	roadmap-dfs	W116	2026-10-27T06:57:10Z	first	1	assumption	Assumptions with no Hypothesis, for the author: W116.5 pushes only after a reviewed finish, not after every work session as W116.1's Hypothesis said (should the PR show work in progress?); W116.4 turns every comment, the author's own replies and bots' included, into a root node (filter by author?); W116.6 polls only while a walk is on (should the screen or web server watch without a walk?); W116.8 lands by fast-forward and never pushes the default branch (may the tool push it?); W116.2 counts a held task as done, so the order moves past it.
+line	roadmap-dfs	W116	2026-10-27T08:28:17Z	later	2	defect/introduced	W116.16: W116.15 left `@one_at_a_time` on `_landing_commit`, so `github.land` (fetch, ff/rebase of the main checkout, worktree and branch removal, commit) runs unlocked beside chains; during its replay HEAD is detached and a chain's `branch.enter` works its task in place in the main checkout. Verified by introspection.
+line	roadmap-dfs	W116	2026-10-27T08:28:17Z	later	2	minor	W116.17: minor findings (an unused parameter and wrong docstring in test_chain, README lines past the wrap width).
+line	roadmap-dfs	W116	2026-10-27T08:28:17Z	later	2	assumption	Assumptions with no Hypothesis, for the author: W116.15 has `land` rebase the author's unpushed commits on the main checkout by itself, as `git pull --rebase` would, and only raise on a clash (may the tool rewrite the author's local commits, or should any commit of theirs in the way be a raise?); W116.9 chose to hold work finished after a merge for a new pull request over raising when a merge lands over open comment nodes (is a second PR from the same task wanted?); W116.14 runs `git fetch --prune <remote>`, which also drops the author's other stale remote-tracking refs of that remote.
+line	roadmap-dfs	W116	2026-10-27T15:18:37Z	later	3	defect+test-gap/introduced	W116.19: `github.land` puts the task's paths back to HEAD in the main checkout before the fast-forward, so an author's uncommitted hand edit to `.dfs/items/<task>.md` is discarded with no raise (probed: edit gone, 0 raises); no test needs the put-back (all 14 landing tests pass without it).
+line	roadmap-dfs	W116	2026-10-27T15:18:37Z	later	3	minor	W116.20: minor findings (a squash merge after a prune is falsely kept as `dfs-merged/<task>` "holding work the pull request lacks", and a second such keep collides on the name).
+line	roadmap-dfs	W116	2026-10-27T15:18:37Z	later	3	assumption	Assumption with no Hypothesis, for the author: W116.18 leaves a landed task's log (`pr <url> merged` and the entries no commit held) uncommitted in the main checkout indefinitely; it reaches the remote only if the task is worked again (should it ride in a later pull request, or stay local?).
+line	roadmap-dfs	W116	2026-10-27T21:21:29Z	later	4	defect+reproduced/introduced	W116.21: a raise from `github.land` (or `closed`) stays open after its cause is put right and the watch lands (or resumes) the pull request, so a done-and-merged task reads `blocked, open raise`, and answering it makes the walk start a work session on a landed task; a reopened pull request's new comment nodes are never worked. Reproduced with a scratch Chain probe.
+line	roadmap-dfs	W116	2026-10-27T21:21:29Z	later	4	minor	W116.22: minor findings (README 93-94 ragged wrap, a second `gh pr view` under the lock for headRefOid, no GIT_TERMINAL_PROMPT/BatchMode on locked git network calls).
+line	roadmap-dfs	W116	2026-10-27T21:21:29Z	later	4	assumption	Assumption with no Hypothesis, for the author: W116.19 makes any uncommitted edit to the task's files in the main checkout block the landing until the author commits or stashes it (should a hand edit to the task's file instead be kept beside the carried log, landing anyway?).
+line	roadmap-dfs	W116	2026-10-28T02:28:02Z	later	5	defect/unplaced	W116.23: a PR comment node the author deletes is added again by the next watch (probed: delete W1.2, watch adds W1.5 with the same comment).
+line	roadmap-dfs	W116	2026-10-28T02:28:02Z	later	5	minor	W116.24: minor findings (settled raise still shown open in the TUI log pane, _push_held blames a moved branch for any push failure, GIT_SSH ignored by _git_net, substring tag match in _settle/_raise_once, gh has no timeout under the lock).
+line	roadmap-dfs	W116	2026-10-28T02:58:47Z	later	6	defect/maybe-introduced	W116.25 · Fix: a stalled git network call under the chains' lock holds every chain and stops the poll for good (_git_net has no timeout)
+line	roadmap-dfs	W116	2026-10-28T02:58:47Z	later	6	minor	W116.26 · Minor findings from the review
+line	roadmap-dfs	W116	2026-10-28T03:51:55Z	later	8	defect/maybe-introduced	W116.28: web Open PR holds the git lock then takes the web LOCK (writing=LOCK), while accept and delete_task hold LOCK then take the git lock, so an accept during a push deadlocks the web writes.
+line	roadmap-dfs	W116	2026-10-28T03:51:55Z	later	8	defect+reproduced/unplaced	W116.29: deleting a confirmed (shelved) PR comment node loses its mark (Approach is "archived." in the delete entry), so the next watch adds the comment again; reproduced.
+line	roadmap-dfs	W116	2026-10-28T03:51:55Z	later	8	minor	W116.30: minor findings (land docstring wrap, killed proc never reaped in _run_bounded, web test should cover an accept during Open PR).
+line	roadmap-dfs	W121	2026-10-28T01:40:14Z	first	1	defect	W121.4 added: the right-click node menu still offers Refute/confirm, Edit, Add under and Delete on an archived task.
+line	roadmap-dfs	W121	2026-10-28T01:40:14Z	first	1	minor	W121.5 added: minor findings from the review (note wording, no page test, undeclared readings of the Goal).
+line	roadmap-dfs	W123	2026-10-28T12:44:03Z	later	8	defect/unplaced	W123.15 added: the 900px redraw listener is gone, so the bar, scrim and sheet hint go stale when the window crosses 900px without crossing 1012px.
+line	roadmap-dfs	W123	2026-10-28T12:44:03Z	later	8	minor	W123.16 added: minor findings together.
+line	roadmap-dfs	W124	2026-10-28T09:46:31Z	first	1	defect	W124.6 added: opencode_turn leaks its temp files (stream and stderr) when a turn is stopped or times out.
+line	roadmap-dfs	W124	2026-10-28T09:46:31Z	first	1	minor	W124.7 added: minor findings, including missing Hypotheses on W124.2, W124.4 and W124.5 for the author to read.
+line	roadmap-dfs	W125	2026-10-28T00:55:21Z	first	1	defect+test-gap	W125.6 · Fix: the Models env test errors (int cap) and sits after the __main__ block so it never runs directly
+line	roadmap-dfs	W125	2026-10-28T00:55:21Z	first	1	minor	W125.7 · Minor findings from the review
+line	roadmap-dfs	W125	2026-10-28T01:02:54Z	later	2	defect/unplaced	W125.8 · Fix: a push redraws the walk box under a model field being typed in
+line	roadmap-dfs	W125	2026-10-28T01:02:54Z	later	2	minor	W125.9 · Minor findings from the review
+task	shop-app	W4	2026-10-20T13:32:30Z	issues	1	929599;4517064	
+task	shop-app	W8	2026-09-25T14:18:36Z	issues	1		
+task	shop-app	W12	2026-09-25T13:36:42Z	issues	1		
+task	shop-app	W13	2026-09-25T14:42:36Z	issues	17		
+task	shop-app	W14	2026-09-25T20:06:25Z	issues	7	0,0,0,0,0,0,649114;1006556	
+task	shop-app	W19	2026-09-25T21:01:37Z	issues	4	0,0,0,0;499807	
+task	shop-app	W20	2026-09-26T03:31:58Z	issues	6	0,1558721,1150783,1039922,944222,1287105;11339509	
+task	shop-app	W21	2026-10-02T09:07:33Z	ok	0	;16718482	
+task	shop-app	W25	2026-09-30T03:40:26Z	issues	2	2785835,2811143;8041867	
+task	shop-app	W26	2026-10-12T00:42:38Z	issues	1		
+task	shop-app	W28	2026-10-04T13:31:26Z	ok	0		
+task	shop-app	W29	2026-10-02T23:20:23Z	issues	5	0,0,0,0,0;1257603	
+task	shop-app	W30	2026-09-30T16:07:22Z	ok	0	;965005	
+task	shop-app	W31	2026-10-01T04:54:30Z	ok	0	;1040339	
+task	shop-app	W32	2026-10-01T17:42:26Z	issues	19	620867,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0;1519036	
+task	shop-app	W33	2026-10-01T18:51:03Z	ok	0	;1082632	
+task	shop-app	W34	2026-10-01T22:30:51Z	ok	0	;1109889	
+task	shop-app	W35	2026-10-02T11:27:52Z	issues	2	0,0;887606	
+task	shop-app	W36	2026-10-01T23:20:01Z	ok	0	;1949618	
+task	shop-app	W37	2026-10-02T03:45:51Z	issues	1	549504;5735264	
+task	shop-app	W38	2026-10-02T13:50:40Z	issues	1		
+task	shop-app	W39	2026-10-05T01:00:30Z	issues	7	7044690,0,2818490,0,2969156,1673999,0;17154784	
+task	shop-app	W41	2026-10-10T04:51:26Z	ok	0		
+task	shop-app	W42	2026-10-10T06:31:24Z	issues	8		
+task	shop-app	W43	2026-10-10T23:58:12Z	issues	1		
+task	shop-app	W44	2026-10-11T10:41:20Z	ok	0		
+task	shop-app	W45	2026-10-11T15:10:00Z	issues	1		
+line	shop-app	W4	2026-10-20T13:32:30Z	first	1	defect	W4.5 · Fix: wake the cash panel on all_trading_week. The carry made it an input of cash_query, and sse.js's HINT_QUERY_TABLES.cash_query was not updated, so query-shape-guards.spec.js fails and a calendar hint leaves the screen stale.
+line	shop-app	W4	2026-10-20T13:32:30Z	first	1	minor	W4.6 · Minor findings from the review: a duplicated comment block in cash_query.l, stale off-week placement prose in docs/views/cash.md, and W4.3/W4.4 assumptions with no Hypothesis. W4.3 ignores a stored start count rather than letting it override the carry, so cash moved between one week's end and the next week's start can only be recorded by editing last week's end count; ask the author whether that is right. W4.4 drops the upper-third bound on the counter for off-weeks.
+line	shop-app	W8	2026-09-25T14:18:36Z	first	1	defect	W8.1: sync-flow.sysml's "DO NOT FIX … no spec asserts that an adoption happened" was made false by 7257e0e, which gave the adoption edge its @Probe right below it.
+line	shop-app	W8	2026-09-25T14:18:36Z	first	1	defect	W8.2: the ordering edge's @Noted reason (and its baseline copy and drill string) hands the predicate to W15, which is closed without it, so no task owns it. The Goal's "five probed and two noted" count is stale too.
+line	shop-app	W12	2026-09-25T13:36:42Z	first	1	defect	W12.2: docs/epic-sysml-config-matrix.md:147-155 still lists W12 unticked and says every evidence path is a browser file and that syncReplayOutcome is at `implemented`. Both have been false since 239f234.
+line	shop-app	W13	2026-09-25T14:42:36Z	first	1	defect	W13.1: syncOfflineAttribution and syncDownloadAttribution are `exercised` on @Evidence alone, with no cell. The joint report lists them among "no scenario in any configuration" without their status, so an exercised obligation with no checked configuration still reads green.
+line	shop-app	W13	2026-09-25T18:04:17Z	later	2	defect/unplaced	W13.1: the author answered (a) to the evidence-only `exercised` raise, and nothing implements it. The checker still accepts @Evidence alone, and syncOfflineAttribution and syncDownloadAttribution are still `exercised` with no cell.
+line	shop-app	W13	2026-09-26T05:56:48Z	later	3	defect/unplaced	W13.4: the evidence-only drill depends on syncOfflineAttribution carrying @Evidence and no scenario, and never asserts it, so removing that @Evidence would quietly stop it testing the evidence-only branch.
+line	shop-app	W13	2026-09-27T02:58:37Z	later	4	defect/unplaced	W13.5: the model-check output prints the full obligation/gap listing straight after "N obligations with no scenario in any configuration", with no heading, so exercised obligations with cells read as members of the no-scenario list. Both the 18:04 raise and W13.2's evidence misread it this way.
+line	shop-app	W13	2026-09-27T03:09:48Z	later	5	defect/unplaced	W13.7: with a listing that selects no project for sync-contract.spec.js, model-check exits 0 and prints syncWriteInstant's four cells as `ran … (no project selects it)`, so the obligation stays exercised with no run.
+line	shop-app	W13	2026-09-27T03:09:48Z	later	5	defect/unplaced	W13.8: the browser summary says "ran in" from a --list listing (selection, not a run) and leaves out scenarios with no browser, so it read "no scenario ran in any other" while four ran nowhere.
+line	shop-app	W13	2026-09-27T03:16:28Z	later	6	defect/unplaced	W13.9: the `(no project selects it)` label and the summary's `or "none"` in report are unreachable since W13.7 refuses that state, so they are leftover code describing a refused state.
+line	shop-app	W13	2026-09-27T03:16:28Z	later	6	defect/unplaced	W13.10: W13.8's rewording missed two places: the playwright.config.js comment and the no-listing line both still say "ran in" about what is selection.
+line	shop-app	W13	2026-09-27T03:16:28Z	later	6	defect/unplaced	W13.11: the pre-commit hook runs W13.7's refusal only when the model or playwright config is staged, so skipping every test in a scenario's cited spec commits green and the obligation stays exercised.
+line	shop-app	W13	2026-09-27T03:24:34Z	later	7	defect/unplaced	W13.12: the hook comment still says the config alone decides selection (contradicted by W13.11's own next sentence), and the sysml skill says only model commits take the full lane, omitting playwright.config.js, specs and --suite-listing auto.
+line	shop-app	W13	2026-09-27T03:24:34Z	later	7	defect/unplaced	W13.13: nothing drills the hook's lane choice, so reverting W13.11's spec pathspec puts spec commits back on --fast with every suite green.
+line	shop-app	W13	2026-09-27T03:29:55Z	later	8	defect/unplaced	W13.14: W13.7's refusal is per spec file, so removing one scenario's generated test (queueConservedRefused) from a multi-scenario spec leaves model-check exiting 0 and printing that scenario's cell as `ran … (chromium)`.
+line	shop-app	W13	2026-09-27T03:29:55Z	later	8	defect+test-gap/maybe-introduced	W13.15: the lane drill keeps helpers.js on --fast because "a helper cannot move what a listing reports", but a throw in fixtures.js (which every scenario spec imports) empties the listing, and that commit never runs the refusal.
+line	shop-app	W13	2026-09-27T08:55:53Z	later	9	defect/unplaced	W13.21: under --suite-report a trace scenario whose own test FAILED counts as ran, so a run that observed a different cell (W13.17's three localMode scenarios) still prints that cell as ran in chromium.
+line	shop-app	W13	2026-09-27T08:55:53Z	later	9	defect/unplaced	W13.22: scripts/check-plan-keys.hs says scripts/check-plan-keys.sh runs it, and no such file exists; the flake app and the hook do.
+line	shop-app	W13	2026-09-27T09:04:59Z	later	10	defect/present	W13.23: the commit-time plan-key check (W13.18) covers only the server's ApplyPlan.hs. A key mapped on the server but not in localdb-core.mjs's PLAN_KEYS commits green and ends local mode on every device, which is W13.17's fault. Only the Playwright suite catches it.
+line	shop-app	W13	2026-09-27T09:13:59Z	later	11	defect/unplaced	W13.24: the pre-commit failure line says "the server refuses a write plan" even when the browser half (W13.23) refused, and the flake app's header and usage line still describe a server-only check and leave out --core.
+line	shop-app	W13	2026-09-27T12:18:08Z	later	12	defect/unplaced	W13.26: the pre-commit plan-key check (W13.18/W13.23) compiles and loads the WORKING TREE, not the staged content, so a staged emitter key with its mapping left unstaged commits green and HEAD's backend refuses its plans at boot; the hook and the flake header do not say which one it checks.
+line	shop-app	W13	2026-09-27T13:22:12Z	later	13	defect/maybe-introduced	W13.28: dfs_check's archive rule is a substring match over the whole archive, so a removed evidence line passes whenever its text occurs inside any other archived line (checked: `for: it ran` removed, archive holding only `for: it ran on nothing, in fact`, returns clean).
+line	shop-app	W13	2026-09-27T13:22:12Z	later	13	defect/maybe-introduced	W13.29: the archive now holds the only copy of 18 nodes' evidence and dfs_check never reads it against HEAD, so archived evidence can be edited or deleted with `clean`; and an unstaged archive copy passes the hook, since dfs_check reads the working tree.
+line	shop-app	W13	2026-09-27T13:28:05Z	later	14	defect/maybe-introduced	W13.30: dfs_check checks an archive only for tasks that still exist, so a commit deleting both .dfs/items/W13.md and its archive passes clean (checked in a scratch clone), losing the only copy of 18 nodes' evidence.
+line	shop-app	W13	2026-09-27T13:28:05Z	later	14	defect/introduced	W13.31: check_archive compares line multisets, so reordering the archive passes clean. Swapping the W13.18 and W13.19 Evidence headings re-attributes each node's evidence to the other (checked in a scratch clone).
+line	shop-app	W13	2026-09-27T17:15:56Z	later	15	defect/maybe-introduced	W13.34 · the task archives have no merge driver, so two branches appending evidence or a compacted log to one archive conflict at its end; dfs_merge's docstring and README still say the log merges by union with nothing lost
+line	shop-app	W13	2026-09-27T17:34:19Z	later	16	defect/introduced	W13.38 (Parent W13.34): merge_archive's byte-exact prefix makes compact on an archive ending in blank lines (W23's does today) a false "edited above the common end" conflict
+line	shop-app	W13	2026-09-27T17:34:19Z	later	16	defect/introduced	W13.39 (Parent W13.35): two branches moving the same node whole merge to an archive with its Plan and Hypothesis twice; drop_held dedupes only `- ` items
+line	shop-app	W13	2026-09-27T17:34:19Z	later	16	defect+reproduced/unplaced	W13.40 (Parent W13.36): git rebase and cherry-pick run the .dfs drivers and no hook, so their output lands unjudged; reproduced with an out-of-order driver
+line	shop-app	W13	2026-09-27T17:49:52Z	later	17	defect/unplaced	W13.41 (Parent W13.40): the refusal from dfs-judge-commits and post-rewrite says to undo with `git reset --hard`. After a cherry-pick in a tree holding other tasks' uncommitted work, that discards the work, so it should say `git reset --keep` and have a drill with a dirty tree.
+line	shop-app	W14	2026-09-25T20:06:25Z	first	1	defect	W14.3: new cell-copy guard failed 2 of 2 runs beside deploy-window.spec.js at 3 lanes (12/12 on its own). Load or neighbour cause not isolated.
+line	shop-app	W14	2026-09-25T20:06:25Z	first	1	defect	W14.6: epic says the tiers were fixed before any family was walked (false for W8), and that every stubbed failure in the 44 specs is a 502 (400/404/500/401 are stubbed too).
+line	shop-app	W14	2026-09-25T20:06:25Z	first	1	defect	W14.6: epic table has no blank lines around it inside a list item, so the next paragraph likely renders as table rows (not rendered to check).
+line	shop-app	W14	2026-09-25T20:06:25Z	first	1	defect	W14.4: the promised side observation, the stale "a 5xx" sentence in AGENTS.md:297 and sync-invariants.md:270, was never recorded in W14.6.
+line	shop-app	W14	2026-09-27T22:20:45Z	later	2	defect/unplaced	W14.11: the new cell-copy guard is red whenever any of 8 item-creating specs runs beside it, so it has no teeth in the normal suite. W14.9's mechanism (live insert, then renderRows, then clearCellSelection) was inferred with load not held constant. The spec comment cites W14.7 for a W14.9 measurement.
+line	shop-app	W14	2026-09-27T22:20:45Z	later	2	defect/unplaced	W14.12: sync-invariants.md still says "Every write goes through postJson", but doFlush has its own classifier copy (W14.5), and W14.8 rewrote the sentence without fixing that.
+line	shop-app	W14	2026-09-28T02:41:36Z	later	3	defect/unplaced	W14.19: the epic still says the supplier move and the create are bare fetches that fail, in the present tense, and it leaves out W14.18's box-size (B).
+line	shop-app	W14	2026-09-28T02:41:36Z	later	3	defect/unplaced	W14.20: a rename that landed but whose answer was lost is also "put back", which would double the week's order. Not yet measured.
+line	shop-app	W14	2026-09-28T02:41:36Z	later	3	defect+test-gap/unplaced	W14.21: no test drives the buying table's supplier cell, a unit move, or a rejected fetch against the new move paths.
+line	shop-app	W14	2026-09-28T02:41:36Z	later	3	defect/unplaced	W14.22: renderSupplierCell keeps an unreachable bare-fetch branch, and two comments are false (the vacate "above", and saveRow's "resolves false" against saveRowOnBaseEdge's held path).
+line	shop-app	W14	2026-09-28T02:41:36Z	later	3	defect/unplaced	W14.23: the playwright.config.js comment added in ff4e94f opens with an ellipsis.
+line	shop-app	W14	2026-09-29T04:40:24Z	later	4	defect/unplaced	W14.27: a sourcing move whose vacate landed but lost its answer (504, rejected after send) aborts with no put-back, so the week's order is zeroed while the screen says nothing happened
+line	shop-app	W14	2026-09-29T04:40:24Z	later	4	defect/unplaced	W14.28: the epic's score bullet calls W8 a test, names the classifier flushOutbox where the other docs say doFlush, and does not say its two (A) holes are now guarded
+line	shop-app	W14	2026-09-29T04:42:53Z	later	5	defect/unplaced	W14.29: the epic's score bullet and AGENTS.md say every sourcing-move fault is fixed and guarded, but the table's supplier cell (W29.1) is unguarded and a lost vacate answer (W29.4) still zeroes the order
+line	shop-app	W14	2026-09-29T04:49:42Z	later	6	defect/unplaced	W14.30: in local mode, a box-size move whose second half gets a 502 intermittently leaves the device holding the new pairing and its order, which the server never got (supplier-move-deploy-window.spec.js line 107 red 3 of 10 attempts, one held as drift)
+line	shop-app	W14	2026-09-29T11:29:39Z	later	7	defect/unplaced	W14.32: the epic's score bullet and AGENTS.md say two sourcing-move things are open in W29, but W29.3 and W29.5 are open too, and W29.5 went red again in this review (chromium-local box-size put-back, 1 of 51)
+line	shop-app	W14	2026-09-29T11:29:39Z	later	7	defect/unplaced	W14.33: the epic's W14 roadmap entry is still unticked and lists candidates, though the tree says the score is in the findings
+line	shop-app	W19	2026-09-25T21:01:37Z	first	1	defect	W19.9: drift-worker-death.spec.js fails when an app-started drift check is in flight at the kill (seen at 3 lanes beside hydrating specs; 2/2 green alone): the cell is not entered.
+line	shop-app	W19	2026-09-25T21:01:37Z	first	1	defect	W19.7: phase2-offline-resume.spec.js "expected failure" came from its own threshold-vs-completion race while the fill was running (hints from other lanes). test.fail() cannot be trusted to go red on the fix, and pool-switch-outbox has the same assert-last weakness.
+line	shop-app	W19	2026-09-25T21:01:37Z	first	1	defect	W19.4: historyCompleteOnline and historyCompleteOffline cite tests that never wait for phase 2, so `complete` is not established.
+line	shop-app	W19	2026-09-25T21:01:37Z	first	1	defect	W19.4: workerAliveView is covered by a server-mode run, which has no worker.
+line	shop-app	W19	2026-09-25T21:01:37Z	first	1	defect	W19.1: only the five chosen pairs have a recorded reason; nothing says why the other pairs (e.g. DriftHeld × OutboxSubstrate, whose drift check requires an empty outbox) are not worth crossing.
+line	shop-app	W19	2026-09-28T08:44:29Z	later	2	defect/unplaced	W19.20: the base-substrate covers (workerAliveBase, workerAliveBaseAwaiting, poolClaimedBaseAwaiting, poolClaimedBase) never assert the substrate, so a declined apply passes them
+line	shop-app	W19	2026-09-28T08:44:29Z	later	2	defect/unplaced	W19.21: pool-switch-outbox and phase2-offline-resume are titled with the fixed behaviour while asserting the hole
+line	shop-app	W19	2026-09-28T08:44:29Z	later	2	defect/unplaced	W19.22: docs/epic-sysml-config-matrix.md's W19 entry still says the control came out walked, and omits W19.19's cover finding and W19.17's pool finding
+line	shop-app	W19	2026-09-28T08:44:29Z	later	2	defect/unplaced	W19.23: .claude/skills/sysml/SKILL.md's model-file table does not list sync-machines.sysml
+line	shop-app	W19	2026-09-28T08:44:29Z	later	2	defect/unplaced	W19.24: the outbox entry machine's held-for-a-person state is neither declared nor excluded with a reason
+line	shop-app	W19	2026-09-28T08:44:29Z	later	2	defect/unplaced	W19.25: local-worker-death's first test keeps step 3, which its own comment says cannot fail
+line	shop-app	W19	2026-09-28T16:48:03Z	later	3	defect/unplaced	W19.29: known-hole specs, model reasons, baseline and epic still name closed W19.8/W19.10/W19.28 (and bare W28) as the fix, not W28.1-W28.4
+line	shop-app	W19	2026-09-28T16:48:03Z	later	3	defect/unplaced	W19.30: the model routes the sticky-fault hole into poolOfflineWalkedOn, which stays @CoveredBy at suite on a test that wants the fault
+line	shop-app	W19	2026-09-28T16:48:03Z	later	3	defect/unplaced	W19.31: drift-held-outbox never asserts substrate base / awaiting 0 at the press, so held x view passes as held x base; header misstates the order
+line	shop-app	W19	2026-09-28T17:09:56Z	later	4	defect/unplaced	W19.32: W28.1's plan names only the rebuild route and its spec; the boot-time walk-on (local-pool-walkon known-hole test, poolOfflineWalkedOn) is missing from it
+line	shop-app	W19	2026-09-28T17:09:56Z	later	4	defect/unplaced	W19.33: local-pool-walkon.spec.js header and offline-test comment still present the sticky fault as intended and list three tests, not four
+line	shop-app	W20	2026-09-26T03:31:58Z	first	1	defect	W20.7: emitted query scopes omit known synced message and cash inputs
+line	shop-app	W20	2026-09-26T03:31:58Z	first	1	defect	W20.8: the sheets daemon and probes duplicate the artifact-owned deferred-table list
+line	shop-app	W20	2026-09-26T03:31:58Z	first	1	defect	W20.9: runtime comments still call burndown the sole sale-history consumer
+line	shop-app	W20	2026-09-29T16:30:21Z	later	2	defect/maybe-introduced	W20.23 added: cash_query's `partial` runs over a half-filled shop_sale between phase-2 chunks (PENDING_TABLES holds until the last chunk), so the Cash panel can show a wrong non-null register figure; the proof only ran empty vs full.
+line	shop-app	W20	2026-09-29T16:30:21Z	later	2	defect/introduced	W20.24 added: partial_answer_test.py, view_scope_test.py and read_scope_test.py are run by nothing (no hook, no build, no spec), so a Coalesce in cash_query.l ships green; only the declaration's presence is checked at boot.
+line	shop-app	W20	2026-09-29T16:30:21Z	later	2	defect/introduced	W20.25 added: W20.15 wrote an ellipsis (`cash_count(...)`) into a difftest_views.py comment, which AGENTS.md forbids.
+line	shop-app	W20	2026-09-29T21:45:26Z	later	3	defect/maybe-introduced	W20.28: deferrableTables never sees the compiled delta rules (artifact.deltas), a fourth reader family of base tables with no read_tables, so the check does not cover the whole artifact
+line	shop-app	W20	2026-09-29T21:57:17Z	later	4	defect/unplaced	W20.29: deferrableTables' delta loop (W20.28) has no committed test; local-core-unit.spec.js covers views/writes/queries only, so removing it fails nothing
+line	shop-app	W20	2026-09-29T21:57:17Z	later	4	defect/maybe-introduced	W20.30: a view, write or query with no read_tables is accepted by deferrableTables (defaults to []), while a scope-less delta refuses; make all four families refuse
+line	shop-app	W20	2026-09-29T22:19:43Z	later	5	defect/maybe-introduced	W20.31: ensureDeferrable's refusal says "has no absence answer" for a reader refused because it has no read_tables, including a query that declares partial
+line	shop-app	W20	2026-09-29T22:31:21Z	later	6	defect/maybe-introduced	W20.32: the Cash panel explains a pending `shop_sale` null as a week the registers can never answer, and local-two-phase.spec.js asserts that sentence
+line	shop-app	W25	2026-09-30T03:40:26Z	first	1	defect	W25.5: policyTermsCache (detail.js, /api/pricing/policy-terms) is cleared only by this client's own edits, never by a hint, and does not declare that it does not follow one. So an open pricing sheet can explain a new policy price with the old terms.
+line	shop-app	W25	2026-09-30T03:40:26Z	first	1	minor	W25.6: minor findings. A fetch in flight across a hint can put the pre-hint answer back in the pairing and burndown caches. An open sheet's detailState.itemSuppliers is not re-asked after a hint. W25.4's determination narrows "every cache over a query" to compiled queries.
+line	shop-app	W25	2026-09-30T08:16:34Z	later	2	defect/unplaced	W25.8: the burndown's in-flight refusal bumps gen only when the cache held a key, so a curve in flight with a null key (the state its own spec builds) is put back; the spec failed 1 of 3 on committed code and passes only when a second hint flush arrives.
+line	shop-app	W25	2026-09-30T08:16:34Z	later	2	minor	W25.9: minor findings (policy terms' in-flight week check, registry reloads with no generation, two unmeasured repaints).
+line	shop-app	W26	2026-10-12T00:42:38Z	first	1	defect	W26.8 · Fix: make every declared protocol transition executable and trace-checked
+line	shop-app	W26	2026-10-12T00:42:38Z	first	1	defect	W26.9 · Fix: implement the Goal’s identity, week and absence types
+line	shop-app	W26	2026-10-12T00:42:38Z	first	1	defect	W26.10 · Fix: project complete transition records into the typed protocol interface
+line	shop-app	W26	2026-10-12T00:42:38Z	first	1	defect	W26.11 · Fix: keep generated reader files inside the output directory
+line	shop-app	W26	2026-10-12T00:42:38Z	first	1	minor	W26.12 · Minor findings from the review
+line	shop-app	W29	2026-10-02T23:20:23Z	first	1	defect	W29.6 · Reconcile a skipped sourcing put-back while Buying is inactive
+line	shop-app	W29	2026-10-02T23:20:23Z	first	1	minor	W29.7 · Minor findings from the review
+line	shop-app	W29	2026-10-04T04:49:26Z	later	2	defect/unplaced	W29.10 · Keep the restored pairing focused when its replay answer is lost
+line	shop-app	W29	2026-10-04T06:48:26Z	later	3	defect/unplaced	W29.11 · Reconcile a genuinely skipped restoration after its answer is lost
+line	shop-app	W29	2026-10-04T06:48:26Z	later	3	minor	W29.12 · Minor findings from the review
+line	shop-app	W29	2026-10-04T14:05:41Z	later	4	defect/unplaced	W29.13 · Preserve lost-answer reconciliation across the server deploy — W29.10 assumed the response-status rename could deploy atomically with its client; ask the author whether mutation responses must remain backward-compatible for already-loaded pages, with yes recommended because the Goal is explicitly a deploy-window guarantee.
+line	shop-app	W29	2026-10-04T14:05:41Z	later	4	minor	W29.14 · Minor findings from the review — update the remaining high-water duplicate wording to distinguish no-op execution from the `replayed` response status.
+line	shop-app	W29	2026-10-04T18:46:31Z	later	5	defect/unplaced	W29.15 · Preserve an applied restoration for a legacy page across deploy
+line	shop-app	W29	2026-10-04T18:46:31Z	later	5	minor	W29.16 · Minor findings from the review — three stale replay-status descriptions; W29.13 assumed loaded-page compatibility and capability negotiation without a Hypothesis, so ask the author to confirm both.
+line	shop-app	W32	2026-10-01T17:42:26Z	first	1	defect	W32.3 added: the pricing grid row's reg-mismatch mark is never repainted by mergeLiveRows, so the ⚠ stays on the row after the tills are in step until a refresh.
+line	shop-app	W32	2026-10-01T17:42:26Z	first	1	minor	W32.4 added: minor findings (test drives mergeLiveRows directly; the "re-save the price" wording was never seen on screen).
+line	shop-app	W32	2026-10-13T21:30:21Z	later	2	defect/unplaced	W32.7 added: bind suppression to the exact unanswered save so dirty, refused, and overlapping saves cannot hide or prematurely restore a real mismatch.
+line	shop-app	W32	2026-10-13T21:30:21Z	later	2	defect/unplaced	W32.8 added: suppress the same in-flight mismatch in the pricing row mark, header and mismatch-only filter, not only the detail line.
+line	shop-app	W32	2026-10-13T21:30:21Z	later	2	defect/unplaced	W32.9 added: record W32.5's missing request-boundary hypothesis and consolidate the response-path test, leaked status, tracked screenshot, and stale Summary findings.
+line	shop-app	W32	2026-10-13T22:17:22Z	later	3	defect/present	W32.10 added: generic `saveRow` pricing writes, including the Retail grid cell and register-affecting undos, bypass request tracking and expose the transient mismatch in the row, header and mismatch-only filter before the response.
+line	shop-app	W32	2026-10-13T22:17:22Z	later	3	defect/unplaced	W32.11 added: correct the Summary's claim about unrelated mismatches during a pending same-row save.
+line	shop-app	W32	2026-10-14T03:54:38Z	later	4	defect/unplaced	W32.13 added: restore the pricing row warning after its tracked save answers on another view and Pricing reuses its persistent DOM.
+line	shop-app	W32	2026-10-14T07:56:39Z	later	5	defect/unplaced	W32.15 added: deferred pricing repaint identities survive cache-invalidated returns and can accumulate across distinct off-view saves.
+line	shop-app	W32	2026-10-14T14:06:40Z	later	6	defect/unplaced	W32.17 added: keep a queued local pricing save suppressed until its exact mutation answers.
+line	shop-app	W32	2026-10-14T14:06:40Z	later	6	defect/unplaced	W32.18 added: correct the overstated Summary and record the missing queue-lifetime hypothesis.
+line	shop-app	W32	2026-10-14T14:36:39Z	later	7	defect/unplaced	W32.19 added: a second tab can process or hold the shared queued mutation while the originating tab keeps its pricing suppression token and answer waiter after the queue is empty.
+line	shop-app	W32	2026-10-14T14:36:39Z	later	7	defect/unplaced	W32.20 added: correct the Summary's cross-tab overstatement when W32.19 is fixed.
+line	shop-app	W32	2026-10-15T02:26:42Z	later	8	defect/unplaced	W32.22 added: a tab-local in-flight guard lets another tab reuse the same shared mutation id, so the earlier response deletes the later price and falsely settles its suppression token.
+line	shop-app	W32	2026-10-15T02:26:42Z	later	8	defect/introduced	W32.23 added: `answerPages` grows without bound across page owners, while the 64-entry early-answer cap can discard an outcome and leave a live suppression token pending forever.
+line	shop-app	W32	2026-10-15T02:26:42Z	later	8	defect/introduced	W32.24 added: W32.5, W32.10 and W32.18 exclude offline queued edits without a `Hypothesis:`; ask whether the same-page reconnect interval belongs inside the Goal.
+line	shop-app	W32	2026-10-15T11:49:17Z	later	9	defect/unplaced	W32.26 added: retain same-row suppression when an online pricing request gets no answer and its edit moves into the outbox.
+line	shop-app	W32	2026-10-15T11:49:17Z	later	9	defect/unplaced	W32.27 added: allocate mutation ids atomically so concurrent tabs cannot share an identity, lose a later price, or settle the wrong suppression owner.
+line	shop-app	W32	2026-10-15T11:49:17Z	later	9	defect/unplaced	W32.28 added: record the unmarked W32.10 and W32.25 scope assumption and ask whether new sale-item creation is part of "sale item changes".
+line	shop-app	W32	2026-10-15T16:45:39Z	later	10	defect/unplaced	W32.30 added: serialize cross-tab coalescing through the durable put so reversed put completion cannot lose the later price, its retry, or its suppression outcome.
+line	shop-app	W32	2026-10-15T16:45:39Z	later	10	defect/unplaced	W32.31 added: make the rebuilt off-view regression authoritative and remove its duplicate fixture key.
+line	shop-app	W32	2026-10-15T17:32:37Z	later	11	defect/unplaced	W32.32 added: serialize same-key queued sale-item creation so reversed cross-tab puts cannot strand the later creating page's exact answer waiter and pricing suppression token.
+line	shop-app	W32	2026-10-15T17:32:37Z	later	11	defect/unplaced	W32.33 added: close stale version-2 IndexedDB connections so a deployed old tab cannot block a new tab's version-3 outbox and pricing queue fallback indefinitely.
+line	shop-app	W32	2026-10-16T04:07:43Z	later	12	defect/unplaced	W32.35 added: let a surviving coalesced base-edge pricing save reach its own answer after the earlier tab closes.
+line	shop-app	W32	2026-10-16T04:07:43Z	later	12	defect/unplaced	W32.36 added: W32.32 made the unmarked assumption that same-name creation payloads are one act; the later payload is lost, so preserve it past the earlier response and ask the author whether queued creation order must match sequential online POSTs.
+line	shop-app	W32	2026-10-16T04:07:43Z	later	12	defect/unplaced	W32.37 added: handle a blocked outbox upgrade before a pricing save is reported saved or queued.
+line	shop-app	W32	2026-10-16T04:07:43Z	later	12	defect/unplaced	W32.38 added: close the stale atomicity comment and dead forced-put test scaffolding.
+line	shop-app	W32	2026-10-16T09:20:50Z	later	13	defect/unplaced	W32.40 added: preserve a later different same-name creation through the earlier response; W32.39 assumed without a Hypothesis that every same-name payload is one act, so ask the author whether a later differing payload may be discarded or must follow sequential online POST semantics.
+line	shop-app	W32	2026-10-16T09:20:50Z	later	13	defect/maybe-introduced	W32.41 added: align `outbox.js` operation-coalescing comments with the semantics chosen by the fix.
+line	shop-app	W32	2026-10-16T12:45:29Z	later	14	defect/unplaced	W32.43: a rejected local detail enqueue applies the base write before reporting failure.
+line	shop-app	W32	2026-10-16T12:45:29Z	later	14	defect/unplaced	W32.44: the Pricing save description is stale and the queued-creation regression is timing-sensitive.
+line	shop-app	W32	2026-10-16T14:39:06Z	later	15	defect/unplaced	W32.45 added: keep an unanswered local detail save durable; W32.43 assumed without a Hypothesis that an online local detail edit may remain only in page memory until the direct response, so ask the author whether that narrowing of the durable-before-apply local-mode contract was intended.
+line	shop-app	W32	2026-10-16T14:39:06Z	later	15	defect/unplaced	W32.46 added: stabilize the blocked-upgrade regression's local boot and four-field timing budget.
+line	shop-app	W32	2026-10-17T10:31:57Z	later	16	defect/unplaced	W32.50 · held local Active, Category and Sale unit saves report failure but remain applied in the local base and return on refresh; W32.49's Retail-only check assumed those reverting handlers shared its outcome, so the author should confirm whether held detail edits stay visibly applied or roll back both layers.
+line	shop-app	W32	2026-10-17T15:27:16Z	later	17	defect/unplaced	W32.51 · bind held rollback to the exact mutation answer.
+line	shop-app	W32	2026-10-19T00:57:31Z	later	18	defect/unplaced	W32.53 · a refused local queued sale-item creation remains in the device base after discard and restores a false tills-out-of-date warning.
+line	shop-app	W32	2026-10-19T00:57:31Z	later	18	defect/unplaced	W32.54 · make the exact-answer regression assert stable state, correct saveRow's stale return contract, and present W32.5's unmarked response-boundary assumption to the author.
+line	shop-app	W32	2026-10-19T14:20:20Z	later	19	defect/unplaced	W32.55 — a held local Pricing cell undo has no rollback baseline, falls out of local mode, and leaves the rejected optimistic price event in the local base.
+line	shop-app	W35	2026-10-02T11:27:52Z	first	1	defect	W35.5 · Suppress neighbouring selection for every drag handle
+line	shop-app	W35	2026-10-02T11:27:52Z	first	1	minor	W35.6 · Minor findings from the review
+line	shop-app	W35	2026-10-02T12:37:17Z	later	2	defect/unplaced	W35.8 · Cover neighbouring selection on every drag-handle surface
+line	shop-app	W35	2026-10-02T12:37:17Z	later	2	minor	W35.9 · Minor findings from the review
+line	shop-app	W37	2026-10-02T03:45:51Z	first	1	minor	Added W37.5 (Stock column is off-screen on a 390px phone) and W37.6 (minor findings: stale "multiplier LAST" comment and doc, sheet vs row figure not kept in step by any spec, stale cached rows draw a dash).
+line	shop-app	W38	2026-10-02T13:50:40Z	first	1	defect	W38.4 · Make hash-seed guards preserve the client resync watermark
+line	shop-app	W38	2026-10-02T13:50:40Z	first	1	minor	W38.5 · Minor findings from the review
+line	shop-app	W39	2026-10-05T01:00:30Z	first	1	defect	W39.5 added: syncMutationOutcome and the invariants doc say skipped is never an unconditional entry's answer, but applyMutations answers a legacy page's repeat of any unconditional entry with skipped, and nothing reads it.
+line	shop-app	W39	2026-10-05T01:00:30Z	first	1	defect	W39.6 added: the fate of the compensation itself after a refused rename (put-back unanswered, put-back refused) is neither a cell nor guarded.
+line	shop-app	W39	2026-10-05T01:00:30Z	first	1	minor	W39.7 added: minor findings (overclaimed teeth, status not read in four restoration cells, a doc blank line, one first-attempt failure, assumptions without a Hypothesis).
+line	shop-app	W39	2026-10-07T05:19:56Z	later	2	defect/unplaced	W39.15 added: refused atomic replays lose operation identity and can leave Notes server, device and screen in different states with no working conflict action.
+line	shop-app	W39	2026-10-07T05:19:56Z	later	2	defect/unplaced	W39.16 added: direct atomic endpoints can answer failure after commit, while both clients treat that answer as proof the operation did not land and queue no replay.
+line	shop-app	W39	2026-10-07T05:19:56Z	later	2	defect/unplaced	W39.17 added: two supplier-move status guards failed their first Chromium-local attempts in the full focused run and passed on retry and in isolation.
+line	shop-app	W39	2026-10-07T10:10:44Z	later	3	defect/unplaced	W39.20 added: reconcileActState ends local mode and records a version-wide fault when a table refill fails on the network.
+line	shop-app	W39	2026-10-07T10:10:44Z	later	3	minor	W39.21 added: minor findings (a racy immediate read in note-move-atomic that failed both attempts under load, outcomeUnknown's wider-than-documented catch-all, holdRejections now letting a dropMutation rejection escape, the unrun lost-commit classification carried without a Hypothesis).
+line	shop-app	W39	2026-10-09T01:02:54Z	later	4	defect/unplaced	W39.24 · Fix: preserve a refused atomic operation's held decision across reload
+line	shop-app	W39	2026-10-09T01:02:54Z	later	4	defect/unplaced	W39.25 · Fix: retry an atomic refusal's authoritative read before exposing the held choice
+line	shop-app	W39	2026-10-09T01:02:54Z	later	4	defect/unplaced	W39.26 · Fix: propagate replayed order item changes to Google Sheets
+line	shop-app	W39	2026-10-09T01:02:54Z	later	4	minor	W39.27 · Minor findings from the review: W39.11 assumes the process-wide writer gate is the required concurrency boundary for atomic PostgreSQL moves
+line	shop-app	W39	2026-10-09T07:45:59Z	later	5	defect/maybe-introduced	W39.28 · Fix: a plan refusal is answered may_have_landed, so a refused item change is queued and retried for ever
+line	shop-app	W39	2026-10-09T07:45:59Z	later	5	minor	W39.29 · Minor findings from the review (stale docs, shared refill-debt key across tabs, hidden decision when off-screen, one flaky local case)
+line	shop-app	W39	2026-10-09T09:42:14Z	later	6	defect/unplaced	W39.30 · Fix: an owed authoritative read is not retried when the week changes, so a refusal for another week stays hidden
+line	shop-app	W39	2026-10-09T09:42:14Z	later	6	minor	W39.31 · Minor findings from the review
+line	shop-app	W39	2026-10-09T11:35:56Z	later	7	defect/unplaced	W39.33: a later settled batch entry advances the high-water mark past an earlier transient error, so its retry is mislabeled replayed and lost.
+line	shop-app	W39	2026-10-09T11:35:56Z	later	7	defect/unplaced	W39.34: an atomic item change replayed after a customer move pulls the line back onto the stale customer order.
+line	shop-app	W39	2026-10-09T11:35:56Z	later	7	defect/unplaced	W39.35: a refused item change initiated from Invoicing hides its held choice until Orders is opened.
+line	shop-app	W39	2026-10-09T11:35:56Z	later	7	defect/unplaced	W39.36: the W39 documentation adds a prohibited omission made from three full stops.
+line	shop-app	W42	2026-10-10T06:31:24Z	first	1	defect	W42.4 · Fix: pin the whole counter inside the viewport's upper third
+line	shop-app	W42	2026-10-10T06:31:24Z	first	1	defect	W42.5 · Fix: keep counter feedback and actions visible while counting
+line	shop-app	W42	2026-10-10T06:31:24Z	first	1	minor	W42.6 · Minor findings from the review
+line	shop-app	W42	2026-10-10T17:29:45Z	later	2	defect/unplaced	W42.8 · Fix: keep the Cash counter in the upper third for off-current weeks
+line	shop-app	W42	2026-10-10T17:29:45Z	later	2	defect/unplaced	W42.9 · Fix: keep the complete Cash counter usable in short viewports
+line	shop-app	W42	2026-10-10T17:29:45Z	later	2	minor	W42.10 · Minor findings from the review
+line	shop-app	W42	2026-10-11T04:06:17Z	later	3	defect/unplaced	W42.11 · Fix: keep the complete Cash counter usable in short portrait viewports
+line	shop-app	W42	2026-10-11T04:06:17Z	later	3	minor	W42.12 · Minor findings from the review
+line	shop-app	W42	2026-10-11T04:39:15Z	later	4	defect/unplaced	W42.13 · Fix: keep every selected Cash destination legible
+line	shop-app	W42	2026-10-11T10:56:08Z	later	5	defect/unplaced	W42.15 · Fix: keep denomination fields legible while a destination is selected
+line	shop-app	W42	2026-10-11T10:56:08Z	later	5	minor	W42.16 · Minor findings from the review
+line	shop-app	W42	2026-10-13T11:58:24Z	later	6	defect/unplaced	W42.22 · Fix: keep the Cash counter legible on narrow phones
+line	shop-app	W42	2026-10-13T11:58:24Z	later	6	minor	W42.23 · Minor findings from the review
+line	shop-app	W42	2026-10-13T16:26:23Z	later	7	defect/unplaced	W42.24 · Fix: preserve an in-progress Cash count across a structural rebuild
+line	shop-app	W42	2026-10-13T16:26:23Z	later	7	minor	W42.25 · Minor findings from the review
+line	shop-app	W42	2026-10-14T02:44:08Z	later	8	defect/unplaced	W42.27 · Fix: preserve every active Cash edit across a structural rebuild
+line	shop-app	W42	2026-10-14T02:44:08Z	later	8	minor	W42.28 · Minor findings from the review
+line	shop-app	W43	2026-10-10T23:58:12Z	first	1	defect	W43.7: fresh databases abort before the complete register ingest types can be created.
+line	shop-app	W43	2026-10-10T23:58:12Z	first	1	defect	W43.8: Cash reports a partial known sum when the same week also contains an unavailable tender.
+line	shop-app	W43	2026-10-10T23:58:12Z	first	1	defect	W43.9: Cash documentation and comments still deny the capable CSV backfill and null-field enrichment W43 added.
+line	shop-app	W45	2026-10-11T15:10:00Z	first	1	defect	W45.4 · Fix: keep multi-target add-note controls inside the keyboard-safe modal
+line	shop-app	W45	2026-10-11T15:10:00Z	first	1	minor	W45.5 · Minor findings from the review, including the unexercised autocomplete geometry and W45.2's missing Hypothesis that one 390 by 700 geometry and bounded non-suggestion controls cover the mobile goal; ask the author whether every supported mobile keyboard band and multi-target form is in scope.
+task	farm-app	W92	2026-10-19T02:42:28Z	ok	1		
+task	farm-app	W117	2026-10-23T09:40:28Z	ok	0		
+task	farm-app	W118	2026-10-23T11:44:37Z	issues	2		
+task	farm-app	W122	2026-10-23T09:18:41Z	issues	2		
+task	farm-app	W123	2026-10-24T17:41:30Z	ok	0		
+task	farm-app	W124	2026-10-24T18:27:42Z	ok	0		
+task	farm-app	W125	2026-10-25T05:34:00Z	ok	0		
+task	farm-app	W126	2026-10-25T06:48:22Z	ok	1		
+task	farm-app	W127	2026-10-26T07:42:01Z	issues	6		
+task	farm-app	W128	2026-10-26T21:43:35Z	ok	0		
+task	farm-app	W129	2026-10-26T21:55:18Z	ok	0		
+task	farm-app	W131	2026-10-27T01:15:34Z	ok	2		
+task	farm-app	W132	2026-10-27T01:49:49Z	issues	1		
+task	farm-app	W133	2026-10-27T21:08:42Z	issues	1		
+task	farm-app	W134	2026-10-28T01:41:49Z	ok	0		
+task	farm-app	W135	2026-10-28T02:06:52Z	ok	0		
+task	farm-app	W136	2026-10-28T04:12:38Z	ok	0		
+task	farm-app	W137	2026-10-28T04:34:01Z	ok	0		
+task	farm-app	W138	2026-10-28T04:47:34Z	ok	0		
+task	farm-app	W139	2026-10-28T05:03:15Z	ok	0		
+task	farm-app	W140	2026-10-28T05:26:54Z	ok	0		
+task	farm-app	W141	2026-10-28T05:47:55Z	ok	0		
+task	farm-app	W142	2026-10-28T09:18:52Z	issues	2		
+line	farm-app	W92	2026-10-19T03:21:18Z	later	1	defect+reproduced	W92.25 · Fix: settle the phone-chip RTK route W92.24 left open. W92.24's L1 GPS+Galileo float passes its criterion (kin2.py on /tmp/w92fr/*_D.pos reproduces 0.10-0.36 m KTON, 0.26-0.62 m DFRD against the chip's 1.20-1.55 m). W92.3 and W92.21 still call the route refuted and say GA's data gives no gain, and nothing asks the author for the independent reference W92.24 says is needed.
+line	farm-app	W92	2026-10-19T03:21:18Z	later	1	minor	W92.26 · Minor findings from the review: W92.24's evidence is only in /tmp, KTON_D.pos has 3 fixed epochs, gpslog.html loses data on Record after Stop and never re-requests the wake lock, the duplicate-timestamp guard is untested, W92.16's Determination is in the Log, W92.19 says east for west, and the Summary omits the README paragraph.
+line	farm-app	W92	2026-10-19T03:21:18Z	later	1	assumption	Unmarked assumption, W92.24 (confirmed, no Hypothesis): the session chose "a float RMS under half the chip's, against the same recording's static float" as the bar for a native app being worth writing. Ask the author whether that bar, which shows consistency only, is the one they want, or whether only an independent reference (a surveyed mark, or a moving-phone test) should count.
+line	farm-app	W118	2026-10-23T11:44:37Z	first	1	defect	W118.8 · Fix: casing ringing after the direct path reads as an echo near 6 m when there is none (the test's default ringing with no echo gives ok at 6.1–6.5 m; the noise-only test turns the ringing off)
+line	farm-app	W118	2026-10-23T11:44:37Z	first	1	defect	W118.9 · Fix: capture.py hangs forever when the board does not answer `ping` (a serial timeout in the ping loop never exits)
+line	farm-app	W118	2026-10-23T11:44:37Z	first	1	minor	W118.10 · Minor findings from the review
+line	farm-app	W118	2026-10-23T11:44:37Z	first	1	assumption	Unmarked assumption: W118.5 chose a fixed 3 m blind zone (min_depth_m) without a Hypothesis. Ask the author whether the water in their bore ever stands within 3 m of the head; if it does, the near range needs another method.
+line	farm-app	W118	2026-10-24T15:08:56Z	later	2	defect/maybe-introduced	W118.15 · Fix: changing `SLOT_*` in config.h, README's remedy for another TDM slot order, is ignored by `mic`, `load()`, `dump` and `capture.py` (mic 1/2 and NVS store raw slots 0/1, SLOT_MIC2 is unused, dump writes slots 0..2 by position, capture.py hard-codes channel 2 as the loopback)
+line	farm-app	W118	2026-10-24T15:08:56Z	later	2	minor	W118.16 · Minor findings from the review
+line	farm-app	W118	2026-10-24T15:08:56Z	later	2	assumption	Unmarked assumption, W118.12 (as the last review said): it documents one-point `cal`'s drift rather than removing it, though its own test shows the mic's direct path as t0 cancels the delay (0.09 m against 0.76 m at 60 m after cal at 8 m), and the sketch always times from the loopback. Ask the author: is "calibrate near the depth to be read" enough, or should the sketch offer the direct path as t0 or a two-point cal?
+line	farm-app	W122	2026-10-23T09:18:41Z	first	1	defect	W122.10 · Fix: the unit loses the tty for good when the cable is not there at start or comes back as another device node (DeviceAllow is resolved once at unit start; the reader never exits, so the unit never restarts)
+line	farm-app	W122	2026-10-23T09:18:41Z	first	1	minor	W122.11 · Minor findings from the review
+line	farm-app	W122	2026-10-23T09:18:41Z	first	1	assumption	Unmarked assumptions, for the author: W122.8 chose to leave ChirpStack's per-uplink LinkADRReq unanswered without a Hypothesis (ask: is a downlink message and two log lines per reading acceptable, or should the reader answer it?); W122.9 declared the Goal met with no real controller, cable or started systemd unit, also without a Hypothesis (ask: is that enough to accept, or can the author run it on hardware?).
+line	farm-app	W122	2026-10-23T09:25:26Z	later	2	defect/unplaced	W122.12 · Fix: enabling the module with the cable already plugged in does not start the reader until a reboot or a replug (wantedBy only the .device unit; switch-to-configuration starts only active targets)
+line	farm-app	W122	2026-10-23T09:25:26Z	later	2	minor	W122.13 · Minor findings from the review
+line	farm-app	W122	2026-10-23T09:25:26Z	later	2	assumption	Unmarked assumption, for the author: W122.10 chose to stop the unit while the USB cable is out of the host, so nothing is sent then and Farm Operator sees the device go quiet (offline after 3 h) instead of `controller_answering: false`, without a Hypothesis (ask: should a pulled USB cable read as "controller not answering", as the ESP32 node reports it, or is going quiet acceptable?).
+line	farm-app	W126	2026-10-26T13:35:19Z	later	1	defect	W126.6 · Fix: a zone card's own rule shows its "Go to" line twice (zoneAutosHtml writes `${names}${names}`), and a tank's or gate's own rules show none (controlAutosHtml's `own` never writes `names`). Confirmed with a scratch test on the demo site.
+line	farm-app	W126	2026-10-26T13:35:19Z	later	1	minor	W126.7 · Minor findings from the review (a Summary sentence that is false until W126.6 is fixed, ruleNames checking for links by inspecting HTML, a misplaced comment, a 24px tap target).
+line	farm-app	W126	2026-10-26T13:35:19Z	later	1	assumption	Assumptions with no Hypothesis, to put to the author: W126.4 took "other places where objects or devices are named" to mean the rules on farm cards (it says schedules, owners, attention items and heard lists already link); ask whether any other place should link. W126.5 chose a "Go to <links>" line under a rule row that is a button, rather than, for example, moving the edit action to a separate button so the names in the row can be links; ask whether that layout is the one wanted.
+line	farm-app	W127	2026-10-26T07:42:01Z	first	1	defect+reproduced	W127.5 · Fix: a held command is sent again when the channel's later state has another cause (a short water run re-sent after its time ran out; an On re-sent after the person's later Off, both reproduced)
+line	farm-app	W127	2026-10-26T07:42:01Z	first	1	minor	W127.6 · Minor findings from the review
+line	farm-app	W127	2026-10-26T07:42:01Z	first	1	assumption	Unmarked assumptions, no Hypothesis on the node: W127.4 decided to record a run ChirpStack reported "not acknowledged" as "acknowledged" when the status matches, to re-send exactly once, and to hold for SETTLE_WAIT=900 s; ask the author whether the app may override ChirpStack's verdict and re-send on its own. W127.2 picked ACK_TRANSMISSIONS=3 and rests on ChirpStack holding back other Class C confirmed downlinks while one waits for its ack, untried on hardware; ask whether three repeats per command uplink is acceptable airtime. W127.1 and W127.2 are confirmed only in the build; ask the author to try them on the flaky node.
+line	farm-app	W127	2026-10-26T08:18:23Z	later	2	defect+reproduced/maybe-introduced	W127.7 · Fix: a held command is sent again after the node card's own Off or On for its channel (water re-sent after the node's channel_off, reproduced)
+line	farm-app	W127	2026-10-26T08:18:23Z	later	2	defect+reproduced/unplaced	W127.8 · Fix: a water the node did not hear reads as acknowledged when the channel was already open (60 min water judged applied from the old run's timer, reproduced)
+line	farm-app	W127	2026-10-26T08:18:23Z	later	2	minor	W127.9 · Minor findings from the review
+line	farm-app	W127	2026-10-26T08:18:23Z	later	2	assumption	Unmarked assumption, no Hypothesis on the node: W127.5 settles a command whose status another cause explains (a later command, a timed run's time up) as "not acknowledged", though the node may have carried it out (a 1-minute run that did run reads as not done); ask the author whether such a run should read "not acknowledged" or something like "unknown".
+line	farm-app	W127	2026-10-26T09:28:04Z	later	3	defect+reproduced/unplaced	W127.12 · Fix: a water longer than the node's longest on reads as not applied and is sent again (a 180 min water, which the shipped node caps at 7200 s, with its ack lost was judged "not applied, sent again" and re-sent; reproduced)
+line	farm-app	W127	2026-10-26T09:28:04Z	later	3	minor	W127.13 · Minor findings from the review
+line	farm-app	W127	2026-10-26T09:28:04Z	later	3	assumption	Unmarked assumption, no Hypothesis on the node: W127.11 dropped the ack uplink's repeats in favour of Farm Operator's status settling, rather than repeating in the firmware with Class C receive open between sends. It rests on a reading of the ChirpStack 4.19.2 and RadioLib source, not tried on hardware. A lost ack uplink now always waits for the periodic status (up to 10 min), and a run shorter than that reads "not acknowledged". Ask the author whether that is acceptable or whether they want firmware-managed repeats. W127.8 also picked TIMER_SLACK = 60 s with no Hypothesis. The earlier questions on W127.4 (whether the app may override ChirpStack's verdict and re-send) and W127.5 (whether a run another cause explains should read "not acknowledged") still stand, and W127.11 makes W127.5's case far more common.
+line	farm-app	W127	2026-10-26T09:43:08Z	later	4	defect+reproduced/maybe-introduced	W127.14 · Fix: a water the node did not hear reads as acknowledged when an earlier held water had opened the channel (W127.12's `before` gate ignores a held command: a 60 min water after a held 30 min one was judged applied from the 30 min timer and not re-sent, reproduced)
+line	farm-app	W127	2026-10-26T09:43:08Z	later	4	minor	W127.15 · Minor findings from the review
+line	farm-app	W127	2026-10-26T09:43:08Z	later	4	assumption	Unmarked assumptions still standing from earlier reviews, no Hypothesis on the nodes: W127.4 (the app overrides ChirpStack's "not acknowledged" and re-sends once on its own), W127.5 (a run another cause explains reads "not acknowledged" though the node may have done it, far more common since W127.11), W127.8 (TIMER_SLACK = 60 s), W127.11 (no ack-uplink repeats; a lost ack waits up to 10 min for the periodic status, untried on hardware). Ask the author on each.
+line	farm-app	W127	2026-10-26T09:53:15Z	later	5	defect+reproduced/maybe-introduced	W127.16 · Fix: a water the node heard reads as not applied and is sent again when an earlier held water was longer than the node's longest on (W127.14's synthetic `before` takes the held water's uncapped minutes*60: a 150 min water after a held 180 min one, status 7200 s left, was judged "not applied, sent again" and re-sent; reproduced, and it settled as acknowledged before W127.14)
+line	farm-app	W127	2026-10-26T09:53:15Z	later	5	minor	W127.17 · Minor findings from the review
+line	farm-app	W127	2026-10-26T09:53:15Z	later	5	assumption	Unmarked assumptions still standing from earlier reviews, no Hypothesis on the nodes: W127.4 (the app overrides ChirpStack's "not acknowledged" and re-sends once on its own), W127.5 (a run another cause explains reads "not acknowledged" though the node may have done it, far more common since W127.11), W127.8 (TIMER_SLACK = 60 s), W127.11 (no ack-uplink repeats; a lost ack waits up to 10 min for the periodic status, untried on hardware). W127.14 also assumes an earlier command still pending or held was carried out when it sets the next one's `before`. Ask the author on each.
+line	farm-app	W127	2026-10-26T10:06:27Z	later	6	defect+reproduced/maybe-introduced	W127.18 · Fix: a water the node did not hear reads as acknowledged when an earlier held water is before it and the countdown is not that water's uncapped time (W127.16's `held` branch accepts any open countdown other than the held water's uncapped time. Case: open 600 s, then a held 30 min water, then a 60 min water, neither heard, status 595 s. The 60 min water read "applied" and was not sent again; reproduced, and it was sent again at W127.15)
+line	farm-app	W127	2026-10-26T10:06:27Z	later	6	minor	W127.19 · Minor findings from the review
+line	farm-app	W127	2026-10-26T10:06:27Z	later	6	assumption	Unmarked assumption, no Hypothesis on the node: W127.16 assumes the app cannot know a channel's longest on (7200 s in every shipped config.h), so it treats any countdown other than a held water's uncapped time as new. Ask the author whether Farm Operator may be told each node channel's longest on. Assumptions still standing from earlier reviews, no Hypothesis on the nodes: W127.4 (the app overrides ChirpStack's "not acknowledged" and re-sends once on its own), W127.5 (a run another cause explains reads "not acknowledged" though the node may have done it), W127.8 (TIMER_SLACK = 60 s), W127.11 (no ack-uplink repeats; a lost ack waits up to 10 min for the periodic status, untried on hardware), W127.14 (an earlier command still pending or held is taken as carried out). Ask the author on each.
+line	farm-app	W131	2026-10-27T10:47:11Z	later	1	defect	W131.6 · Fix: the server's readings are stored every 30 s in every farm, whether or not a signal links them (about 20,000 rows and 2.6 MB a day, more than the author's whole farm writes, never deleted)
+line	farm-app	W131	2026-10-27T10:47:11Z	later	1	defect	W131.7 · Fix: a failed SQLite write of the server's readings (a full disk, say) aborts check_services before the service results are observed, freezing the service states and their down alerts
+line	farm-app	W131	2026-10-27T10:47:11Z	later	1	minor	W131.8 · Minor findings from the review
+line	farm-app	W131	2026-10-27T10:47:11Z	later	1	assumption	Unmarked assumption: W131.4 picks the disks shown and stored ("/" and FARM_DB's directory, app.DISKS) with no Hypothesis; ask the author whether other mounts (a USB or backup disk, say) should show too.
+line	farm-app	W131	2026-10-27T11:03:46Z	later	2	defect/unplaced	W131.9 · Fix: a failed store write of the server's readings (a full disk) throws away that round's sample, so the server card's numbers, the server:local signal's value and any rule on it freeze at their last values until the store succeeds
+line	farm-app	W131	2026-10-27T11:03:46Z	later	2	minor	W131.10 · Minor findings from the review
+line	farm-app	W131	2026-10-27T11:03:46Z	later	2	assumption	Unmarked assumption: W131.6 chooses to store only the keys a linked signal measures, once every HOST_STORE (300 s), with no Hypothesis. A signal written later therefore has no past history, and its chart is coarser than a 30 s poll. Ask the author whether that pace, and storing nothing until a signal links the server, is what they want.
+line	farm-app	W132	2026-10-27T01:49:49Z	first	1	defect	W132.7 · Fix: labels measured while the map is hidden get 8 px boxes (page load, other tabs), so on the author's own farm the three zone names show drawn over each other and over a sensor icon until some label's text changes.
+line	farm-app	W132	2026-10-27T01:49:49Z	first	1	defect	W132.8 · Fix: the box tool fits a tall box to the whole map, leaving its top ~145 px under the layer chips and weather card on a phone.
+line	farm-app	W132	2026-10-27T01:49:49Z	first	1	minor	W132.9 · Minor findings: stale README map paragraph, labels placed under the overlays, a thin box drag silently disarms, shift-click no longer taps, the tool stays armed across tabs/editor, untested tap/pinch-during-box paths.
+line	farm-app	W132	2026-10-27T01:49:49Z	first	1	assumption	Unmarked assumptions (no Hypothesis on the live nodes); ask the author:
+line	farm-app	W133	2026-10-27T21:08:42Z	first	1	defect	W133.10 · Fix: a rule with a second condition re-arms when the pair stops holding, not only when its own reading does (the demo's pump alarm stays silent after the pump is switched off and on again still dry)
+line	farm-app	W133	2026-10-27T21:08:42Z	first	1	minor	W133.11 · Minor findings from the review (alarm body has no unit; an also on a dropped device waits silently; a BoM test flaked once under the full suite)
+line	farm-app	W133	2026-10-27T21:08:42Z	first	1	assumption	Unmarked assumption, W133.8: a server disk alarm needs a site-file [[signal]] measuring disk_used_pct on server:local (the server is not a device the rule editor offers, and the author's own site has no such signal), with no Hypothesis; ask the author whether that is how they want to set up the disk alarm, or whether the editor should offer the server's readings directly.
+line	farm-app	W142	2026-10-28T09:18:52Z	first	1	defect	W142.5 · Fix: the map is left drawn for the wrong size when a panel folded or unfolded in a sheet goes back under the header (parent W142.3)
+line	farm-app	W142	2026-10-28T09:18:52Z	first	1	minor	W142.6 · Minor findings from the review: README Charts paragraph not updated and now false while folded; stale comments on dockPlot/plotTile/plotOnly/#sheet > #plot; a tall docked panel squeezes the sheet below SHEET_MIN
+line	farm-app	W142	2026-10-28T09:18:52Z	first	1	assumption	Unmarked assumptions, for the author: W142.4 has no Hypothesis for a design choice: while folded, a plain tap toggles the tile, so a tap on a tile already stacked silently takes it off rather than plotting it alone. Ask whether that is wanted. W142.1 chose to dock the panel and shrink the sheet below it rather than lay it over the sheet (only the parked W142.2 records the alternative). Ask whether a shorter sheet under the charts is acceptable.
+line	farm-app	W142	2026-10-28T12:11:00Z	later	2	defect/unplaced	W142.7 · Fix: on a wide screen, a sheet opened with charts plotted shifts the map up under the docked panel (parent W142.1)
+line	farm-app	W142	2026-10-28T12:11:00Z	later	2	minor	W142.8 · Minor findings from the review: dockPlot fits the panel's height while the sheet is still closed, so plotChrome/plotMin measure 0

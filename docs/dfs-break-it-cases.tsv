@@ -22,3 +22,20 @@ n	node	case	what triggers the fault
 21	W108.8	no	adoption on a branch that is not dfs/<task>
 22	W116.9	no	a pull request merged while comment nodes are open
 23	W116.10	repeated	landing a second merged pull request after the first
+24	W75.37	stretch	an accept while a chain still runs a session in the worktree: a race
+25	W75.38	no	the law as it was when the branch was cut (two checkouts out of step)
+26	W75.42	interrupted	a chain killed outright (kill -9) after the accept
+27	W75.44	interrupted	the screen after a chain killed outright
+28	W75.56	interrupted	an interrupt during the merge
+29	W97.12	no	a figure in the document that does not reproduce (not code)
+30	W116.21	stretch	a raise left open after its cause is put right: a stale state
+31	W116.29	repeated	the watch run again after a comment node was deleted (borderline; read as a second run)
+32	shop-app W13.40	no	git rebase and cherry-pick run the drivers and no hook
+33	farm-app W92.25	no	a position-solution route the analysis left open (not a code case)
+34	farm-app W127.5	stretch	a held command sent again after the channel's later state changed: a stale command
+35	farm-app W127.7	stretch	a held command sent again after the node's own Off or On: a stale command
+36	farm-app W127.8	no	a water judged applied when the channel was already open (an unusual starting state)
+37	farm-app W127.12	no	a water longer than the node's longest on (a value over a cap)
+38	farm-app W127.14	no	a water after an earlier held water (an order of two commands)
+39	farm-app W127.16	no	a water after a longer held water (a value over a cap)
+40	farm-app W127.18	no	a third water after a held one with an open countdown (an order of three commands)

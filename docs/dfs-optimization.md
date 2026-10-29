@@ -401,6 +401,61 @@ Not candidates, from the evidence: cutting reviews (they are 27.0% of spend and 
 the bugs were caught), re-read avoidance (150 of 3,458 reads), and encouraging branching
 as an end in itself (candidate 1 is the version of it with a purpose).
 
+### Re-counted on the three checkouts (W130)
+
+The 2026-10-28 survey could read roadmap-dfs's task files only. This recount adds the
+task files and transcripts of shop-app (66 task files, 27 with a review) and farm-app (23
+with a review) from `optimisation-data/`. Every number is printed by `python3
+docs/dfs-class-counts.py` from `docs/dfs-class-lines.tsv` (output: `docs/dfs-class-counts.txt`;
+the history behind it: `docs/dfs-history-w130.txt`). Candidates 1 to 3 change what a review
+finds and are each a predicate on a review's finding lines, counted the same three ways. A line
+is *blocking* if it is a defect or an unmarked assumption (the lesser batch, class `minor`,
+comes with `ok` reviews too). Of 207 reviews that said issues (68 of them first reviews):
+
+| candidate | blocking lines it matches (of 358) | issues reviews with such a line (of 207) | reviews with no other blocking line (of 207) | first reviews with no other (of 68) |
+|---|---|---|---|---|
+| 1 break it, the node's own words (repeat, again, re-run, interrupt, empty, short screen) | 30 (8%) | 29 (14%) | 3 (1%) | 1 |
+| 1 break it, plus concurrent, race, stale, crash, kill, cut off | 54 (15%) | 49 (24%) | 11 (5%) | 2 |
+| 2 assumptions | 51 (14%) | 49 (24%) | 0 | 0 |
+| 3 one review finds all (a later round's defect in code unchanged since the round before) | 9 (3%) | 9 (4%) | 5 (2%) | 0 |
+
+The last two columns say how many rounds that class alone started: with every line of the
+class gone, the review would have had nothing blocking left. None of the three started more than 11 of the 207
+rounds. Assumption lines are 14% of blocking lines and never the only ones, so naming them
+better would not have turned one review in the 207. Candidate 1's predicate is a word list, so
+it is set against the same words in lines that are not defects (minor and assumption lines):
+the narrow list is in 10% of defect lines (30 of 307) and in 10% of the others (19 of 197), the
+wide list in 18% and 21%. The words do not pick out defects in the three checkouts together or in roadmap-dfs
+(10% and 9%); the small checkouts split (shop-app 6% against 0 of 26, farm-app 36% against 20%
+on 22 and 35 lines), so a word count says nothing about how many defects a break-it node reaches.
+The one reading that does is by hand, of the defects whose review says it reproduced the
+fault (`docs/dfs-break-it-cases.tsv`, 40 rows now, 23 before): 11 are in the cases the node
+names (5 repeated, 5 interrupted, 1 empty), 10 only by stretching a case to a race, a stale
+state or a failure path, 19 are not. That is 11 of the 307 defect lines (4%) known to be
+in the node's cases and 21 of 307 (7%) on the widest reading; the other 267 defects do not say
+they were reproduced, so these are floors. The new checkouts add little to it: shop-app's
+reviews say they reproduced 1 of 155 defects, farm-app's 8 of 22 (7 are one task's
+re-send logic, none in the narrow cases).
+
+Candidates 4 and 5 do not change a review and are counted in the history (2,101 sessions,
+733 million weighted-token units, `--history-report`): 8% of sessions since 22 October had
+a refused commit, 1% for the file:line coordinate (14% from 19 to 22 October, 9% before), and
+the sessions that had one hold 16% of the units, an upper bound since a refusal costs a retry
+inside a session. The coordinate's drop followed the guard's wording change on 19 October by
+three days; whether the wording caused it is not shown. Units after the third review that
+said issues are 11% of all, after the first 40% (history.py gives 40.3% in dollars), and the
+first review said issues on 29% of roadmap-dfs's tasks with a transcript (32 of 112), 43% of
+shop-app's (6 of 14, a small base) and 30% of chirpstack-docker's (40 of 135). By units, then,
+candidate 5's bound (11% of all units) is larger than what candidate 1's class alone started
+(0.4% narrow, 3% wide, of the units of the 131 tasks with a transcript; candidate 3 1%,
+candidate 2 none); the order of the table does not follow spend, and rests on candidate 1 changing the first review (the
+measure a replay moves) while 5 only limits the loss and cannot be tested by one.
+
+What this does to the rank: the recount leaves candidate 1 first among the three that change a
+review where the document had it, on the one reading that separates them (the rounds a class
+alone started: 3 to 11 for 1, 5 for 3, 0 for 2), and shows that none of them started more than 11 of the 207
+rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word count.
+
 ### The loop
 
     mine → choose → change → replay control and changed → compare → keep or drop → mine
@@ -510,36 +565,6 @@ What the loop cannot see: whether a change helps on projects other than roadmap-
 (only its history can be replayed); the author's time; and drift in the model between
 the control run and the changed run, which is why the arms are interleaved, control then
 changed, task by task, in one sitting, and not run as two batches on different days.
-
-### Candidate 1 under the loop (W130.6): not shown
-
-Run under kiro in the sandbox, control then changed, task by task. The changed arm was the
-store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
-node tries to break the work, and a tree whose last node is not that is not complete); a
-copy of the store tool and not `--tool-ref`, because the repo's `SKILL.md` is older than the
-store tool the control ran. First reviews, credits per replay:
-
-| task | control | changed |
-|---|---|---|
-| W22 | ok, 11.2 | issues, 14.4 plus one cut-off session unpriced |
-| W11 | ok, 9.8 | ok, 13.2 |
-| W5 | issues, 15.9 | issues, 27.1 |
-
-The change was followed (a node titled "Break it" came before the first review in all three
-changed trees), and two of its three first reviews still said issues, so the rule of
-step 5 (3 of 3 pairs better) is not met and the candidate is **not shown**. The run stopped
-after these six replays, at 91.6 credits, because no later replay could change that. It
-shows nothing about whether the node helps: three replays an arm cannot separate a
-modest gain from the control's own spread, and the changed arm cost more on every task.
-W22's changed replay was cut off once by the host's 30-minute call limit and resumed with
-`run`, so its first review is of a chain that ran in two sittings. The score's "answered
-output" count (1, 3 and 6 calls in the changed arm) is the changed tool's own path, which
-lies inside the live checkout and is not cut out of `reached` when passed as `--tool`; the
-one call that named the live items directory printed only "No such file or directory".
-
-Read as pairs (step 5, margin 30%): W22 worse (one issues review against none), W11 same
-(13.2 against 9.8 credits), W5 worse (27.1 against 15.9, one issues review each). Zero of
-three better, so the pair rule also drops it, with no new replay.
 
 ### Next
 
