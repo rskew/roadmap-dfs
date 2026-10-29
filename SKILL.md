@@ -92,6 +92,18 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   knew. Refer to another node only beside the substance, never in place of it, and
   keep it short: one or two sentences, not the history of how you got there. Keep the
   Evidence as short: a node with ten evidence lines is usually a log of the work.
+- **Write every part in plain, simple English**: short sentences, one point each,
+  everyday words, no longer than it needs to be. Explain a term the reader may not know
+  in the sentence where it first appears, and give each node id, file, function, flag or
+  test a few words saying what it is, but only where the reader needs it. Keep code
+  detail (names, flags, paths, tests): the next person to touch the code needs it. Copy
+  numbers as they are. An Approach reads best in this order, each part a bold label with
+  one to three bullets: **The question** (an actual question), **Why it matters**,
+  **What this node does**, **How we will know it worked** (the check). A small node needs
+  one or two of them, not all four. A Hypothesis keeps the shape above (the assumption,
+  then `Wrong if`) and a Determination stays one sentence, both in the same plain words.
+  A raise reads in this order: what was found, the options, your recommendation, where
+  the task stands.
 - `parked` is a real alternative not being pursued: its Determination says why it is not
   first. Park one only if you would take it were the branch refuted; do not make up
   alternatives to have a sibling. It is not determined, so it may be edited and reopened, and neither it nor
