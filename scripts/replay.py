@@ -428,7 +428,7 @@ def tool_docs(dest, tool):
     if not src.is_dir():
         return None
     out = box_of(dest) / "docs"
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     out.mkdir(parents=True)
     for entry in sorted(src.iterdir()):
         if entry.name.startswith(HIDDEN_DOCS):
@@ -437,7 +437,23 @@ def tool_docs(dest, tool):
             shutil.copytree(entry, out / entry.name, symlinks=True)
         else:
             shutil.copy(entry, out / entry.name)
+    # A tool in the nix store is read-only; the copy is the box's own, so a later launch can rebuild it.
+    for base, dirs, files in os.walk(out):
+        for name in dirs + files:
+            path = os.path.join(base, name)
+            if not os.path.islink(path):
+                os.chmod(path, os.stat(path).st_mode | 0o200)
     return out
+
+
+def remove_tree(path):
+    """`shutil.rmtree` for a tree whose directories may be read-only (a copy of a store path): each
+    directory is made owner-writable first, since removing a file needs write on its directory."""
+    if not os.path.lexists(path):
+        return
+    for base, dirs, _ in os.walk(path):
+        os.chmod(base, os.stat(base).st_mode | 0o700)
+    shutil.rmtree(path)
 
 
 def hidden_docs_named(tool):

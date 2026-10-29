@@ -411,6 +411,23 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertIn(f"{replay.box_of(self.dest) / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)   # docs laid over it, last
         self.assertNotIn(f"{Path(tool).resolve() / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)
 
+    def test_the_box_docs_are_rebuilt_when_the_tools_docs_are_read_only(self):
+        # A tool in the nix store has read-only directories; a resumed `run` builds the box docs again.
+        tool = Path(self.tmp.name) / "readonly-tool"
+        (tool / "docs" / "sub").mkdir(parents=True)
+        (tool / "docs" / "artefacts.md").write_text("a\n")
+        (tool / "docs" / "sub" / "b.md").write_text("b\n")
+        for path in [tool / "docs" / "artefacts.md", tool / "docs" / "sub" / "b.md"]:
+            path.chmod(0o444)
+        for path in [tool / "docs" / "sub", tool / "docs"]:
+            path.chmod(0o555)
+        self.addCleanup(lambda: [p.chmod(0o755) for p in [tool / "docs", tool / "docs" / "sub"]])
+        first = replay.tool_docs(self.dest, tool)
+        second = replay.tool_docs(self.dest, tool)
+        self.assertEqual(first, second)
+        self.assertEqual((second / "sub" / "b.md").read_text(), "b\n")
+        self.assertTrue(os.access(second / "sub", os.W_OK))
+
     def test_building_the_command_writes_nothing_to_the_box(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
                 "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
