@@ -408,7 +408,7 @@ def task_json(task, include_archived=False):
                 name=t["name"], goal_text=t["goal"], runs=runs_for(task),
                 artefacts=artefacts_for("\n".join(strings(t))),
                 status=status, why=humanize(why), accepted=accepted,
-                acceptable=status == "done" and not accepted, rows=rows, assumed=assumed,
+                acceptable=dfs_tree.acceptable(t), rows=rows, assumed=assumed,
                 notes=[dict(kind=g["kind"], heading=dfs_tui.note_heading(g),
                             body="\n\n".join(b for _ts, _v, b in g["notes"]))
                        for g in dfs_tree.note_sessions(t)],
@@ -858,7 +858,7 @@ def act(name, body):
             record_correction(task, nid, body.get("verdict"), need(body, "body", "a directive"),
                               body.get("park"))
         elif name == "accept":
-            if not (dfs_tree.status_of(t)[0] == "done" and not dfs_tree.accepted(t)):
+            if not dfs_tree.acceptable(t):
                 raise Refused("%s is not a finished tree waiting to be accepted" % task, 409)
             dfs_tree.append_log(task, "accept")
         elif name == "edit_task":

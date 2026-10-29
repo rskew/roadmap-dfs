@@ -216,6 +216,42 @@ def task_ids():
     return sorted(out)
 
 
+def _ids_in(names):
+    return {(part_of(n) or (n,))[0] for n in names if part_of(n) or re.fullmatch(TASK_RE, n)}
+
+
+def worktree_task_ids():
+    """Every task id with a file in some item worktree's `.dfs/items`, its own or one a
+    session created there. Inside an item worktree, also every id the main checkout holds
+    (committed or not, retired ones too) and every sibling worktree: a session there
+    creates tasks, and none of these are in its own `.dfs`. Only for keeping ids apart: a
+    worktree's copy of a task this checkout has deleted is stale, so these are not listed
+    as tasks."""
+    out = set()
+    states = list(dfs_paths.worktree_states())
+    main = dfs_paths.main_root()
+    if main != dfs_paths.work_root():
+        mstate = main / dfs_paths.STATE_DIR_NAME
+        states.append(mstate)
+        try:
+            states += sorted(d / dfs_paths.STATE_DIR_NAME for d in (mstate / "worktrees").iterdir()
+                             if (d / ".git").exists())
+        except OSError:
+            pass
+        for base in ("deleted", "archived"):
+            d = mstate / "archive" / base / "items"
+            try:
+                out |= _ids_in(p.name for p in d.iterdir())
+            except OSError:
+                pass
+    for st in states:
+        try:
+            out |= _ids_in(p.name for p in (st / "items").iterdir())
+        except OSError:
+            continue
+    return out
+
+
 def exists(task):
     return bool(part_tags(task))
 
@@ -713,10 +749,22 @@ def append_log(task, kind, args=(), body=""):
         # branch, if it has one, goes into the default branch. A merge that cannot go
         # through leaves the accept written and the branch where it is, with an open node
         # or a raise saying why, so the task is not done (`run.sh` does the same).
+        # ⚠️ Not while a chain is working the task: the accept is exactly when its review
+        # session is running in the worktree, and the merge would remove the directory
+        # under it, losing the review's finding and verdict. The chain merges as it stops
+        # (`merge_item` at its `done` stop, `settle_accept` at any other), once that session has ended.
+        import runs as dfs_runs
+        if dfs_runs.live_for(task):
+            print("dfs_tree: %s is accepted; the running chain merges it as it stops (accept again if it is killed)" % task,
+                  file=sys.stderr)
+            return ts
         import branch as dfs_branch
         try:
             result = dfs_branch.merge(task)
-            if result not in ("merged", "held", "none"):
+            if result == "blocked":
+                print("dfs_tree: %s was accepted and merged, but your edits set aside for the merge "
+                      "conflict with it; the raise names the stash that keeps them" % task, file=sys.stderr)
+            elif result not in ("merged", "held", "none"):
                 print("dfs_tree: %s was accepted but not merged (%s); see its tree" % (task, result),
                       file=sys.stderr)
         except dfs_branch.BranchError as e:
@@ -758,7 +806,7 @@ def next_task_id():
     dfs_paths.NoBranch on a detached HEAD."""
     tag = dfs_paths.branch_tag()
     nums = [int(m.group(1)) for m in (re.fullmatch(r"W(\d+)(?:@.*)?", i)
-                                          for i in set(task_ids()) | retired_ids() | branch_ids()) if m]
+                                          for i in set(task_ids()) | worktree_task_ids() | retired_ids() | branch_ids()) if m]
     return "W%d%s" % (max(nums, default=0) + 1, "@" + tag if tag else "")
 
 
@@ -778,7 +826,7 @@ def create_task(name, goal="", task=None, draft=False):
     if not re.fullmatch(r"[A-Za-z]+\d+%s" % re.escape(suffix), task):
         raise ValueError("a task id is letters then a number (W25)%s, not %r"
                          % (", tagged %s on this branch" % suffix if suffix else "", task))
-    if exists(task) or task in retired_ids():
+    if exists(task) or task in retired_ids() or task in worktree_task_ids():
         raise ValueError("%s already exists: pick another id" % task)
     path = part_path(task, tag)
     body = ["# %s · %s" % (task, name), "", "## Goal", "", (goal or "").strip() or name, "",
@@ -1499,6 +1547,22 @@ def accepted(t):
     last_work = max((e["ts"] for e in t["log"] if e["kind"] in ("end", "correct", "backtrack")),
                     default="")
     return bool(last_acc) and last_acc >= last_work
+
+
+def acceptable(t):
+    """Whether the author may accept the tree now: it is done and not yet accepted, or
+    accepted but its item branch is still unmerged with no chain left to merge it. A chain
+    killed outright runs no exit trap, so an accept held back for it (`append_log`) would
+    otherwise sit done and unmerged with the screen and web page refusing a second accept;
+    accepting again finds no live chain and merges. In GitHub mode the worktree is kept on
+    purpose until the pull request merges (`branch.merge` returns "held"), so an accepted
+    task is never offered again there: a second accept would only re-push the branch."""
+    import runs as dfs_runs
+    if status_of(t)[0] != "done":
+        return False
+    if accepted(t) and dfs_paths.read_github():
+        return False
+    return not accepted(t) or bool(dfs_paths.worktree(t["task"]) and not dfs_runs.live_for(t["task"]))
 
 
 # The page a node's Hypothesis names as its artefact, by path inside the Hypothesis; the name has

@@ -35,10 +35,11 @@ Each item is worked on its own branch, `dfs/<task>`, in its own git worktree und
 `.dfs/worktrees/<task>`, so a walk never switches the checkout you have open (the screen
 and the web page read the task through its worktree). The first run cuts the branch from
 `main` (or `master`). When the review passes, or you accept the tree, the branch is
-merged into the default branch with `--no-ff` (local, never pushed) and the worktree and
+rebased onto the default branch and merged into it with `--no-ff` (local, never pushed) and the worktree and
 branch are removed. A rebase that conflicts reopens the item with a node to resolve it;
-uncommitted edits of yours that the merge would overwrite, or a merge, cherry-pick, revert
-or rebase of yours left unfinished in the checkout, raise instead and are left alone. A
+uncommitted edits of yours that the merge would overwrite are stashed for the merge and put back
+uncommitted (a raise, with the stash kept, only if they conflict with what it brought in; an untracked file of yours, or an edit under `.dfs`, is a raise, left where it is); a merge,
+cherry-pick, revert or rebase of yours left unfinished in the checkout raises instead and is left alone. A
 gitignored `.dfs/` is worked the same way: the worktree links to your checkout's ignored
 planning files, so the screen and the sessions read and write one copy. That includes task
 files and `order.md` that a blanket rule such as `.*` hides but you force-added: they are
@@ -46,7 +47,9 @@ edited in your checkout through the link and left modified and uncommitted there
 merge, for you to commit. Gitignore it only by a rule naming it (`.dfs/`), with nothing in
 it tracked: a broader rule such as `.*` or `*.html`, or files force-added past one, leaves
 part of the roadmap out of git, and `init`, each chain's start and the screen's header
-(`git hides .dfs`, the rule under `h`) say so.
+(`git hides .dfs`, the rule under `h`) say so. An accept you make
+while a chain is still working the task is recorded and the chain merges it as it stops, so
+the worktree is never removed under a session; if that chain is killed outright, accept again.
 
 There is no branch when the checkout is off `main`/`master` or the repo has no commit yet:
 the item is worked in place, on whatever is checked out, and nothing is merged. A task that

@@ -552,7 +552,43 @@ IN_SESSION=""
 # `$(date)` is the date's exit status, every time.
 on_exit() {
   rc=$?
+  settle_accept
   meta_set finished="$(date -Is)" rc="$rc"
+}
+
+# ⚠️ AN ACCEPT HELD BACK FOR THIS CHAIN IS MERGED HOWEVER IT STOPS. The author's accept
+# while a chain works the task is only logged (tree.append_log), leaving the merge to the
+# chain's `done` stop; a chain that stops any other way (a failed or silent session, the
+# cap, Ctrl-C) would leave the task reading done with `dfs/$ITEM` unmerged. So the exit
+# merges a task that reads done and still has its worktree. Neither the exit code nor
+# the stop is changed: a merge that cannot go through reopens the item or raises, as at
+# a `done` stop. (A chain killed outright runs no trap; its accept is offered again,
+# and with no live chain that accept merges: tree.acceptable.)
+#
+# ⚠️ FROM THE INT/TERM TRAP, `wait` RETURNS AT ONCE ON A BACKGROUNDED AGENT (codex, kiro,
+# opencode), so the merge would remove the worktree under an agent still exiting: wait for
+# it first, up to 30 s, then end it. Nothing to wait for when the session ended normally.
+# It ends only the agent's own pid, not that process's children, and it reads the pid's
+# state with `ps`: with no `ps` the state is empty, so it returns at once and skips the wait.
+wait_agent() {
+  local pid="${AGENT_PID:-}" n=0 st
+  [ -n "$pid" ] || return 0
+  while [ "$n" -lt 150 ]; do
+    st="$(ps -o stat= -p "$pid" 2>/dev/null)"
+    case "$st" in ""|Z*) return 0 ;; esac
+    sleep 0.2; n=$((n + 1))
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
+settle_accept() {
+  [ -n "${ITEM_TREE:-}" ] && [ -d "$ITEM_TREE" ] || return 0
+  local status=""
+  eval "$(python3 "$HERE/state.py" --sh "$ITEM" 2>/dev/null)" || return 0
+  [ "$status" = done ] || return 0
+  wait_agent
+  echo "dfs_run: $ITEM was accepted while this chain ran; merging it as the chain stops."
+  merge_item || true
 }
 
 # Ctrl-C must end the CHAIN, not just the run. A claude that handles the interrupt
@@ -739,9 +775,11 @@ run_session() {
       "${AGENT_ARGV[@]}" run --standalone --format json "${PERMISSION_ARGV[@]}" \
       "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
+    AGENT_PID=$agent_pid
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
     session_rc=$?
+    AGENT_PID=
     SID="$(stream_sid "$log")"
     meta_set sid="$SID"
   elif [ "$AGENT" = kiro ]; then
@@ -759,9 +797,11 @@ run_session() {
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
       --agent dfs-inbox --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
+    AGENT_PID=$agent_pid
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
     session_rc=$?
+    AGENT_PID=
     SID="$(stream_sid "$log")"
     meta_set sid="$SID"
   elif [ "$AGENT" = codex ]; then
@@ -782,9 +822,11 @@ run_session() {
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec --json "${PERMISSION_ARGV[@]}" "$prompt" \
       > "$log" < /dev/null &
     agent_pid=$!
+    AGENT_PID=$agent_pid
     stream_watch_sid "$log" "$agent_pid"
     wait "$agent_pid"
     session_rc=$?
+    AGENT_PID=
     SID="$(codex_thread_id "$log")"
     meta_set sid="$SID"
   else
@@ -932,7 +974,7 @@ while True:
 
 t = dfs_tree.load(task)
 status, why = dfs_tree.status_of(t)
-if status == "done" and not dfs_tree.accepted(t):
+if status == "done" and dfs_tree.acceptable(t):
     if (ask("accept %s's tree as finished? [y/N]: " % task) or "n")[:1].lower() == "y":
         dfs_tree.append_log(task, "accept")
         wrote += 1
@@ -1065,8 +1107,9 @@ fi
 # with it, so the chain steps back into the main checkout first.
 # A merge that cannot go through (branch.py, `_unmerged`) is not a done item: a conflict
 # puts an open node back in the tree (exit 3) and the chain goes on and works it, and
-# edits of the author's that overlap the merge raise (exit 4). Both return non-zero here
-# and the chain steps back into the worktree.
+# edits of the author's that overlap the merge are stashed and put back around it (a raise,
+# exit 4, only when they conflict with what the merge brought in). Both return non-zero here
+# and the chain steps back into the worktree, unless the merge went through and removed it.
 merge_item() {
   [ -n "$ITEM_TREE" ] || return 0
   local rc=0
@@ -1075,7 +1118,8 @@ merge_item() {
   # Anything but a merge (or nothing to merge) is not done: an exit this does not know
   # (a crash) blocks the chain rather than ending it `done` with the branch unmerged.
   [ "$rc" = 0 ] && return 0
-  cd "$ITEM_TREE"
+  # (a merge that went through but could not put the author's stash back has removed it)
+  [ -d "$ITEM_TREE" ] && cd "$ITEM_TREE"
   case "$rc" in 3|4) ;; *) rc=4; echo "dfs_run: the merge of $ITEM failed unexpectedly; see above." ;; esac
   return "$rc"
 }

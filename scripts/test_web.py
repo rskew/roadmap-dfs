@@ -1348,6 +1348,29 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertEqual(self.call("POST", "/api/accept", dict(task="W1"))[0], 409)
         self.assertFalse(self.task()["acceptable"])
 
+    def test_a_done_accepted_task_whose_branch_is_unmerged_with_no_chain_left_is_acceptable_again(self):
+        import runs as dfs_runs
+        done = ("# W1 · Bound the limiter\n\n## Goal\n\nKeep it bounded.\n\n## Tree\n\n"
+                "### W1.1 · Measure\nStatus: confirmed\nApproach: Count.\n"
+                "Determination: Confirmed: it grows.\n\n## Log\n\n"
+                "- 2026-09-25T09:00:00Z · session · work · run-1\n"
+                "- 2026-09-25T09:05:00Z · end · work · ok\n"
+                "- 2026-09-25T09:06:00Z · accept\n")
+        (self.root / ".dfs" / "items" / "W1.md").write_text(done)
+        old = dfs_runs.live_for
+        try:
+            dfs_runs.live_for = lambda task, mode="work": None
+            self.assertFalse(self.task()["acceptable"], "merged or never branched: nothing to accept")
+            wt = self.root / ".dfs" / "worktrees" / "W1"
+            (wt / ".dfs" / "items").mkdir(parents=True)
+            (wt / ".git").write_text("gitdir: elsewhere\n")
+            (wt / ".dfs" / "items" / "W1.md").write_text(done)
+            self.assertTrue(self.task()["acceptable"], "accepted, branch unmerged, no chain left")
+            dfs_runs.live_for = lambda task, mode="work": {"item": task}
+            self.assertFalse(self.task()["acceptable"], "a live chain merges the accept itself")
+        finally:
+            dfs_runs.live_for = old
+
     def test_a_node_is_added_open_under_its_parent_and_a_missing_parent_is_refused(self):
         status, data, _ = self.call("POST", "/api/add", dict(
             task="W1", parent="W1.3", title="  Add a   metric ", approach="In src/metrics.py."))

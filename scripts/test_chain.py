@@ -10,11 +10,13 @@ Run:  python3 roadmap-dfs/scripts/test_chain.py
 """
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -54,6 +56,11 @@ Evidence:
 #   fix        add and confirm W1.2 with a commit
 #   rnode      a review that adds an open node and gives an issues verdict
 #   fixn       confirm the open node and commit it under its id
+#   raccept    the author's accept from the main checkout ($MAIN_ROOT) while this review runs,
+#              then `rnode`: a finding and an issues verdict
+#   racceptfail the author's accept as `raccept` logs it, then the session exits 1
+#   racceptsilent the author's accept as `raccept` logs it, then no verdict and no finding
+#   racceptkill the author's accept as `raccept` logs it, then the chain is killed outright (no trap)
 #   rminor     a review verdict of ok carrying a minor finding
 #   issue      a critic raise plus an issues verdict
 #   meddle     a critic that edits code and gives a verdict
@@ -65,6 +72,7 @@ Evidence:
 #   lower      `work`, then lower the chain's cap to this run, as the TUI's `w` does
 #   resolvemain confirm the open node, committing it, after rebasing the branch onto main
 #              the way the node asks (keeping the branch's side of a conflict)
+#   codenew    add new.txt in the worktree, uncommitted (`confirm` commits it)
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
 STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -83,6 +91,7 @@ T="python3 $TREE_PY"
 case "$recipe" in
   work)    python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n" ;;
   code)    echo "change $n" >> app.txt ;;
+  codenew) echo "the branch's" > new.txt ;;
   confirm) python3 -c 'import os; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Status: open","Status: confirmed\nDetermination: done.",1))'
            git add -A && git -c user.name=t -c user.email=t@t commit -q --allow-empty -m "W1.1: the step is done" ;;
   raise)   echo "which way?" | $T log W1 raise W1.1 > /dev/null ;;
@@ -101,6 +110,12 @@ case "$recipe" in
   resolvemain) git -c user.name=t -c user.email=t@t rebase -q --autostash -X theirs "$MAIN_BRANCH" > /dev/null 2>&1 || exit 3
            id="$(python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); m=re.search(r"^### (W1\.\d+) · [^\n]*\nStatus: open",t,re.M); open(p,"w").write(t[:m.start()]+m.group(0).replace("Status: open","Status: confirmed\nDetermination: rebased.")+t[m.end():]); print(m.group(1))')"
            git add -A && git -c user.name=t -c user.email=t@t commit -qm "$id: the item is up to date" ;;
+  raccept) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1)
+           python3 -c 'import os,re; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); n=len(re.findall(r"^### W1\.",t,re.M))+1; open(p,"w").write(t.replace("## Log","### W1.%d · review finding %d\nStatus: open\nApproach: fix it.\n\n## Log" % (n,n),1))'
+           echo "W1.2 a finding" | $T log W1 review issues > /dev/null ;;
+  racceptfail) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1); exit 1 ;;
+  racceptsilent) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1) ;;
+  racceptkill) (cd "$MAIN_ROOT" && $T log W1 accept < /dev/null > /dev/null 2>&1); kill -9 $PPID ;;
   rminor)  echo "a comment reads oddly" | $T log W1 review ok > /dev/null ;;
   issue)   echo "the evidence says nothing ran" | $T log W1 raise W1.1 > /dev/null
            echo "W1.2 one issue" | $T log W1 critic issues > /dev/null ;;
@@ -280,6 +295,26 @@ class Chain(unittest.TestCase):
             dfs_tree.dfs_paths.work_root = old
         self.assertEqual(status[0], "done")
         self.assertIn("held unmerged for its pull request", status[1])
+
+    def test_a_github_mode_item_held_for_its_pull_request_is_not_acceptable_once_accepted(self):
+        (self.root / ".dfs" / "github").write_text("origin\n")
+        rc, meta, out = self.run_chain("work,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertTrue(self.wt.exists(), out)
+        import state as dfs_state
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            self.assertTrue(dfs_tree.acceptable(dfs_tree.load("W1")), "the first accept is offered")
+            subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                           cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
+            t = dfs_tree.load("W1")
+            self.assertTrue(dfs_tree.accepted(t))
+            self.assertTrue(self.wt.exists(), "GitHub mode keeps the worktree until the pull request merges")
+            self.assertFalse(dfs_tree.acceptable(t), "a second accept only re-pushes the held branch")
+            self.assertEqual(dfs_state.state_for("W1")["standing"], [])
+        finally:
+            dfs_tree.dfs_paths.work_root = old
 
     def test_in_github_mode_open_pr_pushes_the_held_branch_and_logs_the_pull_request(self):
         (self.root / ".dfs" / "github").write_text("hub\n")
@@ -735,29 +770,75 @@ class Chain(unittest.TestCase):
         subprocess.run(["git", "merge-base", "--is-ancestor", moved, merge + "^2"], cwd=self.root, check=True)
         self.assertFalse(self.wt.exists())
 
-    def test_a_merge_over_the_authors_uncommitted_edits_is_a_raise_and_leaves_main_alone(self):
+    def commit_app(self, text):
+        (self.root / "app.txt").write_text(text)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "app")
+
+    def stashes(self):
+        return self.git("stash", "list", "--format=%gs")
+
+    def test_a_merge_over_the_authors_overlapping_edit_sets_it_aside_and_puts_it_back(self):
+        self.commit_app("one\ntwo\nthree\nfour\nfive\n")
+        (self.root / "app.txt").write_text("my one\ntwo\nthree\nfour\nfive\n")
+        rc, meta, out = self.run_chain("code,confirm,rok")
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.log("raise"), [], out)
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        # the author's line is back, on top of the merged one, and still uncommitted
+        text = (self.root / "app.txt").read_text()
+        self.assertTrue(text.startswith("my one\ntwo\n"), text)
+        self.assertIn("change", text)
+        self.assertEqual(self.git("status", "--porcelain", "--", "app.txt"), "M app.txt")
+        self.assertEqual(self.stashes(), "")
+
+    def test_a_merge_over_an_edit_that_conflicts_with_it_keeps_the_stash_and_raises(self):
         (self.root / "app.txt").write_text("the author's edit\n")
-        head = self.git("rev-parse", "HEAD")
         rc, meta, out = self.run_chain("code,confirm,rok")
         self.assertEqual(meta.get("stop"), "blocked", out)
         raised = self.log("raise")
         self.assertEqual(len(raised), 1, out)
         self.assertIn("app.txt", raised[0]["body"])
-        self.assertEqual(self.git("rev-parse", "HEAD"), head)
-        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
-        self.assertTrue(self.wt.exists())
+        self.assertIn("git stash apply", raised[0]["body"])
+        # merged, the paths as the merge left them, the author's edit safe in the stash
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertEqual(self.git("status", "--porcelain", "--", "app.txt"), "")
+        self.assertIn("dfs-merge-W1", self.stashes())
+        self.assertIn("the author's edit", self.git("stash", "show", "-p", "stash@{0}"))
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+        # a blocked merge is a raise, not a crash: no traceback, and the chain leaves the removed worktree alone
+        self.assertNotIn("Traceback", out)
+        self.assertNotIn("failed unexpectedly", out)
+        self.assertNotIn("No such file", out)
+        self.assertIn("merged, but putting your edits back", out)
+        # the recovery the raise names brings the author's edit back
+        sha = re.search(r"git stash apply ([0-9a-f]{12})", raised[0]["body"]).group(1)
+        subprocess.run(["git", "stash", "apply", sha], cwd=self.root, capture_output=True)   # conflicts: markers
+        self.assertIn("the author's edit", (self.root / "app.txt").read_text())
 
-    def test_a_staged_edit_that_stops_the_merge_is_named_in_the_raise(self):
+    def test_an_untracked_file_the_branch_adds_is_not_set_aside_and_is_raised_for(self):
+        (self.root / "new.txt").write_text("mine\n")
+        rc, meta, out = self.run_chain("codenew,confirm,rok")
+        self.assertEqual(meta.get("stop"), "blocked", out)
+        self.assertNotIn("Traceback", out)
+        raised = self.log("raise")
+        self.assertEqual(len(raised), 1, out)
+        self.assertIn("new.txt", raised[0]["body"])
+        self.assertIn("move or delete new.txt", raised[0]["body"])
+        self.assertNotIn("commit or stash", raised[0]["body"])
+        # nothing merged, the author's file untouched and in no stash, the branch and worktree kept
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "")
+        self.assertEqual((self.root / "new.txt").read_text(), "mine\n")
+        self.assertEqual(self.stashes(), "")
+        self.assertTrue(self.wt.exists())
+
+    def test_an_edit_that_stops_the_merge_without_overlapping_is_set_aside_and_stays_staged(self):
         (self.root / "other.txt").write_text("staged\n")
         self.git("add", "other.txt")
-        head = self.git("rev-parse", "HEAD")
         rc, meta, out = self.run_chain("code,confirm,rok")
-        self.assertEqual(meta.get("stop"), "blocked", out)
-        body = self.log("raise")[0]["body"]
-        self.assertIn("stop the merge: other.txt", body)
-        self.assertNotIn("overlap", body)
-        self.assertEqual(self.git("rev-parse", "HEAD"), head)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertEqual(self.git("status", "--porcelain", "--", "other.txt"), "A  other.txt")
+        self.assertEqual((self.root / "other.txt").read_text(), "staged\n")
+        self.assertEqual(self.stashes(), "")
 
     def test_a_review_ok_over_a_dirty_worktree_reopens_the_item_and_is_never_done_unmerged(self):
         rc, meta, out = self.run_chain("work,confirm,rmeddle", cap=3)
@@ -1124,6 +1205,163 @@ class Chain(unittest.TestCase):
         self.assertTrue((self.wt / ".git").exists())
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s", cwd=self.wt))
 
+    def test_a_branch_whose_worktree_was_removed_by_hand_off_main_is_a_raise_not_a_pass(self):
+        self.run_chain("work,confirm", cap=2)
+        shutil.rmtree(self.wt)
+        self.git("checkout", "-q", "-b", "elsewhere")
+        rc, meta, out = self.run_chain("work,confirm,rok", cap=2)
+        self.assertEqual(meta.get("stop"), "blocked", out)
+        self.assertEqual(len(self.log("raise")), 1, out)
+        self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))
+        self.assertTrue(self.wt.exists())
+
+    def test_a_staged_rename_is_one_dirty_path_not_two(self):
+        self.git("mv", "app.txt", "moved.txt")
+        code = ("import sys; sys.path.insert(0, %r); import branch; "
+                "print(branch._dirty(['app.txt', 'moved.txt']))" % str(HERE))
+        out = subprocess.run([sys.executable, "-c", code], cwd=self.root, capture_output=True,
+                             text=True, check=True).stdout
+        self.assertEqual(out.strip(), "[('R ', 'moved.txt')]")
+
+    def branch_call(self, code):
+        return subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r); import branch; %s"
+                               % (str(HERE), code)], cwd=self.root, capture_output=True, text=True, check=True).stdout.strip()
+
+    def test_a_set_aside_that_saves_nothing_does_not_take_an_older_kept_stash_for_its_own(self):
+        (self.root / "app.txt").write_text("kept\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "dfs-merge-W1")
+        self.assertEqual(self.branch_call("print(branch._set_aside('W1', ['app.txt']))"), "None")
+        self.assertEqual(len(self.stashes().splitlines()), 1)
+
+    def test_putting_a_stash_back_never_drops_another_sessions_entry_when_its_own_is_gone(self):
+        (self.root / "app.txt").write_text("ours\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "dfs-merge-W1")
+        ours = self.git("rev-parse", "stash@{0}")
+        self.git("stash", "drop", "-q")
+        (self.root / "app.txt").write_text("theirs\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "another session")
+        self.assertEqual(self.branch_call("print(branch._put_back(%r, ['app.txt']))" % ours), "True")
+        self.assertEqual((self.root / "app.txt").read_text(), "ours\n")
+        self.assertEqual(self.stashes(), "On %s: another session" % self.git("symbolic-ref", "--short", "HEAD"))
+
+    def test_a_stash_whose_staged_half_alone_will_not_apply_is_put_back_without_the_index(self):
+        # staged edit to line 1, then undone in the working tree, and line 3 edited; the merge
+        # changed line 1, so `--index` cannot apply but the working-tree edit merges cleanly
+        self.commit_app("1\n2\n3\n")
+        (self.root / "app.txt").write_text("A\n2\n3\n")
+        self.git("add", "app.txt")
+        (self.root / "app.txt").write_text("1\n2\nC\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "dfs-merge-W1")
+        ours = self.git("rev-parse", "stash@{0}")
+        self.commit_app("Z\n2\n3\n")
+        self.assertEqual(self.branch_call("print(branch._put_back(%r, ['app.txt']))" % ours), "True")
+        self.assertEqual((self.root / "app.txt").read_text(), "Z\n2\nC\n")
+        self.assertEqual(self.stashes(), "")
+
+    def test_a_set_aside_finds_its_own_entry_when_another_session_pushes_right_after(self):
+        (self.root / "other.txt").write_text("theirs\n")
+        self.git("add", "other.txt")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "other")
+        (self.root / "app.txt").write_text("the author's edit\n")
+        (self.root / "other.txt").write_text("another session's edit\n")
+        sha = self.branch_call(
+            "orig = branch._git\n"
+            "def racing(*a, **k):\n"
+            "    r = orig(*a, **k)\n"
+            "    if 'push' in a and 'dfs-merge-W1' in a:\n"
+            "        orig(*branch._identity(), 'stash', 'push', '-q', '-m', 'another session', '--', 'other.txt')\n"
+            "    return r\n"
+            "branch._git = racing\n"
+            "print(branch._set_aside('W1', ['app.txt']))")
+        entries = self.git("stash", "list", "--format=%H %gs").splitlines()
+        self.assertEqual(len(entries), 2)
+        self.assertEqual([l.split(" ", 1)[0] for l in entries if l.endswith("dfs-merge-W1")], [sha])
+
+    def interrupted_merge(self, after):
+        """Run `branch.merge('W1')` with the `after`-th `merge --no-ff` of git (1 = the refused
+        one, 2 = the retry over the stash) made to raise KeyboardInterrupt before it runs."""
+        return self.branch_call(
+            "orig = branch._git\n"
+            "seen = []\n"
+            "def stopping(*a, **k):\n"
+            "    if 'merge' in a and '--no-ff' in a:\n"
+            "        seen.append(1)\n"
+            "        if len(seen) == %d:\n"
+            "            raise KeyboardInterrupt\n"
+            "    return orig(*a, **k)\n"
+            "branch._git = stopping\n"
+            "try:\n"
+            "    print(branch.merge('W1'))\n"
+            "except KeyboardInterrupt:\n"
+            "    print('interrupted')" % after)
+
+    def test_an_interrupt_in_the_merge_after_the_edit_was_set_aside_puts_it_back(self):
+        (self.root / "app.txt").write_text("the author's edit\n")
+        self.run_chain("code,confirm", cap=2)
+        self.assertEqual(self.interrupted_merge(2), "interrupted")
+        # the edit is in the working tree again, the stash is empty, the merge never happened
+        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
+        self.assertEqual(self.stashes(), "")
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "")
+        self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+        self.assertTrue(self.wt.exists())
+
+    def test_an_interrupt_after_the_merge_that_the_edit_cannot_follow_raises_for_the_stash(self):
+        (self.root / "app.txt").write_text("the author's edit\n")
+        self.run_chain("code,confirm", cap=2)
+        out = self.branch_call(
+            "orig = branch._git\n"
+            "def stopping(*a, **k):\n"
+            "    if 'worktree' in a and 'remove' in a:\n"
+            "        raise KeyboardInterrupt\n"
+            "    return orig(*a, **k)\n"
+            "branch._git = stopping\n"
+            "try:\n"
+            "    print(branch.merge('W1'))\n"
+            "except KeyboardInterrupt:\n"
+            "    print('interrupted')")
+        self.assertEqual(out, "interrupted")
+        raised = self.log("raise")
+        self.assertEqual(len(raised), 1)
+        self.assertIn("was interrupted", raised[0]["body"])
+        self.assertIn("git stash apply", raised[0]["body"])
+        self.assertIn("dfs-merge-W1", self.stashes())
+
+    def test_a_stash_that_cannot_be_put_back_when_the_merge_is_refused_is_raised_for_by_name(self):
+        (self.root / "app.txt").write_text("the author's edit\n")
+        self.run_chain("code,confirm", cap=2)
+        self.branch_call(
+            "import subprocess\n"
+            "orig = branch._git\n"
+            "seen = []\n"
+            "def refusing(*a, **k):\n"
+            "    if 'merge' in a and '--no-ff' in a:\n"
+            "        seen.append(1)\n"
+            "        if len(seen) == 2:\n"
+            "            return subprocess.CompletedProcess(a, 1, '', 'error: Your local changes to the "
+            "following files would be overwritten by merge:\\n\\tapp.txt\\n')\n"
+            "    return orig(*a, **k)\n"
+            "branch._git = refusing\n"
+            "branch._put_back = lambda sha, paths: False\n"
+            "print(branch.merge('W1'))")
+        bodies = [r["body"] for r in self.log("raise")]
+        self.assertTrue(any("is not merged, and" in b and "git stash apply" in b for b in bodies), bodies)
+        self.assertIn("dfs-merge-W1", self.stashes())
+
+    def test_a_stash_put_back_without_its_index_says_the_staged_edits_came_back_unstaged(self):
+        self.commit_app("1\n2\n3\n")
+        (self.root / "app.txt").write_text("A\n2\n3\n")
+        self.git("add", "app.txt")
+        (self.root / "app.txt").write_text("1\n2\nC\n")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "-q", "-m", "dfs-merge-W1")
+        ours = self.git("rev-parse", "stash@{0}")
+        self.commit_app("Z\n2\n3\n")
+        r = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r); import branch; "
+                            "print(branch._put_back(%r, ['app.txt']))" % (str(HERE), ours)],
+                           cwd=self.root, capture_output=True, text=True)
+        self.assertEqual(r.stdout.strip(), "True")
+        self.assertIn("staged edits to app.txt came back unstaged", r.stderr)
+
     def git_that_loses_the_lock_race(self, times):
         """A `git` ahead of the real one on PATH whose first `times` `worktree add -b` cut the
         branch as git does, then fail on the new worktree's index lock; returns the PATH."""
@@ -1179,6 +1417,84 @@ class Chain(unittest.TestCase):
         self.assertFalse(self.wt.exists())
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
         self.assertTrue(self.log("accept"))
+
+    def test_the_authors_accept_while_a_chain_reviews_leaves_the_merge_to_the_chain(self):
+        rc, meta, out = self.run_chain("work,confirm,raccept,fixn,rok", MAIN_ROOT=str(self.root))
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        # the review kept its worktree: its finding and its verdict were written
+        self.assertEqual([e["args"][:2] for e in self.log("end")][-3:],
+                         [["review", "ok"], ["work", "ok"], ["review", "ok"]], out)
+        self.assertEqual([e["args"][:1] for e in self.log("review")], [["issues"], ["ok"]], out)
+        self.assertEqual([(n["id"], n["status"]) for n in self.tree()["nodes"]],
+                         [("W1.1", "confirmed"), ("W1.2", "confirmed")], out)
+        # and the branch was merged once, by the chain's own done stop
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertIn("W1.2: fixed", self.git("log", "--format=%s"))
+        self.assertFalse(self.wt.exists())
+
+    def test_an_accept_held_back_for_a_chain_is_merged_however_that_chain_stops(self):
+        for recipe in ("racceptfail", "racceptsilent"):
+            with self.subTest(recipe=recipe):
+                self.tearDown()
+                self.setUp()
+                rc, meta, out = self.run_chain("work,confirm," + recipe, MAIN_ROOT=str(self.root))
+                self.assertNotEqual(meta.get("stop"), "done", out)
+                self.assertTrue(self.log("accept"), out)
+                # the accept read done, so the chain's exit merged it: never done and unmerged
+                self.assertEqual(self.git("log", "--merges", "--format=%s"),
+                                 "W1: merge the item's branch dfs/W1", out)
+                self.assertFalse(self.wt.exists(), out)
+                self.assertEqual(self.git("branch", "--list", "dfs/W1"), "", out)
+
+    def test_an_accept_held_back_for_a_chain_killed_outright_is_acceptable_again_and_merges(self):
+        rc, meta, out = self.run_chain("work,confirm,racceptkill", MAIN_ROOT=str(self.root))
+        # no trap ran: the task reads done and accepted, unmerged, its worktree kept
+        self.assertTrue(self.wt.exists(), out)
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "", out)
+        old = dfs_tree.dfs_paths.work_root
+        dfs_tree.dfs_paths.work_root = lambda: self.root
+        try:
+            t = dfs_tree.load("W1")
+            self.assertEqual(dfs_tree.status_of(t)[0], "done", out)
+            self.assertTrue(dfs_tree.accepted(t))
+            self.assertTrue(dfs_tree.acceptable(t), "a second accept must be offered")
+            import state as dfs_state
+            self.assertEqual(dfs_state.state_for("W1")["standing"], ["tree"],
+                             "the list must point at the second accept")
+        finally:
+            dfs_tree.dfs_paths.work_root = old
+        subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                       cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(self.git("log", "--merges", "--format=%s"), "W1: merge the item's branch dfs/W1")
+        self.assertFalse(self.wt.exists())
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+
+    def test_the_exit_merge_waits_for_a_backgrounded_agent_to_end(self):
+        # wait_agent as run.sh defines it, timed on a child that outlives the call
+        src = RUNNER.read_text()
+        fn = src[src.index("wait_agent() {"):]
+        fn = fn[:fn.index("\n}\n") + 3]
+        def waited(script):
+            t0 = time.monotonic()
+            subprocess.run(["bash", "-c", fn + "\n" + script], check=True, capture_output=True)
+            return time.monotonic() - t0
+        self.assertGreaterEqual(waited("sleep 1.5 & AGENT_PID=$!; wait_agent"), 1.4)
+        self.assertLess(waited("AGENT_PID=; wait_agent"), 1.0)
+
+    def test_a_session_in_the_worktree_is_briefed_with_the_law_as_the_author_has_it_now(self):
+        self.enter()
+        law = self.root / ".dfs" / "ROADMAP.md"
+        law.write_text(ROADMAP + "\nL2 · committed after the branch was cut.\n")
+        self.git("add", ".dfs/ROADMAP.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "L2")
+        law.write_text(law.read_text() + "\nL3 · still uncommitted in the author's checkout.\n")
+        for flag in ("--brief", "--critic-brief", "--review-brief"):
+            out = subprocess.run([sys.executable, str(HERE / "state.py"), flag, "W1"], cwd=self.wt,
+                                 capture_output=True, text=True).stdout
+            self.assertIn("L2 · committed after the branch was cut.", out, flag)
+            self.assertIn("L3 · still uncommitted in the author's checkout.", out, flag)
+        # the branch's own copy is untouched: the law is read from main, not merged in
+        self.assertNotIn("L2", (self.wt / ".dfs" / "ROADMAP.md").read_text())
 
     def test_the_authors_accept_from_a_checkout_off_the_default_branch_is_a_raise_not_a_pass(self):
         self.run_chain("work,confirm", cap=2)
@@ -1320,7 +1636,12 @@ class Chain(unittest.TestCase):
         """Run the chain from a copy of the scripts whose `script` starts with `code`.
         Returns (rc, meta, output)."""
         copy = self.aside / "scripts-copy"
-        shutil.copytree(HERE.parent, copy, ignore=shutil.ignore_patterns("__pycache__", ".git", ".dfs"))
+        # TMPDIR may sit inside the checkout (a sandbox with no other executable directory), and
+        # the copy is made inside TMPDIR: leave TMPDIR out, or it copies itself without end
+        tmp = Path(tempfile.gettempdir()).resolve()
+        names = shutil.ignore_patterns("__pycache__", ".git", ".dfs")
+        skip = lambda d, ns: list(names(d, ns)) + [n for n in ns if (Path(d) / n).resolve() == tmp]
+        shutil.copytree(HERE.parent, copy, ignore=skip)
         path = copy / "scripts" / script
         lines = path.read_text().split("\n")
         lines.insert(1, code)
@@ -1665,7 +1986,7 @@ class Chain(unittest.TestCase):
         (self.root / "app.txt").write_text("the author's edit\n")
         r = self.merge_by_hand()
         self.assertEqual(r.returncode, 4, r.stderr)
-        self.assertIn("raised for the author", r.stderr + r.stdout)
+        self.assertIn("a raise names the stash", r.stderr + r.stdout)
         text = task.read_text()
         self.assertIn("edited since", text)
         self.assertIn("raise", text)
@@ -1778,6 +2099,29 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- author\n")
         self.assertTrue(self.wt.exists())
         self.assertFalse((self.root / ".git" / "MERGE_HEAD").exists())
+
+    def test_the_edit_set_aside_is_put_back_before_the_raise_for_one_that_stays(self):
+        # app.txt is stashed so the merge can go on; `.dfs/order.md` is a roadmap file and is not,
+        # so the second merge is refused over it too, and the raise leaves app.txt as it was
+        (self.root / ".dfs" / "order.md").write_text("- W1\n")
+        self.git("add", ".dfs/order.md")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "order")
+        self.enter()
+        (self.wt / ".dfs" / "order.md").write_text("- W1\n- branch\n")
+        (self.wt / "app.txt").write_text("worked\n")
+        self.git("add", ".dfs/order.md", "app.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "W1.1: both", cwd=self.wt)
+        (self.root / ".dfs" / "order.md").write_text("- W1\n- author\n")
+        (self.root / "app.txt").write_text("the author's edit\n")
+        head = self.git("rev-parse", "HEAD")
+        r = self.merge_by_hand()
+        self.assertEqual(r.returncode, 4, r.stderr)
+        self.assertIn("raised for the author", r.stderr)
+        self.assertEqual(self.git("rev-parse", "HEAD"), head, r.stderr)
+        self.assertEqual((self.root / "app.txt").read_text(), "the author's edit\n")
+        self.assertEqual((self.root / ".dfs" / "order.md").read_text(), "- W1\n- author\n")
+        self.assertEqual(self.git("stash", "list"), "")
+        self.assertTrue(self.wt.exists())
 
     def test_a_merge_does_not_write_a_clashing_edit_over_the_branchs_committed_force_tracked_file(self):
         (self.root / ".gitignore").write_text(".*\n!.gitignore\n")

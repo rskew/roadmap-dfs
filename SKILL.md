@@ -162,15 +162,20 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 A chain runs every session of an item (work, critic and review) in a git worktree,
 `.dfs/worktrees/<task>`, on the branch `dfs/<task>`, which the first run cuts from the
 default branch (`main` or `master`). Your CWD is that worktree: edit and commit there,
-and the author's checkout stays on the default branch. The branch writes plain ids
+and the author's checkout stays on the default branch. The law in your briefing is the
+main checkout's current `.dfs/ROADMAP.md`, not this branch's older copy. The branch writes plain ids
 (`W13.4`, no `@<tag>`), so its nodes merge into the default branch's task file as
 written. You never merge, switch branch or remove the worktree yourself: when the
 review passes (or the author accepts), the runner rebases `dfs/<task>` onto the default
 branch and merges it in with `--no-ff`, locally and without a push, and removes the worktree and the
 branch. A rebase that conflicts is not done: the runner aborts it and adds an open node asking
 for `dfs/<task>` to be rebased onto the default branch and the conflicts resolved, so the next
-session takes it up like any open node. (Edits of the author's that overlap the merge,
-or a merge or rebase of theirs left unfinished, are the runner's raise, not yours.) The rebase rewrites the
+session takes it up like any open node. Edits of the author's on the default branch
+that git refuses the merge over are set aside in a stash for the length of the merge and put
+back (a raise only when they conflict with what it brought in, with the stash kept; an
+untracked file of theirs that the branch adds, or an edit under `.dfs`, is a raise too, left where it is); a
+merge, cherry-pick, revert or rebase of theirs left unfinished in the checkout is a raise
+(a rebase detaches HEAD, and the raise says so), which the runner leaves untouched. The rebase rewrites the
 branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
 by a hash that would dangle once the branch is merged and deleted. Until then a task in
 flight has its current file only on its branch: the default branch's copy is stale or

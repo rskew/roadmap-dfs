@@ -40,7 +40,7 @@ HANDOFF_BUDGET = 10_000
 
 
 def read_roadmap() -> str:
-    p = dfs_paths.roadmap()
+    p = dfs_paths.law()
     return p.read_text() if p.exists() else ""
 
 
@@ -166,8 +166,9 @@ def state_for(task: str):
         next=["%s · %s" % (nd["id"], nd["title"]) for nd in fr],
         outline=dfs_tree.outline(t),
         # The author's pass over this row has something to show them: an open raise,
-        # or a finished tree nobody has accepted since it last changed.
-        standing=(["tree"] if status == "done" and not dfs_tree.accepted(t) else []),
+        # or a finished tree nobody has accepted since it last changed, or an accepted one
+        # whose branch a killed chain left unmerged (the second accept).
+        standing=(["tree"] if dfs_tree.acceptable(t) else []),
         # The nodes the author should read before accepting: those that state a
         # Hypothesis (or, in an old tree, an Ask). What `rev` counts, beside the raises.
         assumptions=([] if dfs_tree.accepted(t) else dfs_tree.assumed(t)),
