@@ -54,7 +54,7 @@ def verdicts(cmd):
     command, in order: written out, or through a variable the same command sets to a `tree.py` path."""
     found = {m.start(1): (m.group(2), m.group(3) or "") for m in VERDICT.finditer(cmd)}   # keyed by where the call is
     for m in VERDICT_VAR.finditer(cmd):
-        if m.start(2) not in found and re.search(r"(?:^|[\s;&|(])(?:export\s+)?%s=[\"']?(?:[^\s;|&$]|\$\([^)\n]*\))*tree\.py" % re.escape(m.group(1)), cmd[:m.start()], re.M):
+        if m.start(2) not in found and re.search(r"(?:^|[\s;&|(])(?:export\s+)?%s=[\"']?(?:[^\s;|&$]|\$\([^)\n]*\)|\$\{\w+\}|\$\w+)*tree\.py" % re.escape(m.group(1)), cmd[:m.start()], re.M):
             found[m.start(2)] = (m.group(3), m.group(4) or "")
     return [found[at] for at in sorted(found)]
 

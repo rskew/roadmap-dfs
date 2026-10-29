@@ -42,6 +42,13 @@ class VerdictsTest(unittest.TestCase):
             self.assertEqual(history.verdicts(cmd), [("review", "issues")], use)
         self.assertEqual(history.verdicts("export S=%s; python3 $S log W5 critic ok" % self.S), [("critic", "ok")])
 
+    def test_a_variable_whose_value_names_another_variable(self):
+        for assign in ('S=$DIR/tree.py', 'S="$ROOT/scripts/tree.py"', 'S=${ROOT}/tree.py', 'S="${ROOT}/tree.py"'):
+            self.assertEqual(history.verdicts("%s\npython3 $S log W22 review issues" % assign), [("review", "issues")], assign)
+
+    def test_a_variable_not_set_to_tree_py_is_not_read(self):
+        self.assertEqual(history.verdicts("S=$DIR/other.py\npython3 $S log W22 review issues"), [])
+
     def test_a_variable_set_from_a_command_substitution_with_spaces(self):
         for assign in ('S=$(dirname "$X")/tree.py', 'S="$(cd /a b && pwd)/scripts/tree.py"', "S=$(dirname $(realpath $0))/tree.py"):
             self.assertEqual(history.verdicts("%s\npython3 $S log W22 review issues" % assign), [("review", "issues")], assign)
