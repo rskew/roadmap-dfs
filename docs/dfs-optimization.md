@@ -372,7 +372,8 @@ hold no session of the task, where it used to print a table of dashes.
 
 Judged on a replay, a change succeeds if the delivered tree meets more of the task's Goal clauses
 than the same-sitting control's (a rubric per task, a blind judge, a tie margin of 1.5 clauses; step 5),
-and, where quality ties, at no more than 70% of the control's credits. The first review's verdict is
+and, where quality ties, at no more than 70% of the control's credits (a pair whose credits are only a
+cut-off's lower bound is unresolved, not same). The first review's verdict is
 not the measure, since it is the dfs reviewer grading its own system. The history is still where
 the spend is found: `history.py` prints these counts in its "Share of all
 dfs spend" block (run of 2026-10-28, the same run as section 2): of 276 tasks that had a
@@ -518,9 +519,12 @@ rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word coun
    score, a spread of 0.71 clauses for one judging and so 1.5 for a difference of two two-judging
    means. *Tier 2, credits (kiro records credits per session, not token counts).* When quality ties,
    the pair is *better* at no more than 70% of the control's credits, *worse* at 1.43 times or more,
-   otherwise *same*; a cheaper tree of lower quality is *worse*, by tier 1. A pair in which either
-   replay has an unpriced session (a cut-off) is run again when credits would decide, and so is a
-   pair void under step 4.
+   otherwise *same*; a cheaper tree of lower quality is *worse*, by tier 1. A cut-off replay's credits
+   are a lower bound, so a pair in which credits decide and the bound cannot settle the verdict is
+   *unresolved* (`docs/dfs-quality-pairs.py` prints it so): it is run again, unless no cost it could
+   have changes how the candidate ends, and so is a pair void under step 4. The tie test is made on
+   whole clause counts (the two judgings' sums differ by more than 3), not on a float mean, so a
+   difference of exactly 1.5 clauses is a tie.
    A candidate is **kept** if it is better in **3 of 3** pairs. If not, and the first three
    were two better and one same, run two more pairs: kept if **4 of 5** are better and none
    is worse. Anything else is **dropped** (after three pairs with fewer than two better,
@@ -528,15 +532,22 @@ rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word coun
    rule keeps only a clear win. Read the reviews of the changed replays that count as
    better too: a pass counts only if the review's `ok` names what it checked.
 
-   *The two-tier rule (W130.28), the keep rate.* Over the pairs of two different control replays
-   of one task (both orders, `docs/dfs-quality-pairs.py`) a change that does nothing reads 29%
-   better, 44% same and 27% worse, and the sequence below keeps it **3.4%** of the time (the
-   first-review rule with a 30% credits margin: 6.8%); a change that cuts credits to 0.7 of the
-   control's is kept 23.8% of the time and one that halves them 54.4%, so a modest gain is still
-   returned as "not shown". The control's trees differ in quality (means of 6 to 8 of 8 clauses for
-   W11, 6.5 to 7 of 8 for W22, 7.5 to 9 of 9 for W36, 6 to 7 of 10 for W5), so tier 1 does not tie
-   every pair. W22 C6 (printed warnings) and W5 C7 (terminal markers) are unmet in all ten trees
-   each and separate nothing. The paragraph below is the earlier rule's reasoning and is kept as
+   *The two-tier rule (W130.28, redone by W130.30), the keep rate.* Over the pairs of two different
+   control replays of one task (both orders, `docs/dfs-quality-pairs.py`) a change that does nothing
+   reads 27% better, 48% same and 25% worse, and the sequence below keeps it **2.8%** of the time
+   (the first-review rule with a 30% credits margin: 6.8%). 12% of those pairs are *unresolved*,
+   because one control replay of W36 was cut off and its credits are only a bound; read as costs they
+   give the figure above, and if every unresolved pair went one way the keep rate would be 1.6% to
+   6.5%. A change that cuts credits to 0.7 of the control's is kept 24.2% of the time (14.9% to 33.6%)
+   and one that halves them 60.0% (42.0% to 67.9%), so a modest gain is still returned as "not
+   shown". Tier 1 decides only 2 of the 48 ordered control pairs (W11-c1a and W11-c2a,
+   8.0 against 6.0 of 8 clauses, in both orders), and the lower tree, W11-c2a, lost one clause on a
+   reading of "items" (see below) and two that the judge scored differently in its two judgings; the
+   other control trees sit within the 1.5-clause margin of each other (means of 7 to 8 of 8 for W11
+   without it, 6.5 to 7 of 8 for W22, 7.5 to 9 of 9 for W36, 6 to 7 of 10 for W5). So the rubric
+   separates candidate from control where a whole feature is missing (W5's lists and fences), and
+   otherwise credits decide. W22 C6 (printed warnings) and W5 C7 (terminal markers) are unmet in all ten
+   trees each and separate nothing. The paragraph below is the earlier rule's reasoning and is kept as
    history.
 
    *Why pairs and this margin (W130.9, figures corrected by W130.12).* The first-review pass
@@ -631,15 +642,36 @@ about its interrupted, repeated and empty cases.
 
 ### Candidate 1 under the loop (W130): dropped, not shown
 
-*Re-judged by the two-tier rule (W130.28; the text below used the first-review rule).* Against its
-same-sitting control candidate 1 reads **better** in W5 (9.0 against 6.5 of 10 clauses: lists and
-fenced blocks drawn) and W11 (8.0 against 6.0 of 8: an edit control on the page), **same** in W36
-(9.0 against 9.0; 25.4 against 22.9 credits) and W22 (7.0 against 7.0; 14.4+ against 11.2), and worse
-nowhere. In the order of step 5 the first three pairs read better, same, same, so it is still not
-kept (three better, or two better and one same, is needed); the verdict "not shown" stands but not for
-the reason given below, since the issues reviews that made W22 and W5 "worse" are no longer the
-measure. The quality gain in W5 and W11 lies in Goal clauses (a control on the page, lists, fences),
-not only in the edge-case clauses a break-it node would favour.
+*Re-judged by the two-tier rule (W130.28, redone by W130.30; the text below used the first-review
+rule).* Against its same-sitting control candidate 1 reads:
+
+- **W5 better** (9.0 against 6.5 of 10 clauses; credits 27.1 against 15.9). The clauses that differ in both judgings are
+  C4 (bulleted and numbered lines drawn as lists) and C5 (fenced code drawn as a preformatted block);
+  the changed tree has a renderer for both (`scripts/richtext.py`), the control's `rich()` in
+  `index.html` has neither, and both judgings agree on each. They are Goal clauses ("rich text") that
+  either arm could have met (C8, plain text not mangled, also differs, in one judging). Against the mean of the four controls (6, 7, 7, 6.5) it is also better.
+- **W11 better by the rule, and not carried by the trees** (8.0 against 6.0 of 8; credits 13.2 against
+  9.8). The control it is paired with, W11-c2a, does have an edit control on the page (an "Edit goal"
+  button, `index.html:460`); it lost C1 because the rubric reads "items" as the task's name and Goal text
+  and that button edits the Goal only. Its two other lost clauses, C4 and C5, are the ones the judge
+  scored differently in its two judgings (met then not met); on the first judging alone the pair is 8
+  against 7. The other three W11 controls scored 8, 7 and 7, so against the mean of the four (7.0) the
+  gain is 1.0 clause, inside the margin, and credits (13.2 against 11.8, 1.12 times) make it *same*.
+  W11 is counted as better in the sequence below because that is the rule, but nothing in it shows a
+  gain from the node.
+- **W36 same** (9.0 against 9.0 of 9; 25.4 against 22.9 credits, 1.11 times).
+- **W22 unresolved** (7.0 against 7.0 of 8; the changed arm was cut off at 14.4 credits against 11.2,
+  so its ratio is at least 1.29 and it is worse if the true cost is 16.0 or more). Against the mean of
+  the four controls (8.9 credits) the bound alone gives 1.62 times, worse. It was not run again,
+  because no cost could make it better, which is all the sequence needs.
+
+In the order of step 4 (W5, W36, W22, W11) the first three pairs are better, same and same-or-worse:
+fewer than two better, and 4 of 5 cannot happen, so the candidate is **not kept** (three better, or
+two better and one same, is needed). The verdict "not shown" stands, reached on a tie test and
+a W11 pair that hold, and not for the reason given below, since the issues reviews that made W22 and
+W5 "worse" are no longer the measure. The one gain that carries is W5's: two Goal clauses (lists,
+fences) that one control tree left out and the node's tree had, not the edge-case clauses a break-it
+node would favour.
 
 Run under kiro in the sandbox, each pair in one sitting, control then changed. The changed arm
 is the store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
