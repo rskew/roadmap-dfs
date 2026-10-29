@@ -90,7 +90,8 @@ print(f"control pairs decided by quality (a difference over {M} clauses): {len(q
       + ", ".join(f"{a} v {b}" for a, b in qp))
 print("\ncandidate 1 (b*) against its same-sitting control, and against the mean of the task's control trees:")
 # The control run in the same sitting as the changed arm (tag numbers do not give it: W5-b1a ran beside W5-c2a,
-# W36-b4a beside W36-c4a). Taken from the sittings' order in W130's log; edit it if a replay is added.
+# W36-b4a beside W36-c4a). Recorded nowhere else: it is the reading of the order the replays ran in by the session
+# that wrote this, so check it against the replay directories' timestamps and edit it if a replay is added.
 SAME_SITTING = {"W5": "c2a", "W36": "c4a", "W22": "c2a", "W11": "c2a"}
 for t, c in SAME_SITTING.items():
     ch = next(r for r in rows if r["task"] == t and r["tag"][0] == "b"); ct = next(r for r in rows if r["task"] == t and r["tag"] == c)

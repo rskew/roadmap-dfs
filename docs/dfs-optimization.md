@@ -270,8 +270,8 @@ What the proof does not show, and what a comparison has to allow for:
   credits (`promptTurnSummaries`, one summary per finished turn, none for a session cut off,
   counted as "unpriced"), and its size is the context window's highest percentage. The score
   table prints credits on their own row and `n/a` in the dollar rows, never a credit in a dollar
-  column, and the original's dollars are not comparable to them; the first-review verdict, which
-  the keep rule does not use (it takes the rubric score, then credits), is the same. The breach rows read the same calls (a kiro call is `execute`,
+  column, and the original's dollars are not comparable to them. The first-review verdict is
+  read the same way, but the keep rule does not use it (it takes the rubric score, then credits). The breach rows read the same calls (a kiro call is `execute`,
   `read`, `search` or `edit`, with its `rawInput` and the text it printed). Commits and nodes are
   counted by the same pattern as claude's, which misses `git commit -am` and `-q -am` and can
   match the word inside a script a call writes, so `main`'s `W<n>.<m>:` commits are the check
@@ -459,8 +459,8 @@ reading was fixed in W130.15 and the counts of the task files, which candidates 
 use, did not change. By units, then,
 candidate 5's bound (12% of all units) is larger than what candidate 1's class alone started
 (0.4% narrow, 3% wide, of the units of the 131 tasks with a transcript; candidate 3 1%,
-candidate 2 none); the order of the table does not follow spend, and rests on candidate 1 changing the first review (the
-measure a replay moves) while 5 only limits the loss and cannot be tested by one.
+candidate 2 none); the order of the table does not follow spend, and rests on candidate 1 changing the quality of the delivered tree or its credits (the
+measure a replay moves, step 5) while 5 only limits the loss and cannot be tested by one.
 
 What this does to the rank: the recount leaves candidate 1 first among the three that change a
 review where the document had it, on the one reading that separates them (the rounds a class
@@ -663,15 +663,14 @@ rule).* Against its same-sitting control candidate 1 reads:
   scored differently in its two judgings (met then not met); on the first judging alone the pair is 8
   against 7. The other three W11 controls scored 8, 7 and 7, so against the mean of the four (7.0) the
   gain is 1.0 clause, inside the margin, and credits (13.2 against 11.8, 1.12 times) make it *same*.
-  W11 is counted as better in the sequence below because that is the rule, but nothing in it shows a
-  gain from the node.
+  Nothing in it shows a gain from the node.
 - **W36 same** (9.0 against 9.0 of 9; 25.4 against 22.9 credits, 1.11 times).
 - **W22 unresolved** (7.0 against 7.0 of 8; the changed arm was cut off at 14.4 credits against 11.2,
   so its ratio is at least 1.29 and it is worse if the true cost is 16.0 or more). Against the mean of
   the four controls (8.9 credits) the bound alone gives 1.62 times, worse. It was not run again,
   because no cost could make it better, which is all the sequence needs.
 
-In the order of step 4 (W5, W36, W22, W11) the first three pairs are better, same and same-or-worse:
+In the order of step 4 (W5, W36, W22, W11) the first three pairs are better, same and unresolved:
 fewer than two better, and 4 of 5 cannot happen, so the candidate is **not kept** (three better, or
 two better and one same, is needed). The verdict "not shown" stands, reached on a tie test and
 a W11 pair that hold, and not for the reason given below, since the issues reviews that made W22 and
