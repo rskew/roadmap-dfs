@@ -441,15 +441,31 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    median dollars, refused commits, replays that stopped BLOCKED or on the cap. Then
    read the reviews of the changed arm's passes: a pass counts only if the review's
    `ok` names what it checked (the `ok` of two guarded W55 replays still listed three
-   and four defects each). A candidate is **kept** if it passes the first review in at
-   least **four** more replays of the twelve than the control does, and no task gets
-   worse by more than one replay of three. **Dropped** if it does not, with the numbers
+   and four defects each). A candidate is **kept** if it passes the first review in **all
+   twelve** of its replays (three of each task), the control replayed in the same sitting
+   passes at most eleven of its twelve (else the sitting was easy and nothing is shown),
+   and its twelve replays cost at most 176 credits (the control's 155.0 and two spreads of
+   a difference of two twelve-replay totals, 10.4 each). **Dropped** if it does not, with the numbers
    in the candidate's row: "not shown", not "shown useless" (a modest gain is missed more
    often than not, below). The lead guards against reviewer noise and small samples,
    which the sandbox does not remove: the first review's verdict varies between replays
    of one tool.
 
-   *Why four.* Assume each replay passes its first review with probability p, alone
+   *Why all twelve (W130.8).* The first rule below, four more passes of twelve than
+   the control, assumed a control near 0.5 to 0.7. The sandboxed control passed 9 of 12
+   (W22 3, W11 3, W36 2, W5 1; 95% interval for the rate 0.43 to 0.95), so four more
+   would be 13 of 12 and no change could ever be kept. With the control at 9, all twelve
+   is three more; a change that does nothing passes all twelve with probability p^12 (3.2%
+   at p=0.75, 1.4% at 0.70), and kept only if the same-sitting control does not also pass
+   all twelve, at most 25% anywhere in the control's interval. A change that lifts p to
+   0.95 is kept 54% of the time, to 0.90 28%: "not shown" is common, as before. Rejected:
+   restricting to W5 and W36 (picked because the control failed there, so their rate
+   regresses upward and six of six is common by chance), cost alone (the issues rounds are
+   13.5 of the control's 155 credits, below its spread), and five replays a task (about
+   340 credits an arm). Hypothesis of W130.8, page
+   `.dfs/artefacts/1b9b28c6-5f6a-49cc-b988-4638ffc650c5.html`.
+
+   *Why four (the earlier rule).* Assume each replay passes its first review with probability p, alone
    and independently, p between 0.5 and 0.7 (the history fails 30% of first reviews; the
    three W55 replays before the sandbox passed 2 of 3, an upper bound on a sandboxed replay's rate, and the one sandboxed replay passed). Two arms of the same tool then differ by
    the margin by chance this often (exact sums over every outcome, recomputed by `python3 <scripts>/chance.py` and by the page named below):

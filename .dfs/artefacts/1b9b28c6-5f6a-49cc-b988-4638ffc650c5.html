@@ -1,0 +1,239 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W130.8 keep rule the control allows</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  h3 { font-size: 16px; margin: 14px 0 4px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tabs button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .panel { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 12px; margin: 10px 0; }
+  .res { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+  .res div { flex: 1 1 140px; border: 1px solid #999; border-radius: 6px; padding: 8px; }
+  .res b { display: block; font-size: 22px; }
+  .sl { display: block; margin: 10px 0; }
+  .sl input { width: 100%; min-height: 44px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td, th { border: 1px solid #bbb; padding: 4px 6px; text-align: left; }
+  .tw { overflow-x: auto; }
+</style>
+
+<h1>A keep rule the control's 9 of 12 allows</h1>
+<p>The twelve control replays passed the first review 9 times (W22 3, W11 3, W36 2, W5 1).
+  The rule in <code>docs/dfs-optimization.md</code> wants a change to pass four more of twelve
+  than the control: 13 of 12 is impossible, so no change can be kept. Pick a rule below to
+  see how often it keeps a change that does nothing, and how often it keeps one that works.</p>
+
+<div class="tabs" role="group" aria-label="Rule">
+  <button type="button" data-rule="old" aria-pressed="false">Old: +4 of 12</button>
+  <button type="button" data-rule="a" aria-pressed="false">(a) W5 and W36 only</button>
+  <button type="button" data-rule="b" aria-pressed="false">(b) credits only</button>
+  <button type="button" data-rule="c" aria-pressed="false">(c) 5 replays a task</button>
+  <button type="button" data-rule="x" aria-pressed="true">Chosen: all 12 pass</button>
+</div>
+<div class="panel"><p id="rtext"></p></div>
+
+<div class="sl"><label for="p0">Control's true first-review pass rate</label> <output id="p0o">0.75</output>
+  <input id="p0" type="range" min="0.5" max="0.95" step="0.01" value="0.75"></div>
+<div class="sl"><label for="q">Changed tool's true pass rate, if it works</label> <output id="qo">0.95</output>
+  <input id="q" type="range" min="0.75" max="1" step="0.01" value="0.95"></div>
+<div class="res">
+  <div>A change that does nothing is kept<b id="nul">-</b></div>
+  <div>A change that lifts the rate is kept<b id="pow">-</b></div>
+</div>
+<p id="note"></p>
+
+<h2>The twelve control replays</h2>
+<div class="tw"><table>
+  <tr><th>task</th><th>first review</th><th>credits</th><th>total</th></tr>
+  <tr><td>W22</td><td>ok ok ok</td><td>5.9 8.6 10.0</td><td>24.5</td></tr>
+  <tr><td>W11</td><td>ok ok ok</td><td>14.0 14.0 9.6</td><td>37.6</td></tr>
+  <tr><td>W5</td><td>issues issues ok</td><td>23.4 12.2 14.3</td><td>49.9</td></tr>
+  <tr><td>W36</td><td>ok issues ok</td><td>11.5 17.0 14.5</td><td>43.0</td></tr>
+</table></div>
+<p>Credit total 155.0; the spread of a 12-replay total is 7.3 credits, of the difference of two
+  such totals 10.4. 9 of 12 has a 95% interval of 0.43 to 0.95 for the true rate.</p>
+
+<script>
+  var RULES = {
+    old: 'Keep if the changed arm passes four more of twelve than the control. With the control at 9 the changed arm would need 13: never kept, whatever it does.',
+    a: 'Keep if the changed arm passes all 6 first reviews of W5 and W36, where the control failed 3 of 6. The two tasks were picked because the control failed there, so their true rate is likely above the 0.5 they show (regression to the mean), and a no-op passes 6 of 6 far more often than 1 in 64.',
+    b: 'Keep if the 12 changed replays cost 21 credits less than the control (155.0 minus two spreads). The change aims at fewer issues rounds, which is 13.5 of the 155 credits, so a cost-only test misses it and a rule on cost alone can not tell a better review from a cheaper one. Not computed from the rates above.',
+    c: 'Keep if the changed arm passes all 5 first reviews of every task (20 replays), with 5 more control replays a task. About 340 credits for each arm.',
+    x: 'Keep if the changed arm passes the first review in all 12 replays (three of each task) and the control replayed in the same sitting passes at most 11 of its 12 (else the sitting was easy, and the result is "not shown"). Also the 12 changed replays cost at most 176 credits (control 155.0 plus two spreads of a difference). Otherwise "not shown", never "shown useless".'
+  };
+  var NOTE = {
+    old: 'Power is nil.',
+    a: 'Follows the slider for the control rate on these two tasks.',
+    b: 'Needs a model of credits; see the table for the spread (W5 alone runs 12.2 to 23.4).',
+    c: 'More replays buy power only if the tool gets cheaper; kept for the author to weigh.',
+    x: 'Chance of keeping a no-op is p^12 times (1 minus p^12); it is at most 25% (p near 0.84 to 0.95 reading the control interval), 3% at 0.75 and 1% at 0.70.'
+  };
+  var cur = 'x', p0 = 0.75, q = 0.95;
+  function pct(v) { return (100 * v).toFixed(1) + '%'; }
+  function calc() {
+    var n, w;
+    if (cur === 'old') { n = 0; w = 0; }
+    else if (cur === 'a') { n = Math.pow(p0, 6); w = Math.pow(q, 6); }
+    else if (cur === 'b') { n = NaN; w = NaN; }
+    else if (cur === 'c') { n = Math.pow(p0, 20) * (1 - Math.pow(p0, 20)); w = Math.pow(q, 20) * (1 - Math.pow(p0, 20)); }
+    else { n = Math.pow(p0, 12) * (1 - Math.pow(p0, 12)); w = Math.pow(q, 12) * (1 - Math.pow(p0, 12)); }
+    document.getElementById('nul').textContent = isNaN(n) ? 'n/a' : pct(n);
+    document.getElementById('pow').textContent = isNaN(w) ? 'n/a' : pct(w);
+    document.getElementById('rtext').textContent = RULES[cur];
+    document.getElementById('note').textContent = NOTE[cur];
+    document.getElementById('p0o').textContent = p0.toFixed(2);
+    document.getElementById('qo').textContent = q.toFixed(2);
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-rule') === cur ? 'true' : 'false');
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+    b.addEventListener('click', function () { cur = b.getAttribute('data-rule'); calc(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  });
+  document.getElementById('p0').addEventListener('input', function (e) { p0 = +e.target.value; calc(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  document.getElementById('q').addEventListener('input', function (e) { q = +e.target.value; calc(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  window.dfsPageState = function () { return { cur: cur, p0: p0, q: q }; };
+  document.addEventListener('dfs-state', function (e) {
+    var s = e.detail || {}; cur = s.cur || cur; p0 = s.p0 || p0; q = s.q || q;
+    document.getElementById('p0').value = p0; document.getElementById('q').value = q; calc();
+  });
+  calc();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
