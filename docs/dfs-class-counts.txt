@@ -62,21 +62,21 @@
       2 assumptions                       0 units  0/74825061 0%
       3 one review (present)              0 units  0/74825061 0%
 
-# python3 docs/dfs-class-counts.py --history-report history.json   (history.json from: python3 scripts/history.py --repo roadmap-dfs=. --repo shop-app=optimisation-data/shop-app --repo farm-app=optimisation-data/farm-app --json history.json)
-2101 dfs sessions, 733,568,493 weighted-token units
+# python3 docs/dfs-class-counts.py --history-report history.json   (history.json from: python3 scripts/history.py --repo roadmap-dfs=. --repo shop-app=optimisation-data/shop-app --repo farm-app=optimisation-data/farm-app --json history.json; rerun 2026-10-29 after W130.15 fixed the verdict reading, 2,111 sessions)
+2111 dfs sessions, 737,512,333 weighted-token units
 
 candidate 4: sessions with a refused commit, and with the file:line coordinate refusal, by period
    2026-09-29..2026-10-19: 1432 sessions, refused 155/1432 11%, coordinate 124/1432 9%
    2026-10-19..2026-10-22: 253 sessions, refused 45/253 18%, coordinate 35/253 14%
-   2026-10-22..2026-10-30: 416 sessions, refused 34/416 8%, coordinate 5/416 1%
-   units of the sessions that had a refusal (an upper bound; a retry is part of a session): 116209714/733568493 16%
+   2026-10-22..2026-10-30: 426 sessions, refused 35/426 8%, coordinate 6/426 1%
+   units of the sessions that had a refusal (an upper bound; a retry is part of a session): 117140802/737512333 16%
 
 first review said issues, by project (tasks with a transcript)
-   -workspace-chirpstack-docker: 40/135 30%
+   -workspace-chirpstack-docker: 49/135 36%
    -workspace-farm-app: 0/1 0%
-   -workspace-house: 10/25 40%
-   -workspace-roadmap-dfs: 32/112 29%
-   -workspace-shop-app: 6/14 43%
+   -workspace-house: 11/25 44%
+   -workspace-roadmap-dfs: 39/114 34%
+   -workspace-shop-app: 7/15 47%
 
 candidate 5: units after the third review that said issues, and after the first
-   after the first issues review: 296231282/733568493 40%; after the third: 79152911/733568493 11%
+   after the first issues review: 319645334/737512333 43%; after the third: 89074859/737512333 12%

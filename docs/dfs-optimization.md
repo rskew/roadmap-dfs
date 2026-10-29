@@ -374,7 +374,9 @@ Judged on a replay, a change succeeds if more first finished trees **pass their 
 review**, at a cost no higher than the control's. That is the one number the history
 supports as the thing to move. `history.py` prints these counts in its "Share of all
 dfs spend" block (run of 2026-10-28, the same run as section 2): of 276 tasks that had a
-review, the first review found issues in 84 (30%); 104 tasks (38%) had at least one
+review, the first review found issues in 84 (30%; the run read verdicts from the
+commands that wrote them and missed a verdict set through a shell variable, and the
+fixed reading of 2026-10-29 gives 106 of 290, 37%); 104 tasks (38%) had at least one
 issues round and hold 72.7% of all dfs dollars; 30 tasks (11%) had three or more and hold
 34.3%. A task's dollars are all its work, review and critic sessions, so the 72.7% is a
 share of the spend on those tasks, not of the spend after their first issues review (that
@@ -437,16 +439,21 @@ they were reproduced, so these are floors. The new checkouts add little to it: s
 reviews say they reproduced 1 of 155 defects, farm-app's 8 of 22 (7 are one task's
 re-send logic, none in the narrow cases).
 
-Candidates 4 and 5 do not change a review and are counted in the history (2,101 sessions,
-733 million weighted-token units, `--history-report`): 8% of sessions since 22 October had
+Candidates 4 and 5 do not change a review and are counted in the history (2,111 sessions,
+738 million weighted-token units, `--history-report`): 8% of sessions since 22 October had
 a refused commit, 1% for the file:line coordinate (14% from 19 to 22 October, 9% before), and
 the sessions that had one hold 16% of the units, an upper bound since a refusal costs a retry
 inside a session. The coordinate's drop followed the guard's wording change on 19 October by
 three days; whether the wording caused it is not shown. Units after the third review that
-said issues are 11% of all, after the first 40% (history.py gives 40.3% in dollars), and the
-first review said issues on 29% of roadmap-dfs's tasks with a transcript (32 of 112), 43% of
-shop-app's (6 of 14, a small base) and 30% of chirpstack-docker's (40 of 135). By units, then,
-candidate 5's bound (11% of all units) is larger than what candidate 1's class alone started
+said issues are 12% of all, after the first 43% (history.py gives 42.9% in dollars), and the
+first review said issues on 34% of roadmap-dfs's tasks with a transcript (39 of 114), 47% of
+shop-app's (7 of 15, a small base) and 36% of chirpstack-docker's (49 of 135). These rates
+and the 12% are higher than the first count of this section (29%, 43%, 30%, 11%, 40%),
+which read a review's verdict from the command that wrote it and missed a verdict written
+through a shell variable (`S=…/tree.py`, then `python3 $S log W22 review issues`); the
+reading was fixed in W130.15 and the counts of the task files, which candidates 1 to 3
+use, did not change. By units, then,
+candidate 5's bound (12% of all units) is larger than what candidate 1's class alone started
 (0.4% narrow, 3% wide, of the units of the 131 tasks with a transcript; candidate 3 1%,
 candidate 2 none); the order of the table does not follow spend, and rests on candidate 1 changing the first review (the
 measure a replay moves) while 5 only limits the loss and cannot be tested by one.
