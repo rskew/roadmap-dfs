@@ -370,9 +370,11 @@ hold no session of the task, where it used to print a table of dashes.
 
 ### The measure
 
-Judged on a replay, a change succeeds if more first finished trees **pass their first
-review**, at a cost no higher than the control's. That is the one number the history
-supports as the thing to move. `history.py` prints these counts in its "Share of all
+Judged on a replay, a change succeeds if the delivered tree meets more of the task's Goal clauses
+than the same-sitting control's (a rubric per task, a blind judge, a tie margin of 1.5 clauses; step 5),
+and, where quality ties, at no more than 70% of the control's credits. The first review's verdict is
+not the measure, since it is the dfs reviewer grading its own system. The history is still where
+the spend is found: `history.py` prints these counts in its "Share of all
 dfs spend" block (run of 2026-10-28, the same run as section 2): of 276 tasks that had a
 review, the first review found issues in 84 (30%; the run read verdicts from the
 commands that wrote them and missed a verdict set through a shell variable, and the
@@ -502,18 +504,40 @@ rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word coun
    by hand) or a conclusion shown is void: it is dropped from the count, the arm is run
    again, and a Fix node is opened to close the hole.
 5. **Compare** the changed replay with the control replay of each pair, and judge the pair
-   **better**, **same** or **worse**. Both arms end with the review passed (the chain's
-   DONE), so the comparison is what it took to get there. The changed replay is *better* if
-   it has fewer reviews that said issues; or the same number and at most 70% of the
-   control's credits. *Worse* is the mirror: more issues reviews, or the same number and
-   at least 1/0.7 (1.43) times the credits. Otherwise *same*. A pair that credits would decide, in which either replay
-   has an unpriced session (a cut-off), is run again, and so is a pair void under step 4.
+   **better**, **same** or **worse** on two tiers, quality first (W130.26 to W130.28). Both arms
+   end with the review passed, and the dfs reviewer grades its own system, so neither the review's
+   verdict nor the count of issues reviews is the measure.
+   *Tier 1, quality.* Each replay's delivered tree is scored against a rubric of the task's Goal
+   clauses (`docs/dfs-rubrics/<task>.md`, one per task, written before any arm ran; rubric only, no
+   tests) by a separate kiro session with a fixed prompt (`docs/dfs-rubrics/judge-prompt.md`,
+   `docs/dfs-quality-judge.py`) that sees a blind snapshot (no `.dfs`, log, task file or arm name)
+   and must cite file and line for every clause. A tree's score is the mean of two judgings, in
+   clauses met. The pair is *better* (or *worse*) if the changed tree's score is above (below) the
+   control's by more than **1.5 clauses**, the margin sized from the judge's own spread: scoring the
+   20 replay trees twice gave 165 of 175 clause verdicts the same (94.3%), 14 of 20 trees the same
+   score, a spread of 0.71 clauses for one judging and so 1.5 for a difference of two two-judging
+   means. *Tier 2, credits (kiro records credits per session, not token counts).* When quality ties,
+   the pair is *better* at no more than 70% of the control's credits, *worse* at 1.43 times or more,
+   otherwise *same*; a cheaper tree of lower quality is *worse*, by tier 1. A pair in which either
+   replay has an unpriced session (a cut-off) is run again when credits would decide, and so is a
+   pair void under step 4.
    A candidate is **kept** if it is better in **3 of 3** pairs. If not, and the first three
    were two better and one same, run two more pairs: kept if **4 of 5** are better and none
    is worse. Anything else is **dropped** (after three pairs with fewer than two better,
    4 of 5 cannot happen, so stop there). Dropped is "not shown", not "shown useless": the
    rule keeps only a clear win. Read the reviews of the changed replays that count as
    better too: a pass counts only if the review's `ok` names what it checked.
+
+   *The two-tier rule (W130.28), the keep rate.* Over the pairs of two different control replays
+   of one task (both orders, `docs/dfs-quality-pairs.py`) a change that does nothing reads 29%
+   better, 44% same and 27% worse, and the sequence below keeps it **3.4%** of the time (the
+   first-review rule with a 30% credits margin: 6.8%); a change that cuts credits to 0.7 of the
+   control's is kept 23.8% of the time and one that halves them 54.4%, so a modest gain is still
+   returned as "not shown". The control's trees differ in quality (means of 6 to 8 of 8 clauses for
+   W11, 6.5 to 7 of 8 for W22, 7.5 to 9 of 9 for W36, 6 to 7 of 10 for W5), so tier 1 does not tie
+   every pair. W22 C6 (printed warnings) and W5 C7 (terminal markers) are unmet in all ten trees
+   each and separate nothing. The paragraph below is the earlier rule's reasoning and is kept as
+   history.
 
    *Why pairs and this margin (W130.9, figures corrected by W130.12).* The first-review pass
    rate was the earlier measure, and it is coarse: counted from the replays' own task files
@@ -606,6 +630,16 @@ first three pairs say the node does not reliably finish the per-clause search, a
 about its interrupted, repeated and empty cases.
 
 ### Candidate 1 under the loop (W130): dropped, not shown
+
+*Re-judged by the two-tier rule (W130.28; the text below used the first-review rule).* Against its
+same-sitting control candidate 1 reads **better** in W5 (9.0 against 6.5 of 10 clauses: lists and
+fenced blocks drawn) and W11 (8.0 against 6.0 of 8: an edit control on the page), **same** in W36
+(9.0 against 9.0; 25.4 against 22.9 credits) and W22 (7.0 against 7.0; 14.4+ against 11.2), and worse
+nowhere. In the order of step 5 the first three pairs read better, same, same, so it is still not
+kept (three better, or two better and one same, is needed); the verdict "not shown" stands but not for
+the reason given below, since the issues reviews that made W22 and W5 "worse" are no longer the
+measure. The quality gain in W5 and W11 lies in Goal clauses (a control on the page, lists, fences),
+not only in the edge-case clauses a break-it node would favour.
 
 Run under kiro in the sandbox, each pair in one sitting, control then changed. The changed arm
 is the store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
