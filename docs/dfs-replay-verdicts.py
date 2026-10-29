@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""The control and changed replays of W130, scored two ways, and the pair rule on the corrected counts.
+"""The control and changed replays of W130, scored two ways, and the first-review pair rule on the corrected counts.
+
+This is the OLD rule (fewer issues reviews, then credits at a 30% margin), kept for the history; the author
+refuted it. The measure now is rubric quality then credits: docs/dfs-quality-pairs.py.
 
     python3 docs/dfs-replay-verdicts.py REPLAYS_DIR            # table; REPLAYS_DIR holds dfs-replay-W<n>-<tag>
     python3 docs/dfs-replay-verdicts.py REPLAYS_DIR --pairs    # also the no-change pair table of step 5

@@ -165,7 +165,8 @@ What the proof does not show, and what a comparison has to allow for:
 - **One replay is one sample.** The same task, under one system, cost 1.95, 2.77 and 3.44
   dollars (1.30 originally) and its first review passed twice in three; a change to the
   system can only be judged over several replays of each arm (control and changed),
-  compared on the first review's pass rate before cost.
+  compared on the delivered tree's rubric score, then on credits (step 5 of the loop; this bullet
+  was written when the first review's pass rate was the measure).
 - **The replays `a`, `b`, `c` and `arm1` ran with the original's evidence on the box.** `seal` empties the clone
   of the original's later work, but not the box: a replay's sessions run as the same user,
   and the live checkout's `.dfs/runs` (the original chain's run logs, with its sessions'
@@ -270,7 +271,7 @@ What the proof does not show, and what a comparison has to allow for:
   counted as "unpriced"), and its size is the context window's highest percentage. The score
   table prints credits on their own row and `n/a` in the dollar rows, never a credit in a dollar
   column, and the original's dollars are not comparable to them; the first-review verdict, which
-  the keep rule uses, is the same. The breach rows read the same calls (a kiro call is `execute`,
+  the keep rule does not use (it takes the rubric score, then credits), is the same. The breach rows read the same calls (a kiro call is `execute`,
   `read`, `search` or `edit`, with its `rawInput` and the text it printed). Commits and nodes are
   counted by the same pattern as claude's, which misses `git commit -am` and `-q -am` and can
   match the word inside a script a call writes, so `main`'s `W<n>.<m>:` commits are the check
@@ -478,7 +479,8 @@ rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word coun
    or the web, so a task whose answer is on the remote shows in the breach rows or not at all;
    and a task that sends its sessions to the original's run logs can only be guessed at, as
    W55's is), and whose original first
-   review found issues, so the control has something to move. Take at least four. `replay.py plan TASK` prints the starting
+   review found issues, which marks a task the reviewer found wanting (whether a control tree falls
+   short of the task's Goal is read from the rubric, not from the review). Take at least four. `replay.py plan TASK` prints the starting
    point and the original's numbers.
 3. **Change** the tool, on a branch of this repo, one candidate at a time: the changed
    arm is that revision (`--tool-ref REV`), the control is the revision it branched from.
@@ -524,7 +526,11 @@ rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word coun
    *unresolved* (`docs/dfs-quality-pairs.py` prints it so): it is run again, unless no cost it could
    have changes how the candidate ends, and so is a pair void under step 4. The tie test is made on
    whole clause counts (the two judgings' sums differ by more than 3), not on a float mean, so a
-   difference of exactly 1.5 clauses is a tie.
+   difference of exactly 1.5 clauses is a tie. Two limits on the cost and the blindness of tier 1:
+   the judge's own cost is unknown (kiro-cli prints no credits for a judge session), so a pair's credits
+   are the replays' alone; and the judge is blind by its prompt and its snapshot, not by a sandbox: it
+   has read, glob and grep tools that can open any path, and the scores file keeps only its answer lines,
+   so a read outside the snapshot could not be seen afterwards.
    A candidate is **kept** if it is better in **3 of 3** pairs. If not, and the first three
    were two better and one same, run two more pairs: kept if **4 of 5** are better and none
    is worse. Anything else is **dropped** (after three pairs with fewer than two better,
@@ -624,7 +630,7 @@ from the replays' task files, said issues in 5 of 12 replays (W22 1 of 3, W11 0,
 and in 1 of 3 more in the sitting of the second control (W5), so the failure that selected
 the tasks recurs in under half of the control replays and not at all in W11. A candidate
 aimed at a class mined from the history can only be tested on a task whose control replays
-fail in that class, and the metric (fewer issues reviews, then credits) is blind to a class
+fail in that class, and the measure (rubric quality, then credits) cannot show a change aimed at a class
 that does not occur; `docs/dfs-replay-verdicts.txt` lists each replay's verdicts.
 
 Read against candidate 1's class (W130.13, `docs/dfs-review-class-reading.tsv`, one row per issues
@@ -637,7 +643,7 @@ first kind, and in those two trees the "Break it" node did run the per-clause ch
 grep for caps, an AST walk for shouted words; W5: a read of each place that prints task prose) and
 missed what the review then found; in W11 the node found three faults and the review passed. W36,
 the one task whose control fails in the narrow cases, was not run under the changed arm. So the
-first three pairs say the node does not reliably finish the per-clause search, and say nothing
+first three pairs of the first-review rule say the node does not reliably finish the per-clause search, and say nothing
 about its interrupted, repeated and empty cases.
 
 ### Candidate 1 under the loop (W130): dropped, not shown
@@ -676,7 +682,9 @@ starting chat renderer already draws fences but not lists), and with either clau
 tie of exactly 1.5 clauses that credits (1.70 times) call worse. The verdict does not turn on it, since
 a W5 that is worse leaves none of the first three better, and a W5 that is better leaves one.
 
-Run under kiro in the sandbox, each pair in one sitting, control then changed. The changed arm
+*The table and the paragraphs below are the first-review rule's reading (the rule the author refuted, kept
+as history); the figures "worse, better, worse" in them are not the measure.* Run under kiro in the
+sandbox, each pair in one sitting, control then changed. The changed arm
 is the store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
 node tries to break the work, and a tree whose last node is not that is not complete), as a copy
 of the store tool and not `--tool-ref`, because the repo's `SKILL.md` is older than the store tool
@@ -728,8 +736,9 @@ once on W36, judged by pairs (step 5), with no change kept. The shop-app tasks a
 --recorded-as /workspace/shop-app --limit 3.5` (W32 and W14; `score` and `replay` take the same `--recorded-as`; whether
 each has a starting commit to replay from is not checked); farm-app's tasks have no starting commit and cannot be replayed.
 What is next is a candidate of the remaining ones (2, 3, 4, 5) run as a pair against a
-same-sitting control, on the tasks whose control fails in the class the candidate targets (the
-kiro control fails the first review in 5 of 12 replays, none in W11).
+same-sitting control, on the tasks whose control trees fall short of the rubric in the clauses the
+candidate targets (the kiro control's first review said issues in 5 of 12 replays, none in W11; the
+rubric scores of the control trees are in `docs/dfs-quality-scores.jsonl`).
 
 A replay needs the configured agent's binary (claude, codex, kiro-cli or opencode) and `proot`
 (both from nixpkgs at the agent pin; `REPLAY_CLAUDE_CODE`, `REPLAY_KIRO_CLI`, `REPLAY_CODEX`,

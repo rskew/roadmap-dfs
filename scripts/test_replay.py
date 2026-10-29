@@ -775,6 +775,13 @@ class RecordedAsReachesEveryCommandTest(unittest.TestCase):
                 self.main(*argv, "--recorded-as", "/tmp/orig-shop")
             self.assertIn("--recorded-as", str(e.exception))
 
+    def test_only_candidates_takes_limit_and_the_rest_refuse_it_by_name(self):
+        for argv in (("plan", "W5"), ("prepare", "W5", "/tmp/dfs-replay-W5-a"), ("run", "/tmp/dfs-replay-W5-a", "W5"),
+                     ("score", "/tmp/dfs-replay-W5-a", "W5"), ("replay", "W5", "/tmp/dfs-replay-W5-a")):
+            with self.assertRaises(SystemExit) as e:
+                self.main(*argv, "--limit", "3.5")
+            self.assertIn("--limit", str(e.exception))
+
 
 class OriginalIsTheRepoOwnTest(unittest.TestCase):
     def test_a_task_of_the_same_name_in_another_project_is_not_the_original(self):

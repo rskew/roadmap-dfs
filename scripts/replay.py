@@ -873,6 +873,8 @@ def main(argv):
     it = iter(rest)
     for a in it:
         if a.startswith("--") and a[2:] in opts:
+            if a == "--limit" and cmd != "candidates":   # only `candidates` filters by cost: say so rather than drop it
+                raise SystemExit(f"replay: --limit does nothing for {cmd}; it caps the original's cost, for candidates")
             opts[a[2:]] = next(it)
         else:
             pos.append(a)

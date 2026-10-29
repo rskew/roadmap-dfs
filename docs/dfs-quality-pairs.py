@@ -89,7 +89,10 @@ print(f"control pairs decided by quality (a difference over {M} clauses): {len(q
       f"{sum(len([r for r in ctl if r['task'] == t]) * (len([r for r in ctl if r['task'] == t]) - 1) for t in {r['task'] for r in ctl})} ordered pairs: "
       + ", ".join(f"{a} v {b}" for a, b in qp))
 print("\ncandidate 1 (b*) against its same-sitting control, and against the mean of the task's control trees:")
-for t, c in (("W5", "c2a"), ("W36", "c4a"), ("W22", "c2a"), ("W11", "c2a")):
+# The control run in the same sitting as the changed arm (tag numbers do not give it: W5-b1a ran beside W5-c2a,
+# W36-b4a beside W36-c4a). Taken from the sittings' order in W130's log; edit it if a replay is added.
+SAME_SITTING = {"W5": "c2a", "W36": "c4a", "W22": "c2a", "W11": "c2a"}
+for t, c in SAME_SITTING.items():
     ch = next(r for r in rows if r["task"] == t and r["tag"][0] == "b"); ct = next(r for r in rows if r["task"] == t and r["tag"] == c)
     print(f"  {t}: {verdict(ch, ct)} | clauses {mean(ch):.1f} vs {mean(ct):.1f} of {n_of[t]} | credits {ch['credits']}{'+' if ch['unpriced'] else ''} vs {ct['credits']}")
     cs = [r for r in ctl if r["task"] == t]
