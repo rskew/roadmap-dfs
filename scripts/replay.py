@@ -7,12 +7,16 @@ Goal and Background) and nothing the sessions added. This clones the repo there,
 chain (run.sh) work the task, and measures the result with history.py's `session()` and
 `tasks_of()`, the code that measured the original, so the two columns are comparable.
 
-  python3 <scripts>/replay.py candidates [--repo PATH]       (tasks the loop's selection rule picks from)
-  python3 <scripts>/replay.py plan    TASK [--repo PATH]
+  python3 <scripts>/replay.py candidates [--repo PATH] [--recorded-as PATH] [--limit USD]   (tasks the loop's selection rule picks from)
+  python3 <scripts>/replay.py plan    TASK [--repo PATH] [--recorded-as PATH]
   python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE] [--agent A]
   python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M] [--agent A]    (inside proot)
-  python3 <scripts>/replay.py score   DEST TASK [--repo PATH]
-  python3 <scripts>/replay.py replay  TASK DEST [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
+  python3 <scripts>/replay.py score   DEST TASK [--repo PATH] [--recorded-as PATH]
+  python3 <scripts>/replay.py replay  TASK DEST [--recorded-as PATH] [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
+
+`--recorded-as PATH` names the path the checkout's sessions were recorded under, when `--repo` is a
+copy (optimisation-data/shop-app): the original to compare with, and the replay's session cap, are
+read from there. `prepare` and `run` look up no original and refuse it.
 
 The replay runs under the agent the screen is set to (`.dfs/runs/agent`: claude, codex, kiro or
 opencode), or the one `--agent` names; `prepare` records it. `score` reads claude's transcripts and
@@ -106,23 +110,43 @@ def starting_point(repo, task):
     raise SystemExit(f"replay: {rel} is in neither {parent[:8]} nor {first[:8]}")
 
 
-def original(repo, task):
-    """The original run of `task`, scored by the code that scores a replay."""
-    repos = {}
-    sessions, tasks, _, _ = history.load(transcripts(repo), repos)
-    mine = history.project_of(re.sub(r"[/.]", "-", str(Path(repo).resolve())))
+def recorded_project(path):
+    """The project name the transcripts of a checkout are filed under."""
+    return history.project_of(re.sub(r"[/.]", "-", str(Path(path).resolve())))
+
+
+def recorded_hint(repo, recorded_as=None):
+    """What to say when no transcript lies under the checkout's path (`recorded_as` or `repo`): the
+    projects under the author's config whose name ends in the checkout's name, as candidates for
+    `--recorded-as` (a copy such as optimisation-data/shop-app was recorded under its old path).
+    Empty when there are transcripts."""
+    if history._glob(transcripts(recorded_as or repo)):
+        return ""
+    tail = re.sub(r"[/.]", "-", Path(repo).name)
+    found = sorted(os.path.basename(d) for d in glob.glob(os.path.join(glob.escape(str(config_dir())), "projects", "*"))
+                   if os.path.basename(d).endswith("-" + tail))
+    return (f"no transcript lies under {recorded_as or repo}; a checkout recorded under another path "
+            f"needs --recorded-as PATH" + (f" (projects ending in {tail}: {', '.join(found)})" if found else ""))
+
+
+def original(repo, task, recorded_as=None):
+    """The original run of `task`, scored by the code that scores a replay. `recorded_as` is the
+    path the checkout's sessions were recorded under, when it is not `repo`."""
+    mine = recorded_project(recorded_as or repo)
+    repos = {mine: str(repo)} if recorded_as else {}   # the copy supplies the runner's prices and the author log
+    sessions, tasks, _, _ = history.load(transcripts(recorded_as or repo), repos)
     for (project, name), t in tasks.items():
         if name == task and project == mine:
             return t
     return None
 
 
-def candidates(repo, limit=3.0):
+def candidates(repo, limit=3.0, recorded_as=None):
     """The tasks of this repo that the loop's selection rule picks from the history: original
     at most `limit` dollars, a first review that found issues, and a node commit to start
     before. Whether a task's evidence lies in the repo is for a reader to check."""
-    tasks = history.load(transcripts(repo), {})[1]
-    mine = history.project_of(re.sub(r"[/.]", "-", str(Path(repo).resolve())))
+    mine = recorded_project(recorded_as or repo)
+    tasks = history.load(transcripts(recorded_as or repo), {mine: str(repo)} if recorded_as else {})[1]
     rows = []
     for (project, name), t in tasks.items():
         if project != mine or t["first_review"] != "issues" or not t["sessions"].get("work") \
@@ -428,7 +452,7 @@ def tool_docs(dest, tool):
     if not src.is_dir():
         return None
     out = box_of(dest) / "docs"
-    shutil.rmtree(out, ignore_errors=True)
+    remove_tree(out)
     out.mkdir(parents=True)
     for entry in sorted(src.iterdir()):
         if entry.name.startswith(HIDDEN_DOCS):
@@ -437,7 +461,26 @@ def tool_docs(dest, tool):
             shutil.copytree(entry, out / entry.name, symlinks=True)
         else:
             shutil.copy(entry, out / entry.name)
+    # A tool in the nix store is read-only; the copy is the box's own, so a later launch can rebuild it.
+    for base, dirs, files in os.walk(out):
+        for name in dirs + files:
+            path = os.path.join(base, name)
+            if not os.path.islink(path):
+                os.chmod(path, os.stat(path).st_mode | 0o200)
     return out
+
+
+def remove_tree(path):
+    """`shutil.rmtree` for a tree whose directories may be read-only (a copy of a store path): each
+    directory is made owner-writable first, since removing a file needs write on its directory."""
+    if not os.path.lexists(path):
+        return
+    if os.path.islink(path) or not os.path.isdir(path):   # a file or a link (to a directory too): rmtree refuses both
+        os.unlink(path)
+        return
+    for base, dirs, _ in os.walk(path):
+        os.chmod(base, os.stat(base).st_mode | 0o700)
+    shutil.rmtree(path)
 
 
 def hidden_docs_named(tool):
@@ -825,7 +868,7 @@ def main(argv):
         sys.stdout.write(__doc__)
         return 2
     cmd, rest = argv[0], argv[1:]
-    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES, "agent": None}
+    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES, "agent": None, "recorded-as": None, "limit": "3.0"}
     pos = []
     it = iter(rest)
     for a in it:
@@ -834,16 +877,22 @@ def main(argv):
         else:
             pos.append(a)
     repo = opts["repo"]
+    if opts["recorded-as"] and cmd in ("prepare", "run"):   # they never look up an original: say so rather than drop it
+        raise SystemExit(f"replay: --recorded-as does nothing for {cmd}; it names where the original's sessions were "
+                         "recorded, for candidates, plan, score and replay")
     if cmd == "candidates":
-        rows = candidates(repo)
-        sys.stdout.write(f"{len(rows)} tasks: original at most $3, first review said issues, a node commit to start before\n")
+        limit = float(opts["limit"])
+        rows = candidates(repo, limit, recorded_as=opts["recorded-as"])
+        if not rows and recorded_hint(repo, opts["recorded-as"]):
+            sys.stdout.write(f"replay: {recorded_hint(repo, opts['recorded-as'])}\n")
+        sys.stdout.write(f"{len(rows)} tasks: original at most ${limit:g}, first review said issues, a node commit to start before\n")
         for t in rows:
             sys.stdout.write(f"  {t['task']:6} ${t['usd']:5.2f}  sessions {sum(t['sessions'].values())}  "
                              f"nodes {t['nodes']}  review issues {t['review_issues']}/{t['review_issues'] + t['review_ok']}\n")
     elif cmd == "plan":
         task, = pos
         sha, text = starting_point(repo, task)
-        before = original(repo, task)
+        before = original(repo, task, opts["recorded-as"])
         sys.stdout.write(f"{task} starts from {sha[:8]}; the task file as the author left it:\n\n{text}\n")
         compare(task, before, None)
     elif cmd == "prepare":
@@ -855,7 +904,7 @@ def main(argv):
         return run(dest, task, opts["cap"], opts["tool"], opts["bash-minutes"], repo, opts["agent"])
     elif cmd == "score":
         dest, task = pos
-        compare(task, original(repo, task), score(dest, task, repo))
+        compare(task, original(repo, task, opts["recorded-as"]), score(dest, task, repo))
     elif cmd == "replay":
         task, dest = pos
         agent = configured_agent(repo, opts["agent"])
@@ -863,7 +912,7 @@ def main(argv):
             raise SystemExit(f"replay: the agent is {agent}, whose transcripts score cannot read yet; "
                              "use prepare and run, or --agent claude")
         dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], agent)
-        before = original(repo, task)
+        before = original(repo, task, opts["recorded-as"])
         cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
         run(dest, task, cap, tool, opts["bash-minutes"], repo, agent)
         compare(task, before, score(dest, task, repo))

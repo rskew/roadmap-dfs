@@ -1,0 +1,188 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Class of the issues reviews</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  .tabs button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .bars { display: flex; flex-direction: column; gap: 8px; }
+  .bar { border: 1.5px solid #333; border-radius: 6px; padding: 8px 10px; background: #fff; }
+  .bar .fill { height: 14px; background: #3b6ea5; border-radius: 3px; min-width: 2px; margin-top: 6px; }
+  .bar.top { border-color: #2a7a3b; border-width: 2.5px; }
+  .bar.top .fill { background: #2a7a3b; }
+  .cap { color: #444; font-size: 15px; margin: 8px 0; }
+  .row { border: 1.5px solid #333; border-radius: 6px; padding: 8px 10px; background: #fff; margin: 8px 0; }
+  .row .meta { font-size: 14px; color: #555; }
+  .row button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; margin-top: 6px; }
+  .row.yes { border-color: #b3541e; background: #fff4ec; }
+  .tot { border: 2px solid #1a1a1a; border-radius: 6px; padding: 10px; background: #fff; margin: 12px 0; }
+  details { margin: 8px 0; } summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+  td, th { text-align: left; padding: 4px 8px 4px 0; vertical-align: top; }
+  .scroll { overflow-x: auto; }
+</style>
+
+<h1>Which issues reviews are in the break-it node's own cases?</h1>
+<p class="cap">The node's narrow cases are interrupted, repeated, empty and short-screen. Each review's first finding line is classed by the session; tap a row to read it the other way. The totals follow.</p>
+<div id="rows"></div>
+<div class="tot" id="tot" aria-live="polite"></div>
+<p class="cap">Rule used: only the first finding line of a review, because it is the one the review blocks on; a finding that also fits a second class (W22's changed review is a dependent behaviour and a missed place) is classed by its first clause.</p>
+<script>
+  var DATA = [["original (claude)", "W22", "-", "1", "draw_footer's isupper() test no longer finds \"w stop walk\" after the text was lowercased", "dependent behaviour broken by the change", "no"], ["original (claude)", "W11", "-", "1", "edit_task writes a Goal containing a `## ` line verbatim, splitting the task file", "input case (a delimiter in text)", "no"], ["original (claude)", "W5", "-", "1", "node titles and skim lines still show markdown markers", "missed place (a Goal clause not met somewhere)", "no"], ["original (claude)", "W36", "-", "1", "Stop on a screen-run chat leaves a never-typed message shown as sent", "interrupt", "yes"], ["control (kiro)", "W22", "c1c", "1", "the terminal screen still draws all-caps text (WALK badge, STOP WALK, MISSING, RAISE)", "missed place", "no"], ["control (kiro)", "W5", "c1a", "1", "Assumptions view, answer-form quote, task head and skim still show typed markers", "missed place", "no"], ["control (kiro)", "W5", "c1a", "2", "task status line, task-list reasons and Accept dialog still show typed markers", "missed place", "no"], ["control (kiro)", "W5", "c1b", "1", "web blocks() collapses numbered lists, tables and quotes into one paragraph", "input case (a kind of markup)", "no"], ["control (kiro)", "W5", "c1c", "1", "inline() breaks bold around code and double-backtick spans", "input case (nested markup)", "no"], ["control (kiro)", "W5", "c2a", "1", "a refused http(s) picture becomes a link instead of staying text", "input case (a refused value)", "no"], ["control (kiro)", "W36", "c1c", "1", "a late interrupt leaves a stale stopped flag that kills the next turn", "interrupt", "yes"], ["changed (kiro)", "W22", "b1a", "1", "footer's red \"stop walk\" highlight lost (isupper); one shouted \"SESSIONS\" left", "dependent behaviour + missed place", "no"], ["changed (kiro)", "W5", "b1a", "1", "Assumptions list prints node titles as typed (drawAsm uses esc(a.title))", "missed place", "no"]];
+  var flip = {};
+  function isNarrow(i) { var d = DATA[i][6] === 'yes'; return flip[i] ? !d : d; }
+  function draw() {
+    document.getElementById('rows').innerHTML = DATA.map(function (r, i) {
+      return '<div class="row' + (isNarrow(i) ? ' yes' : '') + '"><div class="meta">' + r[0] + ' \u00b7 ' + r[1] + (r[2] !== '-' ? ' ' + r[2] : '') + ' \u00b7 review ' + r[3] + '</div>' +
+             '<div>' + r[4] + '</div><div class="meta">class: ' + r[5] + '</div>' +
+             '<button type="button" data-i="' + i + '">' + (isNarrow(i) ? 'In the narrow cases: yes' : 'In the narrow cases: no') + (flip[i] ? ' (changed)' : '') + '</button></div>';
+    }).join('');
+    var n = 0, ch = 0, chn = 0;
+    DATA.forEach(function (r, i) { if (isNarrow(i)) n++; if (r[0].indexOf('changed') === 0) { ch++; if (isNarrow(i)) chn++; } });
+    document.getElementById('tot').textContent = 'Narrow cases: ' + n + ' of ' + DATA.length + ' reviews (the session read 2). The changed arm\u2019s ' + ch + ' issues reviews: ' + chn + ' in the narrow cases. ' +
+      (chn === 0 ? 'So the per-clause half of the node did not stop them: the claim stands.' : 'With ' + chn + ' of the changed arm in the node\u2019s own cases, the claim that its per-clause half did not stop W22\u2019s and W5\u2019s misses is in doubt.');
+    Array.prototype.forEach.call(document.querySelectorAll('#rows button'), function (b) {
+      b.addEventListener('click', function () { var i = +b.dataset.i; flip[i] = !flip[i]; draw(); if (window.dfsAnswer) dfsAnswer.keep(); });
+    });
+  }
+  window.dfsPageState = function () { return { flip: flip }; };
+  document.addEventListener('dfs-state', function (e) { if (e.detail && e.detail.flip) { flip = e.detail.flip; draw(); } });
+  draw();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

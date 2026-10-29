@@ -411,6 +411,41 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertIn(f"{replay.box_of(self.dest) / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)   # docs laid over it, last
         self.assertNotIn(f"{Path(tool).resolve() / 'docs'}:{Path(tool).resolve() / 'docs'}", binds)
 
+    def test_the_box_docs_are_rebuilt_when_the_tools_docs_are_read_only(self):
+        # A tool in the nix store has read-only directories; a resumed `run` builds the box docs again.
+        tool = Path(self.tmp.name) / "readonly-tool"
+        (tool / "docs" / "sub").mkdir(parents=True)
+        (tool / "docs" / "artefacts.md").write_text("a\n")
+        (tool / "docs" / "sub" / "b.md").write_text("b\n")
+        for path in [tool / "docs" / "artefacts.md", tool / "docs" / "sub" / "b.md"]:
+            path.chmod(0o444)
+        for path in [tool / "docs" / "sub", tool / "docs"]:
+            path.chmod(0o555)
+        self.addCleanup(lambda: [p.chmod(0o755) for p in [tool / "docs", tool / "docs" / "sub"]])
+        first = replay.tool_docs(self.dest, tool)
+        second = replay.tool_docs(self.dest, tool)
+        self.assertEqual(first, second)
+        self.assertEqual((second / "sub" / "b.md").read_text(), "b\n")
+        self.assertTrue(os.access(second / "sub", os.W_OK))
+
+    def test_remove_tree_takes_a_file_a_link_and_a_read_only_tree_alike(self):
+        base = Path(self.tmp.name) / "rm"
+        real = base / "real"
+        (real / "sub").mkdir(parents=True)
+        (real / "sub" / "f").write_text("x\n")
+        (real / "sub").chmod(0o555)
+        self.addCleanup(lambda: (real / "sub").exists() and (real / "sub").chmod(0o755))
+        (base / "file").write_text("y\n")
+        (base / "link").symlink_to(real, target_is_directory=True)
+        replay.remove_tree(base / "link")        # the link goes, not the directory it points at
+        self.assertFalse(os.path.lexists(base / "link"))
+        self.assertTrue((real / "sub" / "f").exists())
+        replay.remove_tree(base / "file")
+        self.assertFalse((base / "file").exists())
+        replay.remove_tree(real)
+        self.assertFalse(real.exists())
+        replay.remove_tree(base / "never")       # absent is fine
+
     def test_building_the_command_writes_nothing_to_the_box(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
                 "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
@@ -668,6 +703,77 @@ class CandidatesTest(unittest.TestCase):
                 mock.patch.object(replay.history, "project_of", return_value="-r"):
             rows = replay.candidates("/r")
         self.assertEqual([t["task"] for t in rows], ["W1"])   # W2 dear, W3 passed, W4 elsewhere, W5 no node commit, W6 no work
+
+
+class RecordedUnderAnotherPathTest(unittest.TestCase):
+    """A copy of a project (optimisation-data/shop-app) was recorded under the path it had before."""
+    def lines(self):
+        return [
+            {"type": "user", "timestamp": "2026-10-01T00:00:00Z", "message": {"content": "You are the implementation reviewer for task W5. x"}},
+            {"type": "assistant", "timestamp": "2026-10-01T00:01:00Z", "message": {"id": "m", "model": "m", "usage": {"input_tokens": 1, "output_tokens": 1}, "content": [
+                {"type": "tool_use", "id": "t", "name": "Bash", "input": {"command": "tree.py log W5 review issues"}}]}},
+        ]
+
+    def test_the_original_is_found_by_the_path_it_was_recorded_under(self):
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            d = Path(cfg) / "projects" / "-tmp-orig-shop"
+            d.mkdir(parents=True)
+            (d / "s.jsonl").write_text("\n".join(json.dumps(x) for x in self.lines()) + "\n")
+            self.assertIsNone(replay.original("/tmp/elsewhere/data/shop", "W5"))
+            self.assertEqual(replay.original("/tmp/elsewhere/data/shop", "W5", recorded_as="/tmp/orig-shop")["task"], "W5")
+
+    def test_candidates_read_the_same_path_and_say_when_there_is_nothing_to_read(self):
+        tasks = {("-tmp-orig-shop", "W5"): {"task": "W5", "usd": 1.0, "first_review": "issues", "sessions": {"work": 1}}}
+        with mock.patch.object(replay.history, "load", return_value=(None, tasks, None, None)) as load, \
+                mock.patch.object(replay, "starting_point", return_value=(None, None)):
+            rows = replay.candidates("/tmp/elsewhere/data/shop", recorded_as="/tmp/orig-shop")
+            self.assertEqual(load.call_args[0][1], {"-tmp-orig-shop": "/tmp/elsewhere/data/shop"})   # prices come from the copy
+            self.assertEqual([t["task"] for t in rows], ["W5"])
+            self.assertEqual(replay.candidates("/tmp/elsewhere/data/shop"), [])
+        with tempfile.TemporaryDirectory() as cfg, mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": cfg}):
+            (Path(cfg) / "projects" / "-tmp-orig-shop").mkdir(parents=True)
+            (Path(cfg) / "projects" / "-tmp-orig-shop" / "s.jsonl").write_text("{}\n")
+            self.assertIn("-tmp-orig-shop", replay.recorded_hint("/tmp/elsewhere/data/shop"))
+            self.assertEqual(replay.recorded_hint("/tmp/orig-shop"), "")
+
+
+class RecordedAsReachesEveryCommandTest(unittest.TestCase):
+    """`--recorded-as` is passed on by every command that compares with the original, and refused by those that do not."""
+    def main(self, *argv):
+        out = io.StringIO()
+        with redirect_stdout(out):
+            return replay.main(list(argv))
+
+    def test_score_and_replay_look_the_original_up_under_the_recorded_path(self):
+        with mock.patch.object(replay, "original", return_value=None) as original, \
+                mock.patch.object(replay, "score", return_value=None), \
+                mock.patch.object(replay, "compare"):
+            self.main("score", "/tmp/dfs-replay-W5-a", "W5", "--repo", "/tmp/data/shop", "--recorded-as", "/tmp/orig-shop")
+            self.assertEqual(original.call_args, mock.call("/tmp/data/shop", "W5", "/tmp/orig-shop"))
+        with mock.patch.object(replay, "original", return_value=None) as original, \
+                mock.patch.object(replay, "configured_agent", return_value="claude"), \
+                mock.patch.object(replay, "prepare", return_value=("/tmp/dfs-replay-W5-a", "/tool")), \
+                mock.patch.object(replay, "run"), mock.patch.object(replay, "score", return_value=None), \
+                mock.patch.object(replay, "compare"):
+            self.main("replay", "W5", "/tmp/dfs-replay-W5-a", "--repo", "/tmp/data/shop", "--recorded-as", "/tmp/orig-shop")
+            self.assertEqual(original.call_args, mock.call("/tmp/data/shop", "W5", "/tmp/orig-shop"))
+
+    def test_the_replay_cap_comes_from_the_original_found_under_that_path(self):
+        before = {"sessions": {"work": 5, "review": 2}}
+        found = lambda repo, task, recorded_as=None: before if recorded_as == "/tmp/orig-shop" else None
+        with mock.patch.object(replay, "original", side_effect=found), \
+                mock.patch.object(replay, "configured_agent", return_value="claude"), \
+                mock.patch.object(replay, "prepare", return_value=("/tmp/dfs-replay-W5-a", "/tool")), \
+                mock.patch.object(replay, "run") as run, mock.patch.object(replay, "score", return_value=None), \
+                mock.patch.object(replay, "compare"):
+            self.main("replay", "W5", "/tmp/dfs-replay-W5-a", "--repo", "/tmp/data/shop", "--recorded-as", "/tmp/orig-shop")
+            self.assertEqual(run.call_args[0][2], 14)   # 2 * 7 sessions, not the 6 of no original
+
+    def test_prepare_and_run_refuse_it_by_name(self):
+        for argv in (("prepare", "W5", "/tmp/dfs-replay-W5-a"), ("run", "/tmp/dfs-replay-W5-a", "W5")):
+            with self.assertRaises(SystemExit) as e:
+                self.main(*argv, "--recorded-as", "/tmp/orig-shop")
+            self.assertIn("--recorded-as", str(e.exception))
 
 
 class OriginalIsTheRepoOwnTest(unittest.TestCase):

@@ -374,7 +374,9 @@ Judged on a replay, a change succeeds if more first finished trees **pass their 
 review**, at a cost no higher than the control's. That is the one number the history
 supports as the thing to move. `history.py` prints these counts in its "Share of all
 dfs spend" block (run of 2026-10-28, the same run as section 2): of 276 tasks that had a
-review, the first review found issues in 84 (30%); 104 tasks (38%) had at least one
+review, the first review found issues in 84 (30%; the run read verdicts from the
+commands that wrote them and missed a verdict set through a shell variable, and the
+fixed reading of 2026-10-29 gives 106 of 290, 37%); 104 tasks (38%) had at least one
 issues round and hold 72.7% of all dfs dollars; 30 tasks (11%) had three or more and hold
 34.3%. A task's dollars are all its work, review and critic sessions, so the 72.7% is a
 share of the spend on those tasks, not of the spend after their first issues review (that
@@ -391,7 +393,7 @@ it). Each names the file it changes and the replay that tests it.
 
 | # | Change | Evidence | Where | Test replay |
 |---|---|---|---|---|
-| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 40.9% of spend follows an issues review; 101 of 207 review finding lines are defects, but only 2 of them say a test or check is absent. Of the 23 defects whose review says it reproduced the fault (`docs/dfs-break-it-cases.tsv`; one reading by one session, so a reader can disagree row by row), 7 are in the cases this node names (4 repeated, 2 interrupted, 1 empty, none a short screen), 6 more only if "interrupted" is stretched to a failure path or a race, and 10 are not (an unusual starting state, which includes a repo with no commit yet, two checkouts out of step, a different branch). So 7 of the 101 defects are shown to be ones this node would have looked for, 13 on the widest reading; the other 78 do not say they were reproduced and cannot be placed, so 7 is a floor. Whether a repo with no commit yet is "empty" or "an unusual starting state" is a reading (row 8 of the file, classed with the other unusual starting state, row 1); read as empty it is 8 and 14. 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. The rank above 2 is kept because neither is stronger on this evidence (2's 28 lines repeat across rounds) and the order is not moved by it. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and chirpstack-docker cannot be replayed from this box) |
+| 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 40.9% of spend follows an issues review; 101 of 207 review finding lines are defects, but only 2 of them say a test or check is absent. Redone in W130 over the three checkouts (the section "Re-counted on the three checkouts" below): of the 40 defects whose review says it reproduced the fault (`docs/dfs-break-it-cases.tsv`; one reading by one session, so a reader can disagree row by row; roadmap-dfs alone gave 23 on 2026-10-28), 11 are in the cases this node names (5 repeated, 5 interrupted, 1 empty, none a short screen), 10 more only if "interrupted" is stretched to a failure path, a race or a stale state, and 19 are not. So 11 of the 307 defect lines are shown to be ones this node would have looked for, 21 on the widest reading; the other 267 do not say they were reproduced and cannot be placed, so 11 is a floor. 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. The rank above 2 is kept because neither is stronger on this evidence (2's 28 lines repeat across rounds) and the order is not moved by it. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (shop-app and farm-app cannot be replayed from this box) |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 28 of 207 review finding lines are unmarked assumptions (some repeat across rounds). | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `audit.py findings`, rows of class `assumption` in `docs/dfs-review-findings.tsv`) |
 | 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (21 tasks; 26 have two or more issues reviews), 3 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 20 name code the fixes changed (either could hold), 13 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 3 to 23 present ones; the three are in W75, W88 and W91 |
 | 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,043 sessions hit a refusal, 304 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
@@ -400,6 +402,66 @@ it). Each names the file it changes and the replay that tests it.
 Not candidates, from the evidence: cutting reviews (they are 27.0% of spend and where
 the bugs were caught), re-read avoidance (150 of 3,458 reads), and encouraging branching
 as an end in itself (candidate 1 is the version of it with a purpose).
+
+### Re-counted on the three checkouts (W130)
+
+The 2026-10-28 survey could read roadmap-dfs's task files only. This recount adds the
+task files and transcripts of shop-app (66 task files, 27 with a review) and farm-app (23
+with a review) from `optimisation-data/`. Every number is printed by `python3
+docs/dfs-class-counts.py` from `docs/dfs-class-lines.tsv` (output: `docs/dfs-class-counts.txt`;
+the history behind it: `docs/dfs-history-w130.txt`). The task-file counts cover roadmap-dfs, shop-app and farm-app; the history file reads every transcript under `$HOME/.claude/projects`, so it also has chirpstack-docker and house rows. Candidates 1 to 3 change what a review
+finds and are each a predicate on a review's finding lines, counted the same three ways. A line
+is *blocking* if it is a defect or an unmarked assumption (the lesser batch, class `minor`,
+comes with `ok` reviews too). Of 207 reviews that said issues (68 of them first reviews):
+
+| candidate | blocking lines it matches (of 358) | issues reviews with such a line (of 207) | reviews with no other blocking line (of 207) | first reviews with no other (of 68) |
+|---|---|---|---|---|
+| 1 break it, the node's own words (repeat, again, re-run, interrupt, empty, short screen) | 30 (8%) | 29 (14%) | 3 (1%) | 1 |
+| 1 break it, plus concurrent, race, stale, crash, kill, cut off | 54 (15%) | 49 (24%) | 11 (5%) | 2 |
+| 2 assumptions | 51 (14%) | 49 (24%) | 0 | 0 |
+| 3 one review finds all (a later round's defect in code unchanged since the round before) | 9 (3%) | 9 (4%) | 5 (2%) | 0 |
+
+The last two columns say how many rounds that class alone started: with every line of the
+class gone, the review would have had nothing blocking left. None of the three started more than 11 of the 207
+rounds. Assumption lines are 14% of blocking lines and never the only ones, so naming them
+better would not have turned one review in the 207. Candidate 1's predicate is a word list, so
+it is set against the same words in lines that are not defects (minor and assumption lines):
+the narrow list is in 10% of defect lines (30 of 307) and in 10% of the others (19 of 197), the
+wide list in 18% and 21%. The words do not pick out defects in the three checkouts together or in roadmap-dfs
+(10% and 9%); the small checkouts split (shop-app 6% against 0 of 26, farm-app 36% against 20%
+on 22 and 35 lines), so a word count says nothing about how many defects a break-it node reaches.
+The one reading that does is by hand, of the defects whose review says it reproduced the
+fault (`docs/dfs-break-it-cases.tsv`, 40 rows now, 23 before): 11 are in the cases the node
+names (5 repeated, 5 interrupted, 1 empty), 10 only by stretching a case to a race, a stale
+state or a failure path, 19 are not. That is 11 of the 307 defect lines (4%) known to be
+in the node's cases and 21 of 307 (7%) on the widest reading; the other 267 defects do not say
+they were reproduced, so these are floors. The new checkouts add little to it: shop-app's
+reviews say they reproduced 1 of 155 defects, farm-app's 8 of 22 (7 are one task's
+re-send logic, none in the narrow cases).
+
+Candidates 4 and 5 do not change a review and are counted in the history (2,111 sessions,
+738 million weighted-token units, `--history-report`): 8% of sessions since 22 October had
+a refused commit, 1% for the file:line coordinate (14% from 19 to 22 October, 9% before), and
+the sessions that had one hold 16% of the units, an upper bound since a refusal costs a retry
+inside a session. The coordinate's drop followed the guard's wording change on 19 October by
+three days; whether the wording caused it is not shown. Units after the third review that
+said issues are 12% of all, after the first 43% (history.py gives 42.9% in dollars), and the
+first review said issues on 34% of roadmap-dfs's tasks with a transcript (39 of 114), 47% of
+shop-app's (7 of 15, a small base) and 36% of chirpstack-docker's (49 of 135). These rates
+and the 12% are higher than the first count of this section (29%, 43%, 30%, 11%, 40%),
+which read a review's verdict from the command that wrote it and missed a verdict written
+through a shell variable (`S=…/tree.py`, then `python3 $S log W22 review issues`); the
+reading was fixed in W130.15 and the counts of the task files, which candidates 1 to 3
+use, did not change. By units, then,
+candidate 5's bound (12% of all units) is larger than what candidate 1's class alone started
+(0.4% narrow, 3% wide, of the units of the 131 tasks with a transcript; candidate 3 1%,
+candidate 2 none); the order of the table does not follow spend, and rests on candidate 1 changing the first review (the
+measure a replay moves) while 5 only limits the loss and cannot be tested by one.
+
+What this does to the rank: the recount leaves candidate 1 first among the three that change a
+review where the document had it, on the one reading that separates them (the rounds a class
+alone started: 3 to 11 for 1, 5 for 3, 0 for 2), and shows that none of them started more than 11 of the 207
+rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word count.
 
 ### The loop
 
@@ -418,8 +480,10 @@ as an end in itself (candidate 1 is the version of it with a purpose).
 3. **Change** the tool, on a branch of this repo, one candidate at a time: the changed
    arm is that revision (`--tool-ref REV`), the control is the revision it branched from.
    A change to the law goes as `--law FILE`, with the same revision for the tool.
-4. **Replay** each task under each arm **three times**: 4 tasks × 2 arms × 3 = 24 replays,
-   at the W55 figures ($1.95 to $3.44 a replay) roughly $47 to $83. Run them one at a
+4. **Replay in pairs.** A pair is one task replayed twice in one sitting, control then
+   changed (W5, W36, W22, W11, W5 in that order, as many pairs as step 5 asks for, at most
+   five). Under kiro a replay cost 5.9 to 23.4 credits (mean 12.8), so a pair is about 26
+   credits and five pairs about 130. Run them one at a
    time: each is a chain in its own scratch clone, and the three W55 replays run side by
    side used up the account's usage limit in about half an hour and were stopped for 2h20m. Each replay is bounded:
    `--cap` sessions, and `--bash-minutes M` (default 15) is the most one Bash call may
@@ -437,19 +501,56 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    names the path would go unseen. A replay with a call answered with live output (read
    by hand) or a conclusion shown is void: it is dropped from the count, the arm is run
    again, and a Fix node is opened to close the hole.
-5. **Compare** the arms per task, never pooled: first-review pass rate (out of 3),
-   median dollars, refused commits, replays that stopped BLOCKED or on the cap. Then
-   read the reviews of the changed arm's passes: a pass counts only if the review's
-   `ok` names what it checked (the `ok` of two guarded W55 replays still listed three
-   and four defects each). A candidate is **kept** if it passes the first review in at
-   least **four** more replays of the twelve than the control does, and no task gets
-   worse by more than one replay of three. **Dropped** if it does not, with the numbers
-   in the candidate's row: "not shown", not "shown useless" (a modest gain is missed more
-   often than not, below). The lead guards against reviewer noise and small samples,
-   which the sandbox does not remove: the first review's verdict varies between replays
-   of one tool.
+5. **Compare** the changed replay with the control replay of each pair, and judge the pair
+   **better**, **same** or **worse**. Both arms end with the review passed (the chain's
+   DONE), so the comparison is what it took to get there. The changed replay is *better* if
+   it has fewer reviews that said issues; or the same number and at most 70% of the
+   control's credits. *Worse* is the mirror: more issues reviews, or the same number and
+   at least 1/0.7 (1.43) times the credits. Otherwise *same*. A pair that credits would decide, in which either replay
+   has an unpriced session (a cut-off), is run again, and so is a pair void under step 4.
+   A candidate is **kept** if it is better in **3 of 3** pairs. If not, and the first three
+   were two better and one same, run two more pairs: kept if **4 of 5** are better and none
+   is worse. Anything else is **dropped** (after three pairs with fewer than two better,
+   4 of 5 cannot happen, so stop there). Dropped is "not shown", not "shown useless": the
+   rule keeps only a clear win. Read the reviews of the changed replays that count as
+   better too: a pass counts only if the review's `ok` names what it checked.
 
-   *Why four.* Assume each replay passes its first review with probability p, alone
+   *Why pairs and this margin (W130.9, figures corrected by W130.12).* The first-review pass
+   rate was the earlier measure, and it is coarse: counted from the replays' own task files
+   (`docs/dfs-replay-verdicts.py`) the control passed it 7 times in 12 (W22 2, W11 3, W36 2,
+   W5 0). `replay.py score` printed 9 of 12, because it reads a review's verdict from the
+   command that wrote it, and twice (W22 and W5, the third control replay of each) the review
+   had set `S=…/tree.py` on one line and run `python3 $S log W22 review issues` on the next,
+   which the pattern does not match; the task file is the record. A pass count over twelve
+   cannot separate a change from the control's own spread (a task's pass rate runs from 0 of 3
+   to 3 of 3 across the four), and credits to a reviewed finish already include rework after
+   an issues review, but one control replay of a task differs from another by up to 2.0
+   times (W5 12.2 to 23.4, W22 5.9 to 11.2), so a pair is judged by the review count first
+   and by credits only past a margin. The margin was chosen on the 15 control replays: every
+   pair of two different replays of one task is a pair with no change, and how often the rule
+   keeps those is its false keep rate.
+
+   | margin on credits | no-change pair: better / same / worse | no-change kept | kept if the change costs 30% less | 50% less |
+   |---|---|---|---|---|
+   | 20% | 42% / 17% / 42% | 8.7% | 24% | 48% |
+   | **30%** | 37% / 25% / 37% | **6.8%** | 20% | 32% |
+   | 40% | 23% / 54% / 23% | 1.7% | 12% | 27% |
+   | 50% | 21% / 58% / 21% | 1.2% | 8% | 20% |
+
+   30% keeps a change that does nothing about one time in fifteen and a change that cuts
+   credits by half one time in three; 20% keeps a no-op nearly one in eleven; 40% keeps a no-op
+   one time in sixty and half-price one time in four. Power is low on purpose: three pairs with
+   this much noise can only show a large effect, and a smaller one goes back as "not shown".
+   The figures are printed by `python3 docs/dfs-replay-verdicts.py <replays> --pairs`
+   (output: `docs/dfs-replay-verdicts.txt`); the page `.dfs/artefacts/8e49a572-ecd0-40de-b489-efaccd8b2798.html`
+   holds the earlier figures (two replays counted as passed that the task files say failed).
+   Hypothesis of W130.9; it is wrong
+   if the control's pair-to-pair spread in a later sitting is wider than these 15 replays
+   show (a no-op is then better more often than 7%), or if the pairs of one sitting share
+   their noise (the pairs are then not independent). Cost: three pairs about 78 credits,
+   five about 130, against about 310 an arm for the twelve-replay rule it replaces.
+
+   *Why four (the first rule, replaced by W130.9).* Assume each replay passes its first review with probability p, alone
    and independently, p between 0.5 and 0.7 (the history fails 30% of first reviews; the
    three W55 replays before the sandbox passed 2 of 3, an upper bound on a sandboxed replay's rate, and the one sandboxed replay passed). Two arms of the same tool then differ by
    the margin by chance this often (exact sums over every outcome, recomputed by `python3 <scripts>/chance.py` and by the page named below):
@@ -470,7 +571,7 @@ as an end in itself (candidate 1 is the version of it with a purpose).
    of one task are alike (a task that passes 3 of 3 or fails 3 of 3 under both arms
    carries no information and the true noise is above the table's), or if the control
    replayed twice differs by four or more of twelve: run the control twice before the
-   first candidate, and if that happens, the margin and the 24 replays are not enough.
+   first candidate, and if that happens, the margin and the replays are not enough.
 6. **Keep** means merged into the tool and recorded here (the row, the arms, the
    figures) and the control for the next candidate is now the changed tool. Candidates
    are tested one at a time for that reason: two changes in one arm cannot be told apart.
@@ -479,6 +580,63 @@ What the loop cannot see: whether a change helps on projects other than roadmap-
 (only its history can be replayed); the author's time; and drift in the model between
 the control run and the changed run, which is why the arms are interleaved, control then
 changed, task by task, in one sitting, and not run as two batches on different days.
+
+A replay is not the history it was chosen from (W130.12). The four tasks were picked because
+the original's first review said issues, and all four did (4 of 4); the originals were run by
+claude, and every replay here runs under kiro, a different agent whose cost is in credits and
+whose reviewer is not the one that wrote those verdicts. The control's first review, counted
+from the replays' task files, said issues in 5 of 12 replays (W22 1 of 3, W11 0, W36 1, W5 3),
+and in 1 of 3 more in the sitting of the second control (W5), so the failure that selected
+the tasks recurs in under half of the control replays and not at all in W11. A candidate
+aimed at a class mined from the history can only be tested on a task whose control replays
+fail in that class, and the metric (fewer issues reviews, then credits) is blind to a class
+that does not occur; `docs/dfs-replay-verdicts.txt` lists each replay's verdicts.
+
+Read against candidate 1's class (W130.13, `docs/dfs-review-class-reading.tsv`, one row per issues
+review, my reading of its first finding line): of the four originals' first reviews one is in the
+node's narrow cases (W36's Stop on a chat, an interruption) and of the control's seven issues
+reviews one is (W36's late interrupt leaving a stale flag); the other six are a place where a Goal
+clause is still not met (3: W22, W5 twice), or an input kind the code mishandled (3: W5's lists,
+nested markup and refused picture). The two issues reviews of the changed arm (W22, W5) were of the
+first kind, and in those two trees the "Break it" node did run the per-clause check for it (W22: a
+grep for caps, an AST walk for shouted words; W5: a read of each place that prints task prose) and
+missed what the review then found; in W11 the node found three faults and the review passed. W36,
+the one task whose control fails in the narrow cases, was not run under the changed arm. So the
+first three pairs say the node does not reliably finish the per-clause search, and say nothing
+about its interrupted, repeated and empty cases.
+
+### Candidate 1 under the loop (W130): dropped, not shown
+
+Run under kiro in the sandbox, each pair in one sitting, control then changed. The changed arm
+is the store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
+node tries to break the work, and a tree whose last node is not that is not complete), as a copy
+of the store tool and not `--tool-ref`, because the repo's `SKILL.md` is older than the store tool
+the control ran. Verdicts are the task files' (`docs/dfs-replay-verdicts.txt`), credits are
+`replay.py score`'s, and a pair is judged by step 5 (margin 30%):
+
+| pair | control: first review, credits | changed: first review, credits | pair |
+|---|---|---|---|
+| W5 | issues, 15.9 | issues, 27.1 | worse (1.7 times the credits) |
+| W36 | issues, 22.9 | ok, 25.4 | **better** (one issues review fewer) |
+| W22 | ok, 11.2 | issues, 14.4 and one unpriced cut-off | worse (one more issues review) |
+| W11 | ok, 9.8 | ok, 13.2 | same (1.35 times, under 1.43) |
+
+Taken in step 4's order (W5, W36, W22) the first three pairs are worse, better, worse, so fewer
+than two are better and the rule drops the candidate; all four give one better. It is **not
+shown**, and not merged. A node titled "Break it" came before the first review in all four changed
+trees, so the change was followed. What the reading of the reviews (W130.13) adds: in W22 and W5,
+where the control's failures are a Goal clause unmet in some place, the node ran the per-clause
+check and still missed what the review found, and W22's control failed its first review once in four
+replays, so that pair is as much noise as a loss; in W36, the task whose control fails in
+the node's narrow cases (the control's review: interrupting the first turn of a chat loses the
+conversation), the node listed "interrupt an opening turn" and "interrupt, then send", the
+changed tree's review passed, and it noted that path as handled. That is one pair: it says the
+interrupted half of the node can reach the failure that half names, and the per-clause half did not
+stop the misses it is meant for. A candidate that kept only the narrow cases would be a new
+candidate, not tested here. The W36 pair's scores print 0 calls naming a live path and 0 of the
+original's nodes shown, for both. The W22, W11 and W5 changed replays printed 1, 3 and 6 calls
+answered with output; the earlier reading of them found the changed tool's own directory, which
+lies inside the live checkout (not re-read here). The W36 pair cost 48.3 credits.
 
 ### Next
 
@@ -494,15 +652,17 @@ present, and the 3 present and 13 unplaced lines together are 16, so no misreadi
 the unplaced lines reaches it; the 20 `maybe-introduced` lines could, and are why the
 result is "not shown" and not "shown false".
 
-The tasks to replay are not yet chosen. `python3 <scripts>/replay.py candidates` lists
-what step 2's rule picks from the history (original at most $3, first review said
-issues, a node commit to start before): W22, W11, W10, W5, W76, W3, W36 and W40, with
-W55 (the task of section 3) dropped because its evidence was outside the repo. The
-rule's last clause, evidence inside the repo, is not decidable from the history; reading
-each task file for it, and taking four, is the first step. Then
-run the control (the current tool) twice on those four tasks, to see whether two
-control arms differ by four or more of twelve; then candidate 1 on the same four tasks,
-the first real run of the loop (its changed-arm path ran once, in section 3). It needs the configured agent's binary (claude, codex, kiro-cli or opencode) and `proot`
+The loop has been run once from a box with kiro (the first real run of it). Its replays were
+W22, W11, W5 and W36, the four tasks of `replay.py candidates` whose files name no evidence outside
+the repo; the control ran three times on each and candidate 1 once on W22, W11 and W5 and
+once on W36, judged by pairs (step 5), with no change kept. The shop-app tasks are listed by `python3 <scripts>/replay.py candidates --repo optimisation-data/shop-app
+--recorded-as /workspace/shop-app --limit 3.5` (W32 and W14; `score` and `replay` take the same `--recorded-as`; whether
+each has a starting commit to replay from is not checked); farm-app's tasks have no starting commit and cannot be replayed.
+What is next is a candidate of the remaining ones (2, 3, 4, 5) run as a pair against a
+same-sitting control, on the tasks whose control fails in the class the candidate targets (the
+kiro control fails the first review in 5 of 12 replays, none in W11).
+
+A replay needs the configured agent's binary (claude, codex, kiro-cli or opencode) and `proot`
 (both from nixpkgs at the agent pin; `REPLAY_CLAUDE_CODE`, `REPLAY_KIRO_CLI`, `REPLAY_CODEX`,
 `REPLAY_OPENCODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
 (inside the repo's ignored `.dfs/runs` works on the box used here).

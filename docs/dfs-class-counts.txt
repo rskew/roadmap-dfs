@@ -1,0 +1,82 @@
+# python3 docs/dfs-class-counts.py   (reads docs/dfs-class-lines.tsv; built 2026-10-29 by --build from the three checkouts and history.py --json)
+
+== all: 181 tasks with a review, first review said issues on 68/181 38%; 207 issues reviews (68 first), 504 finding lines {'defect': 307, 'minor': 146, 'assumption': 51}, 358 blocking
+   issues reviews with no blocking line (only the lesser batch): 3
+   candidate                       lines      touched      removed removed, first
+   1 break it (narrow)         30/358 8%   29/207 14%     3/207 1%        1/68 1%
+   1 break it (wide)          54/358 15%   49/207 24%    11/207 5%        2/68 3%
+   2 assumptions              51/358 14%   49/207 24%     0/207 0%        0/68 0%
+   3 one review (present)       9/358 3%     9/207 4%     5/207 2%        0/68 0%
+   words narrow: in defects 30/307 10%; in non-defects 19/197 10% (minor 8/146 5%, assumption 11/51 22%)
+   words wide: in defects 54/307 18%; in non-defects 41/197 21% (minor 26/146 18%, assumption 15/51 29%)
+
+== farm-app: 23 tasks with a review, first review said issues on 6/23 26%; 18 issues reviews (6 first), 57 finding lines {'defect': 22, 'minor': 18, 'assumption': 17}, 39 blocking
+   issues reviews with no blocking line (only the lesser batch): 0
+   candidate                       lines      touched      removed removed, first
+   1 break it (narrow)          8/39 21%     8/18 44%      0/18 0%         0/6 0%
+   1 break it (wide)            8/39 21%     8/18 44%      0/18 0%         0/6 0%
+   2 assumptions               17/39 44%    17/18 94%      0/18 0%         0/6 0%
+   3 one review (present)        0/39 0%      0/18 0%      0/18 0%         0/6 0%
+   words narrow: in defects 8/22 36%; in non-defects 7/35 20% (minor 0/18 0%, assumption 7/17 41%)
+   words wide: in defects 8/22 36%; in non-defects 9/35 26% (minor 2/18 11%, assumption 7/17 41%)
+
+== roadmap-dfs: 131 tasks with a review, first review said issues on 44/131 34%; 104 issues reviews (44 first), 266 finding lines {'defect': 130, 'minor': 102, 'assumption': 34}, 164 blocking
+   issues reviews with no blocking line (only the lesser batch): 2
+   candidate                       lines      touched      removed removed, first
+   1 break it (narrow)         13/164 8%   13/104 12%     3/104 3%        1/44 2%
+   1 break it (wide)          25/164 15%   23/104 22%   10/104 10%        1/44 2%
+   2 assumptions              34/164 21%   32/104 31%     0/104 0%        0/44 0%
+   3 one review (present)       7/164 4%     7/104 7%     4/104 4%        0/44 0%
+   words narrow: in defects 13/130 10%; in non-defects 12/136 9% (minor 8/102 8%, assumption 4/34 12%)
+   words wide: in defects 25/130 19%; in non-defects 27/136 20% (minor 19/102 19%, assumption 8/34 24%)
+
+== shop-app: 27 tasks with a review, first review said issues on 18/27 67%; 85 issues reviews (18 first), 181 finding lines {'defect': 155, 'minor': 26}, 155 blocking
+   issues reviews with no blocking line (only the lesser batch): 1
+   candidate                       lines      touched      removed removed, first
+   1 break it (narrow)          9/155 6%      8/85 9%      0/85 0%        0/18 0%
+   1 break it (wide)          21/155 14%    18/85 21%      1/85 1%        1/18 6%
+   2 assumptions                0/155 0%      0/85 0%      0/85 0%        0/18 0%
+   3 one review (present)       2/155 1%      2/85 2%      1/85 1%        0/18 0%
+   words narrow: in defects 9/155 6%; in non-defects 0/26 0% (minor 0/26 0%, assumption 0/0)
+   words wide: in defects 21/155 14%; in non-defects 5/26 19% (minor 5/26 19%, assumption 0/0)
+
+== units spent in the rounds a candidate's class alone started (tasks with a transcript on this box)
+   all: 131 tasks, 285,263,734 units in all, 107,104,766 (107104766/285263734 38%) after an issues review
+      1 break it (narrow)         1,023,825 units  1023825/285263734 0%
+      1 break it (wide)           9,173,812 units  9173812/285263734 3%
+      2 assumptions                       0 units  0/285263734 0%
+      3 one review (present)      3,396,491 units  3396491/285263734 1%
+   farm-app: 0 tasks, 0 units in all, 0 (0/0) after an issues review
+      1 break it (narrow)                 0 units  0/0
+      1 break it (wide)                   0 units  0/0
+      2 assumptions                       0 units  0/0
+      3 one review (present)              0 units  0/0
+   roadmap-dfs: 115 tasks, 210,438,673 units in all, 78,271,616 (78271616/210438673 37%) after an issues review
+      1 break it (narrow)         1,023,825 units  1023825/210438673 0%
+      1 break it (wide)           8,244,213 units  8244213/210438673 4%
+      2 assumptions                       0 units  0/210438673 0%
+      3 one review (present)      3,396,491 units  3396491/210438673 2%
+   shop-app: 16 tasks, 74,825,061 units in all, 28,833,150 (28833150/74825061 39%) after an issues review
+      1 break it (narrow)                 0 units  0/74825061 0%
+      1 break it (wide)             929,599 units  929599/74825061 1%
+      2 assumptions                       0 units  0/74825061 0%
+      3 one review (present)              0 units  0/74825061 0%
+
+# python3 docs/dfs-class-counts.py --history-report history.json   (history.json from: python3 scripts/history.py --repo roadmap-dfs=. --repo shop-app=optimisation-data/shop-app --repo farm-app=optimisation-data/farm-app --json history.json; rerun 2026-10-29 after W130.15 fixed the verdict reading, 2,111 sessions)
+2111 dfs sessions, 737,512,333 weighted-token units
+
+candidate 4: sessions with a refused commit, and with the file:line coordinate refusal, by period
+   2026-09-29..2026-10-19: 1432 sessions, refused 155/1432 11%, coordinate 124/1432 9%
+   2026-10-19..2026-10-22: 253 sessions, refused 45/253 18%, coordinate 35/253 14%
+   2026-10-22..2026-10-30: 426 sessions, refused 35/426 8%, coordinate 6/426 1%
+   units of the sessions that had a refusal (an upper bound; a retry is part of a session): 117140802/737512333 16%
+
+first review said issues, by project (tasks with a transcript)
+   -workspace-chirpstack-docker: 49/135 36%
+   -workspace-farm-app: 0/1 0%
+   -workspace-house: 11/25 44%
+   -workspace-roadmap-dfs: 39/114 34%
+   -workspace-shop-app: 7/15 47%
+
+candidate 5: units after the third review that said issues, and after the first
+   after the first issues review: 319645334/737512333 43%; after the third: 89074859/737512333 12%

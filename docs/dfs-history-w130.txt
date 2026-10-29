@@ -1,0 +1,54 @@
+# python3 scripts/history.py --repo roadmap-dfs=/workspace/roadmap-dfs --repo shop-app=/workspace/roadmap-dfs/optimisation-data/shop-app --repo farm-app=/workspace/roadmap-dfs/optimisation-data/farm-app --json history.json   (2026-10-29, after W130.15 fixed the verdict reading)
+2189 transcripts, 2111 dfs sessions (work, review, critic); dollars from 1771 runner-priced sessions, $0.000002 per unit
+
+Where the spend goes, by project and session kind ($ estimated where the runner did not record it)
+project                            kind        n         $   $ med  peak med resp med
+-workspace-chirpstack-docker       critic     68        62    0.97     73385       21
+-workspace-chirpstack-docker       review    341       235    0.61     58795       16
+-workspace-chirpstack-docker       work      619       552    0.72     74689       27
+-workspace-farm-app                critic      2         1    0.75     57318       16
+-workspace-farm-app                review     11         8    0.55     52625       16
+-workspace-farm-app                work       14        10    0.58     70216       20
+-workspace-house                   critic     14        12    0.93     69614       18
+-workspace-house                   review     63        50    0.79     64596       16
+-workspace-house                   work      127       131    0.79     77668       30
+-workspace-roadmap-dfs             critic     35        30    0.95     66433       22
+-workspace-roadmap-dfs             review    272       157    0.42     49606       12
+-workspace-roadmap-dfs             work      400       304    0.53     65503       22
+-workspace-shop-app                critic     13        11    0.83     90513       13
+-workspace-shop-app                review     31        36    1.07    100556       19
+-workspace-shop-app                work      101       142    1.34    117541       29
+
+Tasks, by project: how many sessions a task takes and how its work was judged
+project                            tasks sess med  p90  $ med  $ p90 review rounds issues/task critic iss raises
+-workspace-chirpstack-docker         137        4   18    2.7   16.7           329        0.88         68     48
+-workspace-farm-app                    3        9   11    7.2    7.7             3        0.00          0      1
+-workspace-house                      26        4   22    3.6   25.8            56        0.81         10      5
+-workspace-roadmap-dfs               115        4   13    2.1    9.4           295        1.00         29     13
+-workspace-shop-app                   16        4   28    3.3   35.0            28        0.94         10      2
+
+Share of all dfs spend
+  work                          65.4%
+  review                        27.9%
+  critic                         6.7%
+  after a review found issues   42.9%  (every session on a task once one of its reviews said issues)
+  review loops: 290 tasks had a review; the first review said issues on 106 (37%)
+  129 tasks (44% of those) had at least one issues rounds and hold 76.1% of all dfs dollars (their work, review and critic sessions)
+  37 tasks (13% of those) had three or more issues rounds and hold 39.1% of all dfs dollars (their work, review and critic sessions)
+  sessions with a refused commit 235 of 2111, 293 refusals
+  refusals by reason (a refusal lists every fault it found, so counts overlap): coordinate in a task file 196, Parent does not exist 28, over the size budget 28, other 25, Hypothesis names no artefact 9
+  Read calls repeating an earlier read of the same slice: 166 of 3772
+
+Most expensive tasks
+  -workspace-roadmap-dfs   W75   $    68 sessions {'work': 44, 'critic': 8, 'review': 26} review issues 16/23 raises 5
+  kspace-chirpstack-docker W108  $    59 sessions {'work': 39, 'review': 26, 'critic': 7} review issues 3/23 raises 8
+  -workspace-shop-app      W21   $    48 sessions {'work': 25, 'critic': 4, 'review': 1} review issues 0/1 raises 0
+  kspace-chirpstack-docker W107  $    36 sessions {'work': 18, 'critic': 3, 'review': 3} review issues 2/3 raises 2
+  -workspace-shop-app      W20   $    35 sessions {'work': 13, 'review': 9, 'critic': 2} review issues 5/6 raises 0
+  -workspace-shop-app      W39   $    34 sessions {'work': 20, 'review': 4, 'critic': 4} review issues 4/4 raises 0
+  -workspace-house         W8    $    32 sessions {'work': 18, 'review': 7, 'critic': 3} review issues 3/7 raises 0
+  -workspace-house         W25   $    30 sessions {'work': 16, 'critic': 3, 'review': 6} review issues 3/4 raises 1
+  kspace-chirpstack-docker W97   $    30 sessions {'work': 22, 'review': 18, 'critic': 4} review issues 4/16 raises 2
+  kspace-chirpstack-docker W110  $    30 sessions {'work': 18, 'critic': 3, 'review': 4} review issues 3/4 raises 0
+  kspace-chirpstack-docker W8    $    27 sessions {'work': 12, 'critic': 2, 'review': 3} review issues 2/3 raises 1
+  -workspace-house         W20   $    26 sessions {'work': 13, 'critic': 2, 'review': 3} review issues 2/3 raises 3
