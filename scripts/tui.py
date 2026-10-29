@@ -718,7 +718,7 @@ KEY_PLACES = [("items", "on the item list"), ("tree", "in the tree — tab"),
 KEYS = [
     ("items", "⏎", 10, "work", "work it in the background, or review it — whichever it needs"),
     ("items", "tab", 9, "tree", "into the item's tree, and back out"),
-    ("items", "w", ord("w"), "walk", "walk the roadmap depth-first, or stop the walk"),
+    ("items", "w", ord("w"), "walk", "walk the roadmap depth-first (add `stop` to end at a usage limit), or stop the walk"),
     ("items", "n", ord("n"), "pin", "pin this item as where the walk goes next (again: unpin)"),
     ("items", "s", ord("s"), "draft", "mark it a draft, which the walk passes over (again: ready); n still pins it"),
     ("items", "P", ord("P"), "open-pr", "GitHub mode: push this finished item's branch and open its pull request (asks first)"),
@@ -4430,7 +4430,9 @@ class UI(WalkMixin):
         still two keys, `w` then ⏎, with Esc between them leaving the walk off.
 
         The line may carry a second number, the chains to run at once (`20 3`), which is
-        1 when it is left out and the last walk's when ⏎ takes the line shown.
+        1 when it is left out and the last walk's when ⏎ takes the line shown. A last word
+        `stop` (`20 stop`, `20 3 stop`) ends the walk at the first usage limit instead of
+        holding for the reset; it is for that walk only, and is never part of the line shown.
         """
         if self.walk_on:
             self.walk_end_chain()
@@ -4452,17 +4454,23 @@ class UI(WalkMixin):
         # question with two numbers: what the `:` line has left over is the rest of it.
         raw, self.answers = " ".join([raw] + self.answers), []
         words = raw.split()
+        stop = words[-1:] == ["stop"]
+        if stop:
+            words.pop()
         try:
             if len(words) > 2:
                 raise ValueError
             budget = int(words[0])
             parallel = int(words[1]) if len(words) > 1 else 1
-        except ValueError:
+        except (ValueError, IndexError):
             self.msg = ("walk: %r is not a number of sessions, then the number of chains "
-                        "at once" % raw)
+                        "at once, then `stop` to end at a usage limit" % raw)
             return
         try:
-            self.walk_begin(budget, parallel)
+            if stop:
+                self.walk_begin(budget, parallel, stop_on_limit=True)
+            else:
+                self.walk_begin(budget, parallel)
         except ValueError as e:
             self.msg = "walk: %s" % e
 
@@ -5201,8 +5209,8 @@ class UiWalker:
     def __init__(self, ui):
         self.ui = ui
 
-    def start(self, budget, parallel=1):
-        self.ui.call_soon(lambda: self.ui.walk_start(budget, parallel))
+    def start(self, budget, parallel=1, stop_on_limit=False):
+        self.ui.call_soon(lambda: self.ui.walk_start(budget, parallel, stop_on_limit))
 
     def stop(self):
         self.ui.call_soon(lambda: self.ui.walk_end_chain() if self.ui.walk_on else None)

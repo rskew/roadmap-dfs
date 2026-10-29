@@ -176,12 +176,13 @@ def chain_cause(rundir):
     return ": " + (failed or lines)[-1] if lines else ""
 
 
-def walk_decide(stop, moved, next_item, cause=""):
+def walk_decide(stop, moved, next_item, cause="", stop_on_limit=False):
     """What the walk does after a chain ends, as `(action, why)`.
 
     `run` carries the item, `hold`, `pend` and `stop` carry a reason to show a person.
     `pend` is nothing workable now: the walk stays on and waits for a task to appear.
     `cause` is what the chain recorded beside its stop (`brief` has one), added to a stop's reason.
+    `stop_on_limit` is the walk's option to end at a usage limit instead of holding for it.
 
     `raise` carries the question to put to the author on the item; the walk then
     goes on to the next item, which the raise has just made the item stop being.
@@ -202,7 +203,7 @@ def walk_decide(stop, moved, next_item, cause=""):
     asked to look at an item that had only finished.
     """
     if stop == "limit":
-        return ("hold", "a usage limit")
+        return ("stop" if stop_on_limit else "hold", "a usage limit")
     if stop in WALK_RAISE:
         return ("raise", WALK_RAISE[stop])
     if stop not in WALK_CONTINUE:
@@ -227,6 +228,7 @@ class WalkMixin:
     # Defaults for a screen built without `walk_init` (the tests do): never changed in
     # place, only rebound, so one value serves every instance.
     walk_parallel = 1
+    walk_stop_on_limit = False
     walk_chains = ()
     walk_carry = ()
     walk_carry_pinned = ()
@@ -249,6 +251,7 @@ class WalkMixin:
         self.walk_budget = 20       # SESSIONS, over the whole walk — see walk_toggle
         self.walk_spent = 0         # sessions run by chains this walk has finished
         self.walk_until = 0.0       # epoch; a usage-limit hold
+        self.walk_stop_on_limit = False     # end the walk at a usage limit rather than hold for it
         self.walk_parallel = 1      # chains at once, each on a task of its own
         # One record per chain THIS walk started and has not yet judged: `dir` (its run
         # directory), `item`, `started` (epoch — see walk_tick), `content` (what that
@@ -262,10 +265,12 @@ class WalkMixin:
         self.walk_pending = False   # on, but nothing is workable: waiting for a task to appear
         self.walk_stops = frozenset()   # tasks behind a stop break that held them this walk
 
-    def walk_begin(self, budget, parallel=1):
+    def walk_begin(self, budget, parallel=1, stop_on_limit=False):
         """Turn the walk on with `budget` sessions, run `parallel` chains at a time: what `w`
-        does once the numbers are in, and what the web page's Start does. A ValueError says
-        why not."""
+        does once the numbers are in, and what the web page's Start does. With
+        `stop_on_limit` the walk ends at the first usage limit any of its chains hits,
+        instead of holding until the reset (the default). The option lasts for this walk
+        only. A ValueError says why not."""
         if budget < 1:
             raise ValueError("a budget of %d sessions is not a walk" % budget)
         if parallel < 1:
@@ -275,6 +280,7 @@ class WalkMixin:
                              % (parallel, MAX_PARALLEL))
         self.walk_budget = budget
         self.walk_parallel = parallel
+        self.walk_stop_on_limit = bool(stop_on_limit)
         self.walk_spent = 0
         self.walk_on = True
         self.walk_until = 0.0
@@ -284,7 +290,8 @@ class WalkMixin:
         self.walk_note = ""
         self.walk_pending = False
         self.walk_stops = frozenset()
-        both = "%d sessions" % budget + (", %d at a time" % parallel if parallel > 1 else "")
+        both = ("%d sessions" % budget + (", %d at a time" % parallel if parallel > 1 else "")
+                + (", stopping at a usage limit" if stop_on_limit else ""))
         self.msg = "walk: on, %s — w to stop" % both
         if parallel > 1 and not self.walk_cuts_new():
             # No worktree is cut here (the checkout is off main/master, has no commit, or is
@@ -587,7 +594,7 @@ class WalkMixin:
         item = run["item"]
         moved = bool(set(self.data.get("contents", {}).get(item, ())) - rec["content"])
         action, why = walk_decide(run["stop"], moved, self.walk_target(),
-                                  run.get("cause", ""))
+                                  run.get("cause", ""), self.walk_stop_on_limit)
         self.walk_spent += int(run["run"] or 0)
         self.walk_chains = [c for c in self.walk_chains if c is not rec]
         if action == "hold":
@@ -605,6 +612,8 @@ class WalkMixin:
             self.walk_carry_add(item, rec)
             return True
         if action == "stop":
+            if run["stop"] == "limit" and run["resets"]:
+                why += " (%s)" % run["resets"]
             self.walk_off("%s: %s" % (item, why))
             return False
         if action == "raise":
@@ -901,7 +910,7 @@ class WalkMixin:
         self.msg = what
         self.event("walk", what)
 
-    def walk_start(self, budget, parallel=1):
+    def walk_start(self, budget, parallel=1, stop_on_limit=False):
         """Start a walk from outside the prompt: the page's Start, validated as `w`'s
         numbers are (and bounded, since a web page is further from the person than a key)."""
         if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
@@ -913,9 +922,11 @@ class WalkMixin:
         if parallel > MAX_PARALLEL:
             raise ValueError("%d chains at once is more than a machine runs: at most %d"
                              % (parallel, MAX_PARALLEL))
+        if not isinstance(stop_on_limit, bool):
+            raise ValueError("stop_on_limit is true or false, not %r" % (stop_on_limit,))
         if self.walk_on:
             raise ValueError("the walk is already on")
-        self.walk_begin(budget, parallel)
+        self.walk_begin(budget, parallel, stop_on_limit)
 
     def walk_pin_id(self, item):
         """The page's `n`: pin an item by id, or with None (or the pinned one again) take
@@ -942,6 +953,7 @@ class WalkMixin:
             next=self.walk_target(),
             on=self.walk_on, pending=self.walk_pending,
             budget=self.walk_budget, used=self.walk_used(), parallel=self.walk_parallel,
+            stop_on_limit=self.walk_stop_on_limit,
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS), models=self.models(),
             model_defaults=self.model_defaults(),
@@ -1047,10 +1059,10 @@ class HeadlessWalk(WalkMixin):
         pass                # nobody at a terminal to ring
 
     # the interface the page calls, each under the lock
-    def start(self, budget, parallel=1):
+    def start(self, budget, parallel=1, stop_on_limit=False):
         with self.lock:
             self.reload()
-            self.walk_start(budget, parallel)
+            self.walk_start(budget, parallel, stop_on_limit)
 
     def stop(self):
         with self.lock:

@@ -1006,12 +1006,17 @@ const FLOWS = {
       await page.click("#walkbox summary"); await page.waitForSelector("#bud");
       await page.fill("#walkbox #bud", "7"); await page.fill("#walkbox #par", "2");
     }
+    assert(!(await page.isChecked("#stoplim")), "a walk does not stop at a usage limit unless told to");
+    await page.check("#stoplim");
+    await page.evaluate(() => { document.activeElement.blur(); drawTasks(); });
+    assert(await page.isChecked("#stoplim"), "a redraw keeps the stop-at-a-limit box ticked");
     await page.click("[data-act=walkstart]");
     await page.waitForFunction(() => /Walking/.test(document.querySelector("#walkbox")?.textContent || ""));
     assert(!(await page.$("dialog[open]")), "Start walk opens no dialog");
     assert(!(await page.$("#walkbox[open]")), "Start walk collapses the box");
     assert(/7/.test(await page.textContent("#walkbox")), "the budget shows");
     assert(/2 at a time/.test(await page.textContent("#walkbox")), "the chains went with it");
+    assert(/stops at a usage limit/.test(await page.textContent("#walkbox")), "the walk says it stops at a usage limit");
     await openWalk(page);
     await page.click("[data-act=walkstop]");
     await page.waitForFunction(() => /Walk is off/.test(document.querySelector("#walkbox")?.textContent || ""));

@@ -246,6 +246,7 @@ dl.keys kbd { font: inherit; font-weight: 600; white-space: pre; }
 .walk .row2.act { margin-bottom: 14px; }
 .walk .pair { display: flex; align-items: center; gap: 10px; }
 .walk .pair input { flex: 1; min-height: var(--hit); padding-block: 0; }
+.walk .pair input[type=checkbox] { flex: none; width: var(--hit); }
 .walk label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
 .walk .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
 .walk .chain span:first-child { overflow-wrap: anywhere; }
@@ -835,7 +836,7 @@ function walkHtml() {
   const mine = (w.chains || []).filter(c => c.live);
   const chain = mine[0];
   const names = mine.map(c => esc(c.item)).join(", ");
-  const at = w.parallel > 1 ? `, ${w.parallel} at a time` : "";
+  const at = (w.parallel > 1 ? `, ${w.parallel} at a time` : "") + (w.stop_on_limit ? ", stops at a usage limit" : "");
   const state = w.on
     ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : w.pending ? `<span class="hold">Waiting for a task</span>` : `<span class="on">Walking</span>`)
     : "Walk is off";
@@ -890,7 +891,8 @@ async function setNext(item) {
 function walkFields() {
   const v = S.walkDraft || {};
   return `<div class="row2"><label for="bud">Budget</label><span class="pair"><input type="number" id="bud" min="1" max="500" value="${esc(v.budget ?? S.walk.budget)}" required aria-describedby="walkhow">
-      <label for="par">Chains</label><input type="number" id="par" min="1" max="16" value="${esc(v.parallel ?? (S.walk.parallel || 1))}" required aria-describedby="walkhow"></span></div>`;
+      <label for="par">Chains</label><input type="number" id="par" min="1" max="16" value="${esc(v.parallel ?? (S.walk.parallel || 1))}" required aria-describedby="walkhow"></span></div>
+    <div class="row2"><label for="stoplim">Limit</label><span class="pair"><input type="checkbox" id="stoplim" ${v.stop ? "checked" : ""} aria-describedby="walkhow"><label for="stoplim">Stop the walk if the agent hits its usage limit</label></span></div>`;
 }
 /* Start walk acts at once, with the numbers in the box; Start and Stop both fold the box away, as the walk's state is in its summary. */
 // The button that was pressed leaves with the open box, so focus goes to the box's summary, where its state now reads.
@@ -901,7 +903,7 @@ async function walkStart() {
   if (walkStarting || !bud || !par || !bud.reportValidity() || !par.reportValidity()) return;
   walkStarting = true;
   try {
-    S.walk = await api("/api/walk/start", { budget: parseInt(bud.value, 10), parallel: parseInt(par.value, 10) });
+    S.walk = await api("/api/walk/start", { budget: parseInt(bud.value, 10), parallel: parseInt(par.value, 10), stop_on_limit: !!$("#stoplim")?.checked });
     S.walkDraft = null; toast("Walking."); collapseWalk();
   } catch (e) { toast(e.message, true); }
   finally { walkStarting = false; }
@@ -2069,7 +2071,7 @@ document.addEventListener("focusout", e => setTimeout(function catchUp() {
 document.addEventListener("input", e => {
   const role = e.target.dataset && e.target.dataset.role;
   if (role) { S.walkDraft = Object.assign({}, S.walkDraft); S.walkDraft.models = Object.assign({}, S.walkDraft.models, { [role]: e.target.value }); }
-  else if (e.target.id === "bud" || e.target.id === "par") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value });
+  else if (e.target.id === "bud" || e.target.id === "par" || e.target.id === "stoplim") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value, stop: $("#stoplim").checked });
 });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStart(); } });
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.role) setModel(e.target.dataset.role, e.target.value); });
