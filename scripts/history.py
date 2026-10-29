@@ -42,8 +42,23 @@ KINDS = [
 ]
 REPLAY = "-dfs-replay-"
 VERDICT = re.compile(r"tree\.py\b.*?\blog (W\d+) (review|critic|raise|backtrack)\b ?(ok|issues)?")
+# `S=…/tree.py` on one line and `python3 $S log W22 review issues` on the next is the same call:
+# VERDICT cannot see it (`.` stops at the newline), so the variable form is read by `verdicts`.
+VERDICT_VAR = re.compile(r"\$\{?([A-Za-z_]\w*)\}?\"?\s+log (W\d+) (review|critic|raise|backtrack)\b ?(ok|issues)?")
 STARTED = re.compile(r"tree\.py\b.*?\bstart (W\d+) (W[\d.]+(?:@\S+)?)")
 SUBJECT = re.compile(r"""git\b(?:[^|;&'"]|"[^"]*"|'[^']*')*?\bcommit\b.*?(?:-m\s+(['"])(.+?)\1|<<-?\s*'?EOF'?\s*\n(.+?)\n)""", re.S)
+
+
+def verdicts(cmd):
+    """The `(kind, verdict)` of every `tree.py log TASK review|critic|raise|backtrack [ok|issues]` in a
+    command, in order: written out, or through a variable the same command sets to a `tree.py` path."""
+    found = {m.start(1): (m.group(2), m.group(3) or "") for m in VERDICT.finditer(cmd)}   # keyed by where the call is
+    for m in VERDICT_VAR.finditer(cmd):
+        if m.start(2) not in found and re.search(r"(?:^|[\s;&|(])(?:export\s+)?%s=[\"']?\S*tree\.py" % re.escape(m.group(1)), cmd[:m.start()], re.M):
+            found[m.start(2)] = (m.group(3), m.group(4) or "")
+    return [found[at] for at in sorted(found)]
+
+
 REFUSED = "dfs_check: the roadmap broke its own rules"
 # The bullet lines under a refusal, by what they say. A refusal lists every fault it found,
 # so it counts once under each reason it lists; a line matching none is `other`.
@@ -156,8 +171,7 @@ def session(path):
                     key = (target, inp.get("offset"), inp.get("limit"))
                     rec["rereads"] += key in read_paths
                     read_paths.add(key)
-                for m in VERDICT.finditer(cmd):
-                    rec["verdicts"].append((m.group(2), m.group(3) or ""))
+                rec["verdicts"].extend(verdicts(cmd))
                 for m in STARTED.finditer(cmd):
                     rec["started"].append(m.group(2))
                 m = SUBJECT.search(cmd)
@@ -293,8 +307,7 @@ def stream_session(path, kinds=None):
             rec["rereads"] += key in read_paths
             read_paths.add(key)
         cmd = inp.get("command", "") if c["kind"] == "execute" else ""
-        for m in VERDICT.finditer(cmd):
-            rec["verdicts"].append((m.group(2), m.group(3) or ""))
+        rec["verdicts"].extend(verdicts(cmd))
         for m in STARTED.finditer(cmd):
             rec["started"].append(m.group(2))
         m = SUBJECT.search(cmd)

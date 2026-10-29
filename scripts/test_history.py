@@ -29,6 +29,30 @@ def result(tid, text, error=False):
     return {"type": "tool_result", "tool_use_id": tid, "content": text, "is_error": error}
 
 
+class VerdictsTest(unittest.TestCase):
+    S = "/nix/store/x-roadmap-dfs/share/roadmap-dfs/scripts/tree.py"
+
+    def test_a_verdict_written_out_on_one_line(self):
+        self.assertEqual(history.verdicts("python3 %s log W22 review issues <<'EOF'\nx\nEOF" % self.S),
+                         [("review", "issues")])
+
+    def test_a_verdict_through_a_variable_set_on_an_earlier_line(self):
+        for use in ("$S", "${S}", '"$S"'):
+            cmd = "cat > f <<'EOF'\nx\nEOF\nS=%s\npython3 %s log W22 review issues <<'EOF'\nW22.2\nEOF" % (self.S, use)
+            self.assertEqual(history.verdicts(cmd), [("review", "issues")], use)
+        self.assertEqual(history.verdicts("export S=%s; python3 $S log W5 critic ok" % self.S), [("critic", "ok")])
+
+    def test_both_forms_in_one_command_come_out_in_order(self):
+        cmd = "S=%s\npython3 $S log W5 raise W5.1 <<'EOF'\nx\nEOF\npython3 %s log W5 review ok" % (self.S, self.S)
+        self.assertEqual(history.verdicts(cmd), [("raise", ""), ("review", "ok")])
+
+    def test_a_variable_not_set_to_tree_py_or_set_after_its_use_is_not_a_verdict(self):
+        self.assertEqual(history.verdicts("python3 $S log W22 review issues"), [])
+        self.assertEqual(history.verdicts("S=/tmp/other.py\npython3 $S log W22 review issues"), [])
+        self.assertEqual(history.verdicts("python3 $S log W22 review issues\nS=%s" % self.S), [])
+        self.assertEqual(history.verdicts("git log W22 review"), [])
+
+
 class ReviewTailTest(unittest.TestCase):
     def task(self, usd, first, issues, ok=0):
         return {"usd": usd, "first_review": first, "review_issues": issues, "review_ok": ok}
