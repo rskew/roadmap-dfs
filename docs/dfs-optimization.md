@@ -508,30 +508,38 @@ rounds alone. It does not show candidate 1 stronger than 2 or 3 by any word coun
    rule keeps only a clear win. Read the reviews of the changed replays that count as
    better too: a pass counts only if the review's `ok` names what it checked.
 
-   *Why pairs and this margin (W130.9).* The first-review pass rate was the earlier
-   measure and the control passes it 9 times in 12 (W22 3, W11 3, W36 2, W5 1), so there
-   is little left for a change to improve and counting passes can neither keep nor reject
-   anything. Credits to a reviewed finish already include rework after an issues review,
-   but one control replay of a task differs from another by up to 2.0 times (W5 12.2 to
-   23.4, W22 5.9 to 11.2), so a pair is judged by the review count first and by credits
-   only past a margin. The margin was chosen on the 15 control replays: every pair of two
-   different replays of one task is a pair with no change, and how often the rule keeps
-   those is its false keep rate.
+   *Why pairs and this margin (W130.9, figures corrected by W130.12).* The first-review pass
+   rate was the earlier measure, and it is coarse: counted from the replays' own task files
+   (`docs/dfs-replay-verdicts.py`) the control passed it 7 times in 12 (W22 2, W11 3, W36 2,
+   W5 0). `replay.py score` printed 9 of 12, because it reads a review's verdict from the
+   command that wrote it, and twice (W22 and W5, the third control replay of each) the review
+   had set `S=…/tree.py` on one line and run `python3 $S log W22 review issues` on the next,
+   which the pattern does not match; the task file is the record. A pass count over twelve
+   cannot separate a change from the control's own spread (a task's pass rate runs from 0 of 3
+   to 3 of 3 across the four), and credits to a reviewed finish already include rework after
+   an issues review, but one control replay of a task differs from another by up to 2.0
+   times (W5 12.2 to 23.4, W22 5.9 to 11.2), so a pair is judged by the review count first
+   and by credits only past a margin. The margin was chosen on the 15 control replays: every
+   pair of two different replays of one task is a pair with no change, and how often the rule
+   keeps those is its false keep rate.
 
    | margin on credits | no-change pair: better / same / worse | no-change kept | kept if the change costs 30% less | 50% less |
    |---|---|---|---|---|
-   | 20% | 42% / 17% / 42% | 8.7% | 25% | 50% |
-   | **30%** | 33% / 33% / 33% | **4.9%** | 21% | 33% |
-   | 40% | 23% / 54% / 23% | 1.7% | 11% | 28% |
-   | 50% | 19% / 63% / 19% | 0.9% | 8% | 21% |
+   | 20% | 42% / 17% / 42% | 8.7% | 24% | 48% |
+   | **30%** | 37% / 25% / 37% | **6.8%** | 20% | 32% |
+   | 40% | 23% / 54% / 23% | 1.7% | 12% | 27% |
+   | 50% | 21% / 58% / 21% | 1.2% | 8% | 20% |
 
-   30% keeps a change that does nothing about one time in twenty and a change that cuts
-   credits by half one time in three; 20% keeps a no-op nearly one in eleven; 40% rarely
-   keeps anything. Power is low on purpose: three pairs with this much noise can only show
-   a large effect, and a smaller one goes back as "not shown". The figures are recomputed
-   on the page `.dfs/artefacts/8e49a572-ecd0-40de-b489-efaccd8b2798.html`. Hypothesis of W130.9; it is wrong
+   30% keeps a change that does nothing about one time in fifteen and a change that cuts
+   credits by half one time in three; 20% keeps a no-op nearly one in eleven; 40% keeps a no-op
+   one time in sixty and half-price one time in four. Power is low on purpose: three pairs with
+   this much noise can only show a large effect, and a smaller one goes back as "not shown".
+   The figures are printed by `python3 docs/dfs-replay-verdicts.py <replays> --pairs`
+   (output: `docs/dfs-replay-verdicts.txt`); the page `.dfs/artefacts/8e49a572-ecd0-40de-b489-efaccd8b2798.html`
+   holds the earlier figures (two replays counted as passed that the task files say failed).
+   Hypothesis of W130.9; it is wrong
    if the control's pair-to-pair spread in a later sitting is wider than these 15 replays
-   show (a no-op is then better more often than 5%), or if the pairs of one sitting share
+   show (a no-op is then better more often than 7%), or if the pairs of one sitting share
    their noise (the pairs are then not independent). Cost: three pairs about 78 credits,
    five about 130, against about 310 an arm for the twelve-replay rule it replaces.
 
@@ -565,6 +573,17 @@ What the loop cannot see: whether a change helps on projects other than roadmap-
 (only its history can be replayed); the author's time; and drift in the model between
 the control run and the changed run, which is why the arms are interleaved, control then
 changed, task by task, in one sitting, and not run as two batches on different days.
+
+A replay is not the history it was chosen from (W130.12). The four tasks were picked because
+the original's first review said issues, and all four did (4 of 4); the originals were run by
+claude, and every replay here runs under kiro, a different agent whose cost is in credits and
+whose reviewer is not the one that wrote those verdicts. The control's first review, counted
+from the replays' task files, said issues in 5 of 12 replays (W22 1 of 3, W11 0, W36 1, W5 3),
+and in 1 of 3 more in the sitting of the second control (W5), so the failure that selected
+the tasks recurs in under half of the control replays and not at all in W11. A candidate
+aimed at a class mined from the history can only be tested on a task whose control replays
+fail in that class, and the metric (fewer issues reviews, then credits) is blind to a class
+that does not occur; `docs/dfs-replay-verdicts.txt` lists each replay's verdicts.
 
 ### Next
 

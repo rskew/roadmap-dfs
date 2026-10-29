@@ -1,0 +1,33 @@
+# python3 docs/dfs-replay-verdicts.py /workspace/roadmap-dfs/.dfs/runs/replays --pairs   (2026-10-29; the replays are in the live checkout, ignored by git)
+task tag  score first  task file first  issues reviews  credits
+W11  b1a           ok               ok               0     13.2
+W11  c1a           ok               ok               0     14.0
+W11  c1b           ok               ok               0     14.0
+W11  c1c           ok               ok               0      9.6
+W11  c2a           ok               ok               0      9.8
+W22  b1a       issues           issues               1     14.4+
+W22  c1a           ok               ok               0      5.9
+W22  c1b           ok               ok               0      8.6
+W22  c1c           ok           issues               1     10.0   <- score misses the issues review
+W22  c2a           ok               ok               0     11.2
+W36  c1a           ok               ok               0     11.5+
+W36  c1b           ok               ok               0     17.0
+W36  c1c       issues           issues               1     14.5
+W5   b1a       issues           issues               1     27.1
+W5   c1a       issues           issues               2     23.4
+W5   c1b       issues           issues               1     12.2
+W5   c1c           ok           issues               1     14.3   <- score misses the issues review
+W5   c2a       issues           issues               1     15.9
+
+control c1a-c1c, first review passed (task file): 7 of 12; by score: 9 of 12
+   W11: task file 3 of 3, score 3 of 3
+   W22: task file 2 of 3, score 3 of 3
+   W36: task file 2 of 3, score 2 of 3
+   W5: task file 0 of 3, score 1 of 3
+
+pairs of two different control replays of one task (both orders); the changed replay's credits are
+multiplied by f (f=1 is a change that does nothing); kept = the sequence of step 5
+   margin 20%: f=1.0: 42%/17%/42% better/same/worse, kept 8.7%; f=0.7: 56%/21%/23% better/same/worse, kept 24.1%; f=0.5: 77%/2%/21% better/same/worse, kept 48.0%
+   margin 30%: f=1.0: 37%/25%/37% better/same/worse, kept 6.8%; f=0.7: 52%/27%/21% better/same/worse, kept 20.1%; f=0.5: 63%/17%/21% better/same/worse, kept 32.0%
+   margin 40%: f=1.0: 23%/54%/23% better/same/worse, kept 1.7%; f=0.7: 44%/35%/21% better/same/worse, kept 12.3%; f=0.5: 58%/21%/21% better/same/worse, kept 27.1%
+   margin 50%: f=1.0: 21%/58%/21% better/same/worse, kept 1.2%; f=0.7: 37%/42%/21% better/same/worse, kept 7.7%; f=0.5: 52%/27%/21% better/same/worse, kept 20.1%
