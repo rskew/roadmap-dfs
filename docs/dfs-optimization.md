@@ -496,6 +496,32 @@ What the loop cannot see: whether a change helps on projects other than roadmap-
 the control run and the changed run, which is why the arms are interleaved, control then
 changed, task by task, in one sitting, and not run as two batches on different days.
 
+### Candidate 1 under the loop (W130.6): not shown
+
+Run under kiro in the sandbox, control then changed, task by task. The changed arm was the
+store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
+node tries to break the work, and a tree whose last node is not that is not complete); a
+copy of the store tool and not `--tool-ref`, because the repo's `SKILL.md` is older than the
+store tool the control ran. First reviews, credits per replay:
+
+| task | control | changed |
+|---|---|---|
+| W22 | ok, 11.2 | issues, 14.4 plus one cut-off session unpriced |
+| W11 | ok, 9.8 | ok, 13.2 |
+| W5 | issues, 15.9 | issues, 27.1 |
+
+The change was followed (a node titled "Break it" came before the first review in all three
+changed trees), and two of its three first reviews still said issues, so the rule of
+step 5 (all twelve pass) cannot be met and the candidate is **not shown**. The run stopped
+after these six replays, at 91.6 credits, because no later replay could change that. It
+shows nothing about whether the node helps: three replays an arm cannot separate a
+modest gain from the control's own spread, and the changed arm cost more on every task.
+W22's changed replay was cut off once by the host's 30-minute call limit and resumed with
+`run`, so its first review is of a chain that ran in two sittings. The score's "answered
+output" count (1, 3 and 6 calls in the changed arm) is the changed tool's own path, which
+lies inside the live checkout and is not cut out of `reached` when passed as `--tool`; the
+one call that named the live items directory printed only "No such file or directory".
+
 ### Next
 
 Candidate 3 was answered from the task logs, with no replay (row 3 above): the present
