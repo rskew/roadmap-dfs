@@ -85,7 +85,7 @@ def main():
         flag = "   <- score misses the issues review" if r["score"] != r["log"] else ""
         print(f"{r['task']:4} {r['tag']:4} {r['score']:>11} {r['log']:>16} {r['issues']:>15} "
               f"{r['credits']:>8}{'+' if r['unpriced'] else ''}{flag}")
-    ctl = [r for r in rows if r["tag"].startswith("c1")]
+    ctl = [r for r in rows if r["tag"].startswith("c1")]  # the first sitting, three per task
     print("\ncontrol c1a-c1c, first review passed (task file):",
           f"{sum(r['log'] == 'ok' for r in ctl)} of {len(ctl)}; by score: {sum(r['score'] == 'ok' for r in ctl)} of {len(ctl)}")
     for t in sorted({r['task'] for r in ctl}):
@@ -100,7 +100,7 @@ def main():
             for f in (1.0, 0.7, 0.5):
                 cnt = {"better": 0, "same": 0, "worse": 0}
                 for t in tasks:
-                    v = [r for r in rows if r["task"] == t and r["tag"] in ("c1a", "c1b", "c1c", "c2a")]
+                    v = [r for r in rows if r["task"] == t and r["tag"].startswith("c")]
                     k = len(v) * (len(v) - 1)
                     for i, ch in enumerate(v):
                         for j, ct in enumerate(v):

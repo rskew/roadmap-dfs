@@ -598,6 +598,39 @@ the one task whose control fails in the narrow cases, was not run under the chan
 first three pairs say the node does not reliably finish the per-clause search, and say nothing
 about its interrupted, repeated and empty cases.
 
+### Candidate 1 under the loop (W130): dropped, not shown
+
+Run under kiro in the sandbox, each pair in one sitting, control then changed. The changed arm
+is the store tool with one bullet added to `SKILL.md` "Ending a node" (the text of row 1: the last
+node tries to break the work, and a tree whose last node is not that is not complete), as a copy
+of the store tool and not `--tool-ref`, because the repo's `SKILL.md` is older than the store tool
+the control ran. Verdicts are the task files' (`docs/dfs-replay-verdicts.txt`), credits are
+`replay.py score`'s, and a pair is judged by step 5 (margin 30%):
+
+| pair | control: first review, credits | changed: first review, credits | pair |
+|---|---|---|---|
+| W5 | issues, 15.9 | issues, 27.1 | worse (1.7 times the credits) |
+| W36 | issues, 22.9 | ok, 25.4 | **better** (one issues review fewer) |
+| W22 | ok, 11.2 | issues, 14.4 and one unpriced cut-off | worse (one more issues review) |
+| W11 | ok, 9.8 | ok, 13.2 | same (1.35 times, under 1.43) |
+
+Taken in step 4's order (W5, W36, W22) the first three pairs are worse, better, worse, so fewer
+than two are better and the rule drops the candidate; all four give one better. It is **not
+shown**, and not merged. A node titled "Break it" came before the first review in all four changed
+trees, so the change was followed. What the reading of the reviews (W130.13) adds: in W22 and W5,
+where the control's failures are a Goal clause unmet in some place, the node ran the per-clause
+check and still missed what the review found, and W22's control failed its first review once in four
+replays, so that pair is as much noise as a loss; in W36, the task whose control fails in
+the node's narrow cases (the control's review: interrupting the first turn of a chat loses the
+conversation), the node listed "interrupt an opening turn" and "interrupt, then send", the
+changed tree's review passed, and it noted that path as handled. That is one pair: it says the
+interrupted half of the node can reach the failure that half names, and the per-clause half did not
+stop the misses it is meant for. A candidate that kept only the narrow cases would be a new
+candidate, not tested here. The W36 pair's scores print 0 calls naming a live path and 0 of the
+original's nodes shown, for both. The W22, W11 and W5 changed replays printed 1, 3 and 6 calls
+answered with output; the earlier reading of them found the changed tool's own directory, which
+lies inside the live checkout (not re-read here). The W36 pair cost 48.3 credits.
+
 ### Next
 
 Candidate 3 was answered from the task logs, with no replay (row 3 above): the present
