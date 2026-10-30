@@ -751,6 +751,16 @@ round (W5, the same kind of fault left in other places), and W130 has two, one f
 So a pair would have one round in sixteen to remove, and every session pays for the longer node: not
 shown, no pair run, nothing merged.
 
+Candidate 4 was bounded on the history again, with the refusal reasons split by period (`history.py
+--json`, 2,126 dfs sessions, 29 September to 31 October). The file:line coordinate refusal, 113 of
+1,393 sessions up to 19 October, was 7 of 480 from 22 October. The two reasons the candidate would
+add (task file over its size budget, a Parent that does not exist) were 15 of those 480 sessions
+(3%), and the sessions that hit either hold 3.1% of the units in that period (3.4% over all of it),
+which is an upper bound because the retry is part of a session. So the candidate's whole remaining
+prize is below 3% of spend and in practice a fraction of it, too small for a before and after count
+to show: 15 sessions become perhaps 8 in nine days. Not worth a change to `tree.py` and `SKILL.md`
+that every session then reads; parked with that figure.
+
 The loop has been run once from a box with kiro (the first real run of it). Its replays were
 W22, W11, W5 and W36, the four tasks of `replay.py candidates` whose files name no evidence outside
 the repo; the control ran three times on each and candidate 1 once on W22, W11 and W5 and
