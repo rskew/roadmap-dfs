@@ -728,6 +728,16 @@ present, and the 3 present and 13 unplaced lines together are 16, so no misreadi
 the unplaced lines reaches it; the 20 `maybe-introduced` lines could, and are why the
 result is "not shown" and not "shown false".
 
+Candidate 3 was bounded a second time on the 20 kiro replays and on W130's own log
+(`docs/dfs-round-one-bound.tsv`). A reviewer that finds everything in round one can only remove a
+second or later issues round, and 1 of the 16 control replays has one (W5, a missed place that was
+there at round one); W130 has two such rounds, one present at round one and one a regression of the
+earlier fix. So a pair cannot show fewer rounds or 30% fewer credits for it, and every pair pays for
+the longer review. What is left is quality: 12 of the 20 trees pass their last review with a rubric
+clause unmet in both judgings, 7 of them outside the two clauses (W22 C6, W5 C7) that all ten trees
+of their task miss (five trees each, both judgings). Whether a reviewer told to walk the Goal's clauses finds those is the premise a
+cheaper check than a pair tests: the same review run on the finished trees.
+
 The loop has been run once from a box with kiro (the first real run of it). Its replays were
 W22, W11, W5 and W36, the four tasks of `replay.py candidates` whose files name no evidence outside
 the repo; the control ran three times on each and candidate 1 once on W22, W11 and W5 and
