@@ -738,6 +738,25 @@ clause unmet in both judgings, 7 of them outside the two clauses (W22 C6, W5 C7)
 of their task miss (five trees each, both judgings). Whether a reviewer told to walk the Goal's clauses finds those is the premise a
 cheaper check than a pair tests: the same review run on the finished trees.
 
+That check was run (`docs/dfs-review-only.py`, `docs/dfs-review-walk.tsv`). The round note of
+`review_brief` in a copy of the tool asks the review to split the Goal into clauses, say where each is
+delivered and what was run, try the empty, repeated and interrupted cases, and report every miss in
+one verdict (`docs/dfs-review-walk-tool.diff`). One walk review and one unmodified review (the control)
+each ran once under kiro, in the sandbox, on a copy of each of 11 finished trees: the 7 that miss a
+rubric clause outside W22 C6 and W5 C7 (12 clauses) and 4 that meet every clause; the reviewer saw no
+rubric. The walk review said issues on 11 of 11 trees, the control on 6 of 11, and on the 4 trees that
+meet every clause the walk review said issues 4 of 4 times and the control 3 of 4, so a second review
+of a finished tree is rarely quiet whichever it is (W36-b4a's repeated Stop typing a second Esc, found
+by both, comes with a reproduction). It named 6 of the 12 unmet clauses and the control 3 (one reader's reading of
+the added lines), 5 of the 6 as lines in a "Minor findings" node and one (W11-c2a, the task name cannot
+be edited) as a Fix node, at 44.9 credits against 30.2 (1.49 times). The most it could add to any
+tree beyond the control review is two clauses (W5-c1a), under the 1.5-clause margin for every other
+tree, W36's one unmet clause was named by neither review, and W22's only misses are the clause every tree misses; so in step
+4's order (W5, W36, W22) a changed arm cannot be better on two of the first three, and the credits
+of an added round are certain. Not shown, no pair run, nothing merged. What this does not settle:
+one run of each review, so a review's own spread is unmeasured; the reviews' findings that no
+rubric clause covers (the reproduced ones above) are real faults the quality tier cannot credit.
+
 A sixth candidate, "after fixing a finding, re-run the node's checks and search the repo and docs for
 every place that states what you changed" (a line in `SKILL.md` "Ending a node" and in the round
 note of `review_brief`), was bounded the same way (`docs/dfs-fix-regressions.tsv`, one reader's

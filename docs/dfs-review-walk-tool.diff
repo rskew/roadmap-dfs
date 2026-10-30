@@ -1,0 +1,23 @@
+--- store/scripts/state.py	1970-01-01 00:00:01.000000000 +0000
++++ walk/scripts/state.py	2026-10-30 04:30:03.247568460 +0000
+@@ -910,12 +910,18 @@
+ def _round_note(t):
+     """Which review round this is, and what the one after it does."""
+     n = dfs_tree.review_rounds_unsettled(t)
++    walk = ["**Walk the Goal in this round.** Split the Goal into its separate clauses, "
++            "each thing it asks for. For every clause say where the code delivers it "
++            "(file and line) and what you ran to see it work, and try the empty case, "
++            "the repeated case and the interrupted case wherever they apply. Report "
++            "every clause that is not delivered, or delivered in part, in this one "
++            "verdict: a later round is not there to find what this one could have.", ""]
+     if not n:
+-        return []
++        return walk
+     last = max(e["ts"] for e in t["log"] if e["kind"] == "review")
+     return ["This is review round %d: %d review%s since the author last spoke found "
+             "issues, and the fixes are in. Start from the commits made since %s." % (
+-                n + 1, n, "" if n == 1 else "s", last), ""]
++                n + 1, n, "" if n == 1 else "s", last), ""] + walk
+ 
+ 
+ def review_brief(task: str) -> str:
