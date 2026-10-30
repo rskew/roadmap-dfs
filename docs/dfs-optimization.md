@@ -738,6 +738,19 @@ clause unmet in both judgings, 7 of them outside the two clauses (W22 C6, W5 C7)
 of their task miss (five trees each, both judgings). Whether a reviewer told to walk the Goal's clauses finds those is the premise a
 cheaper check than a pair tests: the same review run on the finished trees.
 
+A sixth candidate, "after fixing a finding, re-run the node's checks and search the repo and docs for
+every place that states what you changed" (a line in `SKILL.md` "Ending a node" and in the round
+note of `review_brief`), was bounded the same way (`docs/dfs-fix-regressions.tsv`, one reader's
+reading of the first 200 characters of each line, so a reader can flip a row). Of the 43 defect lines
+in a second or later issues review of roadmap-dfs, 9 name a fault the previous fix made (a claim it
+made untrue, a test it added that is flaky, behaviour that worked before it) and 9 a place or case the
+fix left (the same fault through another path); 25 are neither. A later round could vanish only if
+every line in it is one of those 18: 14 of the 37 rounds, 6 of them with from-fix lines alone, and
+only the re-run half is aimed at the 9. In the replays 1 of the 16 control replays has a second issues
+round (W5, the same kind of fault left in other places), and W130 has two, one from the previous fix.
+So a pair would have one round in sixteen to remove, and every session pays for the longer node: not
+shown, no pair run, nothing merged.
+
 The loop has been run once from a box with kiro (the first real run of it). Its replays were
 W22, W11, W5 and W36, the four tasks of `replay.py candidates` whose files name no evidence outside
 the repo; the control ran three times on each and candidate 1 once on W22, W11 and W5 and
