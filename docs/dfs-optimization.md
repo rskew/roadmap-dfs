@@ -781,6 +781,19 @@ same-sitting control, on the tasks whose control trees fall short of the rubric 
 candidate targets (the kiro control's first review said issues in 5 of 12 replays, none in W11; the
 rubric scores of the control trees are in `docs/dfs-quality-scores.jsonl`).
 
+A SKILL.md with its unenforced and unactionable lines removed (`docs/dfs-skill-trim.diff`, 20.6 KB to 18.6 KB:
+the "claude -p" and `Monitor` wording, "one sentence" for a Determination and "one or two sentences" for a
+node's wording, the worktree section cut to what a worker acts on, "never `git add -A`", the re-plan sentence
+the law already holds, and the "Shell discipline" section) was run as one pair on W36 under kiro, control then
+trimmed in one sitting. `check.py`, `tree.py` and `state.py` enforce none of the removed lines; the lines kept
+are the ones they do enforce (Hypothesis with its page, a standalone Approach, archive moves) and the "ONE turn"
+rule `run.sh` records as measured. Quality tied (control 8 of 9 clauses in both judgings, missing C5, a stop
+with no turn running; trimmed 9 of 9), credits did not: 26.7 against 17.8, 1.50 times, so the pair is worse by
+step 5, and the trimmed review said issues where the control's said ok. One pair worse means 3 of 3 cannot
+happen and the first three pairs cannot be two better and one same, so it is dropped as not shown, with no
+further pair; scores in `docs/dfs-skill-trim-scores.jsonl`. One replay each cannot tell a cost of 1.5 times from
+the control's own spread (W36 control replays ran 11.5 to 17.0 credits, changed arms 22.9 and 25.4).
+
 A replay needs the configured agent's binary (claude, codex, kiro-cli or opencode) and `proot`
 (both from nixpkgs at the agent pin; `REPLAY_CLAUDE_CODE`, `REPLAY_KIRO_CLI`, `REPLAY_CODEX`,
 `REPLAY_OPENCODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
