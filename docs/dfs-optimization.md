@@ -733,11 +733,14 @@ W22, W11, W5 and W36, the four tasks of `replay.py candidates` whose files name 
 the repo; the control ran three times on each and candidate 1 once on W22, W11 and W5 and
 once on W36, judged by pairs (step 5), with no change kept. The shop-app tasks are listed by `python3 <scripts>/replay.py candidates --repo optimisation-data/shop-app
 --recorded-as /workspace/shop-app --limit 3.5` (W32 and W14; `score` and `replay` take the same `--recorded-as`).
-W32 was prepared: `replay.py prepare W32 DEST --repo optimisation-data/shop-app` makes a clean clone at 1da34d2f with the Goal as its whole task file; no replay was run. The sandbox binds only the store closure of its programs, so
-inside it `nix`, `node`, `npm`, `playwright` and `chromium` are absent and `/nix/var` does not exist, while outside it
-`nix develop .#shop-app-e2e` runs (about 6 s, cached) and finds playwright: W32's work was checked with those specs,
-which a sandboxed work session cannot run. A shop-app replay would measure work with no test, so replays stay on
-roadmap-dfs tasks until the sandbox can run a project's dev shell (a change to `replay.py`, not made here). farm-app: `plan`
+W32 was prepared: `replay.py prepare W32 DEST --repo optimisation-data/shop-app` makes a clean clone at 1da34d2f with the Goal as its whole task file; no replay was run. By default the sandbox binds only the store closure of its programs, so
+`nix`, `node`, `playwright` and `chromium` are absent in it. `replay.py prepare W32 DEST --shell shop-app-e2e` (also on `replay`) gives the box
+a nix store of its own (`seed_store`: the sandbox's closure, nix, the flake's `shop-app-e2e` dev shell and the flake's inputs, copied
+from the host store, about 53 s and 4.5 GB per box) bound as `/nix/store` and `/nix/var`. Inside it `nix develop .#shop-app-e2e` finds
+`playwright`, `psql` and `java`, and chromium starts: a trivial spec passes and `pricing-detail.spec.js` runs as far as its global setup,
+which fails because no Postgres listens on 5442 (the backend on 3006 is not up either). So the e2e check still needs the database and
+the backend started inside the sandbox; no W32 replay was run. farm-app: `plan`
+
 prints a starting commit for W117, W118, W122 and W123, but W123 shows no original sessions and `candidates` lists 0 tasks
 even at $100, so none qualifies by the loop's rule; the cause was not traced.
 What is next is a candidate of the remaining ones (2, 3, 4, 5) run as a pair against a

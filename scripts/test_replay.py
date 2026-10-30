@@ -458,6 +458,37 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertTrue((replay.box_of(self.dest) / "docs" / "artefacts.md").is_file())
         self.assertIn(f"{replay.box_of(self.dest) / 'docs'}:{tool.resolve() / 'docs'}", argv)
 
+    def test_a_box_store_is_bound_as_the_store_and_state_in_place_of_the_closure_paths(self):
+        bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
+                "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
+        box_store = replay.box_of(self.dest) / "store"
+        plain = replay.sandbox_argv(self.dest, "/nix/store/t/x", ["true"], bins, {}, store=["/nix/store/a"])
+        argv = replay.sandbox_argv(self.dest, "/nix/store/t/x", ["true"], bins, {}, store=["/nix/store/a"], box_store=box_store)
+        binds = [argv[i + 1] for i, a in enumerate(argv) if a == "-b"]
+        self.assertIn(f"{box_store}/nix/store:/nix/store", binds)
+        self.assertIn(f"{box_store}/nix/var:/nix/var", binds)
+        self.assertNotIn("/nix/store/a", binds)            # one store, the box's: not the host's paths beside it
+        # without one (every roadmap-dfs task) the command is as it was
+        self.assertIn("/nix/store/a", [plain[i + 1] for i, a in enumerate(plain) if a == "-b"])
+        self.assertFalse([a for a in plain if "/nix/var" in a])
+        self.assertEqual(plain, replay.sandbox_argv(self.dest, "/nix/store/t/x", ["true"], bins, {}, store=["/nix/store/a"], box_store=None))
+
+    def test_seeding_the_box_store_copies_the_closure_the_shell_and_the_flake_inputs_and_nothing_else(self):
+        calls = []
+
+        def fake(argv, **kw):
+            calls.append(argv)
+            return mock.Mock(returncode=0, stdout="/nix/store/sh-nix-shell\n", stderr="")
+        got = replay.seed_store(self.dest, ["/nix/store/a", "/nix/store/b"], "shop-app-e2e", run=fake)
+        root = f"local?root={replay.box_of(self.dest) / 'store'}"
+        self.assertEqual(got, replay.box_of(self.dest) / "store")
+        build, copy, archive = calls
+        self.assertEqual(build[:2], ["nix", "build"])
+        self.assertIn(".#devShells.x86_64-linux.shop-app-e2e", build)
+        self.assertEqual(copy[:5], ["nix", "copy", "--no-check-sigs", "--to", root])
+        self.assertEqual(copy[5:], ["/nix/store/a", "/nix/store/b", "/nix/store/sh-nix-shell"])
+        self.assertEqual(archive, ["nix", "flake", "archive", "--to", root, str(self.dest.resolve())])
+
     def test_a_tool_in_the_store_is_not_bound_and_the_box_keeps_to_its_own_directories(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
                 "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
