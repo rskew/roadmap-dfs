@@ -1,0 +1,13 @@
+all projects
+  every task             tasks 292  issues review 1+: 128 ( 44%)  2+:  61 ( 21%)  3+:  36  spend $ 1719.2  after 1st issues $ 740.7  after 2nd issues $ 399.2
+  total <= $3.5          tasks 181  issues review 1+:  38 ( 21%)  2+:   3 (  2%)  3+:   0  spend $  312.4  after 1st issues $  35.1  after 2nd issues $   2.3
+  total >  $3.5          tasks 111  issues review 1+:  90 ( 81%)  2+:  58 ( 52%)  3+:  36  spend $ 1406.8  after 1st issues $ 705.6  after 2nd issues $ 396.8
+roadmap-dfs
+  every task             tasks 114  issues review 1+:  48 ( 42%)  2+:  23 ( 20%)  3+:  13  spend $  489.5  after 1st issues $ 217.7  after 2nd issues $ 146.1
+  total <= $3.5          tasks  78  issues review 1+:  19 ( 24%)  2+:   3 (  4%)  3+:   0  spend $  125.7  after 1st issues $  16.6  after 2nd issues $   2.3
+  total >  $3.5          tasks  36  issues review 1+:  29 ( 81%)  2+:  20 ( 56%)  3+:  13  spend $  363.8  after 1st issues $ 201.2  after 2nd issues $ 143.7
+shop-app and farm-app
+  every task             tasks  14  issues review 1+:   5 ( 36%)  2+:   1 (  7%)  3+:   1  spend $  148.9  after 1st issues $  42.1  after 2nd issues $  14.9
+  total <= $3.5          tasks   6  issues review 1+:   1 ( 17%)  2+:   0 (  0%)  3+:   0  spend $   16.2  after 1st issues $   1.2  after 2nd issues $   0.0
+  total >  $3.5          tasks   8  issues review 1+:   4 ( 50%)  2+:   1 ( 12%)  3+:   1  spend $  132.7  after 1st issues $  40.9  after 2nd issues $  14.9
+spend after a second issues review: $399.2 of $1719.2 (23.2%), $396.8 of it (99%) on tasks above $3.5

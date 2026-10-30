@@ -733,6 +733,17 @@ present, and the 3 present and 13 unplaced lines together are 16, so no misreadi
 the unplaced lines reaches it; the 20 `maybe-introduced` lines could, and are why the
 result is "not shown" and not "shown false".
 
+Correction to the two bounds that follow (candidates 3 and 6 on the replays, "one round in sixteen").
+That count is true of the replays and does not carry to the loop. `replay.py candidates` picks tasks
+by the original run's total cost ($3, or $3.5 here), and a task that went through several issues
+rounds is not cheap, so the cut keeps the one-round tasks. In the history (`docs/dfs-round-bound-by-size.py`,
+292 reviewed tasks) 3 of the 181 tasks that cost $3.5 or less have a second issues review (2%, close to the
+replays' 1 of 16), against 58 of the 111 dearer ones (52%); the four replayed originals each had one issues
+review. The spend after a second issues review is $399 of $1,719 (23.2%) and 99% of it is on the dearer
+tasks, which no replay covers. So these two candidates are not shown worthless: the most a change that
+makes round two pass could save is about 23% of spend, and by the fix-caused reading below (14 of 37
+later rounds made of such lines alone) a crude 9%. Only a pair on a task above $3.5 can test it.
+
 Candidate 3 was bounded a second time on the 20 kiro replays and on W130's own log
 (`docs/dfs-round-one-bound.tsv`). A reviewer that finds everything in round one can only remove a
 second or later issues round, and 1 of the 16 control replays has one (W5, a missed place that was
@@ -772,8 +783,8 @@ fix left (the same fault through another path); 25 are neither. A later round co
 every line in it is one of those 18: 14 of the 37 rounds, 6 of them with from-fix lines alone, and
 only the re-run half is aimed at the 9. In the replays 1 of the 16 control replays has a second issues
 round (W5, the same kind of fault left in other places), and W130 has two, one from the previous fix.
-So a pair would have one round in sixteen to remove, and every session pays for the longer node: not
-shown, no pair run, nothing merged.
+On the replays a pair would have one round in sixteen to remove, but see the correction above: the
+replays are the cheap tasks, so this says nothing of the dearer ones. Not shown, no pair run, nothing merged.
 
 Candidate 4 was bounded on the history again, with the refusal reasons split by period (`history.py
 --json`, 2,126 dfs sessions, 29 September to 31 October). The file:line coordinate refusal, 113 of
