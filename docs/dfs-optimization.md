@@ -771,8 +771,14 @@ W32 was prepared: `replay.py prepare W32 DEST --repo optimisation-data/shop-app`
 a nix store of its own (`seed_store`: the sandbox's closure, nix, the flake's `shop-app-e2e` dev shell and the flake's inputs, copied
 from the host store, about 53 s and 4.5 GB per box) bound as `/nix/store` and `/nix/var`. Inside it `nix develop .#shop-app-e2e` finds
 `playwright`, `psql` and `java`, and chromium starts: a trivial spec passes and `pricing-detail.spec.js` runs as far as its global setup,
-which fails because no Postgres listens on 5442 (the backend on 3006 is not up either). So the e2e check still needs the database and
-the backend started inside the sandbox; no W32 replay was run. farm-app: `plan`
+which fails because no Postgres listens on 5442 (the backend on 3006 is not up either). With `--also shop-app,devShells.x86_64-linux.db,db-create-views`
+the box store also holds the backend and the database tools, and `sh docs/dfs-shop-app-e2e-up.sh DEST APP pricing-detail.spec.js`
+(APP is the store path of `.#shop-app` on the host) starts Postgres on 5442 from an empty directory, builds the schema, starts the
+backend on 3006 and runs the spec in the sandbox: 25 of 25 passed, once with the steps run by hand and once by the script from an empty database dir. The schema needs the
+script's order, not `base_schema.sql` plus `migrate.sh`: the baseline lacks `context` on two note tables that migrations 0004 and 0020 read,
+and the views and the migrations each need what the other creates. The backend is the host-built binary serving the clone's `static/`; a
+change to `Main.hs` needs a rebuild that was not tried inside the box (nix there cannot download: it reports no CA certificate), and
+`static/vendor` (the wasm views) is not built. No W32 replay was run. farm-app: `plan`
 
 prints a starting commit for W117, W118, W122 and W123, but W123 shows no original sessions and `candidates` lists 0 tasks
 even at $100, so none qualifies by the loop's rule; the cause was not traced.

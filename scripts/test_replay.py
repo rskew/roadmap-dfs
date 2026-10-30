@@ -489,6 +489,24 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertEqual(copy[5:], ["/nix/store/a", "/nix/store/b", "/nix/store/sh-nix-shell"])
         self.assertEqual(archive, ["nix", "flake", "archive", "--to", root, str(self.dest.resolve())])
 
+    def test_seeding_the_box_store_builds_and_copies_the_extra_outputs_too(self):
+        calls = []
+
+        def fake(argv, **kw):
+            calls.append(argv)
+            return mock.Mock(returncode=0, stdout="/nix/store/sh-nix-shell /nix/store/app\n", stderr="")
+        replay.seed_store(self.dest, ["/nix/store/a"], "shop-app-e2e", run=fake, also=["shop-app", "devShells.x86_64-linux.db"])
+        build, copy, _ = calls
+        self.assertEqual(build[-3:], [".#devShells.x86_64-linux.shop-app-e2e", ".#shop-app", ".#devShells.x86_64-linux.db"])
+        self.assertIn("/nix/store/app", copy)
+
+    def test_also_needs_a_shell_and_is_refused_where_it_does_nothing(self):
+        for argv in (["prepare", "W1", "/x/dfs-replay-a", "--also", "shop-app"],
+                     ["run", "/x/dfs-replay-a", "W1", "--shell", "e2e", "--also", "shop-app"]):
+            with self.assertRaises(SystemExit) as e:
+                replay.main(argv)
+            self.assertIn("--also", str(e.exception))
+
     def test_a_tool_in_the_store_is_not_bound_and_the_box_keeps_to_its_own_directories(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
                 "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
