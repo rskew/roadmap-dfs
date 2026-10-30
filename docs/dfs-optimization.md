@@ -7,7 +7,12 @@ their starting point to see whether the change helps (replay).
 ## 1. What the past recorded
 
 Surveyed 2026-10-22 on the box the chains run on. Four projects have been walked:
-roadmap-dfs itself, chirpstack-docker, house and shop-app.
+roadmap-dfs itself, chirpstack-docker, house and shop-app. `optimisation-data/farm-app` is chirpstack-docker's
+repo (its flake describes the ChirpStack stack and Farm Operator): 27 of its 31 task files are tasks whose
+sessions were recorded under `/workspace/chirpstack-docker`, and only 3 tasks were recorded under
+`/workspace/farm-app`, and no worktree task id is in both. The `farm-app` and `chirpstack-docker` rows below are one repo's
+sessions under its two names; their sessions are distinct transcripts, so no total counts one twice, but
+"every project" is one fewer than the rows say.
 
 | Source | Where | Size | Answers | Cannot answer |
 |---|---|---|---|---|
@@ -48,7 +53,7 @@ in this section and in section 4 is from this one run):
 | project | tasks | sessions per task, median / p90 | $ per task, median / p90 | review issues per task | raises |
 |---|---|---|---|---|---|
 | chirpstack-docker | 131 | 4 / 18 | 2.6 / 18.5 | 0.70 | 48 |
-| farm-app | 2 | 8 / 9 | 7.5 / 7.8 | 0.00 | 0 |
+| farm-app | 2 | 8 / 9 | 7.5 / 7.8 | 0.00 | 0 | (chirpstack-docker's repo, recorded after it was renamed)
 | house | 22 | 4 / 20 | 2.9 / 24.0 | 0.77 | 4 |
 | roadmap-dfs | 115 | 4 / 13 | 2.1 / 9.4 | 0.80 | 13 |
 | shop-app | 16 | 6 / 28 | 7.1 / 35.4 | 1.12 | 5 |
@@ -797,10 +802,13 @@ backend on 3006 and runs the spec in the sandbox: 25 of 25 passed, once with the
 script's order, not `base_schema.sql` plus `migrate.sh`: the baseline lacks `context` on two note tables that migrations 0004 and 0020 read,
 and the views and the migrations each need what the other creates. The backend is the host-built binary serving the clone's `static/`; a
 change to `Main.hs` needs a rebuild that was not tried inside the box (nix there cannot download: it reports no CA certificate), and
-`static/vendor` (the wasm views) is not built. No W32 replay was run. farm-app: `plan`
-
-prints a starting commit for W117, W118, W122 and W123, but W123 shows no original sessions and `candidates` lists 0 tasks
-even at $100, so none qualifies by the loop's rule; the cause was not traced.
+`static/vendor` (the wasm views) is not built. No W32 replay was run. farm-app: the sessions of `optimisation-data/farm-app` (the autofarm2 repo) are recorded under
+`/workspace/chirpstack-docker`, not `/workspace/farm-app`, so `candidates --repo optimisation-data/farm-app` printed 0 tasks until it
+was given `--recorded-as /workspace/chirpstack-docker` (the fault W130.18 fixed for shop-app); with it, `--limit 100` lists 8 tasks
+(W132 $6.25, W133 $8.44, W142 $8.53, W121, W122, W118, W120, W127) and `plan W132` prints the starting commit c757d4ea and the
+original's figures (5 sessions, first review issues). The checks run on the host: `nix build .#test-farm-operator` is in the store and
+`FARM_OPERATOR_SRC=farm-operator test-farm-operator -k map` ran 97 tests there (95 passed, 1 failed on a menu focus assertion, 1 skipped); whether it runs
+inside the replay box is not yet tried.
 What is next is a candidate of the remaining ones (2, 3, 4, 5) run as a pair against a
 same-sitting control, on the tasks whose control trees fall short of the rubric in the clauses the
 candidate targets (the kiro control's first review said issues in 5 of 12 replays, none in W11; the
