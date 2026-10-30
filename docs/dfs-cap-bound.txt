@@ -1,0 +1,54 @@
+cap 3: 36 of 292 reviewed tasks reach issues review 3
+units after it: 87485422 of 733605542 (11.9%), $207.1 of $1719.2 (12.0%)
+
+by project
+  chirpstack-docker      tasks  135  reach 3:  18  units after  30540676 of 355945958 ( 8.6%)  $  74.2
+  farm-app               tasks    1  reach 3:   0  units after         0 of   1672905 ( 0.0%)  $   0.0
+  house                  tasks   29  reach 3:   4  units after   7841759 of 106283144 ( 7.4%)  $  19.0
+  roadmap-dfs            tasks  114  reach 3:  13  units after  44459832 of 209679562 (21.2%)  $ 104.6
+  shop-app               tasks   13  reach 3:   1  units after   4643155 of  60023973 ( 7.7%)  $   9.3
+
+what the rounds after the cap found, where docs/dfs-review-findings.tsv and docs/dfs-fix-regressions.tsv cover them
+(the tsv files read roadmap-dfs only and hold some of a task's rounds; a round is a distinct review time, the first
+ 3 of a task's rounds in the file are taken as the rounds before the cap, which is exact only if the file holds them all)
+  roadmap-dfs tasks past the cap with lines in the files: 12; rounds after the cap in them: 9
+  finding lines by class: {'defect+reproduced': 7, 'minor': 8, 'assumption': 4, 'defect': 4}
+  defect lines placed by the fix-regression reading: {'fix-incomplete': 3, 'from-fix': 2, 'other': 6}
+
+task, project, issues reviews, units after the cap, share of the task's units
+  W75    roadmap-dfs        16 21835266   79%
+  W97    chirpstack-docker   4  6658993   55%
+  W39    shop-app            4  4643155   27%
+  W108   chirpstack-docker   3  4100123   18%
+  W48    roadmap-dfs         5  3949390   84%
+  W68    roadmap-dfs         5  3314813   73%
+  W87    roadmap-dfs         5  3269869   53%
+  W109   chirpstack-docker   5  3074081   31%
+  W17    house               3  3050717   32%
+  W67    roadmap-dfs        11  2885711   70%
+  W127   chirpstack-docker   6  2572582   34%
+  W89    roadmap-dfs         4  2424855   51%
+  W111   chirpstack-docker   5  2416062   43%
+  W25    house               4  2325720   16%
+  W31    chirpstack-docker   4  1778486   21%
+  W148   chirpstack-docker   3  1686594   47%
+  W61    roadmap-dfs         5  1672050   61%
+  W8     house               3  1660873   11%
+  W75    chirpstack-docker   4  1615568   43%
+  W90    roadmap-dfs         3  1399903   36%
+  W43    chirpstack-docker   3  1387404   13%
+  W116   roadmap-dfs         4  1311681   17%
+  W74    roadmap-dfs         3  1150590   28%
+  W66    chirpstack-docker   3   817402   19%
+  W15    house               3   804448   14%
+  W121   chirpstack-docker   3   766549   19%
+  W2     chirpstack-docker   3   681509   27%
+  W110   chirpstack-docker   3   650146    5%
+  W82    chirpstack-docker   3   609649   20%
+  W91    roadmap-dfs         3   602981   10%
+  W115   chirpstack-docker   3   517162   13%
+  W131   chirpstack-docker   3   429736    8%
+  W108   roadmap-dfs         3   424365   20%
+  W21    chirpstack-docker   3   401023    4%
+  W37    chirpstack-docker   3   377606    8%
+  W97    roadmap-dfs         3   218356   11%
