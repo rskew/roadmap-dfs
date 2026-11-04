@@ -136,6 +136,29 @@ class Daemon(unittest.TestCase):
             self.assertIn("--rm", run.split())
             self.assertNotIn("--restart", run)
 
+    def test_gpu_indices_become_cdi_devices_on_the_container_alone(self):
+        p, calls = self.sandbox("run", "true", extra={"CONTAINER_GPU": "0 2"})
+        self.assertEqual(p.returncode, 0, p.stderr)
+        sidecar, main = [c for c in calls if c.startswith("run ")]
+        self.assertIn("--device nvidia.com/gpu=0 --device nvidia.com/gpu=2", main)
+        self.assertNotIn("--device", sidecar)
+
+    def test_gpu_can_come_from_the_repo_config(self):
+        p, calls = self.sandbox("run", "true", config="CONTAINER_GPU=1\n")
+        main = [c for c in calls if c.startswith("run ")][1]
+        self.assertIn("--device nvidia.com/gpu=1", main)
+
+    def test_no_gpu_means_no_device(self):
+        p, calls = self.sandbox("run", "true")
+        for run in [c for c in calls if c.startswith("run ")]:
+            self.assertNotIn("--device", run)
+
+    def test_a_bad_gpu_is_refused_before_the_container_starts(self):
+        p, calls = self.sandbox("run", "true", extra={"CONTAINER_GPU": "0,1"})
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("CONTAINER_GPU takes GPU indices", p.stderr)
+        self.assertEqual(len([c for c in calls if c.startswith("run ")]), 1, calls)  # only the sidecar
+
 
 if __name__ == "__main__":
     unittest.main()

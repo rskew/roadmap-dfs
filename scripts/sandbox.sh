@@ -65,6 +65,10 @@
 #                      directory of `dfs-<name>` links (the flake's `sandbox` puts the tool's commands there)
 #   TERM COLORTERM COLORFGBG NO_COLOR DFS_THEME  passed through when set, so a screen
 #                      looks as it does outside the container
+#   CONTAINER_GPU      NVIDIA GPUs to pass in, by index: "0", or "0 1" for two. Each is
+#                      given to the engine as `--device nvidia.com/gpu=<index>` (a CDI
+#                      device, so the host needs the NVIDIA Container Toolkit's CDI spec,
+#                      `nvidia-ctk cdi generate`; "all" gives every GPU). Default: none.
 #   CONTAINER_SHM_SIZE                                   (default: 1g)
 #   CONTAINER_APPARMOR_MODE  default|unconfined          (default: default)
 #   KIRO_API_KEY       passed through when set, so kiro-cli runs headless without
@@ -139,6 +143,7 @@ CONTAINER_APPARMOR_MODE="${CONTAINER_APPARMOR_MODE:-default}"
 CONTAINER_PORTS="${CONTAINER_PORTS:-}"
 CONTAINER_MOUNTS="${CONTAINER_MOUNTS:-}"
 CONTAINER_ENV="${CONTAINER_ENV:-}"
+CONTAINER_GPU="${CONTAINER_GPU:-}"
 CONTAINER_PATH_PREFIX="${CONTAINER_PATH_PREFIX:-}"
 CONTAINER_APP_CMD="${CONTAINER_APP_CMD:-}"
 CONTAINER_APP_READY_PORT="${CONTAINER_APP_READY_PORT:-}"
@@ -276,7 +281,7 @@ stop_daemon() {
 }
 
 run_in_container() {
-  local ca_bundle locale_archive nix_bin_dir port mount env_pair
+  local ca_bundle locale_archive nix_bin_dir port mount env_pair gpu
   local -a docker_args
   ca_bundle="$(host_ca_bundle)"
   locale_archive="$(host_locale_archive)"
@@ -348,6 +353,16 @@ run_in_container() {
 
   for env_pair in ${CONTAINER_ENV}; do
     docker_args+=(-e "${env_pair}")
+  done
+
+  # The index goes into the device name as given, so refuse anything that is not one
+  # (or "all") rather than hand the engine a name it would read differently.
+  for gpu in ${CONTAINER_GPU}; do
+    if [[ ! "${gpu}" =~ ^([0-9]+|all)$ ]]; then
+      echo "CONTAINER_GPU takes GPU indices (e.g. \"0\" or \"0 1\") or \"all\", not \"${gpu}\"" >&2
+      exit 1
+    fi
+    docker_args+=(--device "nvidia.com/gpu=${gpu}")
   done
 
   # A checkout of roadmap-dfs in the home directory, when there is one. Mounting a
