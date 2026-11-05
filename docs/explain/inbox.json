@@ -1,0 +1,59 @@
+{
+  "title": "inbox.py: handing the author's messages to a running agent",
+  "about": "Task W104. The author types a message on the page or screen. A hook in the running agent session (claude, codex, kiro) or a plugin (opencode) picks it up at the agent's next tool call or stop, and the model reads it.",
+  "files": ["scripts/inbox.py"],
+  "entries": ["main"],
+  "places": {
+    "author": {"kind": "actor", "label": "the author", "note": "page or screen, through runs.post_message"},
+    "model": {"kind": "actor", "label": "the running agent", "note": "claude, codex, kiro or opencode"},
+    "plugin": {"kind": "actor", "label": "opencode's plugin", "note": "lives inside the agent's own process"},
+    "box": {"kind": "queue", "label": "inbox/", "note": "one .txt file per message; sorted names are sending order"},
+    "delivered": {"kind": "store", "label": "delivered/", "note": "beside inbox/; a file's mtime is when it was delivered; nothing in inbox.py ever removes or empties it"},
+    "msg": {"kind": "state", "label": "a message's state", "note": "waiting while it is in inbox/, delivered once moved"},
+    "msgfile": {"kind": "resource", "label": "the open message file", "note": "a file handle, open only while its text is read"},
+    "stdin": {"kind": "actor", "label": "the hook's input", "note": "JSON from the agent on stdin"},
+    "agentfile": {"kind": "store", "label": ".kiro/agents/dfs-inbox.json", "note": "written into the directory given to --kiro-agent (run.sh passes the worktree) for kiro"}
+  },
+  "edges": [
+    {"kind": "moves", "from": "author", "to": "box", "label": "message text, written aside as a dot-file then renamed in (runs.post_message, not this file; take skips dot-files)", "at": null},
+    {"kind": "moves", "from": "box", "to": "waiting", "label": "the file names", "at": "waiting"},
+    {"kind": "moves", "from": "claim", "to": "take", "label": "every waiting name", "at": "claim"},
+    {"kind": "moves", "from": "take", "to": "answer", "label": "the texts, oldest first", "at": "main"},
+    {"kind": "moves", "from": "answer", "to": "model", "label": "post: additionalContext; stop: block reason", "at": "answer"},
+    {"kind": "moves", "from": "held", "to": "model", "label": "kiro: stderr text, exit 2, the tool call does not run", "at": "main"},
+    {"kind": "moves", "from": "peek", "to": "plugin", "label": "{names, context} as JSON, files left in place", "at": "peek"},
+    {"kind": "moves", "from": "plugin", "to": "take", "label": "ack: the names it handed over", "at": "main"},
+
+    {"kind": "sets", "from": "take", "to": "msg", "label": "waiting → delivered, by rename, before the text is read", "at": "take"},
+    {"kind": "reads", "from": "waiting", "to": "msg", "label": "is it in inbox/? (a .txt file, no leading dot)", "at": "waiting"},
+    {"kind": "reads", "from": "from_subagent", "to": "stdin", "label": "has an agent_id? then claim nothing", "at": "from_subagent"},
+    {"kind": "sets", "from": "install_kiro_agent", "to": "agentfile", "label": "written, and listed in git's info/exclude", "at": "install_kiro_agent"},
+
+    {"kind": "acquires", "from": "take", "to": "delivered", "label": "makedirs of delivered/ beside the inbox, once per call, even when the inbox is missing or empty", "at": "take"},
+    {"kind": "acquires", "from": "take", "to": "msgfile", "label": "open(dest) to read the text", "at": "take"},
+    {"kind": "releases", "from": "take", "to": "msgfile", "label": "closed when the with-block ends", "at": "take"},
+    {"kind": "acquires", "from": "main", "to": "stdin", "label": "reads all of stdin so the agent's write never blocks", "at": "main"},
+    {"kind": "acquires", "from": "install_kiro_agent", "to": "agentfile", "label": "creates the file; nothing in this file deletes it", "at": "install_kiro_agent"},
+
+    {"kind": "stops", "from": "waiting", "to": "box", "label": "inbox/ cannot be listed → no messages", "at": "waiting"},
+    {"kind": "stops", "from": "take", "to": "msg", "label": "rename failed: another hook took it → skip, return nothing for it", "at": "take"},
+    {"kind": "fails", "from": "take", "to": "delivered", "label": "an OSError reading it after the rename → skipped, the message counts as delivered and the model never gets it; a file that is not valid text raises UnicodeDecodeError, which take does not catch, so it leaves take and the hook after the rename", "at": "take"},
+    {"kind": "stops", "from": "take", "to": "msg", "label": "a blank message is moved to delivered/ and dropped from the texts: delivered, but the model is told nothing", "at": "take"},
+    {"kind": "stops", "from": "hook_input", "to": "stdin", "label": "input is not JSON → {} → treated as the main session, which may claim", "at": "hook_input"},
+    {"kind": "fails", "from": "main", "to": "model", "label": "peek or ack with no DFS_INBOX → message on stderr, exit 2; the caller is the opencode plugin, so the model does not see it", "at": "main"},
+    {"kind": "stops", "from": "from_subagent", "to": "box", "label": "a subagent's hook claims nothing, so the message waits for the main session", "at": "main"},
+    {"kind": "stops", "from": "install_kiro_agent", "to": "agentfile", "label": "git or the exclude file fails → the agent file is still written, the exclude is skipped", "at": "install_kiro_agent"},
+
+    {"kind": "puts", "from": "author", "to": "box", "label": "one .txt file per message, never a partial one (runs.post_message writes aside and renames; this file only skips dot-files and non-.txt names)", "at": null},
+    {"kind": "takes", "from": "claim", "to": "box", "label": "everything waiting at once, oldest first; claude, codex and kiro move it before reading (at most once)", "at": "claim"},
+    {"kind": "takes", "from": "peek", "to": "box", "label": "opencode reads without moving, then ack moves (at least once: a refused prompt leaves it waiting)", "at": "peek"},
+    {"kind": "takes", "from": "take", "to": "box", "label": "two hooks at once cannot both get a file: the second rename fails", "at": "take"},
+    {"kind": "stops", "from": "main", "to": "box", "label": "nothing waiting → the hook prints nothing and the session carries on", "at": "main"}
+  ],
+  "handled": [
+    {"at": "main", "error": "stdin cannot be read", "how": "uses empty input"},
+    {"at": "main", "error": "wrong arguments", "how": "prints usage, exit 2"},
+    {"at": "main", "error": "no inbox named", "how": "hooks do nothing; peek/ack exit 2"},
+    {"at": "main", "error": "kiro starting its own agent as a sub-agent (self_as_subagent only detects it)", "how": "main refuses in the pre hook, after the agent_id check: message on stderr, exit 2, so it cannot take the message"}
+  ]
+}

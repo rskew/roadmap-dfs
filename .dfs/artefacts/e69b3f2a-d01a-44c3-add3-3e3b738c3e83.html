@@ -1,0 +1,217 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W136.18 · What the reader test did and did not show</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 16px; color: #444; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; margin: 0 0 16px; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .box b { display: block; font-size: 16px; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  .box.no { border-style: dashed; background: #f6f1e6; }
+  .link { display: flex; flex-direction: column; align-items: center; padding: 2px 0; font-size: 14px; color: #333; }
+  .link::after { content: "\2193"; font-size: 22px; line-height: 1; }
+  .bar { display: flex; height: 44px; border: 1.5px solid #333; border-radius: 6px; overflow: hidden; margin: 4px 0 2px; }
+  .bar div { display: flex; align-items: center; justify-content: center; font-size: 14px; color: #1a1a1a; }
+  .told { background: #bfe3c0; } .part { background: #f3e2a0; } .sil { background: #eec1bd; } .ok { background: #bfd6ee; }
+  .cap { font-size: 14px; color: #444; margin: 0 0 12px; }
+  .pane[hidden] { display: none; }
+  .pane ul { margin: 6px 0 0; padding-left: 20px; }
+  .pane li { margin: 0 0 6px; }
+  .link.plain::after, .dg.row .link.plain::after { content: ""; }
+  @media (min-width: 720px) {
+    .dg.row { flex-direction: row; align-items: center; }
+    .dg.row .box { flex: 1 1 0; }
+    .dg.row .link { padding: 0 10px; }
+    .dg.row .link::after { content: "\2192"; }
+  }
+</style>
+
+<h1>Do the pages let a person read quickly?</h1>
+<p class="lede">The node rests on an assumption: a sub-agent given a page's text stands in for a person reading the drawn page, and the counts below say the pages are partly useful. Switch between what was run, what was not, and what would refute it.</p>
+
+<div class="tabs" role="group" aria-label="View">
+  <button type="button" data-pane="ran" aria-pressed="true">What was run</button>
+  <button type="button" data-pane="not" aria-pressed="false">What was not</button>
+  <button type="button" data-pane="wrong" aria-pressed="false">What would refute it</button>
+</div>
+
+<div class="pane" id="pane-ran">
+  <div class="dg row">
+    <div class="box" data-node="writer"><b>Question writer</b><span>3 sub-agents, code only, 18 questions</span></div>
+    <div class="link">same 18 questions</div>
+    <div class="box" data-node="pageonly"><b>Page-only reader</b><span>the page as text, no code</span></div>
+    <div class="link plain">and</div>
+    <div class="box" data-node="codeonly"><b>Code-only reader</b><span>the source, no page</span></div>
+  </div>
+  <h2>Page-only reader, 18 questions</h2>
+  <div class="bar" role="img" aria-label="Page only: 9 told, 4 partly, 5 silent">
+    <div class="told" style="flex:9">9 told</div><div class="part" style="flex:4">4 partly</div><div class="sil" style="flex:5">5 silent</div>
+  </div>
+  <p class="cap">Of the 5 silent: 2 guessed wrong, 2 guessed right, 1 vague ("about 6 or 7"). All five were flagged low confidence, none confidently wrong.</p>
+  <h2>Code-only reader, 18 questions</h2>
+  <div class="bar" role="img" aria-label="Code only: 18 correct">
+    <div class="ok" style="flex:18">18 correct, in 4 to 10 steps</div>
+  </div>
+  <p class="cap">The "4 to 10 steps" is written only in the determination of the earlier node. The table has no steps column.</p>
+</div>
+
+<div class="pane" id="pane-not" hidden>
+  <div class="dg">
+    <div class="box no" data-node="n1"><b>A person</b><span>every reader was a sub-agent, none a human</span></div>
+    <div class="box no" data-node="n2" style="margin-top:8px"><b>The drawing</b><span>the page-only reader got text; nobody learned the shapes, arrows and colours from the picture</span></div>
+    <div class="box no" data-node="n3" style="margin-top:8px"><b>Quickness</b><span>no time, and no step count for the page-only reader, so "quick" is shown against nothing</span></div>
+    <div class="box no" data-node="n4" style="margin-top:8px"><b>The question sample</b><span>one writer per piece; whether they match what a person asks is untested</span></div>
+  </div>
+  <p class="cap">So the Summary should say the pages are an honest first look, and that quickness was not measured.</p>
+</div>
+
+<div class="pane" id="pane-wrong" hidden>
+  <ul>
+    <li>A person reading the rendered page answers the same questions slower than a person reading <code>scripts/*.py</code>.</li>
+    <li>A person cannot tell what a shape or arrow means without the legend.</li>
+    <li>A person asks questions <code>docs/explain/judgement_independent.tsv</code> does not hold.</li>
+  </ul>
+  <p class="cap">None of these has been tried. Nine of 18 from the page against 18 of 18 from the code reads as "partly useful"; the same numbers could read as "not worth it" to someone who needs all 18.</p>
+</div>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  var cur = 'ran';
+  function show(p) {
+    cur = p;
+    ['ran', 'not', 'wrong'].forEach(function (k) { document.getElementById('pane-' + k).hidden = k !== p; });
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-pane') === p ? 'true' : 'false');
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+    b.addEventListener('click', function () { show(b.getAttribute('data-pane')); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return cur; };
+  document.addEventListener('dfs-state', function (e) { if (e.detail) show(e.detail); });
+</script>
+
+<script>
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

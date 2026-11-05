@@ -1,0 +1,19 @@
+piece	lens	question	answer from the page	true answer (code)	lens showed it
+inbox	data	When opencode reads a message, is the file moved?	No: peek leaves it, ack moves it later	peek only reads; take moves	yes
+inbox	state	What state is a message in if reading it fails after the rename?	Delivered, and the model never gets it	rename comes first, the OSError is skipped (inbox.take)	yes
+inbox	resource	Is delivered/ ever removed?	No, nothing here removes it	no rmdir, rmtree or unlink in inbox.py	yes
+inbox	failure	What happens to a whitespace-only message?	Page said nothing	moved to delivered/, then dropped by the empty-text filter in take	no; edge added (inbox.json)
+inbox	queue	Two hooks fire at once: who gets the file?	One; the other's rename fails and it skips	os.rename fails for the second, caught in take	yes
+inbox	errors	Hook input is not JSON: what then?	Treated as {}, so as the main session, which may claim	hook_input returns {} on ValueError	yes
+ptyrelay	data	In what form does a message reach the agent?	A bracketed paste, then Enter 0.15 s later	_typist writes ESC[200~ text ESC[201~, sleeps 0.15, writes CR	yes
+ptyrelay	state	How does Relay tell run.sh's output from the agent's first output?	start-up fields (opening, handed, first_out) reset first_out	_follow_opening zeroes first_out until the agent draws	yes
+ptyrelay	resource	What ends each of the three threads?	_typist and _watch return when not live; _pump's end was only implied by the pty closing	_pump breaks on a read error; the others loop while live	partly; row added
+ptyrelay	failure	The agent is missing and exits 127 with nothing typed: who is told?	Nobody; failure() gives no reason	no dfs_run: line and unsent is 0, so failure() returns None	yes
+ptyrelay	queue	Does the idle reaper see a message the typist already took?	No, outbox.empty() cannot see it	true; CHAT_IDLE is 30 minutes by default, so it rarely matters	partly; limit added
+ptyrelay	errors	waitpid raises ChildProcessError: what is rc?	0	rc = 0 in _pump, which can hide a failure	yes
+walk	data	How does walk_decide learn that the chain moved something?	walk_judge compares the task's contents with the record taken at start	moved = contents - rec["content"]	yes
+walk	state	What does a limit hold change?	walk_until moves to the reset, and the task goes to carry	walk_judge sets walk_until and calls walk_carry_add	yes
+walk	resource	Is a chain that hit a limit charged?	Yes, the sessions it actually ran	walk_spent += run before the action is taken	yes
+walk	failure	With stop_on_limit and two chains, what happens to the other?	The walk ends; the page does not say the other is told to end after its run	walk_off calls walk_lower on all chains	partly; failure row added
+walk	queue	After a hold, which task goes first?	The carried one, ahead of the roadmap's next	walk_lead: pin, carry, next_item	yes
+walk	errors	A reset time that cannot be read?	Hold 3600 s	WALK_HOLD used when reset_at is None	yes
