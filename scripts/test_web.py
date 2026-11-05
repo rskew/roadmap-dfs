@@ -244,7 +244,13 @@ class Web(unittest.TestCase):
             status, st, _ = self.call("POST", "/api/chat/interrupt", dict(scope="W1"))
             self.assertEqual((status, st["busy"]), (200, False), "Stop with nothing answering changes nothing")
             self.assertEqual(self.call("POST", "/api/chat/interrupt", dict(scope="W9"))[0], 409)
+            status, st, _ = self.call("POST", "/api/chat/end", dict(scope="W1"))
+            self.assertEqual((status, st["ended"]), (200, True), "End marks the chat and keeps what was said")
+            self.assertTrue(st["messages"])
+            self.assertEqual([c["ended"] for c in self.call("GET", "/api/chats")[1]["chats"]], [True])
+            self.assertEqual(self.call("POST", "/api/chat/end", dict(scope="W9"))[0], 409)
             self.assertEqual(self.call("POST", "/api/chat/clear", dict(scope="W1"))[1]["messages"], [])
+            self.assertEqual(self.call("POST", "/api/chat/end", dict(scope="W1"))[0], 409, "a chat with nothing said is not ended")
             dfs_web.WALK["enabled"] = False
             self.assertEqual(self.call("POST", "/api/chat/interrupt", dict(scope="W1"))[0], 403)
             self.assertEqual(self.call("POST", "/api/chat/send", dict(scope="W1", message="hi"))[0], 403)

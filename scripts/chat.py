@@ -22,6 +22,9 @@ Each scope keeps a log, `<run root>/chat/<scope>.log` (chatlog.py): what the pag
 it, each headless turn and why one failed, and, for a background chat, its start, its exit with the agent's
 last screen, who closed it and a note when it went quiet after a message (DFS_CHAT_STALL).
 
+A chat can be ended (`Chats.end`): its agent is stopped and it is marked, so the Chats list keeps what is in
+progress apart from what is over. The conversation stays, and a message sent to it later makes it in progress again.
+
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
 walk (`--no-walk`): a server that may not start agents does not chat either.
 """
@@ -81,6 +84,8 @@ def run_turn(argv, message, cwd, env, on_start=None):
 
 SCOPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]*$")
 MAX_MESSAGE = 4000
+ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is closed does not undo the end
+                    # (so a message answered within this long of the end leaves the chat ended too)
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
 
@@ -516,8 +521,22 @@ class Chats:
         p = self.path(scope)
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(dict(sid=sid, agent=agent)))
+        rec = dict(sid=sid, agent=agent)
+        if "ended" in self.record(scope):       # ending a chat is kept when its session id is rewritten
+            rec["ended"] = self.record(scope)["ended"]
+        tmp.write_text(json.dumps(rec))
         os.replace(tmp, p)
+
+    def is_ended(self, scope, live=False, busy=False):
+        """Ended by the author and not spoken in since: a message sent from the page or typed at the
+        screen makes the transcript newer than the mark, so the chat is in progress again. Not ended
+        while an agent runs on it (`live`, or `busy`: answering, or open in another terminal). A chat
+        with no transcript yet reads as ended, as it was when the author ended it."""
+        ended = self.record(scope).get("ended")
+        if not isinstance(ended, (int, float)) or live or busy:
+            return False
+        sid = self.sid(scope)
+        return (transcript_mtime(sid, self.agent(scope)) or 0) <= ended + ENDED_SLACK
 
     def state(self, scope):
         self.check(scope)
@@ -546,11 +565,23 @@ class Chats:
             started = self.busy.get(scope)
             live = bool(w and w.chat_live(scope))
             talking = bool(live and w.chat_active(scope))      # a background chat that is answering
+            elsewhere = bool(sid) and not started and not live and running_elsewhere(sid, agent=agent)
             return dict(scope=scope, messages=messages, busy=bool(started) or talking,
+                        ended=self.is_ended(scope, live, bool(started) or talking or elsewhere),
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
-                        elsewhere=bool(sid) and not started and not live and running_elsewhere(sid, agent=agent),
-                        agent=agent)
+                        elsewhere=elsewhere, agent=agent)
+
+    def reopen(self, scope):
+        """A message is sent to the chat: take off its end mark, so the chat is in progress even
+        if the agent fails to answer and writes nothing to the transcript."""
+        rec = self.record(scope)
+        if "ended" not in rec:
+            return
+        del rec["ended"]
+        tmp = self.path(scope).with_suffix(".tmp")
+        tmp.write_text(json.dumps(rec))
+        os.replace(tmp, self.path(scope))
 
     def expect(self, scope, message, agent, sid=None):
         """Show `message` until the transcript records it. One sent before an earlier one is recorded
@@ -576,6 +607,7 @@ class Chats:
             # A chat running on this screen has the session: type into it, as the keyboard does.
             if scope not in self.busy and w and w.chat_send(scope, message):
                 chatlog.log(scope, "page: message of %d characters handed to the screen's chat" % len(message))
+                self.reopen(scope)
                 self.expect(scope, message, agent)
                 self.notes.pop(scope, None)
                 self.stops.pop(scope, None)
@@ -590,6 +622,7 @@ class Chats:
                 chatlog.log(scope, "page: message refused, another terminal has session %s open" % sid)
                 raise ValueError("another terminal has this conversation open: type there, or "
                                  "close it and send from here")
+            self.reopen(scope)
             self.expect(scope, message, agent, sid)
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
@@ -761,11 +794,42 @@ class Chats:
             busy = scope in self.busy or bool(live and w.chat_active(scope))
             if not messages and not live and not busy:
                 continue
+            marked = isinstance(self.record(scope).get("ended"), (int, float))
+            elsewhere = marked and not live and not busy and bool(sid) and running_elsewhere(sid, agent=agent)
             last = messages[-1] if messages else dict(role="", text="")
             updated = transcript_mtime(sid, agent) or p.stat().st_mtime
             out.append(dict(scope=scope, count=len(messages), role=last["role"], last=last["text"][:160],
-                            updated=updated, live=live, busy=busy, agent=agent))
+                            updated=updated, live=live, busy=busy, agent=agent,
+                            ended=self.is_ended(scope, live, busy or elsewhere)))
         return sorted(out, key=lambda c: -c["updated"])
+
+    def end(self, scope):
+        """Done with this chat: its agent is stopped and it is marked ended, so the Chats list can keep
+        what is in progress apart from what is over. The conversation stays and can be read; a message
+        sent to it later (here or at the screen) makes it in progress again. A chat with no
+        conversation has nothing to mark: use "New chat"."""
+        self.check(scope)
+        with self.lock:
+            if scope in self.busy:
+                raise ValueError("it is still answering: stop it or wait for it")
+            rec = self.record(scope)
+            if not rec.get("sid"):
+                raise ValueError("there is no conversation to end")
+            w = self.walker()
+            if w and w.chat_active(scope):
+                raise ValueError("it is still answering: stop it or wait for it")
+            if not (w and w.chat_live(scope)) and running_elsewhere(rec["sid"], agent=self.agent(scope)):
+                chatlog.log(scope, "page: end refused, another terminal has session %s open" % rec["sid"])
+                raise ValueError("another terminal has this conversation open: close it there, then end it")
+            chatlog.log(scope, "page: chat ended (session %s)" % rec["sid"])
+            if w:
+                w.chat_close(scope, why="ended")
+            rec["ended"] = time.time()
+            tmp = self.path(scope).with_suffix(".tmp")
+            tmp.write_text(json.dumps(rec))
+            os.replace(tmp, self.path(scope))
+        self.on_change()
+        return self.state(scope)
 
     def clear(self, scope):
         """Start over: the next message is a new session. The old one stays in the agent's own history."""

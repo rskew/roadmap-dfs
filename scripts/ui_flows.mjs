@@ -514,6 +514,38 @@ const FLOWS = {
     same(posted - sends, 1, "a send the server did not answer is sent once, not again");
   },
 
+  // End chat marks a conversation done: the list of chats keeps what is going apart from what is over.
+  async chat_end(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 640 }, hasTouch: true });
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: "W81.10 is open." }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "claude", ended: false };
+    const chats = [{ scope: "W9", count: 2, role: "agent", last: "W81.10 is open.", updated: Date.now() / 1000, live: false, busy: false, agent: "claude", ended: false },
+                   { scope: "project", count: 2, role: "agent", last: "All done.", updated: Date.now() / 1000 - 90, live: false, busy: false, agent: "claude", ended: true }];
+    let ended = 0;
+    await page.route("**/api/chat/**", r => {
+      if (r.request().url().endsWith("/api/chat/end")) { ended++; state.ended = true; chats[0].ended = true; }
+      return r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await page.route("**/api/chats", r => r.fulfill({ contentType: "application/json", body: JSON.stringify({ chats }) }));
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    await page.click("#chat [data-act=chatend]");
+    await page.waitForFunction(() => /Ended\./.test(document.querySelector("#chat-log").textContent));
+    same(ended, 1, "End asks the server to end the chat");
+    assert(await page.$eval("#chat [data-act=chatend]", e => e.disabled), "an ended chat cannot be ended again");
+    await page.click("[data-act=chatclose]");
+    await page.evaluate(() => { location.hash = "#/chats"; });
+    await page.waitForSelector(".endedchats");
+    same(await page.$$eval("#view > .chatrow", e => e.length), 0, "nothing in progress is left above the Ended group");
+    same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Ended (2)", "the Ended group counts the ended chats");
+    assert((await page.$eval("#title", e => e.textContent)).includes("0 going"), "the title counts only the chats in progress");
+    await page.click(".endedchats summary"); await page.waitForTimeout(4500);
+    assert(await page.$eval(".endedchats", e => e.open), "an open Ended group stays open through the list's redraws");
+    same(await page.$$eval(".endedchats .chatrow", e => e.length), 2, "the ended chats are inside it");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    same(errors, [], "no page errors");
+  },
+
   // The chat's Top button goes to the top of the message being read, and on again to the one before.
   async chat_top(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
@@ -569,7 +601,7 @@ const FLOWS = {
     state.messages = [{ role: "you", text: "hi" }];
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg:not(.wait)").length === 1); await settle();
     same((await press())[0], 0, "in a chat that fits the view, Top leaves it where it is");
-    same(await page.$$eval("#chat .chat-nav button", e => e.map(x => x.dataset.act)), ["chattop", "chatclear", "chatlist", "chatclose"], "the chat's bar: Up, New, Chats, Back");
+    same(await page.$$eval("#chat .chat-nav button", e => e.map(x => x.dataset.act)), ["chattop", "chatend", "chatclear", "chatlist", "chatclose"], "the chat's bar: Up, End, New, Chats, Back");
     // a note above the first message: a reader scrolled into it is taken up to the top of the log, never down to the first message
     state.note = "A note that is long enough to run over a good many lines of the narrow view, so that the log can be scrolled while only it is in sight. ".repeat(6);
     state.messages = [{ role: "you", text: "first" }, { role: "agent", text: long(60) }];
@@ -1516,7 +1548,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => /first about W9/.test(document.querySelector("#chat-log")?.textContent || ""), null, { timeout: 5000 });
     assert(!(await page.$eval("#chat-send", e => e.disabled)), "and can be gone on with");
     const nav = await page.$$eval("#chat .chat-nav button", e => e.map(x => x.dataset.act));
-    same(nav, ["chattop", "chatclear", "chatlist", "chatclose"], "the chat's bar: Up, New, Chats, Back at the right");
+    same(nav, ["chattop", "chatend", "chatclear", "chatlist", "chatclose"], "the chat's bar: Up, End, New, Chats, Back at the right");
     await page.click("#chat [data-act=chatclose]");
     same(errors, [], "no page errors");
   },

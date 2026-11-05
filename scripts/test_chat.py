@@ -1015,7 +1015,7 @@ class Chat(unittest.TestCase):
             def __init__(s): s.typed, s.opened, s.live, s.closed, s.talking = [], [], False, [], False
             def chat_live(s, scope): return s.live
             def chat_active(s, scope): return s.talking
-            def chat_close(s, scope): s.closed.append(scope)
+            def chat_close(s, scope, why=""): s.closed.append(scope)
             def chat_open(s, scope): s.opened.append(scope); return True
             def chat_send(s, scope, text):
                 if not s.live: return False
@@ -1178,7 +1178,7 @@ class Chat(unittest.TestCase):
             talking = set()
             def chat_live(s, scope): return scope in s.live
             def chat_active(s, scope): return scope in s.talking
-            def chat_close(s, scope): s.live.discard(scope)
+            def chat_close(s, scope, why=""): s.live.discard(scope)
             def chat_open(s, scope): return True
             def chat_send(s, scope, text): return False
         screen = Screen()
@@ -1320,6 +1320,112 @@ class Chat(unittest.TestCase):
         self.settle("W1")
         self.assertIn("--session-id", self.calls()[-1], "a new session, not a resume of the old one")
         self.assertNotEqual(self.chats.sid("W1"), old)
+
+    def test_end_marks_the_chat_and_keeps_the_conversation(self):
+        self.assertTrue(self.chats.state("W1")["ended"] is False)
+        with self.assertRaises(ValueError):                      # nothing said yet: nothing to end
+            self.chats.end("W1")
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        old = self.chats.sid("W1")
+        self.assertFalse(self.chats.list()[0]["ended"])
+        st = self.chats.end("W1")
+        self.assertTrue(st["ended"])
+        self.assertTrue(self.chats.list()[0]["ended"])
+        self.assertEqual(self.chats.sid("W1"), old, "the session stays, so it can be read and resumed")
+        self.assertTrue([m for m in st["messages"] if m["role"] == "agent"])
+        self.assertIn("page: chat ended", self.record("W1"))
+
+    def test_a_message_after_the_end_puts_the_chat_back_in_progress(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        self.chats.end("W1")
+        rec = self.chats.record("W1")               # the end was longer ago than the slack
+        rec["ended"] -= dfs_chat.ENDED_SLACK + 1.1
+        self.chats.path("W1").write_text(json.dumps(rec))
+        self.chats.send("W1", "more")
+        self.settle("W1")
+        self.assertFalse(self.chats.state("W1")["ended"])
+        self.assertFalse(self.chats.list()[0]["ended"])
+        self.assertEqual(self.chats.sid("W1"), self.chats.record("W1")["sid"])
+        self.assertNotIn("ended", self.chats.record("W1"), "a message sent from the page takes the mark off")
+
+    def test_end_waits_for_a_turn_and_closes_the_screens_agent(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        self.chats.busy["W1"] = time.time()
+        with self.assertRaises(ValueError):
+            self.chats.end("W1")
+        self.chats.busy.clear()
+
+        class Screen:
+            has_screen = True
+            closed = []
+            def chat_live(s, scope): return False
+            def chat_active(s, scope): return False
+            def chat_close(s, scope, why=""): s.closed.append(scope)
+        screen = Screen()
+        chats = dfs_chat.Chats(walker=lambda: screen)
+        chats.end("W1")
+        self.assertEqual(screen.closed, ["W1"])
+
+    def test_a_chat_open_in_another_terminal_is_not_ended_and_cannot_be_ended(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        sid = self.chats.sid("W1")
+        # a process whose command line names claude and the session, as another terminal's chat does
+        other = subprocess.Popen(["bash", "-c", 'exec -a "claude --resume %s" bash -c "sleep 30; :"' % sid])
+        try:
+            time.sleep(0.3)
+            with self.assertRaises(ValueError) as cm:
+                self.chats.end("W1")
+            self.assertIn("another terminal has this conversation open", str(cm.exception))
+            self.assertNotIn("ended", self.chats.record("W1"))
+            self.assertIn("page: end refused, another terminal has session", self.record("W1"))
+        finally:
+            other.kill()
+            other.wait()
+        time.sleep(0.2)
+        self.chats.end("W1")
+        self.assertTrue(self.chats.state("W1")["ended"])
+        other = subprocess.Popen(["bash", "-c", 'exec -a "claude --resume %s" bash -c "sleep 30; :"' % sid])
+        try:
+            time.sleep(0.3)
+            self.assertTrue(self.chats.state("W1")["elsewhere"])
+            self.assertFalse(self.chats.state("W1")["ended"])
+            self.assertFalse(self.chats.list()[0]["ended"])
+        finally:
+            other.kill()
+            other.wait()
+        time.sleep(0.2)
+        self.assertTrue(self.chats.list()[0]["ended"], "back to ended once nothing runs on it")
+
+    def test_a_message_that_fails_after_the_end_puts_the_chat_back_in_progress(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        self.chats.end("W1")
+        self.assertTrue(self.chats.state("W1")["ended"])
+        os.environ["CHAT_STUB_FAIL"] = "1"
+        self.addCleanup(os.environ.pop, "CHAT_STUB_FAIL", None)
+        self.chats.send("W1", "more")
+        self.settle("W1")
+        self.assertTrue(self.chats.state("W1")["messages"][-1]["role"] == "error")
+        self.assertFalse(self.chats.state("W1")["ended"], "the failed send wrote no transcript, but the chat is in progress")
+        self.assertFalse(self.chats.list()[0]["ended"])
+        self.assertNotIn("ended", self.chats.record("W1"))
+
+    def test_the_end_tells_the_screen_it_was_an_end(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        whys = []
+
+        class Screen:
+            has_screen = True
+            def chat_live(s, scope): return False
+            def chat_active(s, scope): return False
+            def chat_close(s, scope, why="new chat"): whys.append(why)
+        dfs_chat.Chats(walker=lambda: Screen()).end("W1")
+        self.assertEqual(whys, ["ended"])
 
     def test_what_is_not_a_chat_is_refused(self):
         for scope in ("", "../x", "W9", "a b", None):

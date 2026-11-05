@@ -745,6 +745,35 @@ class Pane(unittest.TestCase):
         ui.act(ord("C"))
         self.assertEqual(ran, ["project"])
 
+    def test_capital_e_ends_the_items_chat(self):
+        ui = self.ui
+        ran = []
+        ui.end_chat = lambda scope: ran.append(scope)
+        ui.act(ord("E"))
+        self.assertEqual(ran, ["W1"])
+
+    def test_ending_a_chat_from_the_screen_asks_first_and_marks_it_ended(self):
+        import chat as dfs_chat
+        ui = self.ui
+        ended = []
+
+        class FakeChats:
+            def __init__(s, walker=None): s.walker = walker
+            def sid(s, scope): return "" if scope == "W9" else "sid-1"
+            def end(s, scope): ended.append(scope)
+        real = dfs_chat.Chats
+        dfs_chat.Chats = FakeChats
+        self.addCleanup(setattr, dfs_chat, "Chats", real)
+        ui.event = lambda kind, text: text
+        ui.prompted = "n"
+        ui.end_chat("W1")
+        self.assertEqual((ended, ui.msg), ([], "chat on W1 kept"))
+        ui.end_chat("W9")
+        self.assertEqual((ended, ui.msg), ([], "W9 has no chat to end"))
+        ui.prompted = "y"
+        ui.end_chat("W1")
+        self.assertEqual((ended, ui.msg), (["W1"], "chat W1 ended"))
+
     def test_f_outside_the_tree_corrects_nothing_and_says_where_to_go(self):
         ui = self.ui
         ran = []

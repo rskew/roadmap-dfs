@@ -346,12 +346,13 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .sheet-body .raise { margin: var(--s3) 0; }
 .sheet-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(96px * var(--z)), 1fr)); gap: 10px; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 
+.endedchats > summary { min-height: calc(44px * var(--z)); display: flex; align-items: center; cursor: pointer; font-size: var(--fs-control); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 /* chat: a conversation in a dialog of its own, full height on a phone */
 #chat { width: min(720px, 100vw); max-width: 100vw; margin: auto; padding: 0; flex-direction: column; }
 #chat[open] { display: flex; }
 .chat-top { flex: none; display: flex; align-items: center; justify-content: center; min-height: calc(48px * var(--z)); padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); }
 .chat-top .tag { margin-left: var(--s2); }
-.chat-nav { grid-template-columns: repeat(4, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
+.chat-nav { grid-template-columns: repeat(5, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .chat-nav button[data-act=chatclose] { font-weight: 700; }
 #chat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4); overscroll-behavior: contain; }
 .msg { margin: 0 0 var(--s3); max-width: var(--measure); }
@@ -460,7 +461,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   <div id="chat-log" role="log" aria-live="polite"></div>
   <p id="chat-lost" class="msg error" role="status" hidden></p>
   <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn" id="chat-stop" type="button" hidden>Stop</button><button class="btn primary" id="chat-send" type="submit">Send</button></form>
-  <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chattop" aria-label="Scroll to the top of this message" title="Scroll to the top of this message">↑</button><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
+  <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chattop" aria-label="Scroll to the top of this message" title="Scroll to the top of this message">↑</button><button data-act="chatend">End</button><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
 </dialog>
 <div id="ctx" role="menu" hidden></div>
 <div id="toast" role="status"></div>
@@ -856,7 +857,7 @@ function chrome(r) {
   if (r.view === "task" && S.task) t.innerHTML = `${esc(S.task.id)}<small>${esc(S.task.status)}${S.task.accepted ? ", accepted" : ""}</small>`;
   else if (r.view === "artefact") { const a = artefactOf(r); t.innerHTML = `${esc(a ? a.title : r.name)}<small>${esc(r.task)}, artefact</small>`; }
   else if (r.view === "run") t.innerHTML = `${esc(RUNLOG.info ? RUNLOG.info.progress : "Run")}<small>${esc(r.task)}, run log</small>`;
-  else if (r.view === "chats") t.innerHTML = `Chats<small>${S.chats ? S.chats.length : 0} going, any of them yours to pick up</small>`;
+  else if (r.view === "chats") t.innerHTML = `Chats<small>${S.chats ? S.chats.filter(c => !c.ended).length : 0} going, any of them yours to pick up</small>`;
   else if (S.state) t.innerHTML = `<button class="rename" data-act="rename" aria-label="Rename the project">${esc(PROJECT)}</button><small>${S.state.items.length} tasks, ${S.state.needs_you} need you</small>`;
   document.title = (r.view === "task" ? r.task + " · " : r.view === "artefact" ? r.name + " · " : r.view === "run" ? r.task + " log · " : "") + PROJECT;
   const open = r.view === "task" && !!r.node && !!S.task && S.task.rows.some(x => x.key === r.node);
@@ -1083,15 +1084,18 @@ function runsHtml(t) {
 function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
   const who = { you: "You", agent: "Agent", error: "Not answered", note: "Note" };
-  const rows = S.chats.map(c => `<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
+  const row = c => `<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
       <span class="iid">${c.scope === "project" ? "All" : iidHtml(c.scope)}</span>
       <span>${tagHtml(c.scope)}<span class="goal">${esc(goal(c.scope))}</span>
-        <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}<span class="tag">${esc(c.agent)}</span><span class="muted">${esc(ago(c.updated))}</span></span>
-        ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button>`).join("");
+        <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}${c.ended ? `<span class="tag">ended</span>` : ""}<span class="tag">${esc(c.agent)}</span><span class="muted">${esc(ago(c.updated))}</span></span>
+        ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button>`;
+  const going = S.chats.filter(c => !c.ended), ended = S.chats.filter(c => c.ended);
+  const rows = going.map(row).join("");
   $("#view").className = "col";
   $("#view").innerHTML = `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project">Chat about the project</button></div>`
     + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up.</p>`
-    + (rows || `<p class="hint">No conversations yet.</p>`);
+    + (rows || `<p class="hint">${ended.length ? "Nothing in progress." : "No conversations yet."}</p>`)
+    + (ended.length ? `<details class="endedchats"${S.endedOpen ? " open" : ""}><summary>Ended (${ended.length})</summary>${ended.map(row).join("")}</details>` : "");
 }
 // Which task a chain is running on, and which the walk takes next: the same two tags on the list row and on the task's own screen.
 const walkTags = it => (it.running ? `<span class="tag settled">running ${esc(it.running)}</span>` : "") + (it.next ? `<span class="tag settled">next</span>` : "");
@@ -1678,11 +1682,13 @@ function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
-  const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent]);
+  const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended]);
   if (sig === CHAT.last) return;
   CHAT.last = sig;
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
-  log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
+  $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.length;
+  log.innerHTML = (st.ended ? `<p class="muted">Ended. Send a message to pick it up again.</p>` : "")
+    + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
@@ -2037,6 +2043,7 @@ document.addEventListener("click", e => {
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
+    chatend: async () => { try { CHAT.last = ""; chatDraw(await api("/api/chat/end", { scope: CHAT.scope })); toast("Chat ended."); } catch (e) { toast(e.message, true); } },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStart, walkstop: walkStop,
@@ -2088,6 +2095,8 @@ else matchMedia(`(min-width: ${TABLE_MIN}px)`).addEventListener("change", () => 
 addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
+// The list of chats redraws every few seconds: whether its Ended group is open is kept here, not in the redrawn element.
+$("#view").addEventListener("toggle", e => { if (e.target.classList && e.target.classList.contains("endedchats")) S.endedOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#chat").open) render(true); }, 4000);
 /* Keys. j/k and the up and down arrows step the same way on the list (focus moves from task to task, Enter opens the
    focused one) and on a task (the open node moves to the next or previous visible one, with focus on its row). Left
