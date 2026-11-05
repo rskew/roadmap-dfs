@@ -29,7 +29,7 @@
     {"kind": "reads", "from": "from_subagent", "to": "stdin", "label": "has an agent_id? then claim nothing", "at": "from_subagent"},
     {"kind": "sets", "from": "install_kiro_agent", "to": "agentfile", "label": "written, and listed in git's info/exclude", "at": "install_kiro_agent"},
 
-    {"kind": "acquires", "from": "take", "to": "delivered", "label": "makedirs, once per call", "at": "take"},
+    {"kind": "acquires", "from": "take", "to": "delivered", "label": "makedirs of delivered/ beside the inbox, once per call, even when the inbox is missing or empty", "at": "take"},
     {"kind": "acquires", "from": "take", "to": "msgfile", "label": "open(dest) to read the text", "at": "take"},
     {"kind": "releases", "from": "take", "to": "msgfile", "label": "closed when the with-block ends", "at": "take"},
     {"kind": "acquires", "from": "main", "to": "stdin", "label": "reads all of stdin so the agent's write never blocks", "at": "main"},
