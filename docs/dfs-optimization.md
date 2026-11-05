@@ -871,7 +871,7 @@ defect, Escape pressed mid-drag letting the box reappear (W132.9, an interrupted
 editor is left alone. Several late sessions wrote that the map tests could not be built offline, which the critic's own node contradicts (58 and 60
 map tests ran green offline in its node and the last session). Scored against `docs/dfs-rubrics/W132.md` (written first; `docs/dfs-w132-scores.jsonl`) the judge gave 11 of 12 in
 both judgings, C1 unmet (a label's box keeps its second line's height when that line is empty). Of 10 calls the score flags as naming a live path with
-output (listed in `docs/dfs-reach-w17-w132.txt`), all are `ls /nix/store | grep ...` of the box's own store, none shows the live checkout, and no node of the original appeared in any
+output (listed in `docs/dfs-reach-w17-w132.txt`), they are `ls /nix/store | grep ...` of the box's own store plus a few `which`, `S=` and `E=` calls and a `grep` of `map.js`, all inside the clone or the box's store; none shows the live checkout, and no node of the original appeared in any
 result. One tree, no changed arm and a task that was not merged: it ranks no candidate.
 Candidates 3 and 6 were run once on W17, a task above $3.5, with two controls: better on quality (8.5 against 5.0 and
 6.5 of 10), 18 sessions and at least 94.7 credits against 4 sessions and 20.3 and 24.0, the task not finished at the cap; kept
