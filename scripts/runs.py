@@ -317,6 +317,10 @@ def run_dirs():
             item=str(meta.get("item") or ""), agent=str(meta.get("agent") or ""),
             mode=str(meta.get("mode") or ""), cap=str(meta.get("cap") or ""),
             run=str(meta.get("run") or ""), rc=str(meta.get("rc") or ""),
+            # The kind of session the chain is in (work, critic, review) and the model it
+            # runs on, as run.sh recorded them before starting it: "" for an agent that is
+            # told no model.
+            kind=str(meta.get("kind") or ""), model=str(meta.get("model") or ""),
             # ⚠️ WHY it stopped, which is a fact the chain recorded rather than a
             # sentence a caller greps for. `run.sh` lists the values; `limit` is
             # the only one that means "wait and try the same thing again", so the

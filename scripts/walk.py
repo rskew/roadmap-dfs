@@ -959,6 +959,7 @@ class WalkMixin:
             model_defaults=self.model_defaults(),
             pinned=self.walk_next, auto=auto, auto_goal=goal,
             chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],
+                         agent=r["agent"], kind=r["kind"], model=r["model"],
                          progress=dfs_runs.progress(r), live=r["live"])
                     for r in self.walk_runs()],
             live=[dict(item=r["item"], pid=r["pid"], progress=dfs_runs.progress(r))
