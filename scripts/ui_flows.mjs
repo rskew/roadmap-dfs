@@ -1820,20 +1820,29 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert(connected === 1, "the page connected " + connected + " times");
     assert(reads.slice(0, before).filter(u => u === "/api/state").length <= 2 && reads.slice(0, before).filter(u => u === "/api/task/W9").length === 1, "the first load made more than one set of reads: " + JSON.stringify(reads.slice(0, before)));
   },
-  // A page whose first reads failed (a 500 on /api/state) shows "Could not load", then draws once its stream connects, with no Retry.
+  // A page whose first reads failed shows "Could not load", then draws once its stream connects, with no Retry.
+  // The task route reads /api/task/<id> and /api/walk (not /api/state). Two cases: every read fails, so the page holds no
+  // number to ask `?since=` from; and only the walk fails, where the task read may land (its number is then the live one,
+  // which a `?since=` of that number would be told nothing about) or may not have landed when the stream connects.
   async push_failed_load(b) {
-    const ctx = await b.newContext({ ...PHONE });
-    const page = await ctx.newPage();
-    PAGES.push(page);
-    let fail = true, since = [];
-    await page.route("**/api/state*", r => fail ? r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom" }) }) : r.continue());
-    page.on("request", r => { const u = new URL(r.url()); if (u.pathname === "/api/events") since.push(u.searchParams.get("since")); });
-    await page.goto(URL_ + "#/t/W9");
-    await page.waitForSelector("#view .wait[role=alert]");
-    fail = false;                                 // the server answers again; the page is not told to retry
-    try { await page.waitForSelector(".row", { timeout: 5000 }); }
-    catch (e) { assert(false, "the page stayed on Could not load after its stream connected (since " + JSON.stringify(since) + ")"); }
-    assert(since[0] === "0", "the stream of a page that failed to load asked since=" + since[0]);
+    for (const [name, broken] of [["every read", /\/api\/(task|walk|state)/], ["the walk only", /\/api\/walk/]]) {
+      const ctx = await b.newContext({ ...PHONE });
+      const page = await ctx.newPage();
+      PAGES.push(page);
+      let fail = true; const since = [];
+      // The server answers again once the stream asks to connect, so the read that follows it cannot meet a failure.
+      // The alert is recorded as it is drawn: it is gone again when the page reads and draws, and has no height here
+      // (a one-line message where no font is installed), so it cannot be waited on as visible.
+      await page.addInitScript(() => { window.__alert = false; new MutationObserver(() => { if (document.querySelector("#view .wait[role=alert]")) window.__alert = true; }).observe(document, { childList: true, subtree: true }); });
+      await page.route(u => broken.test(new URL(u).pathname), r => fail ? r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom" }) }) : r.continue());
+      page.on("request", r => { const u = new URL(r.url()); if (u.pathname === "/api/events") { since.push(u.searchParams.get("since")); fail = false; } });
+      await page.goto(URL_ + "#/t/W9");
+      try { await page.waitForSelector("#view .row", { timeout: 8000 }); }
+      catch (e) { assert(false, name + ": the page stayed on Could not load after its stream connected (since " + JSON.stringify(since) + ")"); }
+      assert(await page.evaluate(() => window.__alert), name + ": the page never showed Could not load, so the case did not happen");
+      assert(since.includes("0"), name + ": the stream of a page that failed to load never asked since=0 (" + JSON.stringify(since) + ")");
+      await ctx.close();
+    }
   },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
