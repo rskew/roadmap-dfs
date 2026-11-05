@@ -111,8 +111,6 @@ pre.runlog .r-err { color: var(--attention); }
    strip the phone keeps for its gesture handle, so a thumb sees where the buttons end */
 #tabs::after, .sheet-nav::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: var(--rule); background: var(--ink); pointer-events: none; }
 #tabs::after, .chat-nav::after { bottom: env(safe-area-inset-bottom, 0px); }
-.count { font-variant-numeric: tabular-nums; color: var(--assumption); }
-.count[hidden] { display: none; }
 
 /* the task list: ruled, with ids in a column */
 .item { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr); gap: 0 var(--s3); width: 100%; padding: var(--s4) 0; padding-left: calc(var(--ind, 0px) + var(--gx, 0px)); border-bottom: var(--rule) solid var(--line); }
@@ -468,7 +466,7 @@ const tagAt = id => String(id).indexOf("@");
 const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
 const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, folded: {}, only: false, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0, q: "" };
+const S = { walk: null, state: null, task: null, taskId: null, folded: {}, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0, q: "" };
 /* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
 const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
@@ -749,7 +747,7 @@ async function renderDraw(force) {
     } else if (r.view === "chats") {
       const [list, state] = await Promise.all([api("/api/chats"), api("/api/state")]);
       if (mine !== RENDERS) return;
-      S.chats = list.chats; S.state = state; S.needs = state.needs_you; syncColour(state); S.node = null; drawChats();
+      S.chats = list.chats; S.state = state; syncColour(state); S.node = null; drawChats();
     } else {
       // Back to the list draws it at once from the state the page already holds (a task screen keeps it current,
       // and a push renders again), since reading it again takes most of a second on a roadmap of many tasks.
@@ -763,7 +761,7 @@ async function renderDraw(force) {
       if (mine !== RENDERS) return;
       if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
       S.archived = arc ? arc.items : []; S.archivedCount = state.archived_count;   // the archived rows are not in S.state, so no move or push touches them
-      S.state = state; S.needs = state.needs_you; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
+      S.state = state; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
       S.node = null; if (JSON.stringify([state, walk, S.archived]) !== drawn) drawTasks(true);
     }
     chrome(r);
@@ -777,9 +775,9 @@ async function renderDraw(force) {
       $("#view").innerHTML = `<p class="wait" role="alert">Could not load: ${esc(e.message)}</p><div class="actions top-actions"><button class="btn" data-act="retry">Retry</button></div>`;
   }
 }
-// A task screen does not load the list, but the bar's Needs you carries the count.
+// A task screen does not load the list, but the header's count of tasks that need you is read from the state.
 async function refreshNeeds() {
-  try { const at = WROTE; S.state = await api("/api/state"); S.stateAt = at; S.needs = S.state.needs_you; drawBar(route()); drawRail(); } catch (e) { /* a count is a convenience */ }
+  try { const at = WROTE; S.state = await api("/api/state"); S.stateAt = at; drawBar(route()); drawRail(); } catch (e) { /* a count is a convenience */ }
 }
 /* The rail beside a task's tree on a wide screen: every task, the one you are in marked. It is drawn only when the
    tasks changed, so a push does not take the scroll from under a pointer. */
@@ -808,8 +806,7 @@ function drawBar(r) {
     html = `<button data-act="up">Back</button>`;
   } else if (r.view !== "task" || wide()) {
     mode = "tabs";
-    html = cell('data-act="only" data-v="0"', "All", list && !S.only && !S.reorder)
-      + cell('data-act="only" data-v="1"', `Needs you <span class="count">${S.needs || ""}</span>`, list && S.only)
+    html = cell('data-act="all"', "All", list && !S.reorder)
       + cell('data-act="reorder"', "Reorder", list && S.reorder)
       + (chatOn() ? `<button data-tab="chats" ${r.view === "chats" ? 'aria-current="page"' : ""}>Chats</button>` : "");
   } else {
@@ -1081,7 +1078,7 @@ function typingInBox() {
 function drawTasks(push) {
   const had = findEnter();
   const boxKey = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;     // a draw replaces the box: focus goes back to its control
-  const items = S.state.items.filter(i => !S.only || i.needs_you);
+  const items = S.state.items;
   // A push (drawTasks(true)) redraws the list, and a redrawn number field puts the caret back at its start: digits typed after the push
   // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
   const held = push && typingInBox() ? $("#walkbox") : null;
@@ -1091,10 +1088,9 @@ function drawTasks(push) {
   if (!S.reorder && tableWide()) html += `<div class="actions listopt"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
   if (table) html += `<div class="tblhead" aria-hidden="true"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>`;
   for (const it of S.state.items) {
-    const fenced = it.segment > seg && !S.only;
+    const fenced = it.segment > seg;
     if (fenced) html += `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
     seg = it.segment;
-    if (S.only && !it.needs_you) continue;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     const draft = it.draft && it.status === "open" && !it.blocked_by;
     const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}${draft ? " draft" : ""}`;
@@ -1139,8 +1135,8 @@ function drawTasks(push) {
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
   }
-  // Archived tasks follow the live ones, apart from the order and its breaks; the Needs you view and the reorder view are about live tasks.
-  if (showArchived() && !S.only && !S.reorder && S.archived.length) {
+  // Archived tasks follow the live ones, apart from the order and its breaks; the reorder view is about live tasks.
+  if (showArchived() && !S.reorder && S.archived.length) {
     html += `<div class="break cap">archived</div>`;
     for (const it of S.archived)
       html += `<button class="item done archived" data-act="task" data-id="${esc(it.id)}"><span class="iid">${iidHtml(it.id)}</span>
@@ -1148,7 +1144,7 @@ function drawTasks(push) {
   }
   if (S.archivedCount || showArchived())
     html += `<div class="actions"><button class="btn" data-act="archived" aria-pressed="${showArchived()}">${showArchived() ? "Hide archived" : "Show archived (" + S.archivedCount + ")"}</button></div>`;
-  if (!items.length) html += `<p class="hint">${S.only ? "Nothing is waiting on you." : "No tasks yet. Open one in the terminal with <code>run --open</code>."}</p>`;
+  if (!items.length) html += `<p class="hint">No tasks yet. Open one in the terminal with <code>run --open</code>.</p>`;
   html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
   $("#view").className = "col" + (table ? " tbl" : "");
   const on = document.activeElement && document.activeElement.matches("#view button.item[data-act=task]") ? document.activeElement.dataset.id : null;
@@ -1240,7 +1236,7 @@ function siblingsOf(id) {
   const out = [];
   for (let j = lo; j < hi; j++) {
     if (its[j].depth !== d) continue;
-    if (!d && !S.only && its[j].segment > (j ? its[j - 1].segment : 0)) out.push("|" + its[j].id);   // as drawTasks draws one
+    if (!d && its[j].segment > (j ? its[j - 1].segment : 0)) out.push("|" + its[j].id);   // as drawTasks draws one
     out.push(its[j].id);
   }
   return out;
@@ -1901,8 +1897,8 @@ document.addEventListener("click", e => {
     flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
     liststyle: () => { try { localStorage.setItem("listStyle", listStyle() === "table" ? "card" : "table"); } catch (e) {} render(true); },
     archived: () => { try { localStorage.setItem("showArchived", showArchived() ? "0" : "1"); } catch (e) {} render(true); },
-    only: () => { S.only = d.v === "1"; S.reorder = false; S.moved = null; showList(); },
-    reorder: () => { S.reorder = route().view === "tasks" ? !S.reorder : true; S.moved = null; if (S.reorder) S.only = false; showList(); },
+    all: () => { S.reorder = false; S.moved = null; showList(); },
+    reorder: () => { S.reorder = route().view === "tasks" ? !S.reorder : true; S.moved = null; showList(); },
     move: () => moveTask(d.id, d.move),
     task: () => go("t/" + d.id),
     node: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
@@ -1922,7 +1918,7 @@ document.addEventListener("click", e => {
     walkhere: async () => { try { S.walk = await api("/api/walk/pin", { item: d.item }); toast(S.walk.pinned ? "The walk goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
   }[d.act] || (() => {}))();
 });
-// The bar's All, Needs you and Reorder set how the list is drawn; from another screen they take you to it.
+// The bar's All and Reorder set how the list is drawn; from another screen they take you to it.
 // Reorder gives every row a strip of moves, so the rows change height and the page's old offset lands on other
 // tasks. The first row on screen is found before the redraw and put back where it was after it.
 function showList() {

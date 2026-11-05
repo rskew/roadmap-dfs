@@ -344,7 +344,7 @@ conventions"):
   `review-terminal` for `:reviwe`.
 - **One line editor for every prompt**, on the footer row (htop, fzf): `/` moves as you
   type, and Esc cancels at once.
-- **`m`** (needs you), **`z`** (undo an order move, refused over another session's edit),
+- **`z`** (undo an order move, refused over another session's edit),
   **the walk plan** while `w` asks for a budget, and **the bell** on a chain ending or
   the walk stopping by itself (`DFS_NOTIFY`).
 - Found on the way: the screen crashed at start on a terminal without colour or cursor
