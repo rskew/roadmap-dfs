@@ -73,9 +73,26 @@ def items():
             out.append(dict(id=name, goal=found[name], depth=depth, segment=seg, stop=stop))
             seen.add(name)
             filled = True
+    after = {}                       # base task -> tagged tasks already put beside it
     for name in sorted(found, key=dfs_order.sort_key("")):
-        if name not in seen:
+        if name in seen:
+            continue
+        base = name.partition("@")[0]
+        at = next((i for i, it in enumerate(out) if it["id"] == base), None) if "@" in name else None
+        if at is None:
             out.append(dict(id=name, goal=found[name], depth=0, segment=seg, stop=stop))
+            continue
+        # A task begun on a branch (`W1@fx`) that nobody placed sits beside its base
+        # task: after the base's subtree, at its depth and in its segment, so it
+        # is neither behind every fence nor after every task the author did place.
+        b = out[at]
+        end = at + 1
+        while end < len(out) and out[end]["depth"] > b["depth"]:
+            end += 1
+        end += after.get(base, 0)    # past the tags of this base put there already
+        after[base] = after.get(base, 0) + 1
+        out.insert(end, dict(id=name, goal=found[name], depth=b["depth"],
+                             segment=b["segment"], stop=b["stop"]))
     return out
 
 
