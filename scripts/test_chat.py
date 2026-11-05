@@ -1325,6 +1325,37 @@ class Chat(unittest.TestCase):
         self.chats.clear("W1")
         self.assertFalse(self.chats.dir("W1").exists(), "a new chat starts with no steering messages")
 
+    def test_a_steering_message_the_turn_never_read_is_sent_as_the_next_turn_once(self):
+        os.environ["CHAT_STUB_SLEEP"] = "2"                  # the stub reads no inbox
+        self.chats.send("W1", "first")
+        end = time.time() + 10
+        while not (self.log.exists() and "started" in self.log.read_text()) and time.time() < end:
+            time.sleep(0.05)
+        self.chats.send("W1", "W141-LATE and this")
+        os.environ.pop("CHAT_STUB_SLEEP")
+        st = self.settle("W1", 40)
+        turns = [c for c in self.calls() if c != "started"]
+        self.assertEqual(len(turns), 2, turns)
+        self.assertIn("--resume", turns[1])
+        self.assertIn("W141-LATE and this", turns[1])
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you" and m["text"].startswith("W141-LATE")], ["W141-LATE and this"])
+        self.assertEqual([m.get("steer") for m in st["messages"] if m["role"] == "you"], [None, None], "shown as a sent message, not a waiting steer")
+        self.assertEqual(os.listdir(self.chats.box("W1")), [])
+
+    def test_a_steering_message_a_stopped_turn_never_read_is_dropped(self):
+        os.environ["CHAT_STUB_SLEEP"] = "60"
+        self.chats.send("W1", "first")
+        end = time.time() + 10
+        while not (self.log.exists() and "started" in self.log.read_text()) and time.time() < end:
+            time.sleep(0.05)
+        self.chats.send("W1", "W141-DROP me")
+        self.chats.interrupt("W1")
+        st = self.settle("W1", 40)
+        self.assertEqual(len([c for c in self.calls() if c != "started"]), 1)
+        self.assertNotIn("W141-DROP me", [m["text"] for m in st["messages"]])
+        self.assertEqual(os.listdir(self.chats.box("W1")), [])
+        self.assertIn("never read and are dropped", self.record("W1"))
+
     def test_clear_starts_over(self):
         self.chats.send("W1", "hello")
         self.settle("W1")

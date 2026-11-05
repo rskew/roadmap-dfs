@@ -44,6 +44,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paths as dfs_paths    # noqa: E402
 import runs as dfs_runs      # noqa: E402
+import inbox as dfs_inbox   # noqa: E402
 import tree as dfs_tree      # noqa: E402
 import context as dfs_context   # noqa: E402
 import chatlog   # noqa: E402
@@ -672,6 +673,32 @@ class Chats:
         self.on_change()
         return self.state(scope)
 
+    def unread(self, scope, stopped, error, sid, agent):
+        """What becomes of the steering messages the turn that just ended never read (it ended before
+        its hooks fired again). A turn that was answered sends them as one new turn on the same session, which
+        the caller starts: the text is returned, and they show as the author's sent messages from then on.
+        A turn that was stopped or failed drops them, and says so. The caller holds the lock."""
+        names = [m["name"] for m in dfs_runs.messages(str(self.dir(scope))) if m["state"] == "waiting"]
+        if not names:
+            return ""
+        texts = dfs_inbox.take(self.box(scope), names)
+        gone = set(names)
+        rows = self.steers(scope)
+        keep = [r for r in rows if r.get("name") not in gone]
+        d = self.dir(scope)
+        (d / ".steers.tmp").write_text(json.dumps(keep))
+        os.replace(d / ".steers.tmp", d / "steers.json")
+        if stopped or error:
+            chatlog.log(scope, "turn: %d steering message(s) were never read and are dropped" % len(texts))
+            if not stopped:
+                self.notes[scope] = self.notes.get(scope, []) + ["%d message(s) sent during the turn were never read" % len(texts)]
+            return ""
+        text = "\n\n".join(texts)
+        chatlog.log(scope, "turn: %d steering message(s) arrived after the last step and go as the next turn" % len(texts))
+        self.expect(scope, text, agent, sid)
+        self.busy[scope] = time.time()
+        return text
+
     def held(self, scope):
         """How many messages the conversation shows now, the author's sent ones not yet recorded among
         them, and so where a steering message sent now stands."""
@@ -798,7 +825,10 @@ class Chats:
             self.stopped.discard(scope)
             self.procs.pop(scope, None)
             self.busy.pop(scope, None)
+            follow = self.unread(scope, stopped, error, new_sid or sid, agent)
         self.on_change()
+        if follow:
+            threading.Thread(target=self.turn, args=(scope, follow, new_sid or sid, False, agent), daemon=True).start()
 
     def open(self, scope):
         """The page opened this chat. A conversation that has begun is left as it is; a new one
