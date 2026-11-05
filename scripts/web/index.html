@@ -365,6 +365,10 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
 ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } ul.md li, ol.md li { margin: 0 0 2px; overflow-wrap: anywhere; }
 .msg pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
+/* "Newest": a zero-height row stuck to the bottom of the log, so its button floats just above the input; shown only while scrolled away from the end. */
+.chat-newest { position: sticky; bottom: 0; height: 0; text-align: center; pointer-events: none; }
+.chat-newest .btn { display: none; position: absolute; left: 50%; bottom: var(--s2); transform: translateX(-50%); pointer-events: auto; background: var(--panel); }
+.chat-newest.on .btn { display: inline-block; }
 #chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 #chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: calc(var(--vvh, 100dvh) * .3); resize: none; }
 #chat-form .btn { flex: none; }
@@ -1674,7 +1678,8 @@ function chatDraw(st) {
   log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">Running in the terminal's process: type here, or press <code>c</code> there to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
-    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "");
+    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
+    + `<div class="chat-newest"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
   $("#chat-stop").hidden = !st.busy;
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
@@ -1683,6 +1688,12 @@ function chatDraw(st) {
   CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
   else if (atEnd || follow) log.scrollTop = log.scrollHeight;
+  chatNewest();
+}
+// The Newest button shows while the reader is more than a screen's edge away from the end of the log.
+function chatNewest() {
+  const log = $("#chat-log"), box = log.querySelector(".chat-newest");
+  if (box) box.classList.toggle("on", log.scrollHeight - log.scrollTop - log.clientHeight > 80);
 }
 // The Top button: to the top of the message being read. That is the last one when the log is at its end
 // (a long answer has just landed there), else the one crossing the log's top edge; already at its top, the one before.
@@ -1999,7 +2010,7 @@ document.addEventListener("click", e => {
     answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm,
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
-    chat: () => chatOpen(d.scope), chattop: chatTop, chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
+    chat: () => chatOpen(d.scope), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStart, walkstop: walkStop,
@@ -2042,7 +2053,7 @@ const up = () => {
 $("#back").onclick = up;
 $("#sheet").addEventListener("scroll", e => { if (S.node && e.target.isConnected && e.target.classList.contains("sheet-body")) keepScroll(sheetKey(), e.target.scrollTop); }, true);
 $("#chat-log").addEventListener("scroll", e => {
-  const l = e.target; if (!CHAT.scope || CHAT.fresh) return;
+  const l = e.target; chatNewest(); if (!CHAT.scope || CHAT.fresh) return;
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
 // One redraw path for the table's room: the observer sees a viewport crossing and a classic scrollbar appearing or going (which leaves the media query unchanged); the media listener is only the fallback where there is no ResizeObserver, since both together redraw twice.
