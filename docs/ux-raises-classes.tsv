@@ -1,0 +1,29 @@
+node	class	reading of the raise's first lines (W131.3)
+W43	author-fact	cannot reproduce the phone symptom; asks what it looks like
+W48.3	scope-drift	tests added past the Goal
+W60.4	tooling	tree.py effective() prunes a node the author confirmed
+W70.2	author-fact	cannot reproduce the wrapping; asks for the setup
+W75.44	tooling	size rule (W75.md over 10,000 tokens) refuses the commit
+W75.53	tooling	size rule, same fault
+W75.56	tooling	size rule, same fault
+W75.59	tooling	size rule, same fault
+W75.60	tooling	size rule, same fault
+W86.1	author-fact	what looks low resolution, on which screen
+W86.4	author-fact	reinstall the app and say what the launch screen shows
+W93.9	scope-drift	work moved from faster tests to keeping a CLI alive
+W97.8	access	no claude on PATH and no writable mount runs scripts
+W109.5	tooling	two tooling issues found beside the Goal
+W111.11	tooling	commit refused during a rebase
+W111.13	tooling	status says issues but no node to fix
+W113.1	author-preference	which of the log-review suggestions to take
+W113.6	author-preference	one SKILL.md change touches the law
+W113.9	tooling	law says every fifth session, code counts work sessions
+W116.27	scope-drift	review loop on locked network calls
+W116.33	tooling	review loop no node can end
+W122.5	tooling	commit refused during a rebase
+W123.4	author-preference	which item-list style to build
+W123.5	author-preference	which web list style to build
+W123.12	scope-drift	post-build polish past the Goal
+W123.20	tooling	commit refused during a rebase
+W130.4	tooling	two faults in replay.py
+W130.12	tooling	third fault in replay.py
