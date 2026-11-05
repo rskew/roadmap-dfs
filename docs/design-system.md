@@ -83,3 +83,6 @@ block), `.actions`, `dialog`, `#toast`.
 5. Change the system in `design.css`, look at `/design`, then change the page. `test_ui.py`
    audits `/design` and every screen of the page, both themes, three widths, for overflow,
    contrast and tap targets.
+6. Speed of the web page is timed in headless chromium by `scripts/perf_page.sh` (and `perf_page.mjs`): it
+   serves a copy of the roadmap and prints the first draw of the list and of a task (`--task`), draw times
+   and long tasks. Rerun it before and after a change that touches what the page loads or redraws.

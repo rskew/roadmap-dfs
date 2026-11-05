@@ -122,6 +122,10 @@ class Web(unittest.TestCase):
         for refused in ("gzip;q=0", "identity", "gzip; q=0.0"):
             self.assertIsNone(self.call("GET", "/", headers={"Accept-Encoding": refused})[2].getheader("Content-Encoding"), refused)
         self.assertEqual(self.call("GET", "/", headers={"Accept-Encoding": "br, gzip;q=0.5"})[2].getheader("Content-Encoding"), "gzip")
+        self.assertEqual(self.call("GET", "/", headers={"Accept-Encoding": "*;q=0, gzip"})[2].getheader("Content-Encoding"), "gzip")      # named beats the wildcard
+        self.assertIsNone(self.call("GET", "/", headers={"Accept-Encoding": "gzip;q=0, *"})[2].getheader("Content-Encoding"))
+        self.assertTrue(dfs_web.accepts_gzip("*"))
+        self.assertFalse(dfs_web.accepts_gzip("br, *;q=0"))
 
     def test_the_list_and_the_walk_share_one_state_build_until_a_file_changes(self):
         real = dfs_web.dfs_state.full
@@ -1324,6 +1328,20 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(dfs_web.changed_tasks(sig, sig + [("/r/.dfs/items/W9.md", 1)]), ["W9"])    # a new task
         self.assertEqual(dfs_web.changed_tasks(sig, sig[1:]), ["W1"])      # a removed one
         self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/items/W1.md") + [("/r/.dfs/items/W13@tag.md", 1)]), ["W1", "W13"])      # a branch's part is its task
+
+    def test_a_repo_under_an_items_directory_names_its_own_tasks(self):
+        # `~/items/app2/` holds the repo: the first `items/<name><digits>/` in the path is the directory, not a task.
+        for base in ("/home/u/items/app2", "/tmp/x/items/a1/.dfs/worktrees/W9", "C:\\items\\app2"):
+            sep = "\\" if "\\" in base else "/"
+            key = sep.join([base, ".dfs", "items", "W9.md"])
+            sig = [(key, 1), ("order", 1)]
+            self.assertEqual(dfs_web.changed_tasks(sig, [(key, 2), ("order", 1)]), ["W9"], base)
+            part = sep.join([base, ".dfs", "items", "W9", "a.md"])
+            self.assertEqual(dfs_web.changed_tasks([], [(part, 1)]), ["W9"], base)
+            arch = sep.join([base, ".dfs", "state", "archive", "items", "W3.md"])
+            self.assertEqual(dfs_web.changed_tasks([], [(arch, 1)]), ["W3"], base)
+        # a file in the repo that is no task's must not be named after the directory: rereads everything
+        self.assertIsNone(dfs_web.changed_tasks([], [("/home/u/items/app2/.dfs/runs/d1/meta.json", 1)]))
 
     def test_a_burst_of_changes_is_one_with_the_tasks_of_all_and_unsaid_wins(self):
         self.assertEqual(dfs_web.merge_changes((1, ["W2"]), (2, ["W1"])), (2, ["W1", "W2"]))

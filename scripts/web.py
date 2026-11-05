@@ -1141,7 +1141,9 @@ def merge_changes(a, b):
 
 
 # A task's file is `items/W13.md`, and a branch's part of it is `items/W13/<tag>.md` (or, tagged in the name, `items/W13@tag.md`): all the same task.
-TASK_FILE = re.compile(r"[/\\]items[/\\]([A-Za-z]+\d+)(?:@[^./\\]+)?[./\\]")
+# The id must be followed by nothing but the file name, so a repo that sits under a directory such as `~/items/app2/` is
+# not read as the task `app2`: only the `items/` that holds the file matches.
+TASK_FILE = re.compile(r"[/\\]items[/\\]([A-Za-z]+\d+)(?:@[^./\\]+)?(?:\.[^/\\]*|[/\\][^/\\]+)\Z")
 
 
 def changed_tasks(before, after):
@@ -1217,17 +1219,24 @@ def gzippable(ctype, data):
 
 
 def accepts_gzip(header):
-    """Whether an `Accept-Encoding` value takes gzip: named, or by `*`, and not at `q=0`."""
+    """Whether an `Accept-Encoding` value takes gzip. A named coding (`gzip`, `x-gzip`) decides, whatever
+    `*` says (RFC 9110); `*` speaks for it only when it is not named. `q=0` refuses."""
+    named, star = None, None
     for part in header.split(","):
         name, _, params = part.partition(";")
-        if name.strip().lower() not in ("gzip", "x-gzip", "*"):
+        name = name.strip().lower()
+        if name not in ("gzip", "x-gzip", "*"):
             continue
         q = re.search(r"q\s*=\s*([0-9.]+)", params)
         try:
-            return float(q.group(1)) > 0 if q else True
+            ok = float(q.group(1)) > 0 if q else True
         except ValueError:
-            return False
-    return False
+            ok = False
+        if name == "*":
+            star = ok if star is None else star
+        else:
+            named = ok if named is None else named
+    return named if named is not None else bool(star)
 
 
 class Handler(BaseHTTPRequestHandler):
