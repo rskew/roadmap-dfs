@@ -868,6 +868,26 @@ class RealKiro(unittest.TestCase):
         self.assertNotIn("W104-PING", "".join(self.asked(model)))
 
 
+MCP_STUB = """import json, sys
+for line in sys.stdin:
+    try:
+        m = json.loads(line)
+    except ValueError:
+        continue
+    i, meth = m.get("id"), m.get("method")
+    if meth == "initialize":
+        r = {"protocolVersion": m["params"].get("protocolVersion", "2024-11-05"), "capabilities": {"tools": {}}, "serverInfo": {"name": "w141", "version": "1"}}
+    elif meth == "tools/list":
+        r = {"tools": [{"name": "stubtool_w141", "description": "a stub", "inputSchema": {"type": "object", "properties": {}}}]}
+    elif i is None:
+        continue
+    else:
+        r = {}
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": i, "result": r}) + "\\n")
+    sys.stdout.flush()
+"""
+
+
 @unittest.skipUnless(KIRO, "no kiro-cli here")
 class RealKiroChat(ChatSteer, unittest.TestCase):
     """The page's chat around a real kiro-cli: a message sent while a turn waits for its model is held
@@ -899,6 +919,57 @@ class RealKiroChat(ChatSteer, unittest.TestCase):
         agents = sorted(p.name for p in (self.root / ".kiro" / "agents").glob("*.json"))
         self.assertEqual(agents, [inbox.kiro_agent_for(str(self.chats.box("project"))) + ".json"])
         self.assertNotIn("kiro/agents", subprocess.run(["git", "status", "--short"], cwd=self.root, capture_output=True, text=True).stdout)
+
+    def test_the_second_turn_of_a_session_resumed_under_the_chat_agent_is_steered_too(self):
+        """Every message after the first is `--resume-id` under the agent; a steered one is read there as well."""
+        self.chats.send("project", "hello")
+        self.settle()
+        self.model.requests_seen = 0                    # the stand-in waits again before the next turn's first answer
+        before = len(self.asked())
+        self.chats.send("project", "use a tool please")
+        end = time.time() + 90
+        while len(self.asked()) == before and time.time() < end:
+            time.sleep(0.05)
+        self.chats.send("project", "W141-RESUMED use the other file")
+        st = self.settle()
+        bodies = [b.decode() for b in self.asked()][before:]
+        self.assertNotIn("W141-RESUMED", bodies[0])
+        self.assertIn("W141-RESUMED use the other file", bodies[1])
+        self.assertIn(("you", "W141-RESUMED use the other file", "delivered"),
+                      [(m["role"], m["text"], m.get("steer")) for m in st["messages"]])
+
+    def test_a_chat_turn_under_the_agent_asks_the_model_for_what_the_default_agent_does(self):
+        """The agent file names no resources or MCP servers; kiro still gives the turn the workspace and the user's
+        steering files, AGENTS.md, MCP tools and every built-in tool, so only the default agent's own system prompt
+        and its built-in sub-agents differ (kiro-cli 2.35.1)."""
+        (self.root / "AGENTS.md").write_text("W141-AGENTS-MARK\n")
+        (self.root / ".kiro" / "steering").mkdir(parents=True)
+        (self.root / ".kiro" / "steering" / "w.md").write_text("W141-STEERING-MARK\n")
+        (self.root / ".kiro" / "settings").mkdir(parents=True)
+        (self.home / ".kiro" / "steering").mkdir(parents=True)
+        (self.home / ".kiro" / "steering" / "g.md").write_text("W141-GLOBAL-MARK\n")
+        stub = self.base / "mcp_stub.py"
+        stub.write_text(MCP_STUB)
+        (self.root / ".kiro" / "settings" / "mcp.json").write_text(json.dumps(
+            {"mcpServers": {"w141srv": {"command": "python3", "args": [str(stub)]}}}))
+        self.model.lag = 0
+        seen = {}
+        for label, extra in (("default", []), ("agent", ["--agent", inbox.kiro_agent_for(str(self.chats.box("project")))])):
+            inbox.install_kiro_agent(str(self.root), str(self.chats.box("project")), inbox.kiro_agent_for(str(self.chats.box("project"))))
+            n = len(self.asked())
+            subprocess.run([KIRO, "chat", "--v3", "--output-format", "stream-json", *extra, "--no-interactive", "--trust-all-tools",
+                            "--", "hello"], cwd=self.root, capture_output=True, text=True, timeout=240, stdin=subprocess.DEVNULL,
+                           env=dict(os.environ))
+            request = json.loads(self.asked()[n])
+            seen[label] = (sorted(t["toolSpecification"]["name"] for t in
+                                  request["conversationState"]["currentMessage"]["userInputMessage"]["userInputMessageContext"]["tools"]),
+                           json.dumps(request))
+        self.assertIn("stubtool_w141", seen["default"][1])         # the MCP server is loaded at all
+        self.assertIn("stubtool_w141", seen["agent"][1])
+        self.assertEqual(seen["agent"][0], seen["default"][0])
+        for mark in ("W141-AGENTS-MARK", "W141-STEERING-MARK", "W141-GLOBAL-MARK"):
+            self.assertIn(mark, seen["default"][1])
+            self.assertIn(mark, seen["agent"][1])
 
     def test_two_boxes_have_two_agents_and_the_chat_agents_cannot_be_invoked_as_subagents(self):
         a, b = inbox.kiro_agent_for("/x/chat/W1/inbox"), inbox.kiro_agent_for("/x/chat/W2/inbox")
