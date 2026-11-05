@@ -665,6 +665,8 @@ if (MID.on) {
 
 let lastView = "";
 let RENDERS = 0;
+let PUSHES = 0;      // counts the pushes heard
+const stale = new Map();      // task id (or "*": any) -> the push that changed it, until a read of it has been kept
 /* A draw replaces the controls: for a keyboard user in the pinned Walk box, who goes there in the middle of a walk, put focus back on the same
    control (by id, or its action and target, else its place among the focusable controls) when the draw left it on the page. */
 const FOCUSABLE = "button, a[href], summary, textarea, input:not([type=hidden]), select, [tabindex]:not([tabindex='-1'])";
@@ -758,12 +760,15 @@ async function renderDraw(force, changed) {
   try {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
-      let t; const at = WROTE;
+      let t; const at = WROTE, seen = PUSHES;
       // A push that names the tasks it changed, and not this one, leaves the task as it is: only the walk is read again.
-      const same = changed && !arrived && S.task && S.taskId === r.task && !changed.has(r.task) && S.task.id === r.task;
+      // A change stays unread (`stale`) until a read of the task has landed and been kept, so a render that is replaced or
+      // fails before that does not make the next push trust the old copy.
+      const same = changed && !arrived && S.task && S.taskId === r.task && S.task.id === r.task && !stale.has(r.task) && !stale.has("*");
       [t, S.walk] = await Promise.all([same ? S.task : api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/walk").then(walkSeen)]);
       S.walkAt = at;
       if (mine !== RENDERS) return;
+      if (!same) for (const k of [r.task, "*"]) if (stale.get(k) <= seen) stale.delete(k);      // a push that came in during the read stays
       S.node = r.node;
       const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + walkHere(r.task) + "|" + JSON.stringify(walkOf(r.task));
       S.task = t;
@@ -2255,6 +2260,7 @@ function listen() {
   es.addEventListener("change", e => {
     let tasks = null; try { tasks = JSON.parse(e.data).tasks; } catch (x) { /* not said: reread all */ }
     pushed = tasks && pushed ? new Set([...pushed, ...tasks]) : null;
+    PUSHES++; for (const k of tasks || ["*"]) stale.set(k, PUSHES);
     clearTimeout(pushT);
     pushT = setTimeout(() => {
       const changed = pushed; pushed = new Set();

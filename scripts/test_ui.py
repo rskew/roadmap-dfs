@@ -176,6 +176,9 @@ class Flows(unittest.TestCase):
     def test_a_push_reads_again_only_the_task_that_changed(self):
         self.flow("push_scope")
 
+    def test_a_change_to_the_open_task_survives_a_replaced_or_failed_read(self):
+        self.flow("push_stale")
+
     def test_going_back_to_the_list_draws_it_without_waiting_on_its_reads(self):
         self.flow("backinstant")
 

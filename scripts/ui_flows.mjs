@@ -1765,6 +1765,38 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForTimeout(3000);
     assert(reqs.some(u => u.startsWith("/api/task/W9")), "a change to the open task did not read it again: " + JSON.stringify(reqs));
   },
+  // A change to the open task that is pushed while a later push replaces its read, or whose read fails, is still shown by the next push.
+  async push_stale(b) {
+    const { page } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.waitForTimeout(1500);
+    const file = id => path.join(DIR, ".dfs", "items", id + ".md");
+    const touch = id => { const now = new Date(); fs.utimesSync(file(id), now, now); };
+    const retitle = to => fs.writeFileSync(file("W9"), fs.readFileSync(file("W9"), "utf8").replace(/^(### W9\.1 · ).*$/m, "$1" + to));
+    const shown = async text => { try { await page.waitForFunction(t => document.body.textContent.includes(t), text, { timeout: 5000 }); return true; } catch (e) { return false; } };
+    // 1. the read of W9 is held while another task's push arrives and replaces it
+    let hold = true, release; const gate = new Promise(r => { release = r; });
+    await page.route("**/api/task/W9*", async r => { if (hold) await gate; await r.continue(); });
+    let held = 0, walks = 0;
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/task/W9")) held++; if (u === "/api/walk") walks++; });
+    retitle("Held then replaced"); touch("W9");
+    for (let i = 0; i < 100 && !held; i++) await page.waitForTimeout(100);
+    assert(held, "the push for the open task did not read it");
+    const w = walks; touch("W1");
+    for (let i = 0; i < 100 && walks === w; i++) await page.waitForTimeout(100);
+    assert(walks > w, "the push for the other task did not render");
+    hold = false; release();
+    assert(await shown("Held then replaced"), "a change to the open task was lost when a later push replaced its read");
+    // 2. the read of W9 fails once, and the next push is for another task
+    await page.unroute("**/api/task/W9*");
+    let fail = true;
+    await page.route("**/api/task/W9*", r => fail ? r.abort() : r.continue());
+    retitle("Failed then pushed"); touch("W9");
+    await page.waitForTimeout(1500);
+    fail = false;
+    touch("W1");
+    assert(await shown("Failed then pushed"), "a change to the open task was lost when its read failed");
+  },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
     const box = sel => boxOf(page, sel);
