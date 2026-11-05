@@ -118,6 +118,10 @@ class Web(unittest.TestCase):
         status, small, r = self.call("GET", "/api/archived", headers={"Accept-Encoding": "gzip"})
         self.assertIsNone(r.getheader("Content-Encoding"))              # too small to be worth it
         self.assertEqual(small["items"], [])
+        self.assertEqual(r.getheader("Vary"), "Accept-Encoding")        # a body never compressed still varies, as a cache must know
+        for refused in ("gzip;q=0", "identity", "gzip; q=0.0"):
+            self.assertIsNone(self.call("GET", "/", headers={"Accept-Encoding": refused})[2].getheader("Content-Encoding"), refused)
+        self.assertEqual(self.call("GET", "/", headers={"Accept-Encoding": "br, gzip;q=0.5"})[2].getheader("Content-Encoding"), "gzip")
 
     def test_the_list_and_the_walk_share_one_state_build_until_a_file_changes(self):
         real = dfs_web.dfs_state.full
@@ -1300,6 +1304,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertIsNone(dfs_web.changed_tasks(sig, bump("/tmp/runs/d1/meta.json")))      # a chain's progress: any task page may show it
         self.assertEqual(dfs_web.changed_tasks(sig, sig + [("/r/.dfs/items/W9.md", 1)]), ["W9"])    # a new task
         self.assertEqual(dfs_web.changed_tasks(sig, sig[1:]), ["W1"])      # a removed one
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/items/W1.md") + [("/r/.dfs/items/W13@tag.md", 1)]), ["W1", "W13"])      # a branch's part is its task
 
     def test_a_burst_of_changes_is_one_with_the_tasks_of_all_and_unsaid_wins(self):
         self.assertEqual(dfs_web.merge_changes((1, ["W2"]), (2, ["W1"])), (2, ["W1", "W2"]))

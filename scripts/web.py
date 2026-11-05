@@ -205,7 +205,8 @@ def full_cached():
     each builds the whole state (about half a second on a hundred tasks), so two threads
     built it at once and slowed each other. One build serves every read while the files the
     pages watch (`roadmap_signature`) are unchanged, for at most `FULL_TTL` seconds, which
-    bounds how stale what the files do not show (git, a clock) can get. A caller that waits
+    bounds how stale what the files do not show (git, a clock) can get: the list's ahead,
+    uncommitted and pr fields can lag by that much after a write that moved only git. A caller that waits
     on a build in progress gets it. The result is read, never edited. Writes read
     `state.full()` afresh."""
     sig = roadmap_signature()
@@ -1138,7 +1139,8 @@ def merge_changes(a, b):
     return (b[0], None if a[1] is None or b[1] is None else sorted(set(a[1]) | set(b[1])))
 
 
-TASK_FILE = re.compile(r"[/\\]items[/\\]([A-Za-z]+\d+)[./\\]")
+# A task's file is `items/W13.md`, and a branch's part of it is `items/W13/<tag>.md` (or, tagged in the name, `items/W13@tag.md`): all the same task.
+TASK_FILE = re.compile(r"[/\\]items[/\\]([A-Za-z]+\d+)(?:@[^./\\]+)?[./\\]")
 
 
 def changed_tasks(before, after):
@@ -1213,6 +1215,20 @@ def gzippable(ctype, data):
     return len(data) >= 1024 and (ctype.startswith("text/") or ctype.endswith(("json", "javascript", "svg+xml")))
 
 
+def accepts_gzip(header):
+    """Whether an `Accept-Encoding` value takes gzip: named, or by `*`, and not at `q=0`."""
+    for part in header.split(","):
+        name, _, params = part.partition(";")
+        if name.strip().lower() not in ("gzip", "x-gzip", "*"):
+            continue
+        q = re.search(r"q\s*=\s*([0-9.]+)", params)
+        try:
+            return float(q.group(1)) > 0 if q else True
+        except ValueError:
+            return False
+    return False
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "roadmap-web"
     KEEPALIVE = 15
@@ -1224,7 +1240,7 @@ class Handler(BaseHTTPRequestHandler):
         data = body if isinstance(body, bytes) else body.encode()
         self.send_response(status)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if "text" in ctype or "json" in ctype else ""))
-        if gzippable(ctype, data) and "gzip" in self.headers.get("Accept-Encoding", ""):
+        if gzippable(ctype, data) and accepts_gzip(self.headers.get("Accept-Encoding", "")):
             data = gzip.compress(data, 1)      # level 1: about 3 ms for the largest task, a quarter of the bytes
             self.send_header("Content-Encoding", "gzip")
         self.send_header("Vary", "Accept-Encoding")

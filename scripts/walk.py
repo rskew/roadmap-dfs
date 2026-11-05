@@ -1132,6 +1132,9 @@ class HeadlessWalk(WalkMixin):
             WalkMixin.set_model(self, role, name)
 
     def snapshot(self, data=None):
+        """The walk as the page shows it. `data` is a state the caller already holds (the page's
+        shared build, up to `web.FULL_TTL` old), kept as `self.data`; the walker's own actions
+        reload before they act, so none of them acts on it."""
         with self.lock:
             self.refresh_chains()
             self.reload(data)
