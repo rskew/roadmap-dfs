@@ -367,6 +367,17 @@ class Web(unittest.TestCase):
         self.assertIn("W1.7", json.dumps(data))
         self.assertIn(str(mine), [p for p, _ in dfs_web.roadmap_signature() if p == str(mine)])
 
+    def test_the_signature_moves_when_a_file_changes_size_within_the_same_mtime(self):
+        """A rewrite in the same clock tick as the last keeps the mtime: the size is what shows it."""
+        f = self.root / ".dfs" / "items" / "W1.md"
+        st = f.stat()
+        key = str(f)
+        before = dict(dfs_web.roadmap_signature())[key]
+        f.write_text(f.read_text() + "\nmore\n")
+        os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns))
+        self.assertEqual(f.stat().st_mtime_ns, st.st_mtime_ns)
+        self.assertNotEqual(dict(dfs_web.roadmap_signature())[key], before)
+
     def page_call(self, method, page, body=None, origin="null"):
         """What a sandboxed page sends: a plain-text body (no preflight) and the origin `null`."""
         headers = {"Origin": origin} if origin else {}

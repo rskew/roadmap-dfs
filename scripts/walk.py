@@ -1071,8 +1071,9 @@ class HeadlessWalk(WalkMixin):
         return self.data.get("items", [])
 
     def reload(self, data=None):
-        """`data` is a `state.full()` the caller has just built, used instead of a
-        second build: each takes a third of a second on a hundred tasks."""
+        """`data` is a `state.full()` the caller already holds, used instead of a second
+        build (each takes a third of a second on a hundred tasks). The page passes
+        `web.full_cached()`, which can be `web.FULL_TTL` seconds old."""
         self.data = dfs_state.full() if data is None else data
 
     def refresh_chains(self):

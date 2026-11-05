@@ -1164,8 +1164,15 @@ def changed_tasks(before, after):
 HUB = Hub()
 
 
+def stamp(path):
+    """A file's mtime and size. The size too, since a rewrite within one clock tick of the last
+    keeps the mtime, and then only a changed size shows it."""
+    st = os.stat(path)
+    return (st.st_mtime_ns, st.st_size)
+
+
 def roadmap_signature():
-    """What the pages show, as the mtimes of the files it is read from: the task parts,
+    """What the pages show, as the mtime and size of the files it is read from: the task parts,
     their archives and the order file. Stat only; nothing is read or parsed."""
     sig = []
     roots = [dfs_paths.items(), dfs_paths.state() / "archive" / "items"]
@@ -1176,17 +1183,17 @@ def roadmap_signature():
             for f in files:
                 p = os.path.join(dirpath, f)
                 try:
-                    sig.append((p, os.stat(p).st_mtime_ns))
+                    sig.append((p, stamp(p)))
                 except OSError:
                     pass
     try:
-        sig.append(("order", os.stat(dfs_paths.order()).st_mtime_ns))
+        sig.append(("order", stamp(dfs_paths.order())))
     except OSError:
         pass
     # What the walk did (and so who started, stopped or pinned it, from the screen or
     # the page): the activity log both write.
     try:
-        sig.append(("activity", os.stat(os.path.join(dfs_runs.run_root(), "activity.log")).st_mtime_ns))
+        sig.append(("activity", stamp(os.path.join(dfs_runs.run_root(), "activity.log"))))
     except OSError:
         pass
     # A chain's progress (`run 2 of 5`) is its meta.json; its console is not watched, it
@@ -1196,7 +1203,7 @@ def roadmap_signature():
         for d in glob.glob(os.path.join(root, dfs_runs.GLOB)):
             p = os.path.join(d, "meta.json")
             try:
-                sig.append((p, os.stat(p).st_mtime_ns))
+                sig.append((p, stamp(p)))
             except OSError:
                 pass
     return sorted(sig)

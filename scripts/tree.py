@@ -82,10 +82,10 @@ Usage:
                                                      Hypothesis and Determination to the archive
 """
 import calendar
+import contextlib
 import os
 import re
 import shutil
-import contextlib
 import subprocess
 import sys
 import threading
