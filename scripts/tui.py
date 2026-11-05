@@ -5244,9 +5244,9 @@ class UiWalker:
     def chat_failure(self, scope):
         return self.ui.chat_host.failure(scope) if self.ui.chat_host else None
 
-    def chat_close(self, scope):
+    def chat_close(self, scope, why="new chat"):
         if self.ui.chat_host:
-            self.ui.chat_host.close(scope, why="new chat")
+            self.ui.chat_host.close(scope, why=why)
 
     def chat_interrupt(self, scope):
         r = self._relay(scope)

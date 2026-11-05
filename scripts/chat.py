@@ -529,7 +529,9 @@ class Chats:
 
     def is_ended(self, scope, live=False, busy=False):
         """Ended by the author and not spoken in since: a message sent from the page or typed at the
-        screen makes the transcript newer than the mark, so the chat is in progress again."""
+        screen makes the transcript newer than the mark, so the chat is in progress again. Not ended
+        while an agent runs on it (`live`, or `busy`: answering, or open in another terminal). A chat
+        with no transcript yet reads as ended, as it was when the author ended it."""
         ended = self.record(scope).get("ended")
         if not isinstance(ended, (int, float)) or live or busy:
             return False
@@ -563,12 +565,23 @@ class Chats:
             started = self.busy.get(scope)
             live = bool(w and w.chat_live(scope))
             talking = bool(live and w.chat_active(scope))      # a background chat that is answering
+            elsewhere = bool(sid) and not started and not live and running_elsewhere(sid, agent=agent)
             return dict(scope=scope, messages=messages, busy=bool(started) or talking,
-                        ended=self.is_ended(scope, live, bool(started) or talking),
+                        ended=self.is_ended(scope, live, bool(started) or talking or elsewhere),
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
-                        elsewhere=bool(sid) and not started and not live and running_elsewhere(sid, agent=agent),
-                        agent=agent)
+                        elsewhere=elsewhere, agent=agent)
+
+    def reopen(self, scope):
+        """A message is sent to the chat: take off its end mark, so the chat is in progress even
+        if the agent fails to answer and writes nothing to the transcript."""
+        rec = self.record(scope)
+        if "ended" not in rec:
+            return
+        del rec["ended"]
+        tmp = self.path(scope).with_suffix(".tmp")
+        tmp.write_text(json.dumps(rec))
+        os.replace(tmp, self.path(scope))
 
     def expect(self, scope, message, agent, sid=None):
         """Show `message` until the transcript records it. One sent before an earlier one is recorded
@@ -594,6 +607,7 @@ class Chats:
             # A chat running on this screen has the session: type into it, as the keyboard does.
             if scope not in self.busy and w and w.chat_send(scope, message):
                 chatlog.log(scope, "page: message of %d characters handed to the screen's chat" % len(message))
+                self.reopen(scope)
                 self.expect(scope, message, agent)
                 self.notes.pop(scope, None)
                 self.stops.pop(scope, None)
@@ -608,6 +622,7 @@ class Chats:
                 chatlog.log(scope, "page: message refused, another terminal has session %s open" % sid)
                 raise ValueError("another terminal has this conversation open: type there, or "
                                  "close it and send from here")
+            self.reopen(scope)
             self.expect(scope, message, agent, sid)
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
@@ -779,11 +794,13 @@ class Chats:
             busy = scope in self.busy or bool(live and w.chat_active(scope))
             if not messages and not live and not busy:
                 continue
+            marked = isinstance(self.record(scope).get("ended"), (int, float))
+            elsewhere = marked and not live and not busy and bool(sid) and running_elsewhere(sid, agent=agent)
             last = messages[-1] if messages else dict(role="", text="")
             updated = transcript_mtime(sid, agent) or p.stat().st_mtime
             out.append(dict(scope=scope, count=len(messages), role=last["role"], last=last["text"][:160],
                             updated=updated, live=live, busy=busy, agent=agent,
-                            ended=self.is_ended(scope, live, busy)))
+                            ended=self.is_ended(scope, live, busy or elsewhere)))
         return sorted(out, key=lambda c: -c["updated"])
 
     def end(self, scope):
@@ -801,9 +818,12 @@ class Chats:
             w = self.walker()
             if w and w.chat_active(scope):
                 raise ValueError("it is still answering: stop it or wait for it")
+            if not (w and w.chat_live(scope)) and running_elsewhere(rec["sid"], agent=self.agent(scope)):
+                chatlog.log(scope, "page: end refused, another terminal has session %s open" % rec["sid"])
+                raise ValueError("another terminal has this conversation open: close it there, then end it")
             chatlog.log(scope, "page: chat ended (session %s)" % rec["sid"])
             if w:
-                w.chat_close(scope)
+                w.chat_close(scope, why="ended")
             rec["ended"] = time.time()
             tmp = self.path(scope).with_suffix(".tmp")
             tmp.write_text(json.dumps(rec))

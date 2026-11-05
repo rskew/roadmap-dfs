@@ -999,7 +999,7 @@ class HeadlessWalk(WalkMixin):
     def chat_failure(self, scope):
         return None
 
-    def chat_close(self, scope):
+    def chat_close(self, scope, why="new chat"):
         pass
 
     def chat_interrupt(self, scope):
