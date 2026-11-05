@@ -1317,6 +1317,7 @@ class Chat(unittest.TestCase):
         self.chats.busy["W1"] = time.time()                  # a turn in flight
         st = self.chats.send("W1", "steer it")
         self.assertEqual([(m["text"], m["steer"]) for m in st["messages"] if m["role"] == "you"], [("steer it", "waiting")])
+        self.assertTrue(st["steer"], "the page may send during this turn")
         self.assertEqual(len(os.listdir(self.chats.box("W1"))), 1)
         self.assertIn("left in the inbox of the turn answering", self.record("W1"))
         with self.assertRaises(ValueError):

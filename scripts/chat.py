@@ -25,6 +25,11 @@ last screen, who closed it and a note when it went quiet after a message (DFS_CH
 A chat can be ended (`Chats.end`): its agent is stopped and it is marked, so the Chats list keeps what is in
 progress apart from what is over. The conversation stays, and a message sent to it later makes it in progress again.
 
+A message sent on the page while a headless claude turn is answering STEERS it: it is left in the scope's inbox
+(`<run root>/chat/<scope>/inbox`), and the hooks the turn runs under (inbox.py, as a chain session has them) hand it to
+the agent's next request. One the turn never read goes as the next turn, or is dropped if the turn was stopped or failed.
+The other agents' turns still refuse a message until they answer (`STEERED`).
+
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
 walk (`--no-walk`): a server that may not start agents does not chat either.
 """
@@ -594,7 +599,8 @@ class Chats:
                         ended=self.is_ended(scope, live, bool(started) or talking or elsewhere),
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
-                        elsewhere=elsewhere, agent=agent)
+                        elsewhere=elsewhere, agent=agent,
+                        steer=bool(started) and agent in STEERED)    # steer: a message sent now reaches the turn answering
 
     def reopen(self, scope):
         """A message is sent to the chat: take off its end mark, so the chat is in progress even

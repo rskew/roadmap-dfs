@@ -1682,7 +1682,7 @@ function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
-  const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended]);
+  const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer]);
   if (sig === CHAT.last) return;
   CHAT.last = sig;
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
@@ -1690,11 +1690,12 @@ function chatDraw(st) {
   log.innerHTML = (st.ended ? `<p class="muted">Ended. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
-    + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
+    + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
     + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
-  $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy;
-  $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
+  // A turn that reads steering messages keeps Send (labelled Steer) beside Stop; any other busy turn shows Stop alone.
+  $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy && !st.steer;
+  $("#chat-send").disabled = (st.busy && !st.steer) || st.elsewhere; $("#chat-send").textContent = st.busy && st.steer ? "Steer" : "Send"; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
   // A busy turn redraws every poll ("Working on it (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
