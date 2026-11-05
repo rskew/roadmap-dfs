@@ -1776,7 +1776,9 @@ async function squarePng(file) {
   try { bmp = await createImageBitmap(file); } catch (e) { throw new Error("Could not read that picture."); }
   const side = Math.min(bmp.width, bmp.height), c = document.createElement("canvas");
   c.width = c.height = 1024;
-  c.getContext("2d").drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 1024, 1024);
+  const g = c.getContext("2d");
+  g.fillStyle = "#f5f4ef"; g.fillRect(0, 0, 1024, 1024);   // the manifest's paper: a transparent icon would show black on iOS
+  g.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 1024, 1024);
   const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
   if (!blob) throw new Error("Could not make an icon from that picture.");
   return await new Promise((ok, no) => { const r = new FileReader();

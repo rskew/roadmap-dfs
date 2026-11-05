@@ -138,15 +138,17 @@ def icon_query() -> str:
 
 def index_html():
     name = project_title()
-    return (INDEX.read_text().replace("{{project_json}}", json.dumps(name).replace("</", "<\\/"))
-            .replace("{{colour_chosen}}", "true" if dfs_paths.read_theme() else "false")
-            .replace("{{colour}}", dfs_paths.project_colour())
-            .replace("{{background_json}}", json.dumps(dfs_paths.read_background()))
-            .replace("{{palettes_json}}", json.dumps(dfs_paths.background_palettes()))
-            .replace("{{background_image_json}}", json.dumps(dfs_paths.background_image_versions()))
-            .replace("{{icon_json}}", json.dumps(dfs_paths.icon_version()))
-            .replace("{{icon_query}}", icon_query())
-            .replace("{{project}}", html.escape(name))).encode()
+    values = {"project_json": json.dumps(name).replace("</", "<\\/"),
+              "colour_chosen": "true" if dfs_paths.read_theme() else "false",
+              "colour": dfs_paths.project_colour(),
+              "background_json": json.dumps(dfs_paths.read_background()),
+              "palettes_json": json.dumps(dfs_paths.background_palettes()),
+              "background_image_json": json.dumps(dfs_paths.background_image_versions()),
+              "icon_json": json.dumps(dfs_paths.icon_version()),
+              "icon_query": icon_query(),
+              "project": html.escape(name)}
+    # One pass, so text a value carries (a title containing "{{colour}}") is never filled in again.
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: values.get(m.group(1), m.group(0)), INDEX.read_text()).encode()
 
 
 def needs_you(it):

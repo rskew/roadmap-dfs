@@ -582,7 +582,10 @@ def read_icon():
 def icon_version() -> str:
     """Which icon the app has, for a page to tell a new one from the old: the file's
     modification time in nanoseconds, "" when it uses the built-in icon."""
-    return str(icon_file().stat().st_mtime_ns) if read_icon() else ""
+    try:
+        return str(icon_file().stat().st_mtime_ns)
+    except OSError:         # none set, or removed while we looked
+        return ""
 
 
 def write_icon(data) -> str:

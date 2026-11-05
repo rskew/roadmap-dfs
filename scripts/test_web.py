@@ -940,6 +940,12 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertFalse((self.root / ".dfs" / "background-image").exists())
         self.assertEqual(self.call("GET", "/api/state")[1]["background"]["light"], "#fff2cc")
 
+    def test_a_project_title_that_names_a_placeholder_is_shown_as_it_is(self):
+        self.assertEqual(self.call("POST", "/api/title", dict(title="{{colour}} {{icon_query}}"))[0], 200)
+        page = self.call("GET", "/")[1].decode()
+        self.assertIn("{{colour}} {{icon_query}}", page)
+        self.assertIn('PROJECT = "{{colour}} {{icon_query}}"', page.replace("const PROJECT", "PROJECT").replace("let PROJECT", "PROJECT"))
+
     def test_the_installed_icon_is_set_served_everywhere_it_is_asked_for_and_cleared(self):
         import base64
         png, gif = b"\x89PNG\r\n\x1a\n" + b"icon", b"GIF89a...."
@@ -962,6 +968,7 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertEqual(self.call("GET", "/icon?v=" + ver)[1], png)
         icons = self.call("GET", "/manifest.json")[1]["icons"]
         self.assertEqual({(i["src"], i["type"]) for i in icons}, {("/icon?v=" + ver, "image/png")})
+        self.assertTrue({"192x192", "512x512"} <= {i["sizes"] for i in icons}, "Chromium installs only with a 192 and a 512 icon")
         self.assertEqual(self.call("GET", "/api/state")[1]["icon"], ver)
         page = self.call("GET", "/")[1].decode()
         self.assertIn("ICON = " + json.dumps(ver), page)
