@@ -912,6 +912,28 @@ class Chain(unittest.TestCase):
         self.assertNotIn("Fix what refuses the commit", text)
         self.assertNotIn("guard says", text)
 
+    def test_a_file_a_hook_stages_does_not_stay_staged_behind_the_runners_commit(self):
+        # `--only` commits through a temporary index, so a hook's `git add version.txt` landed
+        # in the commit while the real index kept the old value: a staged rollback in the
+        # worktree, which the next merge named as uncommitted changes.
+        self.run_chain("work,confirm", cap=2)
+        (self.wt / "version.txt").write_text("1\n")
+        self.git("add", "version.txt", cwd=self.wt)
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "version", cwd=self.wt)
+        hook = self.root / ".git" / "hooks" / "pre-commit"
+        hook.write_text('#!/bin/sh\nn=$(cat version.txt); echo $((n+1)) > version.txt\n'
+                        'git add version.txt\n')
+        hook.chmod(0o755)
+        if not os.access(hook, os.X_OK):
+            self.skipTest("the temp directory is mounted noexec, so git cannot run the hook")
+        item = self.wt / ".dfs" / "items" / "W1.md"
+        item.write_text(item.read_text() + "- 2026-01-01T00:00:00Z · note\n")
+        r = subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                           capture_output=True, text=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(self.git("show", "HEAD:version.txt"), "2")
+        self.assertEqual(self.git("status", "--porcelain", "--", "version.txt"), "")
+
     def test_a_hooks_message_is_cut_at_a_word_without_the_guards_warn_aside(self):
         import branch as dfs_branch
         out = "first line\n(--warn covers only the warnings above)\n" + "word " * 200

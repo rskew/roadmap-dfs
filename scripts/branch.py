@@ -636,6 +636,20 @@ def _commit_task_files(task, wt, what):
         if r.returncode != 0:
             raise BranchError("cannot commit %s's files on %s: %s" %
                               (task, dfs_paths.item_branch(task), (r.stderr or r.stdout).strip()))
+        _sync_index_to_head(wt)
+
+
+def _sync_index_to_head(wt):
+    """After a `--only` commit, make the index agree with HEAD for the files it changed.
+    `--only` commits through a temporary index, and a pre-commit hook that stages a file
+    (`git add version.txt`) stages it there: the commit holds the file, the real index
+    keeps the old one, and the worktree shows a staged rollback. `reset` copies HEAD's
+    entry into the index and leaves the work tree alone."""
+    changed = _git("diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "-z", "HEAD",
+                   cwd=wt).stdout.split("\0")
+    changed = [p for p in changed if p]
+    if changed:
+        _git("reset", "-q", "HEAD", "--", *changed, cwd=wt)
 
 
 def _reopen_with(task, wt, title, approach, what):
