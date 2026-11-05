@@ -662,6 +662,103 @@ class RealOpencode(unittest.TestCase):
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
 
+class ChatSteer:
+    """The page's chat (chat.py `Chats`, run.sh `--chat-turn`) around a real codex or opencode and a stand-in
+    model whose first step is a slow tool call: a message sent while the turn answers is in a later request of
+    that same turn, the first request did not hold it, and the page shows it delivered."""
+    agent = ""
+
+    def make(self, model, env):
+        """Set the scope up: `model` is the stand-in, `env` what the agent needs in the environment
+        (a dict, or a function of the home directory)."""
+        import paths as dfs_paths
+        import chat as dfs_chat
+        self.base = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        self.root, self.home = self.base / "repo", self.base / "home"
+        (self.root / ".dfs" / "items").mkdir(parents=True)
+        (self.root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
+        self.home.mkdir()
+        subprocess.run("git init -q -b main && git add -A && git -c user.name=t -c user.email=t@t commit -qm x",
+                       shell=True, cwd=self.root, check=True)
+        self.model = model
+        model.__enter__()
+        self.addCleanup(model.__exit__, None, None, None)
+        env = dict(env(self.home) if callable(env) else env, HOME=str(self.home), DFS_RUN_DIR=str(self.root / ".dfs" / "runs"), AGENT_NIXPKGS_REV="none")
+        saved = {k: os.environ.get(k) for k in list(env) + ["DFS_INBOX", "CHAT_INBOX"]}
+        os.environ.update(env)
+        self.addCleanup(lambda: [os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v) for k, v in saved.items()])
+        for k in ("CODEX_HOME", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "DFS_INBOX", "CHAT_INBOX", "CHAT_SID", "CHAT_RESUME", "CHAT_SHARE"):
+            os.environ.pop(k, None)
+        work = dfs_paths.work_root
+        dfs_paths.work_root = lambda: self.root
+        dfs_paths._TAG_CACHE.clear()
+        self.addCleanup(setattr, dfs_paths, "work_root", work)
+        Path(dfs_chat.agent_file()).parent.mkdir(parents=True, exist_ok=True)
+        Path(dfs_chat.agent_file()).write_text(self.agent + "\n")
+        self.chats = dfs_chat.Chats(on_change=lambda: None)
+
+    def settle(self):
+        end = time.time() + 300
+        while time.time() < end:
+            st = self.chats.state("project")
+            if not st["busy"]:
+                return st
+            time.sleep(0.2)
+        self.fail("the turn did not end")
+
+    def steer(self, started):
+        """Send a first message, wait until `started()` says the tool call is running, send the steering one."""
+        self.chats.send("project", "look at the code")
+        end = time.time() + 90
+        while not started() and time.time() < end:
+            time.sleep(0.05)
+        time.sleep(1)                                   # the command is running
+        sent = self.chats.send("project", "W141-STEER use the other file")
+        self.assertEqual([m.get("steer") for m in sent["messages"] if m["role"] == "you"][-1], "waiting")
+        st = self.settle()
+        bodies = [b.decode() for _, b in self.model.requests]
+        self.assertNotIn("W141-STEER", bodies[0])
+        self.assertIn("W141-STEER use the other file", bodies[-1])
+        self.assertEqual(sum("W141-STEER" in b for b in bodies[-1:]), 1)
+        roles = [(m["role"], m["text"], m.get("steer")) for m in st["messages"] if m["role"] != "prompt"]
+        self.assertIn(("you", "W141-STEER use the other file", "delivered"), roles)
+        self.assertEqual(roles[-1][:2], ("agent", "done"))
+        self.assertEqual(len([r for r in roles if r[0] == "you"]), 2, roles)      # sent once: not again as a turn of its own
+
+
+@unittest.skipUnless(CODEX, "no codex here")
+class RealCodexChat(ChatSteer, unittest.TestCase):
+    agent = "codex"
+
+    def setUp(self):
+        model = ToolCodexModel("sleep 4")
+        self.make(model, dict(model.env(), CODEX_CMD=""))
+        (self.home / ".codex").mkdir()
+        (self.home / ".codex" / "config.toml").write_text('[projects."%s"]\ntrust_level = "trusted"\n' % self.root)
+        cmd = self.base / "codex-with-fake-model"       # CODEX_CMD is split on spaces: the model's arguments live in a script
+        cmd.write_text("#!/bin/sh\nexec %s %s \"$@\"\n" % (CODEX, " ".join("'%s'" % a for a in model.args())))
+        cmd.chmod(0o755)
+        os.environ["CODEX_CMD"] = str(cmd)
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.steer(lambda: self.model.requests)
+
+
+@unittest.skipUnless(OPENCODE, "no opencode 2 here")
+class RealOpencodeChat(ChatSteer, unittest.TestCase):
+    agent = "opencode"
+
+    def setUp(self):
+        model = ToolOpenAIModel("sleep 4")
+        self.make(model, lambda home: dict(model.env(), OPENCODE_CMD=OPENCODE, OPENCODE_DISABLE_AUTOUPDATE="true",
+                                           XDG_DATA_HOME=str(home / "data"), XDG_CONFIG_HOME=str(home / "cfg"),
+                                           XDG_CACHE_HOME=str(home / "cache"), XDG_STATE_HOME=str(home / "state")))
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.steer(lambda: len(self.model.requests) >= 2)
+
+
 class SubagentKiroModel(FakeKiroModel):
     """A stand-in kiro model that first asks to invoke the roadmap's own agent as a sub-agent, then, once that
     is refused, lists a directory, asks again if that call is held back, and answers. `conversations` is the

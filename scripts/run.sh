@@ -285,8 +285,12 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
 # stored the message (the page reads a message stored twice once) but not an answer to be asked for twice.
 # A store that could not be read (`unreadable`) on either side shows nothing, so the turn is run again.
 opencode_turn() {
-  local prompt tries=0 out err sid="" answers="" now a
+  local prompt tries=0 out err sid="" answers="" now a inbox_env=()
   prompt="$(cat; echo x)"; prompt="${prompt%x}"
+  # A chat turn of the page (CHAT_INBOX) reads the author's steering messages through the plugin, as a
+  # chain session does (inbox.py, opencode_inbox/). DFS_INBOX is in opencode's own environment because the
+  # plugin lives in its process; `--standalone` below is what lets this turn's plugin and box be seen.
+  [ -z "${CHAT_INBOX:-}" ] || inbox_env=(DFS_INBOX="$CHAT_INBOX" OPENCODE_CONFIG_CONTENT="$(python3 "$HERE/inbox.py" --opencode-config)")
   for a in "$@"; do [ "$sid" = "?" ] && sid="$a"; [ "$a" = --session ] && sid="?"; done
   [ "$sid" = "?" ] && sid=""
   [ -z "$sid" ] || answers="$(python3 "$HERE/chat.py" --opencode-answers "$sid")"
@@ -296,7 +300,7 @@ opencode_turn() {
   trap 'rm -f "$out" "$err"' EXIT
   trap 'exit 143' TERM INT HUP
   while :; do
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" 2> "$err" || true
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${inbox_env[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" 2> "$err" || true
     tries=$((tries + 1))
     if [ "$tries" -ge 5 ] || grep -q '"type":"step_start"' "$out"; then break; fi
     if ! grep -q '"type":"error".*Transport:' "$out" && { [ -s "$out" ] || ! grep -q 'exited before reporting readiness' "$err"; }; then break; fi
@@ -441,7 +445,13 @@ if [ "$MODE" = chatturn ]; then
     # its length is not an argv's. codex prints a stream of events, read down to the one JSON
     # line chat.py wants; the pipeline's status is the reader's, which fails when the turn did.
     resume_word=(); [ -n "${CHAT_SID:-}" ] && [ -n "${CHAT_RESUME:-}" ] && resume_word=(resume)
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" exec "${resume_word[@]}" --json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" - \
+    # The author's steering messages reach the turn through the two hooks a chain session has, over
+    # CHAT_INBOX. ⚠ BEFORE `exec`: a `-c` after it replaces every `-c` the launch command gave before it.
+    inbox_args=(); inbox_arg=""
+    if [ -n "${CHAT_INBOX:-}" ]; then
+      while IFS= read -r inbox_arg; do inbox_args+=("$inbox_arg"); done < <(python3 "$HERE/inbox.py" --codex-args "$CHAT_INBOX")
+    fi
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec "${resume_word[@]}" --json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" - \
       | python3 "$HERE/chat.py" --codex-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
   fi

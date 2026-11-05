@@ -25,10 +25,10 @@ last screen, who closed it and a note when it went quiet after a message (DFS_CH
 A chat can be ended (`Chats.end`): its agent is stopped and it is marked, so the Chats list keeps what is in
 progress apart from what is over. The conversation stays, and a message sent to it later makes it in progress again.
 
-A message sent on the page while a headless claude turn is answering STEERS it: it is left in the scope's inbox
+A message sent on the page while a headless claude, codex or opencode turn is answering STEERS it: it is left in the scope's inbox
 (`<run root>/chat/<scope>/inbox`), and the hooks the turn runs under (inbox.py, as a chain session has them) hand it to
 the agent's next request. One the turn never read goes as the next turn, or is dropped if the turn was stopped or failed.
-The other agents' turns still refuse a message until they answer (`STEERED`).
+Kiro's turn still refuses a message until it answers (`STEERED` lists the agents that take one).
 
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
 walk (`--no-walk`): a server that may not start agents does not chat either.
@@ -95,7 +95,7 @@ ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is cl
                     # (so a message answered within this long of the end leaves the chat ended too)
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
-STEERED = ("claude",)       # the agents whose headless turn reads the chat's inbox (inbox.py), so a message sent while it answers steers it
+STEERED = ("claude", "codex", "opencode")      # the agents whose headless turn reads the chat's inbox (inbox.py), so a message sent while it answers steers it
 
 
 def transcript_messages(sid, agent="claude"):
@@ -113,6 +113,8 @@ def transcript_messages(sid, agent="claude"):
             continue
         if role == "you":
             if text.startswith(("<command-", "<local-command", "<system-reminder")):
+                continue
+            if text.startswith(dfs_inbox.HEAD):     # opencode's plugin hands a steering message over as a user message; it shows as the steering row
                 continue
             if "The author writes: " in text:                 # the page's first turn carries framing
                 framing, text = (x.strip() for x in text.rsplit("The author writes: ", 1))

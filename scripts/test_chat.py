@@ -49,6 +49,11 @@ printf '{"type":"result","is_error":false,"result":"I read it. %s","session_id":
 CODEX_STUB = r"""#!/usr/bin/env bash
 # a codex that records its arguments and what it was told, keeps a rollout as codex does, and
 # prints `exec --json` events. `resume <id>` alone is the interactive chat: it only records itself.
+# a page turn gets the inbox hooks as `-c` flags before `exec`: they are noted in "$CHAT_STUB_LOG.hooks" and dropped, as codex takes them
+hooks=""; while [ "${1:-}" = -c ] || [ "${1:-}" = --dangerously-bypass-hook-trust ]; do
+  if [ "$1" = -c ]; then hooks="$hooks $2"; shift; fi; shift
+done
+[ -z "$hooks" ] || echo "$hooks" >> "$CHAT_STUB_LOG.hooks"
 echo "$@" >> "$CHAT_STUB_LOG"
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","message":"not logged in"}'; echo '{"type":"turn.failed","error":{"message":"not logged in"}}'; exit 1; }
 [ "$1" = exec ] || exit 0
@@ -79,6 +84,7 @@ OPENCODE_STUB = r"""#!/usr/bin/env bash
 # an opencode that records its arguments and what it was told, keeps its sessions in a sqlite store
 # as opencode does, and prints `run --format json` events, in the shapes a real opencode 2.1.1 wrote. Without `run` it is the interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
+[ -z "${DFS_INBOX:-}" ] || echo "$DFS_INBOX" >> "$CHAT_STUB_LOG.inbox"      # a page turn names its inbox to the plugin
 [ "$1" = run ] || exit 0
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"not logged in","statusCode":401}}}'; exit 1; }
@@ -1294,7 +1300,7 @@ class Chat(unittest.TestCase):
         self.assertIn("waiting on a dialog", log)
 
     def test_a_refused_send_and_a_new_chat_are_recorded(self):
-        self.chats.save_sid("W1", "sess_x", "codex")         # codex's turn reads no inbox, so a send during it is refused
+        self.chats.save_sid("W1", "sess_x", "kiro")          # kiro's turn reads no inbox, so a send during it is refused
         self.chats.busy["W1"] = time.time()
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")
@@ -1305,7 +1311,7 @@ class Chat(unittest.TestCase):
 
     def test_one_turn_at_a_time_and_clear_waits_for_it(self):
         os.environ["CHAT_STUB_SAY"] = "slowly"
-        self.chats.save_sid("W1", "sess_x", "codex")         # codex's turn reads no inbox, so a send during it is refused
+        self.chats.save_sid("W1", "sess_x", "kiro")          # kiro's turn reads no inbox, so a send during it is refused
         self.chats.busy["W1"] = time.time()                  # a turn in flight
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")
@@ -1325,6 +1331,31 @@ class Chat(unittest.TestCase):
         self.chats.busy.clear()
         self.chats.clear("W1")
         self.assertFalse(self.chats.dir("W1").exists(), "a new chat starts with no steering messages")
+
+    def test_a_codex_or_opencode_turn_is_given_the_chats_inbox_and_takes_a_message_while_it_answers(self):
+        for agent in ("codex", "opencode"):
+            with self.subTest(agent=agent):
+                getattr(self, "use_" + agent)()
+                self.log.write_text("")
+                for f in ("stub.log.hooks", "stub.log.inbox"):
+                    (self.root / f).unlink(missing_ok=True)
+                os.environ["CHAT_STUB_SLEEP"] = "2"
+                self.chats.send("W1", "first")
+                end = time.time() + 10
+                while "started" not in self.log.read_text() and time.time() < end:
+                    time.sleep(0.05)
+                st = self.chats.send("W1", "W141-STEER " + agent)
+                self.assertTrue(st["steer"], "the page may send during this turn")
+                self.assertEqual([m["steer"] for m in st["messages"] if m.get("steer")], ["waiting"])
+                os.environ.pop("CHAT_STUB_SLEEP")
+                self.settle("W1", 60)
+                box = str(self.chats.box("W1"))
+                if agent == "codex":        # the hooks are `-c` flags over this chat's box, ahead of `exec`
+                    hooks = (self.root / "stub.log.hooks").read_text().splitlines()
+                    self.assertTrue(hooks and all("inbox.py post" in h and "inbox.py stop" in h and box in h for h in hooks), hooks)
+                else:                       # the plugin finds the box in DFS_INBOX
+                    self.assertEqual(set((self.root / "stub.log.inbox").read_text().split()), {box})
+                self.chats.clear("W1")
 
     def test_a_steering_message_the_turn_never_read_is_sent_as_the_next_turn_once(self):
         os.environ["CHAT_STUB_SLEEP"] = "2"                  # the stub reads no inbox
