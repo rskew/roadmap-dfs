@@ -595,14 +595,14 @@ class Web(unittest.TestCase):
         self.assertNotIn("data-act=\"move\"", off)
         self.assertEqual(off.count('<button class="item'), 2, "a row is one button to open the task")
         self.assertNotIn('<button class="item', on, "a row holding buttons is not itself a button")
-        for move in ("out", "in", "break", "stop"):
+        for move in ("break", "stop"):
             self.assertEqual(on.count('data-move="%s"' % move), 2, move)
         self.assertEqual(on.count("Stop break"), 2, "a plain or absent break offers a stop break")
-        for move in ("up", "down"):
-            self.assertNotIn('data-move="%s"' % move, on, "a drag replaces the up and down buttons")
+        for move in ("up", "down", "out", "in"):
+            self.assertNotIn('data-move="%s"' % move, on, "a drag replaces the up and down buttons, and there are no out and in buttons")
         self.assertEqual(on.count('data-grip="W'), 2, "each row has a grip to drag it by")
-        self.assertEqual(on.count("\u2190"), 2, "out is a left arrow")
-        self.assertEqual(on.count("\u2192"), 2, "in is a right arrow")
+        self.assertNotIn("\u2190", on, "no left arrow")
+        self.assertNotIn("\u2192", on, "no right arrow")
         self.assertEqual(on.count("Remove break"), 1, "only W2 sits behind a fence")
 
     def test_the_table_style_draws_one_row_per_task_on_a_wide_screen_only(self):

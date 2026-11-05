@@ -183,7 +183,7 @@ pre.runlog .r-err { color: var(--attention); }
   .arow.t > .item.tint { margin-left: 0; }
   .arow.t > .archive, .arow.t > .noarch { display: flex; position: static; flex: none; width: 2.2rem; height: auto; align-self: center; }
 }
-/* Reorder: the row stops being one button (its controls are buttons too) and grows a strip of moves under its text */
+/* Reorder: the row stops being one button (its controls are buttons too) and grows a strip of break buttons under its text */
 .item.reorder { cursor: default; }
 .item.reorder:active { background: none; }
 .item.reorder.moved { background: var(--sel); }
@@ -191,7 +191,7 @@ pre.runlog .r-err { color: var(--attention); }
 .item.reorder { grid-template-columns: 3.2rem minmax(0, 1fr) var(--hit); }
 .moves { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 .moves .btn { min-width: var(--hit); padding: 0 var(--s3); }
-/* the grip at the row's right edge: drag it to a new place among the siblings; the strip's arrows change the parent */
+/* the grip at the row's right edge: drag it to a new place among the siblings */
 .grip { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-self: end; width: var(--hit); min-height: var(--hit); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .grip svg { width: calc(18px * var(--z)); height: calc(18px * var(--z)); fill: currentColor; pointer-events: none; }
 .grip:focus-visible { outline: var(--rule-strong) solid var(--ink); }
@@ -1117,7 +1117,7 @@ function drawTasks(push) {
       const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
-        <span class="moves">${mv("out", "\u2190", "Move out of its parent:")}${mv("in", "\u2192", "Move under the task above:")}${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break above a plain one, which a walk passes:" : "Make the break above a stop break, which ends a walk that waited at it:")}</span>${grip}</div>`;
+        <span class="moves">${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break above a plain one, which a walk passes:" : "Make the break above a stop break, which ends a walk that waited at it:")}</span>${grip}</div>`;
     } else if (it.archivable) {
       const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;
@@ -1204,7 +1204,7 @@ async function moveTask(id, move, more) {
   if (route().view === "tasks") redraw();
 }
 // Dragging a row by its grip. The row (and its subtree) follows the pointer, a line shows the gap it will drop
-// into, and letting go posts a place. It stays among its siblings, as Up and Down did; the arrows change the parent.
+// into, and letting go posts a place. It stays among its siblings, as Up and Down did.
 let DRAG = null;
 const rowOf = id => $(`[data-row="${CSS.escape(id)}"]`);
 // a break is a sibling at the root, "|" and the id of the task under it, drawn as its rule
