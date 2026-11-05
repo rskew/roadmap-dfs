@@ -3964,7 +3964,10 @@ class UI(WalkMixin):
         elif self.pane == "runs":
             actions, nav = ["⏎ open", "esc back"], ["↑↓/jk run"]
         elif self.tree_focused():
-            actions = ["⏎ open", "n next ⚑", "p flagged", "space fold", "i add", "a answer", "f correct"]
+            actions = ["⏎ open", "n next ⚑", "p flagged", "space fold", "i add", "a answer"]
+            row = self.tree_row()
+            if not (row and row.get("raises")):     # a node with an open raise is settled by answering it
+                actions.append("f correct")
             if it is not None and it["status"] == "done" and self.tree_acceptable(it):
                 actions.append("A accept")
             actions += ["R terminal review", "c chat", "tab items"]
@@ -4552,6 +4555,9 @@ class UI(WalkMixin):
         row = self.tree_row()
         if not row or row["kind"] != "node":
             self.msg = "put the cursor on the node to correct"
+            return
+        if row.get("raises"):
+            self.msg = "%s has an open raise — answer it with a, not a correction" % row["key"]
             return
         nid = row["key"]
         v = self.choose("%s was really [c]onfirmed or [r]efuted? (any other key cancels)" % nid,
