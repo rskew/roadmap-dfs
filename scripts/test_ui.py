@@ -433,6 +433,10 @@ class Flows(unittest.TestCase):
         self.assertFalse((self.root / ".dfs" / "background-image").exists(), "removed again at the end")
         self.assertFalse((self.root / ".dfs" / "background").exists())
 
+    def test_the_installed_icon_is_chosen_in_the_dialog_and_writes_dfs_icon(self):
+        self.flow("icon")
+        self.assertFalse((self.root / ".dfs" / "icon").exists(), "removed again at the end")
+
     def test_artefacts_are_linked_and_sandboxed(self):
         self.flow("artefacts")
 

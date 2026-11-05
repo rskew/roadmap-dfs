@@ -1453,6 +1453,37 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // The installed app's icon is chosen in the same dialog and lives in .dfs/icon: the page cuts the picture
+  // square and posts a png, the home-screen link and the manifest carry its version, and "use the built-in
+  // icon" puts the shipped one back.
+  async icon(b) {
+    const { page, errors } = await open(b, PHONE);
+    const buf = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const link = () => page.evaluate(() => document.querySelector('link[rel="apple-touch-icon"]').getAttribute("href"));
+    same(await link(), "/apple-touch-icon.png", "the built-in icon until one is chosen");
+    await page.click("[data-act=rename]"); await dialog(page);
+    assert(await page.isDisabled("#pk-off"), "there is no icon to remove yet");
+    await page.setInputFiles("#pk", { name: "logo.png", mimeType: "image/png", buffer: buf });
+    assert(!(await page.isChecked("#pk-off")), "choosing a picture is not removing one");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => document.querySelector('link[rel="apple-touch-icon"]').getAttribute("href").includes("?v="));
+    const got = await page.evaluate(async () => { const r = await fetch("/icon"); const b = new Uint8Array(await r.arrayBuffer());
+      const w = (b[16] << 24 | b[17] << 16 | b[18] << 8 | b[19]) >>> 0; return [r.status, r.headers.get("content-type"), w]; });
+    same(got, [200, "image/png", 1024], "the icon is served as a 1024 px png");
+    const manifest = await page.evaluate(async () => (await (await fetch("/manifest.json")).json()).icons.map(i => i.src));
+    assert(manifest.every(s => s.startsWith("/icon?v=")), "the manifest names the custom icon, got " + manifest);
+    await page.waitForSelector("dialog[open]", { state: "hidden" });
+    await page.reload(); await page.waitForSelector(".item");
+    assert((await link()).includes("?v="), "it survives a reload");
+    await page.click("[data-act=rename]"); await dialog(page);
+    assert(!(await page.isDisabled("#pk-off")), "now it can be removed");
+    await page.check("#pk-off");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => document.querySelector('link[rel="apple-touch-icon"]').getAttribute("href") === "/apple-touch-icon.png");
+    same((await page.evaluate(async () => (await fetch("/icon")).status)), 404, "the custom icon is gone");
+    same(errors, [], "no page errors");
+  },
+
   async background(b) {
     const { page, errors } = await open(b, PHONE);
     const stripe = () => page.evaluate(() => document.documentElement.style.getPropertyValue("--project"));

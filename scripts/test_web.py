@@ -949,6 +949,7 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         built_in = {p: self.call("GET", p)[1] for p in paths[1:]}
         self.assertEqual(self.call("GET", "/icon")[0], 404)
         self.assertEqual(self.call("GET", "/api/state")[1]["icon"], "")
+        self.assertIn("ICON = \"\"", self.call("GET", "/")[1].decode())
         manifest = self.call("GET", "/manifest.json")[1]
         self.assertEqual(sorted({i["src"] for i in manifest["icons"]}), ["/icon-1024.png", "/icon-192.png", "/icon-512.png",
                                                                         "/icon-maskable-1024.png", "/icon-maskable-512.png"])
@@ -962,6 +963,9 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         icons = self.call("GET", "/manifest.json")[1]["icons"]
         self.assertEqual({(i["src"], i["type"]) for i in icons}, {("/icon?v=" + ver, "image/png")})
         self.assertEqual(self.call("GET", "/api/state")[1]["icon"], ver)
+        page = self.call("GET", "/")[1].decode()
+        self.assertIn("ICON = " + json.dumps(ver), page)
+        self.assertIn('href="/apple-touch-icon.png?v=' + ver + '"', page)
         self.assertEqual(send(gif)[1]["icon"] != ver, True)
         self.assertEqual(self.call("GET", "/icon-512.png")[2].getheader("Content-Type"), "image/gif")
         for bad in (dict(), dict(image=5), dict(image="not base64!"), dict(image=base64.b64encode(b"text").decode()),
