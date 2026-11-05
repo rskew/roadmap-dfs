@@ -1431,6 +1431,43 @@ class Chain(unittest.TestCase):
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
         self.assertTrue(self.wt.exists())
 
+    def read_only_box(self):
+        """A directory under the worktree like a replay box's copy of the nix store: 0555, so the
+        file in it cannot be unlinked (W130's merge, 2026-11-05)."""
+        box = self.wt / ".dfs" / "runs" / "replays" / "box" / "store"
+        box.mkdir(parents=True)
+        (box / "lib.so").write_text("x")
+        box.chmod(0o555)
+        self.addCleanup(lambda: [os.chmod(d, 0o755) for d, _, _ in os.walk(self.root) if os.path.isdir(d)])
+        return box
+
+    def merge_w1(self):
+        return subprocess.run([sys.executable, str(HERE / "branch.py"), "merge", "W1"], cwd=self.root,
+                              capture_output=True, text=True, stdin=subprocess.DEVNULL)
+
+    def test_a_worktree_with_a_read_only_directory_is_removed_all_the_same(self):
+        self.run_chain("work,confirm", cap=2)
+        self.read_only_box()
+        r = self.merge_w1()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("could not be removed", r.stderr)
+        self.assertFalse(self.wt.exists(), "the directory git stopped at is removed too")
+        self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
+
+    def test_a_worktree_directory_that_cannot_be_removed_is_reported_with_what_is_left_and_why(self):
+        self.run_chain("work,confirm", cap=2)
+        box = self.read_only_box()
+        self.root.joinpath(".dfs", "worktrees").chmod(0o555)   # nothing below it can be unlinked
+        self.addCleanup(self.root.joinpath(".dfs", "worktrees").chmod, 0o755)
+        r = self.merge_w1()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("merged, but its worktree could not be removed", r.stderr)
+        self.assertIn("%s is left on disk" % self.wt, r.stderr)
+        self.assertTrue(self.wt.exists())
+        self.assertFalse(dfs_tree.dfs_paths.is_worktree_dir(self.wt), "what is left is not taken for a worktree")
+        self.assertIn("Permission denied", r.stderr)
+        self.assertNotIn("its worktree removed", r.stderr)   # it is still there
+
     def test_the_authors_accept_merges_the_branch_too(self):
         rc, meta, out = self.run_chain("work,confirm", cap=2)
         self.assertIn("dfs/W1", self.git("branch", "--list", "dfs/W1"))
