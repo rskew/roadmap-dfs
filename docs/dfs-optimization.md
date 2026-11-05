@@ -106,7 +106,14 @@ the run with the code that scored the original (`history.session()`, `tasks_of()
     python3 <scripts>/replay.py plan   W55                     # starting point and the original's numbers
     python3 <scripts>/replay.py replay W55 <exec-capable dir>/dfs-replay-W55-a [--cap N] [--tool DIR | --tool-ref REV] [--law FILE]
 
-`prepare`, `run` and `score` are the same three steps one at a time. What it does:
+`prepare`, `run` and `score` are the same three steps one at a time. Run the `replay.py` of the
+live checkout (`python3 scripts/replay.py` from the main checkout, `/workspace/roadmap-dfs` here; `replay.py`
+itself takes that path from `main_checkout()`), not the one in the installed
+package a session's briefing names: the package is built from whatever commit was installed and can
+be older than the repo. An old one has no `--agent`, so `replay` fails with "too many values to
+unpack", and its `run.sh` call has no `--kiro`, so it runs claude whatever `.dfs/runs/agent` says.
+Before using an installed one, check that `replay.py` with no arguments lists `--agent` and `--shell`.
+What it does:
 
 - **The starting point** is the commit before the task's first node commit, with one
   change: the task file is cut back to what the author wrote (title, Goal, Background),
