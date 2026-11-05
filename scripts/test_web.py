@@ -768,6 +768,61 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertEqual(got["failed start"], ['[["no",true]]'], "a failure is an error toast")
         self.assertEqual(got["retry"], [1], "a failed start does not lock out the next one")
 
+    def test_the_chat_lets_the_author_steer_a_busy_turn_and_tags_the_message(self):
+        """The chat dialog's markup, chatDraw and the send handler from index.html, run in headless
+        chromium (skipped when there is none) with `api` stubbed and read as DOM text, not pixels:
+        Send stays on, as Steer, while a steerable turn answers; a steering message is tagged
+        waiting, then read; a turn that cannot take one keeps Send off; and Send is usable again
+        after a steer whose reply changes nothing the page draws."""
+        chrome = (os.environ.get("DFS_CHROMIUM") or shutil.which("chromium") or shutil.which("chromium-browser")
+                  or shutil.which("google-chrome"))
+        if not chrome:
+            self.skipTest("no chromium on PATH (or DFS_CHROMIUM) to run the chat's functions")
+        src = (HERE / "web" / "index.html").read_text()
+        dialog = src[src.index('<dialog id="chat"'):src.index("</dialog>", src.index('<dialog id="chat"'))] + "</dialog>"
+        body = src[src.index("const CHAT = {"):src.index('$("#chat-stop").addEventListener')]
+        js = """
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const md = s => esc(s), SCROLL = { at: {} }, PROJECT = "p", toasts = [];
+const toast = (m, bad) => toasts.push(m);
+let reply = null; const sent = [];
+const api = async (p, b) => { if (b) sent.push(p); await new Promise(r => setTimeout(r, 5)); return JSON.parse(JSON.stringify(reply)); };
+""" + body + """
+const seen = () => ({ disabled: $("#chat-send").disabled, label: $("#chat-send").textContent, log: $("#chat-log").textContent });
+const submit = async () => { $("#chat-input").value = "also check the tests"; $("#chat-form").requestSubmit(); await new Promise(r => setTimeout(r, 80)); };
+(async () => {
+  const out = {}; CHAT.scope = "W9";
+  const base = { scope: "W9", messages: [{ role: "you", text: "a long question" }], busy: true, busy_for: 3, live: false, elsewhere: false, note: "", steer: true };
+  chatDraw(base); out.steerable = seen();
+  reply = { ...base, messages: [...base.messages, { role: "you", text: "also check the tests", steer: "waiting" }] };
+  await submit(); out.waiting = seen();
+  chatDraw({ ...reply, messages: [reply.messages[0], { ...reply.messages[1], steer: "delivered" }] }); out.read = seen();
+  chatDraw({ ...base, busy_for: 4, steer: false }); out.cannot = seen();
+  CHAT.last = ""; chatDraw(base); reply = base; await submit(); out.nochange = seen(); out.sent = sent.length; out.toasts = toasts.length;
+  document.body.textContent = "RESULT" + JSON.stringify(out) + "END";
+})();
+"""
+        with tempfile.TemporaryDirectory() as d:
+            page = Path(d) / "chat.html"
+            page.write_text("<!doctype html><body>" + dialog + "<script>" + js + "</script></body>")
+            dom = subprocess.run([chrome, "--headless", "--no-sandbox", "--disable-gpu", "--virtual-time-budget=5000",
+                                  f"--user-data-dir={d}/profile", "--dump-dom", page.as_uri()],
+                                 capture_output=True, text=True, timeout=60).stdout
+        m = re.search(r"RESULT(.*?)END", dom, re.S)
+        self.assertTrue(m, f"the page produced no result: {dom[:300]}")
+        got = json.loads(m.group(1))
+        self.assertEqual(got["toasts"], 0, "no send failed")
+        self.assertEqual(got["steerable"]["disabled"], False, "while a steerable turn answers, Send stays on")
+        self.assertEqual(got["steerable"]["label"], "Steer", "and says it steers")
+        self.assertIn("steering, waiting to be read", got["waiting"]["log"])
+        self.assertEqual(got["waiting"]["disabled"], False, "after a steer, Send is on for the next")
+        self.assertIn("steering, read", got["read"]["log"])
+        self.assertNotIn("waiting to be read", got["read"]["log"])
+        self.assertEqual((got["cannot"]["disabled"], got["cannot"]["label"]), (True, "Send"), "a turn that cannot take one keeps Send off")
+        self.assertEqual(got["sent"], 2, "each of the two steers went to the server")
+        self.assertEqual(got["nochange"]["disabled"], False, "Send is usable again after a steer that changes nothing drawn")
+
     def test_the_walk_panel_is_collapsed_until_the_reader_opens_it(self):
         """walkHtml() in index.html, run under node (skipped when there is none): closed
         even while a walk is on, and open only once the reader's own toggle said so."""

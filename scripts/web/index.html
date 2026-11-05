@@ -1678,6 +1678,12 @@ const chatDraft = (scope, text) => {
   try { const k = "chatdraft:" + scope; if (text === undefined) return sessionStorage.getItem(k) || ""; if (text) sessionStorage.setItem(k, text); else sessionStorage.removeItem(k); } catch (e) { /* no storage: no draft */ }
   return "";
 };
+// Stop, Send (Steer while a turn that reads its inbox answers) and the field, as the state says. A send calls it too:
+// its reply may draw nothing new (chatDraw returns early on the same state), and Send was turned off for the request.
+function chatButtons(st) {
+  $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy && !st.steer;   // Stop alone for a turn that cannot take a message
+  $("#chat-send").disabled = (st.busy && !st.steer) || st.elsewhere; $("#chat-send").textContent = st.busy && st.steer ? "Steer" : "Send"; $("#chat-input").disabled = !!st.elsewhere;
+}
 function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -1693,9 +1699,7 @@ function chatDraw(st) {
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
     + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
-  // A turn that reads steering messages keeps Send (labelled Steer) beside Stop; any other busy turn shows Stop alone.
-  $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy && !st.steer;
-  $("#chat-send").disabled = (st.busy && !st.steer) || st.elsewhere; $("#chat-send").textContent = st.busy && st.steer ? "Steer" : "Send"; $("#chat-input").disabled = !!st.elsewhere;
+  chatButtons(st);
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
   // A busy turn redraws every poll ("Working on it (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
@@ -1773,7 +1777,7 @@ $("#chat-form").addEventListener("submit", async ev => {
   if (!message || !CHAT.scope) return;
   if ($("#chat-send").disabled) { toast("Waiting for the answer. Send again once it has arrived."); return; }
   $("#chat-send").disabled = true; CHAT.follow = true;
-  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message }));
+  try { const st = await api("/api/chat/send", { scope: CHAT.scope, message }); chatDraw(st); chatButtons(st);
     // what was typed while the request was in flight stays; only the sent text is cleared
     if (input.value.trim() === message) { input.value = ""; chatGrow(); chatDraft(CHAT.scope, ""); }
     chatLoad();
