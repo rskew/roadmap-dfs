@@ -269,6 +269,12 @@ def named_in_notes(notes, funcs):
 def tree_html(funcs, notes):
     called = {c for f in funcs.values() for c in f["calls"]}
     roots = notes.get("entries") or [q for q in funcs if q not in called]
+    if not roots:
+        # Every function is called by another (mutual recursion): start from the first function of each file.
+        first = {}
+        for q, f in sorted(funcs.items(), key=lambda kv: kv[1]["line"]):
+            first.setdefault(f["file"], q)
+        roots = list(first.values())
     marks = lenses_at(notes)
     seen = set()
 
@@ -421,6 +427,10 @@ def build(notes_path, root="."):
     with open(notes_path) as fh:
         notes = json.load(fh)
     paths = [os.path.join(root, f) for f in notes["files"]]
+    for path in paths:
+        if not os.path.isfile(path):
+            raise NotesError("cannot read %s: the paths in `files` are relative to the current directory, "
+                             "so run this from the repository root" % path)
     funcs = read_code(paths)
     check_notes(notes, funcs)
     return page(notes, funcs)
@@ -434,7 +444,7 @@ def main(argv):
         out = args[i + 1] if i + 1 < len(args) else None
         args = args[:i] + args[i + 2:]
     if len(args) != 1 or ("--out" in argv and out is None):
-        print("usage: explain.py NOTES.json [--out PAGE.html]", file=sys.stderr)
+        print("usage: explain.py NOTES.json [--out PAGE.html] (run from the repository root: `files` are relative to it)", file=sys.stderr)
         return 2
     try:
         text = build(args[0])

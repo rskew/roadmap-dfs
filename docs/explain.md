@@ -18,6 +18,12 @@ starts with the call tree (who calls whom), then the legend, then one section pe
 - Every other fact is a note in `docs/explain/<subject>.json`. A note names the function it is
   about; the generator fails if that function (or any function an arrow joins) is not in the
   files read, so a rename shows up as an error instead of a page that quietly lies.
+- `files` are paths relative to the current directory, so run `explain.py` from the repository root.
+  With no `entries`, the tree starts from the functions no other function calls, or, when every
+  function is called by another, from the first function of each file.
+- A note is checked only for names, not for what it says. A task that changes `scripts/inbox.py`,
+  `scripts/ptyrelay.py` or `scripts/walk.py` must update `docs/explain/*.json` for them too: renaming
+  a noted function fails `scripts/test_explain.py`, but changed behaviour under the same name does not.
 
 ## Notes file
 

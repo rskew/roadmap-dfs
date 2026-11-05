@@ -224,5 +224,21 @@ class NotedButUnreached(unittest.TestCase):
         self.assertIn('data-lens="failure"', text.split("<b>ƒ alone</b>")[1])
 
 
+class NoRoots(unittest.TestCase):
+    def test_a_module_where_every_function_is_called_still_gets_a_tree(self):
+        d = tempfile.mkdtemp()
+        funcs = explain.read_code([write(d, "m.py", "def a():\n    b()\n\ndef b():\n    a()\n")])
+        text = explain.tree_html(funcs, {})
+        self.assertIn("<b>ƒ a</b>", text)
+        self.assertIn("<b>ƒ b</b>", text)
+
+    def test_a_files_path_that_is_not_there_says_to_run_from_the_repository_root(self):
+        d = tempfile.mkdtemp()
+        notes = write(d, "n.json", '{"title": "t", "files": ["scripts/nope.py"]}')
+        with self.assertRaises(explain.NotesError) as ctx:
+            explain.build(notes, root=d)
+        self.assertIn("repository root", str(ctx.exception))
+
+
 if __name__ == "__main__":
     unittest.main()
