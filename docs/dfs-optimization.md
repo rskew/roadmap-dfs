@@ -812,9 +812,12 @@ unmet in both judgings of control 2 and unmet in one of the changed tree's. Cred
 controls', which tier 2 does not weigh when quality differs. The sandbox held: `replay.py score` flags 0 calls
 for each control and 6 for the changed arm, all answered with output, and the six read the changed arm's tool
 copy (`dfs-tool-walk`) or the clone's own worktree, none the live checkout's items (listed in
-`docs/dfs-reach-w17-w132.txt`; an earlier figure of 90 flagged calls was not reproduced). The score's own
-count of control 2's issues reviews, 3 of 4, differs from its task file's 1 of 2; the table takes the task
-file.
+`docs/dfs-reach-w17-w132.txt`; an earlier figure of 90 flagged calls was not reproduced). `replay.py score` once read
+control 2's issues reviews as 3 of 4 against its task file's 1 of 2, because `history.verdicts` counted two
+`review issues` commands that `tree.py` refused or that failed; it now counts a verdict only when its command
+did not fail and `tree.py` printed no `dfs_tree:` refusal, and score and task file both say 1 of 2 for both
+controls. The changed arm's 6 of 6 has no refused command among them (its task file in the replay folder is
+a stub with no log, so the count rests on the run logs).
 
 What it says of the two candidates' premises: neither removed a round or cut credits. A review told to walk
 every clause did not report them all at round one: it found the page turn outliving the server (C6) in

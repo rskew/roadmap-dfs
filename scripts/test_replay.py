@@ -1122,6 +1122,17 @@ class KiroStreamTest(unittest.TestCase):
         self.assertEqual((t["unit"], t["credits"], t["usd"], t["unpriced"]), ("credits", 12.5, 0.0, 1))
         self.assertEqual((t["nodes"], t["first_review"], t["sessions"]), (1, "issues", {"work": 1, "review": 1}))
 
+    def test_a_verdict_the_command_failed_or_tree_py_refused_is_not_a_round(self):
+        refused = "dfs_tree: a review's `issues` is for a finding put in the tree as an open node\n\nExit Code: 2"
+        text = (acp_call("a", "execute", "Run Command", {"command": "python3 tree.py log W5 review issues"},
+                         "dfs_tree: /x/.dfs/items/.dfs/items/W5.md\n\nExit Code: 2", exit_code=2, status="failed") +
+                acp_call("b", "execute", "Run Command", {"command": "python3 tree.py log W5 review issues"},
+                         refused, exit_code=2, status="failed") +
+                acp_call("c", "execute", "Run Command", {"command": "python3 tree.py log W5 review ok"},
+                         "2026-11-05T00:44:44Z\n\nExit Code: 0"))
+        d = kiro_run_dir(self.tmp.name, name="dfs_run_b", runs=[("review", text)])
+        self.assertEqual(history.stream_session(str(d / "run-1.json"))["verdicts"], [("review", "ok")])
+
     def test_a_log_with_no_console_header_is_another_kind_not_a_guess(self):
         (self.d / "console.log").write_text("")
         self.assertEqual(history.stream_session(str(self.d / "run-1.json"))["kind"], "other")
