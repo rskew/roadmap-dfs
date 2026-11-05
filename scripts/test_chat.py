@@ -1390,7 +1390,9 @@ class Chat(unittest.TestCase):
         self.chats.interrupt("W1")
         st = self.settle("W1", 40)
         self.assertEqual(len([c for c in self.calls() if c != "started"]), 1)
-        self.assertNotIn("W141-DROP me", [m["text"] for m in st["messages"]])
+        self.assertNotIn("W141-DROP me", [m["text"] for m in st["messages"] if m["role"] != "error"], "not sent as a message")
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "error" and "W141-DROP me" in m["text"]].__len__(), 1,
+                         "but its text stays in front of the author, in a note")
         self.assertEqual(os.listdir(self.chats.box("W1")), [])
         self.assertIn("never read and are dropped", self.record("W1"))
 

@@ -697,9 +697,10 @@ class Chats:
         (d / ".steers.tmp").write_text(json.dumps(keep))
         os.replace(d / ".steers.tmp", d / "steers.json")
         if stopped or error:
-            chatlog.log(scope, "turn: %d steering message(s) were never read and are dropped" % len(texts))
-            if not stopped:
-                self.notes[scope] = self.notes.get(scope, []) + ["%d message(s) sent during the turn were never read" % len(texts)]
+            chatlog.log(scope, "turn: %d steering message(s) were never read and are dropped" % len(texts), "\n\n".join(texts))
+            # dropped from the box, but not lost to the author: the note shows the text, to send again if it still matters
+            self.notes[scope] = self.notes.get(scope, []) + [
+                "%d message(s) sent during the turn were never read and are not sent: %s" % (len(texts), " / ".join(texts))]
             return ""
         text = "\n\n".join(texts)
         chatlog.log(scope, "turn: %d steering message(s) arrived after the last step and go as the next turn" % len(texts))
