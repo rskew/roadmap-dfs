@@ -45,6 +45,10 @@ mode that has none of its own): a png, jpeg, webp or gif of 8 MB or less, set at
 (base64 in JSON, with a `mode`; the one write allowed a body past 64 KB), served at GET /background-image
 (`?mode=light|dark`), and drawn fixed behind the page under a 90% veil of the paper so text keeps its
 contrast on any picture.
+THE INSTALLED APP'S ICON is `.dfs/icon`, one picture of the same kinds and size (not one for each mode), set at
+POST /api/icon (base64 in JSON; empty goes back to the built-in icons) and served at GET /icon and at every
+`/icon-*.png` and `/apple-touch-icon.png` while it exists. The manifest lists it, and the page's links carry
+its version. The project dialog cuts the chosen picture square and posts a 1024 px png.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the
@@ -104,6 +108,7 @@ INDEX = HERE / "web" / "index.html"
 STATIC = {"/sw.js": "text/javascript", "/design.css": "text/css", "/design": "text/html", "/icon-192.png": "image/png", "/icon-512.png": "image/png",
           "/icon-1024.png": "image/png", "/icon-maskable-512.png": "image/png", "/icon-maskable-1024.png": "image/png",
           "/apple-touch-icon.png": "image/png"}
+ICON_PATHS = {p for p in STATIC if p.startswith(("/icon-", "/apple-touch-icon"))} | {"/icon"}   # where the app icon is asked for
 MAX_BODY = 64 * 1024
 IMAGE_BODY = dfs_paths.IMAGE_MAX * 4 // 3 + MAX_BODY      # a picture in base64, and the JSON around it
 LOCK = threading.Lock()       # one writer at a time: a task file is read, changed, written
@@ -125,15 +130,25 @@ def project_title():
     return dfs_paths.project_title()
 
 
+def icon_query() -> str:
+    """`?v=<version>` for a custom icon's links, so a new one is fetched; "" for the built-in."""
+    v = dfs_paths.icon_version()
+    return "?v=" + v if v else ""
+
+
 def index_html():
     name = project_title()
-    return (INDEX.read_text().replace("{{project_json}}", json.dumps(name).replace("</", "<\\/"))
-            .replace("{{colour_chosen}}", "true" if dfs_paths.read_theme() else "false")
-            .replace("{{colour}}", dfs_paths.project_colour())
-            .replace("{{background_json}}", json.dumps(dfs_paths.read_background()))
-            .replace("{{palettes_json}}", json.dumps(dfs_paths.background_palettes()))
-            .replace("{{background_image_json}}", json.dumps(dfs_paths.background_image_versions()))
-            .replace("{{project}}", html.escape(name))).encode()
+    values = {"project_json": json.dumps(name).replace("</", "<\\/"),
+              "colour_chosen": "true" if dfs_paths.read_theme() else "false",
+              "colour": dfs_paths.project_colour(),
+              "background_json": json.dumps(dfs_paths.read_background()),
+              "palettes_json": json.dumps(dfs_paths.background_palettes()),
+              "background_image_json": json.dumps(dfs_paths.background_image_versions()),
+              "icon_json": json.dumps(dfs_paths.icon_version()),
+              "icon_query": icon_query(),
+              "project": html.escape(name)}
+    # One pass, so text a value carries (a title containing "{{colour}}") is never filled in again.
+    return re.sub(r"\{\{(\w+)\}\}", lambda m: values.get(m.group(1), m.group(0)), INDEX.read_text()).encode()
 
 
 def needs_you(it):
@@ -199,7 +214,7 @@ def state_json():
                 needs_you=sum(1 for i in items if i["needs_you"]),
                 colour=dfs_paths.project_colour(), colour_chosen=bool(dfs_paths.read_theme()),
                 background=dfs_paths.read_background(), palettes=dfs_paths.background_palettes(),
-                background_image=dfs_paths.background_image_versions())
+                background_image=dfs_paths.background_image_versions(), icon=dfs_paths.icon_version())
 
 
 _commit_cache = {}
@@ -648,6 +663,23 @@ def set_background_image(body):
         raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.background_image_file()), e), 500)
     HUB.notify()
     return dict(background_image=dfs_paths.background_image_versions())
+
+
+def set_icon(body):
+    """Set the installed app's icon (`image`, a png, jpeg, webp or gif in base64) or go back to
+    the built-in one with an empty string."""
+    value = body.get("image")
+    if not isinstance(value, str):
+        raise Refused("an image is needed")
+    try:
+        data = base64.b64decode(value, validate=True) if value else b""
+        dfs_paths.write_icon(data)
+    except ValueError as e:
+        raise Refused(str(e) if "an icon" in str(e) else "that is not base64")
+    except OSError as e:
+        raise Refused("could not write %s: %s" % (dfs_paths.rel(dfs_paths.icon_file()), e), 500)
+    HUB.notify()
+    return dict(icon=dfs_paths.icon_version())
 
 
 def set_theme(body):
@@ -1243,7 +1275,7 @@ class Handler(BaseHTTPRequestHandler):
             if "application/json" not in self.headers.get("Content-Type", ""):
                 raise Refused("JSON only", 415)
             n = int(self.headers.get("Content-Length") or 0)
-            if n > (IMAGE_BODY if url.path in ("/api/background-image", "/api/attach") else MAX_BODY):
+            if n > (IMAGE_BODY if url.path in ("/api/background-image", "/api/icon", "/api/attach") else MAX_BODY):
                 raise Refused("too large", 413)
             try:
                 body = json.loads(self.rfile.read(n) or b"{}")
@@ -1260,6 +1292,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, set_background(body))
             if name == "background-image":
                 return self.json(200, set_background_image(body))
+            if name == "icon":
+                return self.json(200, set_icon(body))
             if name == "attach":
                 return self.json(200, attach(body))
             if name == "new":
@@ -1320,10 +1354,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, image[0], image[1], extra=[("Cache-Control", "no-cache")])
         if path.startswith("/artefacts/"):
             return self.artefact(segment(path, "/artefacts/", ART_NAME, "artefact"))
+        custom = dfs_paths.read_icon()
+        if custom and path in ICON_PATHS:
+            return self.send(200, custom[0], custom[1], extra=[("Cache-Control", "no-cache")])
         if path in STATIC:
             return self.send(200, (HERE / "web" / (path[1:] + (".html" if path == "/design" else ""))).read_bytes(), STATIC[path])
         if path == "/manifest.json":
-            icons = [dict(src="/icon-192.png", sizes="192x192", type="image/png"),
+            custom = dfs_paths.read_icon()
+            icons = [dict(src="/icon" + icon_query(), sizes=z + "x" + z, type=custom[1]) for z in ("192", "512", "1024")] if custom else [
+                     dict(src="/icon-192.png", sizes="192x192", type="image/png"),
                      dict(src="/icon-512.png", sizes="512x512", type="image/png"),
                      dict(src="/icon-1024.png", sizes="1024x1024", type="image/png"),
                      dict(src="/icon-maskable-512.png", sizes="512x512", type="image/png",

@@ -8,8 +8,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="{{project}}">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png{{icon_query}}">
+<link rel="manifest" href="/manifest.json{{icon_query}}">
 <link rel="icon" href="data:,">
 <title>{{project}}</title>
 <link rel="stylesheet" href="/design.css">
@@ -17,7 +17,7 @@
 try { const t = localStorage.getItem("theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
 // The backgrounds chosen for this project (`.dfs/background`), one per mode: the one for the mode
 // the page is in sets its surface and text colours, and the light/dark switch picks between them.
-let BACKGROUND = {{background_json}}, PALETTES = {{palettes_json}}, IMAGE = {{background_image_json}};
+let BACKGROUND = {{background_json}}, PALETTES = {{palettes_json}}, IMAGE = {{background_image_json}}, ICON = {{icon_json}};
 const isDark = () => document.documentElement.dataset.theme
   ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
 function paintBackground() {
@@ -1759,9 +1759,30 @@ function syncColour(state) {
   if (state.palettes && (JSON.stringify(state.background) !== JSON.stringify(BACKGROUND) || JSON.stringify(state.background_image) !== JSON.stringify(IMAGE))) {
     BACKGROUND = state.background; PALETTES = state.palettes; IMAGE = state.background_image; paintBackground();
   }
+  if (state.icon !== undefined && state.icon !== ICON) { ICON = state.icon; paintIcon(); }
   if (state.colour && (state.colour !== COLOUR || state.colour_chosen !== CHOSEN)) {
     COLOUR = state.colour; CHOSEN = state.colour_chosen; paintColour();
   }
+}
+// The installed app's icon (`.dfs/icon`): the links carry its version, so a new one is fetched.
+function paintIcon() {
+  const q = ICON ? "?v=" + ICON : "";
+  $('link[rel="apple-touch-icon"]').setAttribute("href", "/apple-touch-icon.png" + q);
+  $('link[rel="manifest"]').setAttribute("href", "/manifest.json" + q);
+}
+// A picture as a square 1024 px png in base64, cut from its centre: a home screen wants a square png.
+async function squarePng(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch (e) { throw new Error("Could not read that picture."); }
+  const side = Math.min(bmp.width, bmp.height), c = document.createElement("canvas");
+  c.width = c.height = 1024;
+  const g = c.getContext("2d");
+  g.fillStyle = "#f5f4ef"; g.fillRect(0, 0, 1024, 1024);   // the manifest's paper: a transparent icon would show black on iOS
+  g.drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 1024, 1024);
+  const blob = await new Promise(ok => c.toBlob(ok, "image/png"));
+  if (!blob) throw new Error("Could not make an icon from that picture.");
+  return await new Promise((ok, no) => { const r = new FileReader();
+    r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(new Error("Could not read that picture.")); r.readAsDataURL(blob); });
 }
 function paintColour() {
   document.documentElement.style.setProperty("--project", COLOUR);
@@ -1779,6 +1800,9 @@ function renameForm() {
     <div><label for="pi-${m}">Background picture, ${m} mode</label><input type="file" id="pi-${m}" name="picture-${m}" accept="image/png,image/jpeg,image/webp,image/gif"></div>
     <label><input type="checkbox" id="pr-${m}" name="no-picture-${m}"${IMAGE[m] ? "" : " checked disabled"}> No ${m} picture</label>`).join("")}
     <p class="muted" style="margin:0">A picture is a png, jpeg, webp or gif of 8 MB or less, drawn behind the page under a veil of its paper so text stays readable; one for each of light and dark mode, kept in <code>.dfs/background-image-light</code> and <code>-dark</code>.</p>
+    <div><label for="pk">Installed app icon</label><input type="file" id="pk" name="icon" accept="image/png,image/jpeg,image/webp,image/gif"></div>
+    <label><input type="checkbox" id="pk-off" name="no-icon"${ICON ? "" : " checked disabled"}> Use the built-in icon</label>
+    <p class="muted" style="margin:0">The icon the app has on a home screen. A picture is cut square from its centre. Kept in <code>.dfs/icon</code>. An app already installed may keep its old icon until it is added again.</p>
     <p class="muted" style="margin:0">Marks the top of this page, the browser's bar and the installed app, so projects are not mistaken for one another. Kept in <code>.dfs/theme</code>. The backgrounds colour the page itself, one for each of light and dark mode, and the light/dark switch picks between them; kept in <code>.dfs/background</code>.</p>${buttons("Save")}`,
     async fd => {
       const res = await api("/api/title", { title: fd.get("title") }); PROJECT = res.title;
@@ -1795,9 +1819,15 @@ function renameForm() {
           r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(new Error("Could not read that file.")); r.readAsDataURL(pic); });
         IMAGE = (await api("/api/background-image", { image: b64, mode: m })).background_image; paintBackground();
       }
+      const ic = fd.get("icon"), dropIcon = fd.get("no-icon") === "on" && ICON;
+      if (ic && ic.size || dropIcon) {
+        if (ic && ic.size > 8 * 1024 * 1024) throw new Error("An icon picture is 8 MB or smaller.");
+        ICON = (await api("/api/icon", { image: ic && ic.size ? await squarePng(ic) : "" })).icon; paintIcon();
+      }
       const st = await api("/api/state"); COLOUR = st.colour; paintColour();
       toast("Saved."); S.sig = ""; await render(true); });
   $("#pc").addEventListener("input", () => { $("#pa").checked = false; });
+  $("#pk").addEventListener("change", () => { $("#pk-off").disabled = false; $("#pk-off").checked = false; });
   for (const m of ["light", "dark"]) {
     $("#pb-" + m).addEventListener("input", () => { $("#pd-" + m).checked = false; });
     $("#pi-" + m).addEventListener("change", () => { $("#pr-" + m).disabled = false; $("#pr-" + m).checked = false; });
