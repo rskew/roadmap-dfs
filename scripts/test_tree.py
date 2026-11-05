@@ -1719,6 +1719,20 @@ class Branches(InARepo):
         self.assertEqual(r.returncode, 0, r.stderr)
         return wt
 
+    def test_a_directory_left_after_the_merge_with_a_dangling_git_pointer_is_not_a_worktree(self):
+        # W130 on 2026-11-05: the merge could not remove its worktree, `git worktree remove` had
+        # already dropped the gitdir, and the leftover directory (no task file) read as a live
+        # worktree: the finished task loaded as an empty tree.
+        wt = self.worktree()
+        self.assertEqual(dfs_paths.worktree("W1"), wt)
+        self.assertEqual(dfs_paths.worktree_states(), [wt / ".dfs"])
+        shutil.rmtree(self.root / ".git" / "worktrees")
+        self.assertIsNone(dfs_paths.worktree("W1"))
+        self.assertEqual(dfs_paths.worktree_states(), [])
+        (wt / ".dfs/items/W1.md").write_text("# W1 · a task\n\n## Tree\n")   # the leftover's copy is empty
+        self.assertGreater(len(dfs_tree.load("W1")["nodes"]), 0)   # the main checkout's tree is read
+        self.assertEqual(dfs_paths.task_items("W1"), self.root / ".dfs" / "items")
+
     def test_a_task_never_committed_stays_listed_once_its_branch_is_worked(self):
         (self.root / ".dfs/items/W2.md").write_text(task(node(1), "").replace("W1", "W2"))
         self.assertEqual(dfs_tree.task_ids(), ["W1", "W2"])

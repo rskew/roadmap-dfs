@@ -1411,6 +1411,7 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
             self.assertFalse(self.task()["acceptable"], "merged or never branched: nothing to accept")
             wt = self.root / ".dfs" / "worktrees" / "W1"
             (wt / ".dfs" / "items").mkdir(parents=True)
+            (wt / "elsewhere").mkdir()   # the gitdir its `.git` names
             (wt / ".git").write_text("gitdir: elsewhere\n")
             (wt / ".dfs" / "items" / "W1.md").write_text(done)
             self.assertTrue(self.task()["acceptable"], "accepted, branch unmerged, no chain left")

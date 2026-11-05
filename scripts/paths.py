@@ -135,12 +135,31 @@ def is_item_branch(name) -> bool:
     return bool(name) and re.fullmatch(re.escape(ITEM_BRANCH_PREFIX) + r"[A-Za-z]+\d+", name) is not None
 
 
+def is_worktree_dir(d: Path) -> bool:
+    """Whether `d` is a git checkout that is still there: its `.git` is a directory, or a
+    file whose `gitdir:` names a directory that exists. A directory left behind by a merge
+    that could not remove it keeps a `.git` file pointing at the removed gitdir
+    (`.git/worktrees/<task>`); it is not a worktree, and reading it for one showed the
+    finished W130 as an empty tree."""
+    g = d / ".git"
+    if g.is_dir():
+        return True
+    try:
+        line = g.read_text().strip()
+    except (OSError, UnicodeDecodeError):
+        return False
+    if not line.startswith("gitdir:"):
+        return False
+    return (d / line[len("gitdir:"):].strip()).is_dir()
+
+
 def worktree(task: str):
     """The checkout of `task`'s item branch under this work root's `.dfs/worktrees`,
-    None when there is none. A worktree's own `.dfs` has no `worktrees/` (it is
+    None when there is none (a directory whose `.git` points at a gitdir that is gone is
+    not one: `is_worktree_dir`). A worktree's own `.dfs` has no `worktrees/` (it is
     ignored, so never checked out), so inside one this is always None."""
     d = worktrees() / task
-    return d if (d / ".git").exists() else None
+    return d if is_worktree_dir(d) else None
 
 
 def task_state(task: str) -> Path:
@@ -157,7 +176,7 @@ def task_items(task: str) -> Path:
 def worktree_states():
     """The `.dfs` of every item worktree under this work root."""
     try:
-        return sorted(d / STATE_DIR_NAME for d in worktrees().iterdir() if (d / ".git").exists())
+        return sorted(d / STATE_DIR_NAME for d in worktrees().iterdir() if is_worktree_dir(d))
     except OSError:
         return []
 
