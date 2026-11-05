@@ -316,9 +316,6 @@ const FLOWS = {
       return { tagRight: t.right, bodyRight: r.right, scrollW: document.documentElement.scrollWidth, innerW: innerWidth };
     });
     assert(wide.tagRight <= wide.bodyRight + 1 && wide.scrollW <= wide.innerW, "a long tag wraps inside its row and the page does not scroll sideways: " + JSON.stringify(wide));
-    await page.click("[data-act=only][data-v='1']");
-    const ids = await page.$$eval(".item", a => a.map(x => x.dataset.id));
-    same(ids, ["W2", "W4", "W9"], "needs you: the ones that wait on the author");
     same(errors, [], "no page errors");
   },
 
@@ -1166,9 +1163,9 @@ const FLOWS = {
         }, [bar, btn]);
         assert(r.content !== "none" && r.h >= 1 && r.h <= 2 && Math.abs(r.y - r.btn) <= 1, `${name}: a thin line under ${what}, on its buttons' lower edge (${JSON.stringify(r)})`);
       };
-      // the list: All, Needs you, Reorder and Chats in the bar, no filter strip above the rows and no Assumptions tab
-      await low("#tabs [data-act=only][data-v='0']", "All"); await low("#tabs [data-act=only][data-v='1']", "Needs you"); await low("#tabs [data-act=reorder]", "Reorder"); await low("#tabs [data-tab=chats]", "Chats tab");
-      await line("#tabs", "#tabs [data-act=only][data-v='0']", "the bar");
+      // the list: All, Reorder and Chats in the bar, no filter strip above the rows and no Assumptions tab
+      await low("#tabs [data-act=all]", "All"); await low("#tabs [data-act=reorder]", "Reorder"); await low("#tabs [data-tab=chats]", "Chats tab");
+      await line("#tabs", "#tabs [data-act=all]", "the bar");
       assert(!(await page.$(".filters")) && !(await page.$("[data-tab=assumptions]")), `${name}: the filters live in the bar and the Assumptions tab is gone`);
       assert(await page.$eval("#back", e => getComputedStyle(e).display === "none"), `${name}: no Back up in the header`);
       // a task: Chat and Flagged on the left, Back at the right
@@ -1193,7 +1190,7 @@ const FLOWS = {
       await page.click("#sheet [data-act=close]");
       await page.waitForFunction(() => !document.querySelector("#sheet.open") && document.querySelector("#tabs [data-act=up]"));
       await page.click("#tabs [data-act=up]"); await page.waitForSelector(".item");
-      assert(await page.$("#tabs [data-act=only][data-v='0'][aria-current=page]"), `${name}: the bar is back, All current`);
+      assert(await page.$("#tabs [data-act=all][aria-current=page]"), `${name}: the bar is back, All current`);
       // the chat: Back at the bottom
       await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
       await low("#chat [data-act=chatclose]", "chat Back");
@@ -1825,10 +1822,10 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   // All in the bar leaves Reorder: pressed in reorder mode, and from the Chats screen after Reorder was on.
   async allleavesreorder(b) {
     const { page, errors } = await open(b, PHONE);
-    const all = "#tabs [data-act=only][data-v='0'][aria-current=page]";
+    const all = "#tabs [data-act=all][aria-current=page]";
     await page.click("[data-act=reorder]");
     await page.waitForSelector(".moves");
-    await page.click("#tabs [data-act=only][data-v='0']");
+    await page.click("#tabs [data-act=all]");
     await page.waitForSelector("button.item");
     assert(!(await page.$(".moves")), "All takes the list out of Reorder");
     assert(await page.$(all), "All is current after it");
@@ -1836,22 +1833,22 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForSelector(".moves");
     await page.click("#tabs [data-tab=chats]");
     await page.waitForFunction(() => !document.querySelector(".moves"));
-    await page.click("#tabs [data-act=only][data-v='0']");
+    await page.click("#tabs [data-act=all]");
     await page.waitForSelector("button.item");
     assert(!(await page.$(".moves")), "All from Chats shows the list out of Reorder");
     assert(await page.$(all), "All is current after coming from Chats");
     same(errors, [], "no page errors");
   },
 
-  // All, Needs you and Reorder pressed from the Chats screen take you back to the list.
+  // All and Reorder pressed from the Chats screen take you back to the list.
   async barfromchats(b) {
     const { page, errors } = await open(b, PHONE);
-    for (const sel of ["#tabs [data-act=only][data-v='0']", "#tabs [data-act=only][data-v='1']", "#tabs [data-act=reorder]"]) {
+    for (const sel of ["#tabs [data-act=all]", "#tabs [data-act=reorder]"]) {
       await page.click("#tabs [data-tab=chats]");
       await page.waitForFunction(() => !document.querySelector(".item"));
       await page.click(sel);
       await page.waitForFunction(() => location.hash === "" || location.hash === "#/");
-      assert(await page.$("#tabs [data-act=only]"), `${sel} from Chats leaves the list bar showing`);
+      assert(await page.$("#tabs [data-act=all]"), `${sel} from Chats leaves the list bar showing`);
     }
     // The loop left Reorder on; from Chats, pressing Reorder opens the list in Reorder, not out of it.
     await page.waitForSelector(".moves");
@@ -2371,8 +2368,6 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
           assert(!a.small.length, `${name}/${scheme}/${what}: small targets: ${a.small.join("; ")}`);
         };
         await check("list");
-        await page.click("[data-act=only][data-v='1']"); await check("needs you");
-        await page.click("[data-act=only][data-v='0']");
         await task(page, "W9"); await check("task");
         await page.click(".row.hasraise .main"); await page.waitForSelector("#sheet.open"); await check("node");
         await page.click("#sheet [data-act=correct]"); await dialog(page); await check("correct form");
@@ -2380,7 +2375,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
         await page.evaluate(() => document.querySelector("#sheet [data-act=close]")?.click());
         await toList(page);
         await page.click("#tabs [data-tab=chats]"); await check("chats");
-        await page.click("#tabs [data-act=only][data-v='0']"); await page.waitForSelector(".item");
+        await page.click("#tabs [data-act=all]"); await page.waitForSelector(".item");
         assert(!(await page.$("[data-act=chat][data-scope=project]")), "the task list has no project chat button");
         await page.click("#tabs [data-tab=chats]"); await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]"); await check("chat");
         same(errors, [], `${name}/${scheme}: no page errors`);

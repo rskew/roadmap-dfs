@@ -587,7 +587,7 @@ class Web(unittest.TestCase):
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment) => ({id, goal: 'g', depth: 0, status: 'open', segment, raises: 0,"
               " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
-              "const S = {only: false, reorder: false, moved: null, pending: new Set(),"
+              "const S = {reorder: false, moved: null, pending: new Set(),"
               " state: {needs_you: 0, items: [row('W1', 0), row('W2', 1)]}};" + body +
               "drawTasks(); const off = view.innerHTML; S.reorder = true; drawTasks();"
               "console.log(JSON.stringify([off, view.innerHTML]))")
@@ -618,7 +618,7 @@ class Web(unittest.TestCase):
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, extra) => Object.assign({id, goal: 'g' + id, depth: 0, status: 'open', segment: 0, raises: 0,"
               " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false, base: 'main'}, extra);"
-              "const S = {only: false, reorder: false, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "const S = {reorder: false, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
               "row('W1', {rev: 'rev 2', ahead: 3, running: 'work 1'}), row('W2', {status: 'blocked', blocked_by: 'W1', why: 'held'}),"
               "row('W3', {status: 'done', archivable: true})]}};" + body +
               "const out = {}; drawTasks(); out.table = [view.innerHTML, view.className];"
@@ -689,7 +689,7 @@ class Web(unittest.TestCase):
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment, stop, w) => ({id, goal: 'g', depth: 0, status: 'open', segment, stop, raises: 0,"
               " assumptions: [], rev: '', waiting_on: w || '', blocked_by: '', why: '', needs_you: false});"
-              "const S = {only: false, reorder: true, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "const S = {reorder: true, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
               "row('W1', 0, false), row('W2', 1, true), row('W3', 2, false, 'W2')]}};" + body +
               "drawTasks(); console.log(JSON.stringify(view.innerHTML))")
         html = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
