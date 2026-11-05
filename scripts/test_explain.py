@@ -66,6 +66,53 @@ class ReadCode(unittest.TestCase):
         self.assertEqual(text.count("calls itself again"), 1)
 
 
+SAME_NAMES = '''
+import threading
+
+class Host:
+    def get(self, key):
+        return key
+    def start(self):
+        pass
+    def use(self, table, q):
+        table.get(1)
+        self.table.get(2)
+        q.get()
+    def spawn(self):
+        threading.Thread(target=self.use).start()
+    def make(self):
+        Host().start()
+
+class Base:
+    def ping(self):
+        self.pong()
+    def run(self):
+        self.pong()
+
+class Mixin(Base):
+    def pong(self):
+        pass
+'''
+
+
+class WrongOwners(unittest.TestCase):
+    """A call on something whose type the text does not give is not a call to a same-named method."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.funcs = explain.read_code([write(self.dir, "m.py", SAME_NAMES)])
+
+    def test_dict_queue_and_thread_calls_are_not_the_methods_of_the_same_name(self):
+        self.assertEqual(self.funcs["Host.use"]["calls"], [])
+        self.assertEqual(self.funcs["Host.spawn"]["calls"], [])
+
+    def test_a_call_on_a_fresh_instance_or_on_self_is_kept(self):
+        self.assertEqual(self.funcs["Host.make"]["calls"], ["Host.start"])
+
+    def test_a_base_class_method_reaches_what_its_subclass_defines(self):
+        self.assertEqual(self.funcs["Base.ping"]["calls"], ["Mixin.pong"])
+
+
 class Notes(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()

@@ -4,7 +4,8 @@
     explain.py NOTES.json [--out PAGE.html]
 
 NOTES.json (see docs/explain.md) names the Python files to read and holds the facts a person has
-to judge. This script does the part a machine can do truthfully:
+to judge. This script does the part a machine can do truthfully (a call is drawn only when the text fixes its
+target; a call on an object of unknown type is left out, not guessed):
 
   * the top-level view, a call tree read from the files with `ast`;
   * the "errors handled" lens' `try`/`except` and `raise` lines, read from the same tree;
@@ -71,6 +72,7 @@ class NotesError(Exception):
 def read_code(paths):
     """{qualified name: {file, line, calls (names), errors}} for every function and method."""
     funcs = {}
+    bases = {}
     for path in paths:
         with open(path) as fh:
             tree = ast.parse(fh.read(), path)
@@ -78,14 +80,13 @@ def read_code(paths):
             if isinstance(node, ast.FunctionDef):
                 funcs[node.name] = _info(path, node, None)
             elif isinstance(node, ast.ClassDef):
+                bases[node.name] = [b.id if isinstance(b, ast.Name) else b.attr
+                                    for b in node.bases if isinstance(b, (ast.Name, ast.Attribute))]
                 for sub in node.body:
                     if isinstance(sub, ast.FunctionDef):
                         funcs["%s.%s" % (node.name, sub.name)] = _info(path, sub, node.name)
-    short = {}
-    for q in funcs:
-        short.setdefault(q.split(".")[-1], []).append(q)
     for q, f in funcs.items():
-        f["calls"] = _resolve(f.pop("raw"), f["cls"], funcs, short, q)
+        f["calls"] = _resolve(f.pop("raw"), f["cls"], funcs, bases, q)
     return funcs
 
 
@@ -99,6 +100,8 @@ def _info(path, node, cls):
                 raw.append(("name", f.id))
             elif isinstance(f, ast.Attribute):
                 owner = f.value.id if isinstance(f.value, ast.Name) else None
+                if isinstance(f.value, ast.Call) and isinstance(f.value.func, ast.Name):
+                    owner = ("new", f.value.func.id)  # Class(...).name(): the owner is a fresh Class
                 raw.append(("attr", f.attr, owner))
         elif isinstance(n, ast.Try):
             for h in n.handlers:
@@ -123,8 +126,33 @@ def _does(body):
     return "runs " + ast.unparse(first).split("\n")[0][:48]
 
 
-def _resolve(raw, cls, funcs, short, me):
-    """The qualified names of the analysed functions a function calls, in first-call order."""
+def _ancestors(cls, bases):
+    """cls, then its bases, then their bases, nearest first, only those in the files read."""
+    out = [cls]
+    for b in bases.get(cls, []):
+        if b in bases:
+            out += [x for x in _ancestors(b, bases) if x not in out]
+    return out
+
+
+def _method(cls, name, funcs, bases):
+    """The analysed method `name` that `self.name()` reaches from inside `cls`: cls's own or a base's,
+    else the one a subclass in the files read supplies (a mixin calling what its subclass defines)."""
+    for c in _ancestors(cls, bases):
+        if "%s.%s" % (c, name) in funcs:
+            return "%s.%s" % (c, name)
+    subs = [c for c in bases if cls in _ancestors(c, bases) and "%s.%s" % (c, name) in funcs]
+    return "%s.%s" % (subs[0], name) if len(subs) == 1 else None
+
+
+def _resolve(raw, cls, funcs, bases, me):
+    """The qualified names of the analysed functions a function calls, in first-call order.
+
+    A call counts only when its target is certain from the text: `name()` for a function in the
+    files read, `self.name()` / `cls.name()` for a method of the class (see `_method`), and
+    `Class.name()` and `Class(...).name()` for a class in the files read. Any other `x.name()` (a dict's `.get`, a thread's
+    `.start`, a call on something returned) is left out, since the text does not say what `x` is.
+    """
     out = []
     for call in raw:
         target = None
@@ -132,12 +160,12 @@ def _resolve(raw, cls, funcs, short, me):
             target = call[1]
         elif call[0] == "attr":
             _, name, owner = call
-            if owner in ("self", "cls") and cls and "%s.%s" % (cls, name) in funcs:
-                target = "%s.%s" % (cls, name)
-            elif owner in funcs or (owner and owner[:1].isupper() and "%s.%s" % (owner, name) in funcs):
-                target = "%s.%s" % (owner, name) if "%s.%s" % (owner, name) in funcs else None
-            elif len(short.get(name, [])) == 1 and owner not in ("os", "sys", "json", "subprocess", "shlex"):
-                target = short[name][0]
+            if owner in ("self", "cls") and cls:
+                target = _method(cls, name, funcs, bases)
+            elif owner in bases and "%s.%s" % (owner, name) in funcs:
+                target = "%s.%s" % (owner, name)
+            elif isinstance(owner, tuple) and owner[1] in bases and "%s.%s" % (owner[1], name) in funcs:
+                target = "%s.%s" % (owner[1], name)
         if target and target != me and target not in out:
             out.append(target)
     return out

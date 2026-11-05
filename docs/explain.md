@@ -7,7 +7,11 @@ starts with the call tree (who calls whom), then the legend, then one section pe
 ## What the machine does and what a person writes
 
 - The call tree and the `try`/`except`/`raise` list of the "errors handled" lens are read from the
-  code with `ast`, so they are true by construction.
+  code with `ast`. A call is drawn only when the text fixes its target: `f()` for a function in the
+  files read, `self.f()` for a method of the class, its bases, or (for a mixin) the one subclass that
+  defines it, and `Class.f()` or `Class(...).f()` for a class in the files read. A call on anything
+  else (`table.get()`, `thread.start()`) is left out, so the tree can miss a call but does not draw
+  one the code lacks.
 - Every other fact is a note in `docs/explain/<subject>.json`. A note names the function it is
   about; the generator fails if that function (or any function an arrow joins) is not in the
   files read, so a rename shows up as an error instead of a page that quietly lies.
