@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 const { chromium } = createRequire(import.meta.url)("playwright");
 const [src, out] = process.argv.slice(2);
 const b = await chromium.launch();
-const p = await b.newPage({ viewport: { width: 1680, height: 1680 } });
-await p.setContent("<body style='margin:0'>" + readFileSync(src, "utf8"));
+const svg = readFileSync(src, "utf8");
+const size = Number(/<svg[^>]* width="(\d+)"/.exec(svg)[1]);          // the picture's own size: 1680 for a background, 1024 for the icon
+const p = await b.newPage({ viewport: { width: size, height: size } });
+await p.setContent("<body style='margin:0'>" + svg);
 await p.screenshot({ path: out, type: "png" });
 await b.close();
