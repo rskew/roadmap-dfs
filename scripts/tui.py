@@ -728,6 +728,7 @@ KEYS = [
     ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (run.sh --review)"),
     ("items", "c", ord("c"), "chat", "chat about this item (run.sh --chat); ctrl-] comes back and leaves it running"),
     ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (run.sh --chat project)"),
+    ("items", "E", ord("E"), "end-chat", "end this item's chat: its agent is stopped and the Chats list moves it to Ended; a later message reopens it (asks first)"),
     ("items", "o", ord("o"), "open", "open a new task (run.sh --open)"),
     ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
     ("items", "[  -", ord("["), "up", "move up among its siblings"),
@@ -4314,6 +4315,26 @@ class UI(WalkMixin):
         self.scr.refresh()
         self.reload()
 
+    def end_chat(self, scope):
+        """What `E` does: end this scope's chat as the page's End button does (`Chats.end`): its
+        agent here is stopped and the chat is marked ended, so the Chats list keeps it apart from
+        those in progress. The conversation stays, and a later message makes it in progress again."""
+        import chat as dfs_chat
+        chats = dfs_chat.Chats(walker=lambda: UiWalker(self))
+        if not chats.sid(scope):
+            self.msg = "%s has no chat to end" % scope
+            return
+        if self.prompt("end the chat on %s? Its agent is stopped; the conversation is kept [y/N]:"
+                       % scope)[:1].lower() != "y":
+            self.msg = "chat on %s kept" % scope
+            return
+        try:
+            chats.end(scope)
+        except (ValueError, OSError) as e:
+            self.msg = "not ended: %s" % e
+            return
+        self.msg = self.event("run", "chat %s ended" % scope)
+
     def shell(self, argv, pause=True, env=None):
         """Hand the real terminal over. Sessions are interactive and stream output."""
         self.event("run", "$ " + shlex.join(argv))
@@ -5077,6 +5098,9 @@ class UI(WalkMixin):
             self.open_chat(item)
         elif ch == ord("C"):
             self.open_chat("project")
+        elif ch == ord("E"):
+            # Capital, and it asks, like `K`: it stops the chat's agent. The conversation stays.
+            self.end_chat(item)
         elif ch == ord("D"):
             # Capital, and it asks, for the same reason as `K`: nothing in the screen
             # puts a deleted item back (its files wait under .dfs/archive/deleted).
