@@ -878,20 +878,10 @@ task, here, agent = sys.argv[1], sys.argv[2], sys.argv[3]
 sys.path.insert(0, here)
 import tree as dfs_tree
 
-tty_in, tty_out = open("/dev/tty", "r"), open("/dev/tty", "w")
-def say(*a): print(*a, file=tty_out, flush=True)
-def ask(prompt):
-    tty_out.write(prompt); tty_out.flush()
-    return (tty_in.readline() or "").strip()
-def prose(label):
-    """A block of the author's own words, ended by a lone '.' — empty means skip."""
-    say(label)
-    lines = []
-    while True:
-        ln = tty_in.readline()
-        if ln == "" or ln.rstrip("\n") == ".": break
-        lines.append(ln.rstrip("\n"))
-    return "\n".join(lines).strip()
+# ttyio: the prompts below edit the line (left arrow, home, delete) instead of typing the keys' escapes
+import ttyio
+tty_in, tty_out = open("/dev/tty", "r"), open("/dev/tty", "w")      # what the chat session is given
+ask, prose, say = ttyio.attach()    # prose: a block of the author's own words, ended by a lone '.'
 
 def chat(prompt):
     argv = [str(Path(here) / "run.sh")] + (["--" + agent] if agent != "claude" else []) + ["--chat", task]
@@ -1000,19 +990,8 @@ try:
 except dfs_paths.NoBranch as e:
     print("dfs_run: %s" % e, file=sys.stderr); raise SystemExit(2)
 
-tty_in, tty_out = open("/dev/tty", "r"), open("/dev/tty", "w")
-def say(*a): print(*a, file=tty_out, flush=True)
-def ask(prompt):
-    tty_out.write(prompt); tty_out.flush()
-    return (tty_in.readline() or "").strip()
-def block(label):
-    say(label)
-    lines = []
-    while True:
-        ln = tty_in.readline()
-        if ln == "" or ln.rstrip("\n") == ".": break
-        lines.append(ln.rstrip("\n"))
-    return "\n".join(lines).strip()
+import ttyio    # the prompts edit the line (left arrow, home, delete) instead of typing the keys' escapes
+ask, block, say = ttyio.attach()
 
 task = want or ask("  task id [%s]: " % nxt) or nxt
 say("\nYour words go in unchanged. End a multi-line answer with a lone '.'\n")
