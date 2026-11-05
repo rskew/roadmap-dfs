@@ -345,6 +345,9 @@ class Flows(unittest.TestCase):
         self.assertEqual(sorted(cap for _, cap in self.fake.started_chains), ["3", "3", "3", "4", "4", "4"])
         self.assertEqual(self.fake.chosen, "codex")
 
+    def test_a_running_chain_shows_what_it_runs_on(self):
+        self.flow("walkchain")
+
     def test_the_walk_controls_stay_under_the_bar_as_the_list_scrolls(self):
         self.flow("walkpin")
 
