@@ -499,13 +499,15 @@ let WROTE = 0;
 /* A request that never got an answer (`fetch` rejects with a TypeError: "Failed to fetch", "Load failed") is not the
    server refusing it. It is what a phone's browser raises for the first requests after the page was in the background
    or the network was away, so it is marked `e.network` for a caller to wait out. A read is tried once more after a
-   short wait; a write never is, since the server may have done it and the answer been lost. */
+   short wait; a write never is, since the server may have done it and the answer been lost. This is for every caller of
+   `api`, not the chat alone: any failed read waits 600 ms and tries twice, and any network failure reads "Could not reach
+   the server." in place of the browser's own "Failed to fetch". */
 const NO_ANSWER = "Could not reach the server.";
 async function reach(path, body) {
   const ask = () => fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   try { return await ask(); }
-  catch (e) {
-    if (body === undefined) { await new Promise(go => setTimeout(go, 600)); try { return await ask(); } catch (x) { e = x; } }
+  catch {
+    if (body === undefined) { await new Promise(go => setTimeout(go, 600)); try { return await ask(); } catch { /* the second try failed too */ } }
     throw Object.assign(new Error(NO_ANSWER), { network: true });
   }
 }
