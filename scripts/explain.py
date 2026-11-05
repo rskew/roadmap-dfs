@@ -228,7 +228,7 @@ def edge_row(e, notes, funcs, n):
     lens, line, head, _ = KINDS[e["kind"]]
     colour = LENS[lens][2]
     at = '<span class="at">in <b>%s</b></span>' % esc(e["at"]) if e.get("at") else '<span class="at">outside these files</span>'
-    return ('<div class="row" data-lens-row="%s">%s<span class="arrow %s" style="--c:%s"><em>%s</em><u>%s</u></span>%s%s</div>'
+    return ('<div class="row" data-lens-row="%s"><div class="line">%s<span class="arrow %s" style="--c:%s"><em>%s</em><u>%s</u></span>%s</div>%s</div>'
             % (lens, chip(e["from"], notes, funcs), line, colour, esc(e["label"]), head,
                chip(e["to"], notes, funcs), at))
 
@@ -238,8 +238,8 @@ def lens_html(lens, notes, funcs):
     rows = [edge_row(e, notes, funcs, i) for i, e in enumerate(notes.get("edges", [])) if LENS_OF[e["kind"]] == lens]
     extra = ""
     if lens == "errors":
-        rows += ['<div class="row note"><span class="chip" style="border-color:%s"><i>ƒ</i>%s</span>'
-                 '<span class="arrow solid" style="--c:%s"><em>%s</em><u>▣</u></span><span class="chip"><i style="color:%s">▣</i>%s</span>'
+        rows += ['<div class="row note"><div class="line"><span class="chip" style="border-color:%s"><i>ƒ</i>%s</span>'
+                 '<span class="arrow solid" style="--c:%s"><em>%s</em><u>▣</u></span><span class="chip"><i style="color:%s">▣</i>%s</span></div>'
                  '<span class="at">in <b>%s</b></span></div>'
                  % (colour, esc(h["at"]), colour, esc(h.get("how", "")), colour, esc(h["error"]), esc(h["at"]))
                  for h in notes.get("handled", [])]
@@ -283,7 +283,9 @@ small{color:#666;font-size:12px}
 .fn.again{border-style:dashed;color:#666;background:transparent}
 .dot{display:inline-block;min-width:20px;height:20px;line-height:20px;text-align:center;border-radius:10px;color:#fff;font-size:12px;text-decoration:none;margin-left:4px}
 .lens{margin:0 0 24px;padding:12px;border-left:6px solid var(--c);background:#fff}
-.row{display:flex;flex-direction:column;align-items:stretch;gap:2px;margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid #eee}
+.row{margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid #eee}
+.line{display:flex;flex-direction:column;align-items:stretch;gap:2px}
+.at{display:block}
 .chip{display:block;box-sizing:border-box;padding:6px 10px;border:1.5px solid #333;border-radius:6px;background:#fff;font-size:15px}
 .chip i{font-style:normal;margin-right:6px}.chip small{display:block}
 .arrow{display:flex;flex-direction:column;align-items:center;color:var(--c);font-size:14px;padding:2px 0}
@@ -292,21 +294,22 @@ small{color:#666;font-size:12px}
 .arrow::before{content:"";height:14px;border-left:2px solid var(--c)}
 .arrow.thick::before{border-left-width:6px}.arrow.dashed::before{border-left-style:dashed}.arrow.dotted::before{border-left-style:dotted}
 .arrow u{transform:rotate(90deg)}
-.arrow u{display:block}
+.arrow u{display:block;min-width:24px;height:24px;line-height:24px;text-align:center}
 .at{font-size:13px;color:#555}
 details{margin:12px 0;max-width:70ch}summary{min-height:44px;display:flex;align-items:center;cursor:pointer;font-weight:600}
 .legend ul,.found ul{list-style:none;padding:0}.legend li,.found li{margin:8px 0}
-.legend .arrow{display:inline-flex;flex-direction:row;gap:6px;vertical-align:middle}.legend .arrow::before{display:none}.legend .arrow u{transform:none}
+.legend .arrow{display:inline-flex;flex-direction:row;align-items:center;gap:6px;vertical-align:middle}.legend .arrow::before{order:1;display:inline-block;width:40px;height:0;border:0;border-top:2px solid var(--c)}.legend .arrow.thick::before{border-top-width:6px}.legend .arrow.dashed::before{border-top-style:dashed}.legend .arrow.dotted::before{border-top-style:dotted}.legend .arrow u{order:2;transform:none}
 .none{color:#666}
 @media(min-width:720px){body{padding:28px 32px}
-.row{flex-direction:row;align-items:center;gap:0;flex-wrap:wrap}
+.line{flex-direction:row;align-items:center}
 .row .chip{flex:0 1 240px}
-.arrow{flex:0 0 auto;flex-direction:column;justify-content:center;min-width:150px;padding:0 8px}
+.arrow{position:relative;flex:1 1 200px;min-width:140px;max-width:460px;padding:0 8px 4px;margin:0 6px;border-bottom:2px solid var(--c)}
 .arrow::before{display:none}
-.arrow u{transform:none}
-.arrow{border-bottom:2px solid var(--c);}
+.arrow u{position:absolute;right:-8px;bottom:-14px;transform:none}
 .arrow.thick{border-bottom-width:6px}.arrow.dashed{border-bottom-style:dashed}.arrow.dotted{border-bottom-style:dotted}
-.at{flex:1 0 100%;margin-top:2px}}
+.at{margin-top:4px}
+.legend .arrow{position:static;flex:none;min-width:0;max-width:none;margin:0;padding:0;border:0}
+.legend .arrow::before{display:inline-block}.legend .arrow u{position:static}}
 """
 
 JS = """
