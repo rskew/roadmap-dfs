@@ -22,6 +22,9 @@ Each scope keeps a log, `<run root>/chat/<scope>.log` (chatlog.py): what the pag
 it, each headless turn and why one failed, and, for a background chat, its start, its exit with the agent's
 last screen, who closed it and a note when it went quiet after a message (DFS_CHAT_STALL).
 
+A chat can be ended (`Chats.end`): its agent is stopped and it is marked, so the Chats list keeps what is in
+progress apart from what is over. The conversation stays, and a message sent to it later makes it in progress again.
+
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
 walk (`--no-walk`): a server that may not start agents does not chat either.
 """
