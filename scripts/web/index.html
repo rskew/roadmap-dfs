@@ -928,23 +928,34 @@ async function setAgent(agent) {
 /* The model the next chain's agent runs on, per role: plan (the first session on a task, the critic and the review)
    and implement (every other). A drop-down, so a choice is kept the moment it is made and never a half-typed name.
    The first option is the runner's own choice (opus and sonnet for claude, the agent's config for kiro); claude also
-   offers its own default. The list is the agent's (the snapshot's model_choices); codex and opencode read their model
-   from their own config, so theirs is one fixed option. */
+   offers its own default. The list is the agent's (the snapshot's model_choices: for kiro, what kiro-cli lists); codex
+   and opencode read their model from their own config, so theirs is one fixed option. The last option, "Other", opens a
+   text box for a name the list does not hold (S.modelOther[role] keeps it open over a redraw); Enter or leaving the
+   box keeps the name, and a kept name is in the list from then on. */
+const OTHER_MODEL = "__other__";
 function modelFields(w) {
   const m = w.models || {}, d = w.model_defaults || {}, list = w.model_choices || [];
+  const open = (S && S.modelOther) || {};
   const own = (w.agent || "the agent") + "'s own";
   const field = (role, label) => {
     const first = list.length && d[role] ? `${d[role]} (the runner's)` : own + (list.length ? "" : ", not set here");
-    const opts = [`<option value=""${m[role] ? "" : " selected"}>${esc(first)}</option>`].concat(list.map(n =>
-      `<option value="${esc(n)}"${m[role] === n ? " selected" : ""}>${esc(n === "default" ? "claude's own default" : n)}</option>`));
-    return `<div class="row2"><label for="model-${role}">${label}</label><select id="model-${role}" data-role="${role}"${list.length ? "" : " disabled"}>${opts.join("")}</select></div>`;
+    const other = !!open[role] && list.length > 0;
+    const opts = [`<option value=""${m[role] || other ? "" : " selected"}>${esc(first)}</option>`].concat(list.map(n =>
+      `<option value="${esc(n)}"${m[role] === n && !other ? " selected" : ""}>${esc(n === "default" ? "claude's own default" : n)}</option>`));
+    if (list.length) opts.push(`<option value="${OTHER_MODEL}"${other ? " selected" : ""}>Other (type a name)...</option>`);
+    const box = other ? `<div class="row2"><label for="model-${role}-other">Name</label><input type="text" id="model-${role}-other" data-role="${role}" data-other="1" value="" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${label} name" placeholder="a model name, then Enter"></div>` : "";
+    return `<div class="row2"><label for="model-${role}">${label}</label><select id="model-${role}" data-role="${role}"${list.length ? "" : " disabled"}>${opts.join("")}</select></div>${box}`;
   };
   return field("plan", "Plan model") + field("implement", "Implement model");
 }
 async function setModel(role, model) {
-  try { S.walk = await api("/api/walk/model", { role, model }); toast(model ? "The " + role + " model is " + model + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }
+  try { S.walk = await api("/api/walk/model", { role, model }); if (S.modelOther) S.modelOther[role] = false; toast(model ? "The " + role + " model is " + model + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
+// "Other" picked: show the text box and put the caret in it.
+function openModelOther(role) { S.modelOther = Object.assign({}, S.modelOther, { [role]: true }); drawTasks(); $("#model-" + role + "-other")?.focus(); }
+// The text box left empty: nothing is kept, and the box closes on the model that was.
+function closeModelOther(role) { if (S.modelOther) S.modelOther[role] = false; drawTasks(); }
 async function setNext(item) {
   try { S.walk = await api("/api/walk/pin", { item: item || null }); toast(item ? "Next goes to " + item + "." : "Next is automatic."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
@@ -1126,7 +1137,7 @@ const pinSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() =>
 function typingInBox() {
   const a = document.activeElement;
   if (!a || !a.closest("#walkbox") || !S.walk || !S.walk.enabled) return false;
-  return (a.id === "bud" || a.id === "par") && !S.walk.on;
+  return ((a.id === "bud" || a.id === "par") && !S.walk.on) || !!(a.dataset && a.dataset.other);
 }
 function drawTasks(push) {
   const had = findEnter();
@@ -2241,8 +2252,13 @@ document.addEventListener("focusout", e => setTimeout(function catchUp() {
 document.addEventListener("input", e => {
   if (e.target.id === "bud" || e.target.id === "par" || e.target.id === "stoplim") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value, stop: $("#stoplim").checked });
 });
-document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStart(); } });
-document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.role) setModel(e.target.dataset.role, e.target.value); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStart(); }
+  else if (e.key === "Enter" && e.target.dataset && e.target.dataset.other) { e.preventDefault(); e.target.dispatchEvent(new Event("change", { bubbles: true })); }
+  else if (e.key === "Escape" && e.target.dataset && e.target.dataset.other) closeModelOther(e.target.dataset.role);
+});
+document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.other) { const v = e.target.value.trim(); if (v) setModel(e.target.dataset.role, v); else closeModelOther(e.target.dataset.role); }
+  else if (e.target.dataset && e.target.dataset.role) { if (e.target.value === OTHER_MODEL) openModelOther(e.target.dataset.role); else { if (S.modelOther) S.modelOther[e.target.dataset.role] = false; setModel(e.target.dataset.role, e.target.value); } } });
 
 /* A phone puts a page to sleep when another app is on top, and its requests and its timers stop with it. On coming back
    (visible again, restored from the back/forward cache, or the network up) an open chat is read at once and its poll

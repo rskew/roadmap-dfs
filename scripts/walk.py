@@ -72,10 +72,50 @@ MODEL_DEFAULTS = {"plan": "opus", "implement": "sonnet"}   # what run.sh runs a 
 # own default. A name already kept that is not listed stays in the list, so no choice is lost.
 MODEL_AGENTS = ("claude", "kiro")
 MODEL_CHOICES = {
-    "claude": ["opus", "sonnet", "haiku", "default"],
+    "claude": ["opus", "sonnet", "haiku", "opusplan", "opus[1m]", "sonnet[1m]", "default"],
     "kiro": ["auto", "claude-opus-5.5", "claude-sonnet-5.5", "claude-haiku-5.5"],
 }
+# kiro's own list is read from `kiro-cli chat --list-models`; MODEL_CHOICES["kiro"] is what shows until it answers
+# and when it cannot (no kiro-cli here, a failure, a slow start). Claude has no such command.
+KIRO_MODELS_TTL = 600           # seconds a list read from kiro-cli is kept
+KIRO_MODELS_TIMEOUT = 30        # seconds the read may take
+_kiro_models = {"ids": [], "at": 0.0, "busy": False}
+_kiro_models_lock = threading.Lock()
 MODEL_NAME = re.compile(r"[A-Za-z0-9._:\[\]][A-Za-z0-9._:\[\]-]*\Z")   # never a flag: no leading "-"
+
+
+def fetch_kiro_models():
+    """The model ids `kiro-cli chat --list-models` prints, in its order; [] when it cannot say.
+    Launched as run.sh launches it (`KIRO_CMD`, else `kiro-cli` on PATH)."""
+    cmd = shlex.split(os.environ.get("KIRO_CMD") or "kiro-cli")
+    try:
+        out = subprocess.run(cmd + ["chat", "--list-models", "--format", "json"], capture_output=True,
+                             text=True, timeout=KIRO_MODELS_TIMEOUT, stdin=subprocess.DEVNULL).stdout
+        rows = json.loads(out).get("models", [])
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return []
+    ids = [m.get("model_id") for m in rows if isinstance(m, dict)]
+    return [i for i in ids if isinstance(i, str) and MODEL_NAME.match(i)]
+
+
+def _refresh_kiro_models():
+    ids = fetch_kiro_models()
+    with _kiro_models_lock:
+        if ids:
+            _kiro_models["ids"] = ids
+        _kiro_models["at"] = time.time()     # a failure is tried again after the same wait
+        _kiro_models["busy"] = False
+
+
+def kiro_models():
+    """Kiro's models for the page: the last list read from kiro-cli, else `MODEL_CHOICES["kiro"]`.
+    Never waits: a list that is missing or older than `KIRO_MODELS_TTL` is read in a thread,
+    and the next snapshot has it."""
+    with _kiro_models_lock:
+        if not _kiro_models["busy"] and time.time() - _kiro_models["at"] > KIRO_MODELS_TTL:
+            _kiro_models["busy"] = True
+            threading.Thread(target=_refresh_kiro_models, daemon=True).start()
+        return list(_kiro_models["ids"] or MODEL_CHOICES["kiro"])
 
 
 def models_file():
@@ -889,7 +929,7 @@ class WalkMixin:
     def model_choices(self):
         """The models the next chain's agent can be given, for the page's drop-down: empty for
         an agent that reads its model from its own config. A model kept that is not listed is added."""
-        listed = list(MODEL_CHOICES.get(self.agent, []))
+        listed = kiro_models() if self.agent == "kiro" else list(MODEL_CHOICES.get(self.agent, []))
         if listed:
             for name in self.models().values():
                 if name and name not in listed:

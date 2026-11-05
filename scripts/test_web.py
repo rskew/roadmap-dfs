@@ -920,20 +920,22 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         """modelFields() and walkSeen() in index.html, run under node (skipped when there is none);
         the source is checked either way, since the script is not always run."""
         src = (HERE / "web" / "index.html").read_text()
-        fields = src[src.index("function modelFields"):src.index("async function setModel")]
+        fields = src[src.index("const OTHER_MODEL"):src.index("async function setModel")]
         self.assertIn("<select", fields)
-        self.assertNotIn('type="text"', fields, "a model is chosen from a list, not typed")
+        self.assertIn("Other (type a name)", fields, "a name the list lacks can be typed")
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's modelFields()")
         seen = src[src.index("function walkSeen("):src.index("function walkHtml()")]
-        js = ("const esc = s => String(s); let S;" + fields + seen +
+        js = ("const esc = s => String(s); let S = {modelOther: {implement: true}};" + fields + seen +
               "const claude = modelFields({agent: 'claude', models: {plan: 'opus', implement: ''}, model_defaults: {plan: 'opus', implement: 'sonnet'}, model_choices: ['opus', 'sonnet', 'haiku', 'default']});"
               "const kiro = modelFields({agent: 'kiro', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: ['auto', 'claude-opus-5.5']});"
               "const codex = modelFields({agent: 'codex', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: []});"
               "S = {walkDraft: {budget: '3'}}; walkSeen({on: true});"
-              "console.log(JSON.stringify([claude, kiro, codex, S.walkDraft]))")
-        claude, kiro, codex, draft = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+              "S.modelOther = {};"
+              "const closed = modelFields({agent: 'kiro', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: ['auto']});"
+              "console.log(JSON.stringify([claude, kiro, codex, S.walkDraft, closed]))")
+        claude, kiro, codex, draft, closed = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(claude.count("<select"), 2)
         self.assertIn('<option value="opus" selected>opus</option>', claude, "the kept model is the selected one")
         self.assertIn("opus (the runner's)", claude, "an unchosen plan model says what the runner uses")
@@ -941,6 +943,11 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertIn('value="claude-opus-5.5"', kiro)
         self.assertNotIn('value="opus"', kiro, "claude's aliases are not kiro's models")
         self.assertIn("kiro's own", kiro)
+        self.assertEqual(claude.count('value="__other__"'), 2, "each drop-down ends in the Other option")
+        self.assertEqual(claude.count('data-other="1"'), 1, "only the role opened for typing has a text box")
+        self.assertIn('<option value="__other__" selected>', claude, "the opened role shows Other chosen")
+        self.assertNotIn("data-other", closed, "no text box until Other is picked")
+        self.assertNotIn("__other__", codex, "nothing to choose, nothing to type")
         self.assertEqual(codex.count("disabled"), 2, "codex reads its model from its own config: nothing to choose")
         self.assertIsNone(draft, "a walk starting drops the typed numbers")
 
