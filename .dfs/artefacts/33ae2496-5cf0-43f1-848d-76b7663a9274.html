@@ -1,0 +1,223 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W130.49: does one bundled W17 run stand for two candidates?</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  p { margin: 6px 0; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; gap: 0; margin: 8px 0; }
+  .box { border: 1.5px solid #333; border-radius: 6px; padding: 8px 12px; background: #fff; }
+  .box.ctl { background: #eef3fa; }
+  .box.chg { background: #fdf0e0; }
+  .box.warn { background: #fbe9e7; }
+  .link { text-align: center; color: #555; font-size: 14px; padding: 2px 0; }
+  .bar { height: 18px; background: #6a8caf; border-radius: 3px; min-width: 2px; }
+  .bar.chg { background: #d98a2b; }
+  .row { display: flex; gap: 10px; align-items: center; margin: 4px 0; }
+  .row .lab { flex: 0 0 96px; font-size: 14px; }
+  .row .num { flex: 0 0 auto; font-size: 14px; }
+  .row .track { flex: 1 1 auto; }
+  .cap { color: #444; font-size: 14px; }
+  .wrong { border-left: 4px solid #b3261e; padding: 4px 10px; background: #fff; margin: 8px 0; }
+  .dg .box { overflow-wrap: anywhere; }
+</style>
+
+<h1>One bundled arm on one task: what can it say?</h1>
+<p>W130.48 ran one changed arm on W17 (a task above $3.5) against two controls and wrote "neither candidate is kept".
+  That sentence rests on three things nobody settled. Pick one to see it, and what would show it wrong.</p>
+
+<div class="tabs" role="group" aria-label="Assumption">
+  <button type="button" data-k="a" aria-pressed="true">(a) The bundle speaks for each half</button>
+  <button type="button" data-k="b" aria-pressed="false">(b) W17 speaks for dear tasks</button>
+  <button type="button" data-k="c" aria-pressed="false">(c) The wording made the gain</button>
+</div>
+
+<section id="p-a">
+  <h2>(a) One arm carried two changes</h2>
+  <div class="dg">
+    <div class="box chg" data-node="walk">Review brief (<code>state.py _round_note</code>): walk every Goal clause in the round</div>
+    <div class="link">+</div>
+    <div class="box chg" data-node="rerun">Work brief: after a fix, re-run the earlier checks and search for the same fault elsewhere</div>
+    <div class="link">&#8595; one run, one score</div>
+    <div class="box" data-node="score">W17 changed tree: 8 and 9 of 10 clauses. Which line did it?</div>
+  </div>
+  <p class="cap">The two lines sit in different functions and could have been run apart. The pair cannot say which one
+    (or both, or neither) moved the score. If the lines pull opposite ways, the bundle hides it.</p>
+  <div class="wrong"><b>Wrong if</b> a pair with the walk line alone, or the re-run line alone, on W17 scores differently from the bundle.</div>
+</section>
+
+<section id="p-b" hidden>
+  <h2>(b) W17 is one task of about 111 above $3.5</h2>
+  <div class="dg">
+    <div class="box" data-node="pop">Above $3.5: 58 of 111 tasks have a second issues review (52%) and hold 99% of the spend after one.</div>
+    <div class="link">&#8595; one task drawn</div>
+    <div class="box ctl" data-node="ctl">W17's two controls had 1 issues review of 2 each, so neither reached a second issues round.
+      The original had 2 issues of 3.</div>
+  </div>
+  <p class="cap">The controls here did not show the slow loop the candidates aim at. A task whose control does reach a second
+    issues round would test them better.</p>
+  <div class="wrong"><b>Wrong if</b> a second dear task, one whose control has a second issues round, shows a different result.</div>
+</section>
+
+<section id="p-c" hidden>
+  <h2>(c) The gain came from 4.5 times the sessions</h2>
+  <div class="dg" data-node="bars">
+    <div class="row"><span class="lab">control 1</span><span class="track"><div class="bar" style="width:22%"></div></span><span class="num">4 sessions, 5.0 of 10</span></div>
+    <div class="row"><span class="lab">control 2</span><span class="track"><div class="bar" style="width:22%"></div></span><span class="num">4 sessions, 6.5 of 10</span></div>
+    <div class="row"><span class="lab">changed</span><span class="track"><div class="bar chg" style="width:100%"></div></span><span class="num">18 sessions, 8.5 of 10</span></div>
+  </div>
+  <p class="cap">The changed arm found the SIGTERM case (C4) only in review round four, the 11th session. Both controls'
+    second reviews said ok with C4 and C6 unmet. Any loop kept going that long may have found them. Credits: 94.7 or more
+    against 24.0 and 20.3.</p>
+  <div class="wrong"><b>Wrong if</b> a control forced through the same number of review rounds scores no better than 6.5.</div>
+</section>
+
+<h2>What is held, either way</h2>
+<p>The verdict is "not shown" for each candidate, nothing merged. That is the safe default: the risk is a missed gain, not a
+  harm done. The quality difference (8.5 against 5.0 and 6.5) is larger than the judge's 1.5-clause tie margin, so the pair does
+  read better; what is open is why, and for which line.</p>
+
+<script>
+  var tabs = document.querySelectorAll('.tabs button');
+  function show(k) {
+    ['a', 'b', 'c'].forEach(function (x) { document.getElementById('p-' + x).hidden = x !== k; });
+    tabs.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.k === k ? 'true' : 'false'); });
+  }
+  tabs.forEach(function (b) {
+    b.addEventListener('click', function () { show(b.dataset.k); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () {
+    var on = document.querySelector('.tabs button[aria-pressed=true]');
+    return { tab: on ? on.dataset.k : 'a' };
+  };
+  document.addEventListener('dfs-state', function (e) { if (e.detail && e.detail.tab) show(e.detail.tab); });
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Hold it: the W17 pair reads as not shown for each candidate, nothing merged, and the task closes with the three assumptions stated."> Hold it as stated</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Test it: run a one-line arm or a same-rounds control on W17 before the task closes."> Test it before closing</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
