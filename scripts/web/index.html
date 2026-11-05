@@ -191,6 +191,21 @@ pre.runlog .r-err { color: var(--attention); }
 .item.reorder { grid-template-columns: 3.2rem minmax(0, 1fr) var(--hit); }
 .moves { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 .moves .btn { min-width: var(--hit); padding: 0 var(--s3); }
+/* A short row: the goal and the tags take one line each, the reason line is left to the task's own screen, and the
+   padding is halved. Every move and the grip stay --hit high. From 600px the moves sit in the row, beside the text. */
+.item.reorder { padding-block: var(--s2); align-items: center; }
+.item.reorder .goal { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.reorder .meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; margin-top: 2px; }
+.item.reorder .meta .tag { max-width: none; white-space: nowrap; }
+.item.reorder .why { display: none; }
+.item.reorder .st { order: -2; }
+.item.reorder .meta .hold { order: -1; }   /* what waits on or holds a task is what places it: it comes before the tags that clip first */
+.item.reorder .moves { margin-top: var(--s1); }
+@media (min-width: 600px) {
+  .item.reorder { grid-template-columns: 3.2rem minmax(0, 1fr) auto var(--hit); }
+  .item.reorder .moves { grid-column: 3; grid-row: 1; margin-top: 0; flex-wrap: nowrap; }
+  .item.reorder .grip { grid-column: 4; grid-row: 1; }
+}
 /* the grip at the row's right edge: drag it to a new place among the siblings */
 .grip { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-self: end; width: var(--hit); min-height: var(--hit); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .grip svg { width: calc(18px * var(--z)); height: calc(18px * var(--z)); fill: currentColor; pointer-events: none; }
@@ -1091,8 +1106,8 @@ function drawTasks(push) {
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}
           ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}
-          ${it.waiting_on ? `<span class="tag">waiting on ${esc(it.waiting_on)}</span>` : ""}
-          ${it.blocked_by ? `<span class="tag attention">held by ${esc(it.blocked_by)}</span>` : ""}${wait}</span></span>
+          ${it.waiting_on ? `<span class="tag hold">waiting on ${esc(it.waiting_on)}</span>` : ""}
+          ${it.blocked_by ? `<span class="tag attention hold">held by ${esc(it.blocked_by)}</span>` : ""}${wait}</span></span>
       ${it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : ""}`;
     const style = `--ind:${Math.min(it.depth, 3) * 14}px`;
     if (table) {
@@ -1116,7 +1131,8 @@ function drawTasks(push) {
     } else if (S.reorder) {
       const mv = (move, label, name) => `<button class="btn" data-act="move" data-move="${move}" data-id="${esc(it.id)}" aria-label="${name} ${esc(it.id)}">${label}</button>`;
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
-      html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" style="${style}">${inner}
+      const whole = [it.id + " " + it.goal, it.status, it.waiting_on && "waiting on " + it.waiting_on, it.blocked_by && "held by " + it.blocked_by, it.pr_ready && "ready to open a pull request", it.rev, it.status !== "open" && it.status !== "done" && it.why].filter(Boolean).join(", ");   // the row clips its goal, tags and reason; the title has all of it
+      html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" title="${esc(whole)}" style="${style}">${inner}
         <span class="moves">${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break above a plain one, which a walk passes:" : "Make the break above a stop break, which ends a walk that waited at it:")}</span>${grip}</div>`;
     } else if (it.archivable) {
       const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
