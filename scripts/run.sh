@@ -1223,6 +1223,9 @@ for i in $(seq 1 "$CAP"); do
     if [ "$kind" != work ] || [ "${plan:-0}" = 1 ]; then model="${PLAN_MODEL-opus}"; else model="${IMPLEMENT_MODEL-sonnet}"; fi
     [ -z "$model" ] || MODEL_ARGV=(--model "$model")
     echo "   model ${model:-claude default}"
+    meta_set model="${model:-claude default}"   # what the web page's walk box shows beside the run
+  else
+    meta_set model=""                           # codex, kiro and opencode read theirs from their own config
   fi
   IN_SESSION="$kind"
   set +e

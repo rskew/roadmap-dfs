@@ -1054,6 +1054,26 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A running chain shows what it runs on as it recorded it, not the Agent field (the next chain's): kind of session, agent, model.
+  async walkchain(b) {
+    const { page, errors } = await open(b, PHONE);
+    // Set and read in one go, so a poll cannot put the real walk back between the two.
+    const shown = await page.evaluate(() => {
+      walkSeen({ on: true });
+      S.walk.on = true;
+      S.walk.agent = "codex";
+      const draw = c => { S.walk.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true }, c)]; drawTasks(true); return document.querySelector("#walkbox .chain")?.textContent || ""; };
+      return [draw({ agent: "claude", kind: "work", model: "sonnet" }), draw({ agent: "codex", kind: "work", model: "" }), draw({ agent: "claude", kind: "", model: "" }),
+              document.querySelector("#agentsel").value];
+    });
+    assert(/W1 run 2\/5.*work.*claude, sonnet/.test(shown[0]), "the chain says the kind of session, agent and model it runs on: " + shown[0]);
+    assert(/codex, its own model/.test(shown[1]), "an agent told no model says it uses its own: " + shown[1]);
+    assert(!/own model/.test(shown[2]) && /claude/.test(shown[2]), "a chain that has not begun a session names no model: " + shown[2]);
+    same(shown[3], "codex", "the Agent field still shows the next chain's agent");
+    if (process.env.W151_SHOT) { await openWalk(page); await page.evaluate(() => { S.walk.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true, agent: "claude", kind: "work", model: "sonnet" })]; drawTasks(true); }); await page.screenshot({ path: process.env.W151_SHOT }); }
+    same(errors, [], "no page errors");
+  },
+
   // The walk's controls stay in reach on a list taller than the screen: the box sticks under the bar, the rows pass under it,
   // open it scrolls in itself, and a row focus brings back into view is not left under it.
   async walkpin(b) {

@@ -126,6 +126,19 @@ class Controls(unittest.TestCase):
         self.assertEqual(self.ui.agent, "codex")
         self.assertEqual(self.w.agent(), "codex")
 
+    def test_the_snapshot_says_what_each_chain_runs_on(self):
+        # The box shows the agent, the kind of session and the model the chain recorded, not the
+        # settings for the next chain.
+        ui = self.ui
+        ui.walk_parallel, ui.walk_stop_on_limit, ui.walk_carry, ui.walk_stops = 1, False, [], frozenset()
+        run = dict(dir="/runs/mine", item="W1", run="2", cap="5", live=True, pid=1, agent="claude",
+                   kind="work", model="sonnet", mode="work")
+        ui.walk_chains, ui.chains = [dict(dir="/runs/mine", item="W1", started=0.0, content=set(), pin=False, cap=5)], [run]
+        ui.live = lambda: [run]
+        ui.agent = "codex"                                   # chosen since: for the next chain
+        got = ui.walk_snapshot()["chains"]
+        self.assertEqual([(c["agent"], c["kind"], c["model"]) for c in got], [("claude", "work", "sonnet")])
+
     def test_a_screen_with_a_prompt_open_says_so_rather_than_hanging(self):
         # Nothing drains: the screen is in a prompt.
         t0 = time.time()

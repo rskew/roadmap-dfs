@@ -2290,6 +2290,13 @@ class Chain(unittest.TestCase):
         self.run_chain("nothing", cap=1)
         self.assertEqual(self.models_run(), ["work opus"])
 
+    def test_the_chain_records_the_model_of_the_session_it_is_in(self):
+        # The web page's walk box reads kind and model from meta.json.
+        rc, meta, out = self.run_chain("work", cap=1)
+        self.assertEqual((meta.get("kind"), meta.get("model")), ("work", "sonnet"), out)
+        rc, meta, out = self.run_chain("work", cap=1, IMPLEMENT_MODEL="")
+        self.assertEqual((meta.get("kind"), meta.get("model")), ("work", "claude default"), out)
+
     def test_the_review_plans_on_opus_and_the_models_can_be_set_or_dropped(self):
         self.run_chain("work,confirm,rok", PLAN_MODEL="fable", IMPLEMENT_MODEL="")
         self.assertEqual(self.models_run(), ["work", "work", "review fable"])
