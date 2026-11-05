@@ -137,6 +137,8 @@ def index_html():
 
 
 def needs_you(it):
+    """Whether the task waits on the author. The state carries it per row and as a total; the
+    page reads only the total (the header's count), and the row field is what the total sums."""
     return bool(it["status"] == "blocked" or it.get("open_raises")
                 or it.get("standing") or it.get("corrections"))
 
