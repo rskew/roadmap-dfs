@@ -646,6 +646,46 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A node with an open raise is settled by answering it: its card and its menu offer no Refute/confirm.
+  async no_correct_on_raise(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W9");
+    const id = await page.getAttribute(".row.hasraise .main", "data-id");
+    await page.click(".row.hasraise .main");
+    await page.waitForSelector("#sheet.open");
+    assert(await page.locator("#sheet [data-act=answer]").count() === 1, "the raise is answered from the card");
+    assert(await page.locator("#sheet [data-act=correct]").count() === 0, "a node with a raise offers no Refute/confirm");
+    await page.keyboard.press("c");
+    assert(await page.locator("dialog[open]").count() === 0, "the c shortcut opens no correction on it");
+    await page.click("#sheet [data-act=close]");
+    await page.keyboard.press("Escape");
+    const desk = await open(b, DESKTOP);
+    await task(desk.page, "W9");
+    const menu = async sel => {
+      await desk.page.click(sel + " .main[data-act=node]", { button: "right" });
+      await desk.page.waitForSelector("#ctx:not([hidden]) button");
+      const n = await desk.page.locator("#ctx [data-act=correct]").count();
+      await desk.page.keyboard.press("Escape");
+      return n;
+    };
+    assert(await menu(".row.hasraise") === 0, "its menu offers no Refute/confirm either");
+    assert(await menu(".row:not(.hasraise)") === 1, "a node without a raise keeps Refute/confirm");
+    // Answering the raise gives Refute/confirm back (last: it removes the raise the checks above need).
+    await page.click(".row.hasraise .main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=answer]"); await dialog(page);
+    await page.fill("dialog textarea", "Spinning disks. Test on one.");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector(".row.hasraise"));
+    if (!(await page.$("#sheet.open"))) {
+      await page.click(".row .main[data-act=node][data-id=" + JSON.stringify(id) + "]");
+      await page.waitForSelector("#sheet.open");
+    }
+    assert(await page.locator("#sheet [data-act=correct]").count() === 1, "once the raise is answered the card offers Refute/confirm again");
+    same(desk.errors, [], "no page errors on desktop");
+    same(errors, [], "no page errors");
+  },
+
   // Answer a raise: the log gets the same entry the terminal writes.
   async answer(b) {
     const { page, errors } = await open(b, PHONE);

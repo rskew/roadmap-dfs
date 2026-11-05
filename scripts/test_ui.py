@@ -248,6 +248,9 @@ class Flows(unittest.TestCase):
         self.assertEqual([e["body"].strip() for e in answers], ["Spinning disks. Test on one."])
         self.assertEqual(dfs_tree.open_raises(dfs_tree.load("W9")), [])
 
+    def test_a_node_with_a_raise_offers_no_refute_confirm(self):
+        self.flow("no_correct_on_raise")
+
     def test_refute_confirm_states_the_outcome_and_writes_the_correction(self):
         self.flow("correct")
         corr = [e for e in self.log("W9") if e["kind"] == "correct"]

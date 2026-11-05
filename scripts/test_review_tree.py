@@ -753,6 +753,20 @@ class Pane(unittest.TestCase):
         self.assertEqual((self.logged, ran), ([], []))
         self.assertIn("tab to the tree", ui.msg)
 
+    def test_a_node_with_an_open_raise_offers_no_correction(self):
+        # W1.3 carries an open raise; W1.4 does not.
+        ui = self.ui
+        ui.act(9)
+        self.to("W1.3")
+        self.assertNotIn("f correct", ui.footer(200))
+        self.assertIn("a answer", ui.footer(200))
+        ui.prompted = "c"
+        ui.act(ord("f"))
+        self.assertEqual((self.logged, ui.composed), ([], []))
+        self.assertIn("open raise", ui.msg)
+        self.to("W1.4")
+        self.assertIn("f correct", ui.footer(200))
+
     def test_the_tree_cursor_is_drawn_only_while_it_has_the_keys(self):
         ui = self.ui
         lines = [l for l, *_ in ui.lines_tree(100)]
