@@ -372,7 +372,9 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 #chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 #chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: calc(var(--vvh, 100dvh) * .3); resize: none; }
 #chat-form .btn { flex: none; }
-#chat-stop[hidden] { display: none; }
+/* Stop takes Send's place while a turn runs (Send waits then anyway), so the text box keeps its width. */
+#chat-stop[hidden], #chat-send[hidden] { display: none; }
+#chat-send, #chat-stop { min-width: calc(72px * var(--z)); }
 
 /* A keyboard shrinks the VISUAL viewport and may leave the layout one as it was: the dialogs
    are fitted to the visual one (--vvh, --vvt, set below), their fields scroll, and the row of
@@ -1675,12 +1677,12 @@ function chatDraw(st) {
   if (sig === CHAT.last) return;
   CHAT.last = sig;
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
-  log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">Running in the terminal's process: type here, or press <code>c</code> there to look at it.</p>` : "")
+  log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
     + `<div class="chat-newest"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
-  $("#chat-stop").hidden = !st.busy;
+  $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy;
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
   // A busy turn redraws every poll ("processing (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
@@ -1747,7 +1749,7 @@ function chatOpen(scope) {
   CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false);
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
   $("#chat-log").innerHTML = ""; $("#chat-input").value = chatDraft(scope); $("#chat-agent").hidden = true;
-  $("#chat").showModal(); $("#chat-input").focus();
+  $("#chat").showModal(); chatGrow(); $("#chat-input").focus();
   chatBegin(scope);
 }
 $("#chat-form").addEventListener("submit", async ev => {
@@ -1755,7 +1757,7 @@ $("#chat-form").addEventListener("submit", async ev => {
   const input = $("#chat-input"), message = input.value.trim();
   if (!message || !CHAT.scope) return;
   $("#chat-send").disabled = true; CHAT.follow = true;
-  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatDraft(CHAT.scope, ""); chatLoad(); }
+  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatGrow(); chatDraft(CHAT.scope, ""); chatLoad(); }
   catch (e) {
     // no answer is not "not sent": the server may have taken the message. The page does not send it again; the chat is
     // read, and the message stays in the box until the reader sees it among the sent ones.
@@ -1774,7 +1776,12 @@ $("#chat-stop").addEventListener("click", async () => {
 });
 // Enter sends where there is a keyboard (a fine pointer) and Shift+Enter adds a line; on a touch screen Enter stays a new line,
 // and Send is the button. Ctrl/cmd+Enter sends anywhere. A key that is choosing an input-method candidate is left alone.
-$("#chat-input").addEventListener("input", ev => { if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
+$("#chat-input").addEventListener("input", ev => { chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
+// The text box grows with what is typed, up to its CSS max-height (then it scrolls), and shrinks back when cleared.
+function chatGrow() {
+  const el = $("#chat-input"); el.style.height = "auto";
+  el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + "px";
+}
 const chatEnterSends = () => matchMedia("(pointer: fine)").matches;
 $("#chat-input").placeholder = chatEnterSends() ? "Ask about this. Enter sends, Shift+Enter adds a line" : "Ask about this";
 $("#chat-input").addEventListener("keydown", ev => {
@@ -2011,7 +2018,7 @@ document.addEventListener("click", e => {
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
-    chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
+    chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStart, walkstop: walkStop,
     chainstop: () => chainStopForm(d.item),
