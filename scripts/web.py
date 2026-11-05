@@ -1114,8 +1114,9 @@ class Hub:
 
     def subscribe(self, last=None):
         """A listener and the number now. A page that reconnects says the number it last heard
-        (`Last-Event-ID`) and is told at once if things moved on; a new page has just read them,
-        and is told nothing, but is given the number to hold (see `Handler.events`)."""
+        (`Last-Event-ID`), and a new one the number its first reads were made at (`?since=`, see
+        `Handler.events`); either is told at once if things moved on. A page that says neither is
+        told nothing, but is given the number to hold."""
         q = queue.Queue()
         with self.lock:
             self.clients.add(q)
@@ -1232,6 +1233,7 @@ def accepts_gzip(header):
 class Handler(BaseHTTPRequestHandler):
     server_version = "roadmap-web"
     KEEPALIVE = 15
+    read_at = None      # the hub's number a read was begun at, sent with its answer (`handle_any`)
 
     def log_message(self, fmt, *args):         # the terminal belongs to the person running it
         pass
@@ -1244,6 +1246,8 @@ class Handler(BaseHTTPRequestHandler):
             data = gzip.compress(data, 1)      # level 1: about 3 ms for the largest task, a quarter of the bytes
             self.send_header("Content-Encoding", "gzip")
         self.send_header("Vary", "Accept-Encoding")
+        if self.read_at is not None:
+            self.send_header("X-Roadmap-Version", str(self.read_at))
         self.send_header("Content-Length", str(len(data)))
         if not any(k == "Cache-Control" for k, _ in extra):
             self.send_header("Cache-Control", "no-store")
@@ -1311,7 +1315,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
-        q, version = HUB.subscribe(self.headers.get("Last-Event-ID"))
+        # A reconnect says the last number it heard. A new page says the number its first reads were made at (it
+        # connects when they have landed), so a change made between those reads and this connection is told too.
+        since = parse_qs(urlparse(self.path).query).get("since", [None])[0]
+        q, version = HUB.subscribe(self.headers.get("Last-Event-ID") or (since if since and since.isdigit() else None))
         try:
             # The number the page starts from, with no event: the browser keeps it as its last id, so a page that has
             # heard no change still says where it was when it reconnects, and is told what it missed.
@@ -1347,12 +1354,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_any(self, method):
         url = urlparse(self.path)
+        self.read_at = None      # a connection can carry many requests
         try:
             if not self.host_ok():
                 raise Refused("this server answers to its own address only", 421)
             if url.path.startswith("/artefact-state/"):
                 return self.artefact_api(method, url.path)
             if method == "GET":
+                # The number a read is made at, taken before it is built. A change is announced once its file is
+                # written, so a read has every change announced up to this number; the page asks after the rest.
+                self.read_at = HUB.version if url.path.startswith("/api/") and url.path != "/api/events" else None
                 return self.get(url.path)
             if not self.same_origin():
                 raise Refused("that request came from another site", 403)

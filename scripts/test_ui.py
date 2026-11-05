@@ -179,6 +179,9 @@ class Flows(unittest.TestCase):
     def test_a_change_to_the_open_task_survives_a_replaced_or_failed_read(self):
         self.flow("push_stale")
 
+    def test_a_change_made_before_the_event_stream_connects_is_still_shown(self):
+        self.flow("push_gap")
+
     def test_going_back_to_the_list_draws_it_without_waiting_on_its_reads(self):
         self.flow("backinstant")
 

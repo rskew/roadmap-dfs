@@ -523,11 +523,16 @@ async function reach(path, body) {
     throw Object.assign(new Error(NO_ANSWER), { network: true });
   }
 }
+/* `READ_AT` is the oldest number the server said it held when it began a read (`X-Roadmap-Version`). The page connects
+   for pushes after its first reads and asks for what came after it, so a change made while it was loading is told. */
+let READ_AT = Infinity;
 async function api(path, body) {
   if (body !== undefined) WROTE++;
   loading(1);
   try {
     const r = await reach(path, body);
+    const at = body === undefined ? parseInt(r.headers.get("X-Roadmap-Version"), 10) : NaN;
+    if (at < READ_AT) READ_AT = at;
     let j = {};
     try { j = await r.json(); } catch (e) { /* not JSON */ }
     if (!r.ok) throw new Error(j.error || ("error " + r.status));
@@ -2256,7 +2261,7 @@ let pushT, EVENTS, pushed = new Set();      // `pushed`: the tasks changed since
 function listen() {
   if (!window.EventSource) return;
   if (EVENTS) EVENTS.close();
-  const es = EVENTS = new EventSource("/api/events");
+  const es = EVENTS = new EventSource("/api/events" + (READ_AT < Infinity ? "?since=" + READ_AT : ""));
   es.addEventListener("change", e => {
     let tasks = null; try { tasks = JSON.parse(e.data).tasks; } catch (x) { /* not said: reread all */ }
     pushed = tasks && pushed ? new Set([...pushed, ...tasks]) : null;
@@ -2294,8 +2299,7 @@ $("#theme").onclick = () => {
 };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeLabel);
 themeLabel();
-listen();
-render(true);
+render(true).finally(listen);       // after the first reads, which name the number to be told after
 </script>
 </body>
 </html>

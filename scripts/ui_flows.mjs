@@ -1797,6 +1797,29 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     touch("W1");
     assert(await shown("Failed then pushed"), "a change to the open task was lost when its read failed");
   },
+  // A change made after the page's first reads and before its event stream connects (held here) is still shown once it connects,
+  // and the page made one set of reads.
+  async push_gap(b) {
+    const ctx = await b.newContext({ ...PHONE });
+    const page = await ctx.newPage();
+    PAGES.push(page);
+    let release; const gate = new Promise(r => { release = r; });
+    let connected = 0; const reads = [];
+    await page.route("**/api/events*", async r => { connected++; await gate; await r.continue(); });
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/") && u !== "/api/events") reads.push(u); });
+    await page.goto(URL_ + "#/t/W9");
+    await page.waitForSelector(".row");
+    await page.waitForTimeout(1000);
+    const file = path.join(DIR, ".dfs", "items", "W9.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/^(### W9\.1 · ).*$/m, "$1Changed in the gap"));
+    await page.waitForTimeout(2500);        // the watcher announces it while the stream is still held
+    assert(!(await page.evaluate(() => document.body.textContent.includes("Changed in the gap"))), "the page showed the change before it was told");
+    const before = reads.length; release();
+    try { await page.waitForFunction(() => document.body.textContent.includes("Changed in the gap"), null, { timeout: 5000 }); }
+    catch (e) { assert(false, "a change made between the first reads and the connection was not shown (reads " + JSON.stringify(reads) + ")"); }
+    assert(connected === 1, "the page connected " + connected + " times");
+    assert(reads.slice(0, before).filter(u => u === "/api/state").length <= 2 && reads.slice(0, before).filter(u => u === "/api/task/W9").length === 1, "the first load made more than one set of reads: " + JSON.stringify(reads.slice(0, before)));
+  },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
     const box = sel => boxOf(page, sel);

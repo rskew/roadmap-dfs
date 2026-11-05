@@ -1230,10 +1230,10 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), before)
 
     # ── being told, not asking ──────────────────────────────────────────────────
-    def events(self, last=None, preamble=False):
+    def events(self, last=None, preamble=False, since=None):
         """An open `/api/events`: a function that returns the next `event:` as (name, data)."""
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        conn.request("GET", "/api/events", headers={"Last-Event-ID": last} if last else {})
+        conn.request("GET", "/api/events" + ("?since=%s" % since if since is not None else ""), headers={"Last-Event-ID": last} if last else {})
         r = conn.getresponse()
         self.assertEqual((r.status, r.getheader("Content-Type")), (200, "text/event-stream"))
         self.addCleanup(conn.close)
@@ -1272,6 +1272,25 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         # a server that restarted holds a new number: the page's old one is not it
         restarted = self.events(str(int(first.id) - 10 ** 6))
         self.assertEqual(restarted()[0], "change")
+
+    def test_a_new_page_is_told_what_came_after_the_number_its_reads_were_made_at(self):
+        """A read says the number it was begun at; a page that connects after its reads says it as `since`,
+        and a change made between the two is told. A page whose reads are as new is told nothing."""
+        status, _, resp = self.call("GET", "/api/state")
+        read_at = resp.getheader("X-Roadmap-Version")
+        self.assertEqual((status, read_at), (200, str(dfs_web.HUB.version)))
+        self.assertIsNone(self.call("GET", "/")[2].getheader("X-Roadmap-Version"), "only the API's reads carry a number")
+        self.assertIsNone(self.call("POST", "/api/accept", dict(task="W1"))[2].getheader("X-Roadmap-Version"))
+        up_to_date = self.events(since=read_at)
+        dfs_web.HUB.notify(["W1"])                    # made between the read and the connection
+        late = self.events(since=read_at)
+        name, data = late()
+        self.assertEqual((name, data["v"]), ("change", int(read_at) + 1))
+        name, data = up_to_date()                     # told nothing at connecting: the first thing it hears is the notify
+        self.assertEqual((name, data["tasks"]), ("change", ["W1"]))
+        again = self.events(since=read_at, last=str(data["v"]))     # a reconnect's own number wins over the first one
+        dfs_web.HUB.notify(["W2"])
+        self.assertEqual(again()[1]["tasks"], ["W2"])
 
     def test_a_new_page_is_told_nothing_until_a_write_lands_and_a_reconnecting_one_is_told_it_missed_some(self):
         nxt = self.events()
