@@ -63,7 +63,7 @@
     {"kind": "fails", "from": "WalkMixin.walk_tick", "to": "WalkMixin.walk_off", "label": "start_chain returns None → the walk ends; chains already started are told to end", "at": "WalkMixin.walk_tick"},
     {"kind": "stops", "from": "WalkMixin.walk_lower", "to": "author", "label": "a chain whose cap file cannot be written is returned in a list; the screen's message names the first", "at": "WalkMixin.walk_lower"},
     {"kind": "stops", "from": "WalkMixin.walk_look_at_prs", "to": "author", "label": "a pull request that cannot be read is an event line; the walk goes on", "at": "WalkMixin.walk_look_at_prs"},
-    {"kind": "stops", "from": "chain_cause", "to": "WalkMixin.walk_off", "label": "console.log unreadable → no cause added to the reason", "at": "chain_cause"},
+    {"kind": "stops", "from": "rundir", "to": "chain_cause", "label": "console.log unreadable (OSError) → chain_cause returns '', so walk_off's reason carries no cause and nobody is told", "at": "chain_cause"},
 
     {"kind": "puts", "from": "WalkMixin.walk_carry_add", "to": "pending", "label": "a task that ended on its cap, or was held by a limit, goes to the front next time", "at": "WalkMixin.walk_carry_add"},
     {"kind": "takes", "from": "WalkMixin.walk_lead", "to": "pending", "label": "in order: the pin, each carried task still workable, then the roadmap's next item", "at": "WalkMixin.walk_lead"},

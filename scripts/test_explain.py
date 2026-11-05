@@ -113,6 +113,16 @@ class WrongOwners(unittest.TestCase):
         self.assertEqual(self.funcs["Base.ping"]["calls"], ["Mixin.pong"])
 
 
+class Duplicates(unittest.TestCase):
+    def test_one_class_name_in_two_files_is_refused_and_async_is_read(self):
+        d = tempfile.mkdtemp()
+        one = write(d, "one.py", "class K:\n    async def go(self):\n        self.go()\n")
+        two = write(d, "two.py", "class K:\n    def go(self):\n        pass\n")
+        self.assertIn("K.go", explain.read_code([one]))
+        with self.assertRaises(explain.NotesError):
+            explain.read_code([one, two])
+
+
 class Notes(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp()
@@ -157,6 +167,10 @@ class Page(unittest.TestCase):
             self.assertIn("<h1>", text)
             for lens, *_ in explain.LENSES:
                 self.assertIn('id="lens-%s"' % lens, text)
+            with open(os.path.join(NOTES, name)) as fh:
+                notes = json.load(fh)
+            for e in notes["edges"]:
+                self.assertIn(explain.esc(e["label"]), text, "%s: edge %r is not drawn" % (name, e["label"]))
 
 
 if __name__ == "__main__":

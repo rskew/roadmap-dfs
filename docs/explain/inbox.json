@@ -8,8 +8,9 @@
     "model": {"kind": "actor", "label": "the running agent", "note": "claude, codex, kiro or opencode"},
     "plugin": {"kind": "actor", "label": "opencode's plugin", "note": "lives inside the agent's own process"},
     "box": {"kind": "queue", "label": "inbox/", "note": "one .txt file per message; sorted names are sending order"},
-    "delivered": {"kind": "store", "label": "delivered/", "note": "beside inbox/; a file's mtime is when it was delivered"},
+    "delivered": {"kind": "store", "label": "delivered/", "note": "beside inbox/; a file's mtime is when it was delivered; nothing in inbox.py ever removes or empties it"},
     "msg": {"kind": "state", "label": "a message's state", "note": "waiting while it is in inbox/, delivered once moved"},
+    "msgfile": {"kind": "resource", "label": "the open message file", "note": "a file handle, open only while its text is read"},
     "stdin": {"kind": "actor", "label": "the hook's input", "note": "JSON from the agent on stdin"},
     "agentfile": {"kind": "store", "label": ".kiro/agents/dfs-inbox.json", "note": "written into the worktree for kiro"}
   },
@@ -29,7 +30,8 @@
     {"kind": "sets", "from": "install_kiro_agent", "to": "agentfile", "label": "written, and listed in git's info/exclude", "at": "install_kiro_agent"},
 
     {"kind": "acquires", "from": "take", "to": "delivered", "label": "makedirs, once per call", "at": "take"},
-    {"kind": "releases", "from": "take", "to": "delivered", "label": "the message file is closed (with-block); the directory is never removed here", "at": "take"},
+    {"kind": "acquires", "from": "take", "to": "msgfile", "label": "open(dest) to read the text", "at": "take"},
+    {"kind": "releases", "from": "take", "to": "msgfile", "label": "closed when the with-block ends", "at": "take"},
     {"kind": "acquires", "from": "main", "to": "stdin", "label": "reads all of stdin so the agent's write never blocks", "at": "main"},
     {"kind": "acquires", "from": "install_kiro_agent", "to": "agentfile", "label": "creates the file; nothing in this file deletes it", "at": "install_kiro_agent"},
 

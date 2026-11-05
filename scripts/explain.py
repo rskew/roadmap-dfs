@@ -69,22 +69,39 @@ class NotesError(Exception):
 
 # ── reading the code ────────────────────────────────────────────────────────────
 
+FUNCS = (ast.FunctionDef, ast.AsyncFunctionDef)
+
+
+def _add(funcs, name, info):
+    """Two functions with one qualified name in two files (the same class name in both) cannot be told
+    apart by a note, so the second is an error rather than a silent overwrite of the first. Two in one
+    file (a property and its setter, a def under `if`) are one name in one place: the first is kept."""
+    if name in funcs and funcs[name]["file"] == info["file"]:
+        return
+    if name in funcs:
+        raise NotesError("%r is defined twice (%s:%d and %s:%d); notes name a function by this one name"
+                         % (name, funcs[name]["file"], funcs[name]["line"], info["file"], info["line"]))
+    funcs[name] = info
+
+
 def read_code(paths):
-    """{qualified name: {file, line, calls (names), errors}} for every function and method."""
+    """{qualified name: {file, line, calls (names), errors}} for every function, async function and
+    method of a top-level class. Classes nested in classes or functions are not read; their calls
+    count for the function that holds them."""
     funcs = {}
     bases = {}
     for path in paths:
         with open(path) as fh:
             tree = ast.parse(fh.read(), path)
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef):
-                funcs[node.name] = _info(path, node, None)
+            if isinstance(node, FUNCS):
+                _add(funcs, node.name, _info(path, node, None))
             elif isinstance(node, ast.ClassDef):
                 bases[node.name] = [b.id if isinstance(b, ast.Name) else b.attr
                                     for b in node.bases if isinstance(b, (ast.Name, ast.Attribute))]
                 for sub in node.body:
-                    if isinstance(sub, ast.FunctionDef):
-                        funcs["%s.%s" % (node.name, sub.name)] = _info(path, sub, node.name)
+                    if isinstance(sub, FUNCS):
+                        _add(funcs, "%s.%s" % (node.name, sub.name), _info(path, sub, node.name))
     for q, f in funcs.items():
         f["calls"] = _resolve(f.pop("raw"), f["cls"], funcs, bases, q)
     return funcs
