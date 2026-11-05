@@ -809,9 +809,12 @@ killed, and tested) are unmet in both judgings of control 1 and met in the chang
 one judging of control 2); C2 (the agent's helpers that left its group) is unmet in both judgings of the
 changed tree and of control 1 and met in control 2's; C7 (the idle limit can be set) is met by control 1,
 unmet in both judgings of control 2 and unmet in one of the changed tree's. Credits are 3.9 to 4.7 times the
-controls', which tier 2 does not weigh when quality differs. The sandbox held: of the 90 calls the score flags
-as naming a live path (the clone sits under the live checkout's directory), none names a path outside the
-clone and the tool copy.
+controls', which tier 2 does not weigh when quality differs. The sandbox held: `replay.py score` flags 0 calls
+for each control and 6 for the changed arm, all answered with output, and the six read the changed arm's tool
+copy (`dfs-tool-walk`) or the clone's own worktree, none the live checkout's items (listed in
+`docs/dfs-reach-w17-w132.txt`; an earlier figure of 90 flagged calls was not reproduced). The score's own
+count of control 2's issues reviews, 3 of 4, differs from its task file's 1 of 2; the table takes the task
+file.
 
 What it says of the two candidates' premises: neither removed a round or cut credits. A review told to walk
 every clause did not report them all at round one: it found the page turn outliving the server (C6) in
@@ -868,11 +871,11 @@ defect, Escape pressed mid-drag letting the box reappear (W132.9, an interrupted
 editor is left alone. Several late sessions wrote that the map tests could not be built offline, which the critic's own node contradicts (58 and 60
 map tests ran green offline in its node and the last session). Scored against `docs/dfs-rubrics/W132.md` (written first; `docs/dfs-w132-scores.jsonl`) the judge gave 11 of 12 in
 both judgings, C1 unmet (a label's box keeps its second line's height when that line is empty). Of 10 calls the score flags as naming a live path with
-output, all are `ls /nix/store | grep ...` of the box's own store, none shows the live checkout, and no node of the original appeared in any
+output (listed in `docs/dfs-reach-w17-w132.txt`), all are `ls /nix/store | grep ...` of the box's own store, none shows the live checkout, and no node of the original appeared in any
 result. One tree, no changed arm and a task that was not merged: it ranks no candidate.
 Candidates 3 and 6 were run once on W17, a task above $3.5, with two controls: better on quality (8.5 against 5.0 and
 6.5 of 10), 18 sessions and at least 94.7 credits against 4 sessions and 20.3 and 24.0, the task not finished at the cap; kept
-by nothing, since one task is one pair. What is next, besides a second pair on a dear task, is a candidate of the remaining ones (2, 4, 5) run as a pair against a
+by nothing, since one task is one pair. What is next, besides a second pair on a dear task, is candidate 2 (naming assumptions), the only one not yet bounded or run, as a pair against a
 same-sitting control, on the tasks whose control trees fall short of the rubric in the clauses the
 candidate targets (the kiro control's first review said issues in 5 of 12 replays, none in W11; the
 rubric scores of the control trees are in `docs/dfs-quality-scores.jsonl`).
