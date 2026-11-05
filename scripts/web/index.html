@@ -1658,6 +1658,11 @@ function correctForm(id) {
 const chatOn = () => !!(S.walk && S.walk.enabled);
 const CHAT = { scope: null, busyT: null, last: "", fresh: false, follow: false };
 const chatKey = () => "chat:" + CHAT.scope;
+// What was typed and not sent is kept for the tab, per chat, so closing the dialog by accident (or Back) loses nothing.
+const chatDraft = (scope, text) => {
+  try { const k = "chatdraft:" + scope; if (text === undefined) return sessionStorage.getItem(k) || ""; if (text) sessionStorage.setItem(k, text); else sessionStorage.removeItem(k); } catch (e) { /* no storage: no draft */ }
+  return "";
+};
 function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -1730,7 +1735,7 @@ async function chatBegin(scope) {
 function chatOpen(scope) {
   CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false);
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
-  $("#chat-log").innerHTML = ""; $("#chat-input").value = ""; $("#chat-agent").hidden = true;
+  $("#chat-log").innerHTML = ""; $("#chat-input").value = chatDraft(scope); $("#chat-agent").hidden = true;
   $("#chat").showModal(); $("#chat-input").focus();
   chatBegin(scope);
 }
@@ -1739,7 +1744,7 @@ $("#chat-form").addEventListener("submit", async ev => {
   const input = $("#chat-input"), message = input.value.trim();
   if (!message || !CHAT.scope) return;
   $("#chat-send").disabled = true; CHAT.follow = true;
-  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatLoad(); }
+  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatDraft(CHAT.scope, ""); chatLoad(); }
   catch (e) {
     // no answer is not "not sent": the server may have taken the message. The page does not send it again; the chat is
     // read, and the message stays in the box until the reader sees it among the sent ones.
@@ -1758,6 +1763,7 @@ $("#chat-stop").addEventListener("click", async () => {
 });
 // Enter sends where there is a keyboard (a fine pointer) and Shift+Enter adds a line; on a touch screen Enter stays a new line,
 // and Send is the button. Ctrl/cmd+Enter sends anywhere. A key that is choosing an input-method candidate is left alone.
+$("#chat-input").addEventListener("input", ev => { if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
 const chatEnterSends = () => matchMedia("(pointer: fine)").matches;
 $("#chat-input").placeholder = chatEnterSends() ? "Ask about this. Enter sends, Shift+Enter adds a line" : "Ask about this";
 $("#chat-input").addEventListener("keydown", ev => {
@@ -1994,7 +2000,7 @@ document.addEventListener("click", e => {
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope), chattop: chatTop, chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
-    chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
+    chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStart, walkstop: walkStop,
     chainstop: () => chainStopForm(d.item),
