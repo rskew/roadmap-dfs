@@ -7,6 +7,8 @@ hours to answer: median 3.2, p90 29.2
 corrections 27; median words 11
 runner-written raises: 21; median raise words 46; median answer words 2; one-or-two-word answers 12; median hours 3.6; with a page 0
 session-written raises: 28; median raise words 69; median answer words 6; one-or-two-word answers 12; median hours 3.1; with a page 3
+runner-written raises dated 2026-10-08 to 2026-10-25
+session-written raises dated 2026-10-09 to 2026-10-29
 
 task node raise-words page answer-words hours answer
 W3  46 0 1 1.9 Continue

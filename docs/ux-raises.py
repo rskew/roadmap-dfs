@@ -38,7 +38,7 @@ for (t, r), e in raises.items():
     body = " ".join(e[3]); a = answers.get((t, r))
     abody = " ".join(a[3]) if a else None
     hrs = (ts(a[0]) - ts(r)).total_seconds() / 3600 if a else None
-    rows.append(dict(t=t, node=e[2], rl=len(body.split()), page="artefacts/" in body,
+    rows.append(dict(at=r, t=t, node=e[2], rl=len(body.split()), page="artefacts/" in body,
                      al=len(abody.split()) if abody is not None else None, hrs=hrs, ans=abody))
 med = lambda xs: st.median(xs) if xs else float("nan")
 print(f"raises {len(rows)}; answered {sum(r['al'] is not None for r in rows)}; "
@@ -58,6 +58,8 @@ for lab, sub in (("runner", [r for r in rows if not r['node']]), ("session", [r 
     print(f"{lab}-written raises: {len(sub)}; median raise words {med([r['rl'] for r in sub]):.0f}; "
           f"median answer words {med([r['al'] for r in a]):.0f}; one-or-two-word answers {sum(r['al'] <= 2 for r in a)}; "
           f"median hours {med([r['hrs'] for r in a]):.1f}; with a page {sum(r['page'] for r in sub)}")
+for lab, sub in (("runner", [r for r in rows if not r['node']]), ("session", [r for r in rows if r['node']])):
+    print(f"{lab}-written raises dated {min(r['at'] for r in sub)[:10]} to {max(r['at'] for r in sub)[:10]}")
 print("\ntask node raise-words page answer-words hours answer")
 for r in sorted(rows, key=lambda r: (int(r['t'][1:]), r['hrs'] or 0)):
     print(r['t'], r['node'], r['rl'], int(r['page']), r['al'], f"{r['hrs']:.1f}" if r['hrs'] is not None else "-", (r['ans'] or "UNANSWERED")[:60].replace("\t", " "))
