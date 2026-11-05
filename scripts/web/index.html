@@ -1686,7 +1686,7 @@ function chatDraw(st) {
   if (sig === CHAT.last) return;
   CHAT.last = sig;
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
-  $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.some(m => m.role === "agent");
+  $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.length;
   log.innerHTML = (st.ended ? `<p class="muted">Ended. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")

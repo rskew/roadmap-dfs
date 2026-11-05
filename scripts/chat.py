@@ -85,6 +85,7 @@ def run_turn(argv, message, cwd, env, on_start=None):
 SCOPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]*$")
 MAX_MESSAGE = 4000
 ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is closed does not undo the end
+                    # (so a message answered within this long of the end leaves the chat ended too)
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
 

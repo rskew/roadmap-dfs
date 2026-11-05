@@ -1340,7 +1340,9 @@ class Chat(unittest.TestCase):
         self.chats.send("W1", "hello")
         self.settle("W1")
         self.chats.end("W1")
-        time.sleep(dfs_chat.ENDED_SLACK + 1.1)      # the transcript's clock has the mark's resolution
+        rec = self.chats.record("W1")               # the end was longer ago than the slack
+        rec["ended"] -= dfs_chat.ENDED_SLACK + 1.1
+        self.chats.path("W1").write_text(json.dumps(rec))
         self.chats.send("W1", "more")
         self.settle("W1")
         self.assertFalse(self.chats.state("W1")["ended"])
