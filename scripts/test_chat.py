@@ -21,6 +21,7 @@ FIXTURES = HERE / "fixtures" / "kiro"          # output a real kiro-cli 2.27.1 w
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
+import inbox as dfs_inbox     # noqa: E402
 
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
@@ -826,9 +827,10 @@ class Chat(unittest.TestCase):
         self.chats.send("W1", "-and then?")
         st = self.settle("W1")
         first, first_prompt, second, second_prompt = self.calls()
-        self.assertEqual(first, "chat --v3 --output-format stream-json --no-interactive --trust-all-tools -- %s" % first_prompt[len("prompt: "):])
+        agent = dfs_inbox.kiro_agent_for(str(self.chats.box("W1")))      # the chat's own agent, over its box
+        self.assertEqual(first, "chat --v3 --output-format stream-json --agent %s --no-interactive --trust-all-tools -- %s" % (agent, first_prompt[len("prompt: "):]))
         self.assertIn("The author writes: Where is the work?", first_prompt)
-        self.assertEqual(second, "chat --v3 --output-format stream-json --no-interactive --trust-all-tools --resume-id %s -- -and then?" % rec["sid"])
+        self.assertEqual(second, "chat --v3 --output-format stream-json --agent %s --no-interactive --trust-all-tools --resume-id %s -- -and then?" % (agent, rec["sid"]))
         self.assertEqual(second_prompt, "prompt: -and then?", "`--` keeps a message that starts with a dash from being a flag")
         self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["Where is the work?", "-and then?"])
 
@@ -1300,7 +1302,9 @@ class Chat(unittest.TestCase):
         self.assertIn("waiting on a dialog", log)
 
     def test_a_refused_send_and_a_new_chat_are_recorded(self):
-        self.chats.save_sid("W1", "sess_x", "kiro")          # kiro's turn reads no inbox, so a send during it is refused
+        self.addCleanup(setattr, dfs_chat, "STEERED", dfs_chat.STEERED)
+        dfs_chat.STEERED = ()                                # an agent whose turn reads no inbox: a send during it is refused
+        self.chats.save_sid("W1", "sess_x", "kiro")
         self.chats.busy["W1"] = time.time()
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")
@@ -1311,7 +1315,9 @@ class Chat(unittest.TestCase):
 
     def test_one_turn_at_a_time_and_clear_waits_for_it(self):
         os.environ["CHAT_STUB_SAY"] = "slowly"
-        self.chats.save_sid("W1", "sess_x", "kiro")          # kiro's turn reads no inbox, so a send during it is refused
+        self.addCleanup(setattr, dfs_chat, "STEERED", dfs_chat.STEERED)
+        dfs_chat.STEERED = ()                                # an agent whose turn reads no inbox: a send during it is refused
+        self.chats.save_sid("W1", "sess_x", "kiro")
         self.chats.busy["W1"] = time.time()                  # a turn in flight
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")

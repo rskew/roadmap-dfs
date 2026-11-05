@@ -10,6 +10,7 @@
     inbox.py --codex-args [BOX]   the same for codex: the flags, one per line, that go BEFORE `exec`
     inbox.py --opencode-config   the same for opencode: its `OPENCODE_CONFIG_CONTENT`, naming the plugin
     inbox.py --kiro-agent DIR [BOX]   the same for kiro: writes the agent `dfs-inbox` under DIR/.kiro/agents
+    inbox.py --kiro-chat-agent DIR BOX   the same for a page chat: writes an agent named by BOX, and prints its name
 
 `run.sh` starts each session of a chain (work, critic and review) with these hooks, over BOX,
 the run directory's `inbox/`, which the screen and the page write into (`runs.py`,
@@ -50,6 +51,7 @@ Checked against a real claude-code 2.1.308 under `-p`: PostToolUse's
 `additionalContext` is in the very next request, and a Stop hook's `block` makes the
 session answer its `reason` (test_inbox.py).
 """
+import hashlib
 import json
 import os
 import shlex
@@ -154,11 +156,11 @@ def command(event, box=None):
     return "python3 %s %s%s" % (me, event, " " + shlex.quote(os.path.abspath(box)) if box else "")
 
 
-def kiro_agent(box=None):
+def kiro_agent(box=None, name=KIRO_AGENT):
     """The kiro agent that installs the `pre` hook. `tools: ["*"]` keeps every tool the default agent
     gives a work session, less `subagent_semantic_reviewer`, which only this agent would have. A hook is found
     only in an agent: the default one runs none."""
-    return json.dumps({"name": KIRO_AGENT, "description": "the roadmap's work session, reading the run's inbox",
+    return json.dumps({"name": name, "description": "the roadmap's work session, reading the run's inbox",
                        "tools": ["*"], "excludedTools": ["subagent_semantic_reviewer"],
                        "hooks": {"preToolUse": [{"command": command("pre", box)}]}}, indent=2)
 
@@ -171,22 +173,28 @@ def self_as_subagent(event):
     """Whether a kiro `invoke_sub_agent` call names this file's own agent. A sub-agent's tool calls fire the same
     preToolUse hook with the same session id and no mark of their own (kiro-cli 2.31.1), so the one that
     could take a held-back message is refused at the call that would start it."""
-    return event.get("tool_name") == "invoke_sub_agent" and (event.get("tool_input") or {}).get("name") == KIRO_AGENT
+    return event.get("tool_name") == "invoke_sub_agent" and str((event.get("tool_input") or {}).get("name")).startswith(KIRO_AGENT)
 
 
-def install_kiro_agent(directory, box=None):
+def kiro_agent_for(box):
+    """The name of the agent that reads `box`: one agent file names one box, and chats of different scopes
+    (and a work session) share one working directory, so each box gets an agent of its own."""
+    return "%s-%s" % (KIRO_AGENT, hashlib.sha1(os.path.abspath(box).encode()).hexdigest()[:10])
+
+
+def install_kiro_agent(directory, box=None, name=KIRO_AGENT):
     """Write the agent to `.kiro/agents/` in `directory`, the only place `--agent dfs-inbox` finds it besides the
     home directory, and keep it out of the repository's status through `info/exclude` when that is a repository."""
     agents = os.path.join(directory, ".kiro", "agents")
     os.makedirs(agents, exist_ok=True)
-    path = os.path.join(agents, KIRO_AGENT + ".json")
+    path = os.path.join(agents, name + ".json")
     with open(path, "w") as fh:
-        fh.write(kiro_agent(box) + "\n")
+        fh.write(kiro_agent(box, name) + "\n")
     try:
         exclude = subprocess.run(["git", "-C", directory, "rev-parse", "--git-path", "info/exclude"],
                                  capture_output=True, text=True, check=True).stdout.strip()
         exclude = os.path.join(directory, exclude)
-        line = "/.kiro/agents/%s.json" % KIRO_AGENT
+        line = "/.kiro/agents/%s.json" % name
         os.makedirs(os.path.dirname(exclude), exist_ok=True)
         have = []
         if os.path.exists(exclude):
@@ -224,7 +232,7 @@ def opencode_config(env):
 
 
 USAGE = ("usage: inbox.py post|stop|pre [BOX] | peek | ack NAME... | --settings [BOX] | --codex-args [BOX] | "
-         "--opencode-config | --kiro-agent DIR [BOX]")
+         "--opencode-config | --kiro-agent DIR [BOX] | --kiro-chat-agent DIR BOX")
 
 
 def main(argv):
@@ -240,6 +248,11 @@ def main(argv):
         return 0
     if args[:1] == ["--kiro-agent"] and len(args) in (2, 3):
         print(install_kiro_agent(*args[1:]))
+        return 0
+    if args[:1] == ["--kiro-chat-agent"] and len(args) == 3:
+        name = kiro_agent_for(args[2])      # a page chat's turn: an agent of its own for its box
+        install_kiro_agent(args[1], args[2], name)
+        print(name)
         return 0
     if args[:1] in (["peek"], ["ack"]):
         box = os.environ.get("DFS_INBOX")

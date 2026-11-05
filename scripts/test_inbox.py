@@ -868,6 +868,45 @@ class RealKiro(unittest.TestCase):
         self.assertNotIn("W104-PING", "".join(self.asked(model)))
 
 
+@unittest.skipUnless(KIRO, "no kiro-cli here")
+class RealKiroChat(ChatSteer, unittest.TestCase):
+    """The page's chat around a real kiro-cli: a message sent while a turn waits for its model is held
+    against the turn's next tool call, through the agent named by the chat's box. A second chat in the
+    same working directory has an agent and a box of its own."""
+    agent = "kiro"
+
+    def setUp(self):
+        model = FakeKiroModel()
+        model.lag = 3
+        self.make(model, dict(model.env(), KIRO_CMD=KIRO, KIRO_NO_AUTO_UPDATE="1"))
+
+    def asked(self):
+        return [b for t, b in self.model.requests if t.endswith("GenerateAssistantResponse")]
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.chats.send("project", "use a tool please")
+        end = time.time() + 90
+        while not self.asked() and time.time() < end:
+            time.sleep(0.05)
+        sent = self.chats.send("project", "W141-STEER use the other file")
+        self.assertEqual([m.get("steer") for m in sent["messages"] if m["role"] == "you"][-1], "waiting")
+        st = self.settle()
+        bodies = [b.decode() for b in self.asked()]
+        self.assertNotIn("W141-STEER", bodies[0])
+        self.assertIn("W141-STEER use the other file", bodies[1])
+        self.assertIn(("you", "W141-STEER use the other file", "delivered"),
+                      [(m["role"], m["text"], m.get("steer")) for m in st["messages"]])
+        agents = sorted(p.name for p in (self.root / ".kiro" / "agents").glob("*.json"))
+        self.assertEqual(agents, [inbox.kiro_agent_for(str(self.chats.box("project"))) + ".json"])
+        self.assertNotIn("kiro/agents", subprocess.run(["git", "status", "--short"], cwd=self.root, capture_output=True, text=True).stdout)
+
+    def test_two_boxes_have_two_agents_and_the_chat_agents_cannot_be_invoked_as_subagents(self):
+        a, b = inbox.kiro_agent_for("/x/chat/W1/inbox"), inbox.kiro_agent_for("/x/chat/W2/inbox")
+        self.assertNotEqual(a, b)
+        self.assertEqual(json.loads(inbox.kiro_agent("/x/chat/W1/inbox", a))["name"], a)
+        self.assertTrue(inbox.self_as_subagent(dict(tool_name="invoke_sub_agent", tool_input=dict(name=a))))
+
+
 class OpencodeWiring(unittest.TestCase):
     def test_the_config_adds_the_plugin_to_the_plugins_already_there(self):
         cfg = json.loads(inbox.opencode_config({"OPENCODE_CONFIG_CONTENT": json.dumps({"model": "a/b", "plugins": ["/x"]})}))

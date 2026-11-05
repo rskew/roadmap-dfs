@@ -25,10 +25,10 @@ last screen, who closed it and a note when it went quiet after a message (DFS_CH
 A chat can be ended (`Chats.end`): its agent is stopped and it is marked, so the Chats list keeps what is in
 progress apart from what is over. The conversation stays, and a message sent to it later makes it in progress again.
 
-A message sent on the page while a headless claude, codex or opencode turn is answering STEERS it: it is left in the scope's inbox
+A message sent on the page while a headless turn is answering STEERS it: it is left in the scope's inbox
 (`<run root>/chat/<scope>/inbox`), and the hooks the turn runs under (inbox.py, as a chain session has them) hand it to
 the agent's next request. One the turn never read goes as the next turn, or is dropped if the turn was stopped or failed.
-Kiro's turn still refuses a message until it answers (`STEERED` lists the agents that take one).
+Every agent's turn takes one (`STEERED` lists them): claude and codex through two hooks, opencode through a plugin, kiro through an agent of its own named by the chat's box.
 
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
 walk (`--no-walk`): a server that may not start agents does not chat either.
@@ -95,7 +95,7 @@ ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is cl
                     # (so a message answered within this long of the end leaves the chat ended too)
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
-STEERED = ("claude", "codex", "opencode")      # the agents whose headless turn reads the chat's inbox (inbox.py), so a message sent while it answers steers it
+STEERED = ("claude", "codex", "opencode", "kiro")      # the agents whose headless turn reads the chat's inbox (inbox.py), so a message sent while it answers steers it
 
 
 def transcript_messages(sid, agent="claude"):

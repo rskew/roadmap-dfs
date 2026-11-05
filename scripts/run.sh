@@ -466,7 +466,12 @@ if [ "$MODE" = chatturn ]; then
     # stderr goes into the stream: kiro says a failed login or a limit there, and the reader
     # takes what is not JSON as the error. `--` keeps a message that starts with a dash from
     # being read as a flag.
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json --no-interactive "${PERMISSION_ARGV[@]}" \
+    # The author's steering messages reach it through its own agent over CHAT_INBOX (inbox.py): a hook is
+    # found only in an agent file in the working directory, and one file names one box, so the agent is
+    # named by the box and a work session or another chat there keeps its own.
+    kiro_agent=()
+    [ -z "${CHAT_INBOX:-}" ] || kiro_agent=(--agent "$(python3 "$HERE/inbox.py" --kiro-chat-agent "$PWD" "$CHAT_INBOX")")
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json "${kiro_agent[@]}" --no-interactive "${PERMISSION_ARGV[@]}" \
       "${session_flag[@]}" -- "$prompt" 2>&1 < /dev/null \
       | python3 "$HERE/chat.py" --kiro-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
