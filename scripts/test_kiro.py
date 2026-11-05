@@ -167,6 +167,18 @@ class Chain(unittest.TestCase):
         self.assertEqual(meta.get("turns"), "2", out)
         self.assertIn("W1.1 [confirmed]", out)
 
+    def test_kiro_is_told_no_model_when_none_is_chosen(self):
+        # kiro has its own model names, so run.sh has no default for it: opus and sonnet are claude's.
+        rc, meta, out = self.run_chain(cap=1)
+        self.assertNotIn("--model", (self.aside / "argv-1").read_text().splitlines(), out)
+        self.assertEqual(meta.get("model"), "kiro default", out)
+
+    def test_kiro_gets_the_model_the_walk_chose(self):
+        rc, meta, out = self.run_chain(cap=1, IMPLEMENT_MODEL="claude-opus-5.5")
+        argv = (self.aside / "argv-1").read_text().splitlines()
+        self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-5.5", argv)
+        self.assertEqual(meta.get("model"), "claude-opus-5.5", out)
+
     def test_a_session_with_no_usage_and_too_many_turns_stops_the_chain(self):
         # Five tool calls, no usage reading: peak is unmeasured, so MAX_TURNS=3 must trip.
         rc, meta, out = self.run_chain(cap=3, NO_USAGE="1", MAX_TURNS="3")

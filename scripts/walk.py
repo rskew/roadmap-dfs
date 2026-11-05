@@ -66,6 +66,15 @@ def read_agent(path):
 MODEL_ROLES = ("plan", "implement")      # the two things run.sh gives a claude session a model for
 MODEL_ENV = {"plan": "PLAN_MODEL", "implement": "IMPLEMENT_MODEL"}
 MODEL_DEFAULTS = {"plan": "opus", "implement": "sonnet"}   # what run.sh runs a claude session on when none is chosen
+# The agents run.sh can tell a model, and the models the walk offers for each. A model is chosen for an
+# agent, because their names differ: claude takes aliases, kiro its own ids (`kiro-cli chat --list-models`).
+# "" is run.sh's own choice (opus / sonnet for claude, the agent's config for kiro); "default" is claude's
+# own default. A name already kept that is not listed stays in the list, so no choice is lost.
+MODEL_AGENTS = ("claude", "kiro")
+MODEL_CHOICES = {
+    "claude": ["opus", "sonnet", "haiku", "default"],
+    "kiro": ["auto", "claude-opus-5.5", "claude-sonnet-5.5", "claude-haiku-5.5"],
+}
 MODEL_NAME = re.compile(r"[A-Za-z0-9._:\[\]][A-Za-z0-9._:\[\]-]*\Z")   # never a flag: no leading "-"
 
 
@@ -74,16 +83,21 @@ def models_file():
     return os.path.join(dfs_runs.run_root(), "models")
 
 
-def read_models(path=None):
-    """The chosen model per role: {"plan": name, "implement": name}, "" for a role not
-    chosen (run.sh then uses its own default, opus to plan and sonnet to implement).
+def read_models(path=None, agent="claude"):
+    """The chosen model per role for `agent`: {"plan": name, "implement": name}, "" for a role
+    not chosen (run.sh then uses its own default). The file holds claude's choice at its top
+    level and kiro's under "kiro"; an agent run.sh tells no model reads as nothing chosen.
     A missing or unreadable file, or a name it should not hold, reads as nothing chosen."""
     out = {r: "" for r in MODEL_ROLES}
+    if agent not in MODEL_AGENTS:
+        return out
     try:
         with open(path or models_file(), errors="replace") as fh:
             data = json.load(fh)
     except (OSError, ValueError):
         return out
+    if agent != "claude" and isinstance(data, dict):
+        data = data.get(agent)
     if isinstance(data, dict):
         for r in MODEL_ROLES:
             v = data.get(r)
@@ -820,7 +834,7 @@ class WalkMixin:
         console = os.path.join(rundir, "console.log")
         argv = self.runner(item, cap)
         env = dict(os.environ, RUNDIR=rundir)
-        for role, name in read_models().items():
+        for role, name in read_models(agent=self.agent).items():
             if name:                    # "default" is the empty variable: claude's own default
                 env[MODEL_ENV[role]] = "" if name == "default" else name
         try:
@@ -869,8 +883,18 @@ class WalkMixin:
         self.event("walk", "agent: " + name)
 
     def models(self):
-        """The models chosen for the chains the walk starts next, per role."""
-        return read_models()
+        """The models chosen for the chains the walk starts next, per role, for the agent they use."""
+        return read_models(agent=self.agent)
+
+    def model_choices(self):
+        """The models the next chain's agent can be given, for the page's drop-down: empty for
+        an agent that reads its model from its own config. A model kept that is not listed is added."""
+        listed = list(MODEL_CHOICES.get(self.agent, []))
+        if listed:
+            for name in self.models().values():
+                if name and name not in listed:
+                    listed.append(name)
+        return listed
 
     def model_defaults(self):
         """What a role runs on when none is chosen, for the agent the next chain uses:
@@ -879,21 +903,34 @@ class WalkMixin:
         return dict(MODEL_DEFAULTS) if self.agent == "claude" else {r: "" for r in MODEL_ROLES}
 
     def set_model(self, role, name):
-        """Choose the model a claude session runs on for `role` (plan: the first session
+        """Choose the model the next chain's agent (claude or kiro) runs on for `role` (plan: the first session
         on a task, the critic and the review; implement: every other work session), kept
         in `models_file` for the next chain. "" takes the choice away (run.sh's default
         again); "default" gives claude's own default. ValueError says why not."""
         if role not in MODEL_ROLES:
             raise ValueError("a model is chosen for " + " or ".join(MODEL_ROLES))
+        if self.agent not in MODEL_AGENTS:
+            raise ValueError("%s reads its model from its own config, not from here" % self.agent)
         if not isinstance(name, str):
             raise ValueError("a model is a name")
         name = name.strip()
         if name and name != "default" and not MODEL_NAME.match(name):
             raise ValueError("%r is not a model name: letters, digits and . _ : [ ] -, "
                              "not starting with -" % name)
-        chosen = read_models()
-        chosen[role] = name
         path = os.path.join(dfs_runs.ensure_run_root(), "models")
+        try:
+            with open(path, errors="replace") as fh:
+                chosen = json.load(fh)       # the other agent's choice stays as it is
+        except (OSError, ValueError):
+            chosen = {}
+        if not isinstance(chosen, dict):
+            chosen = {}
+        mine = read_models(agent=self.agent)
+        mine[role] = name
+        if self.agent == "claude":
+            chosen.update(mine)
+        else:
+            chosen[self.agent] = mine
         tmp = "%s.%d.tmp" % (path, os.getpid())   # written whole, then swapped in: a reader never sees half
         try:
             with open(tmp, "w") as fh:
@@ -956,7 +993,7 @@ class WalkMixin:
             stop_on_limit=self.walk_stop_on_limit,
             hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
             note=self.walk_note, agent=self.agent, agents=list(AGENTS), models=self.models(),
-            model_defaults=self.model_defaults(),
+            model_defaults=self.model_defaults(), model_choices=self.model_choices(),
             pinned=self.walk_next, auto=auto, auto_goal=goal,
             chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],
                          agent=r["agent"], kind=r["kind"], model=r["model"],

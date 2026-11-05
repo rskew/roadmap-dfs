@@ -77,7 +77,8 @@
 #                          and implementation review
 #         IMPLEMENT_MODEL  the model every other claude work session runs on (default: sonnet)
 #                          Either set empty passes no --model, so claude's own default
-#                          applies. codex, kiro and opencode are not told a model.
+#                          applies. kiro is told a model only when one of these is set
+#                          (kiro's names, such as claude-opus-5.5); codex and opencode are not.
 #         NIX_AGENT_FLAGS  extra flags for the nix command in those defaults
 #                          (default: none)
 #         AGENT_NIXPKGS_REV the nixpkgs revision the defaults launch from
@@ -825,7 +826,7 @@ run_session() {
     # out of git status; a message arriving after the last tool call stays waiting.
     python3 "$HERE/inbox.py" --kiro-agent "$PWD" "$RUNDIR/inbox" > /dev/null
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json \
-      --agent dfs-inbox --no-interactive "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
+      --agent dfs-inbox --no-interactive "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" "$prompt" > "$log" 2>&1 < /dev/null &
     agent_pid=$!
     AGENT_PID=$agent_pid
     stream_watch_sid "$log" "$agent_pid"
@@ -1256,15 +1257,21 @@ for i in $(seq 1 "$CAP"); do
   # ⚠️ OPUS PLANS, SONNET IMPLEMENTS, and which a session does is a fact of the task, not
   # a judgement: the work session that opens a task with no nodes lays the tree out, and
   # the critic and the review judge it; every other work session builds a node. Only
-  # claude is told a model (the others read theirs from their own config).
+  # claude and kiro are told a model (codex and opencode read theirs from their own config).
   MODEL_ARGV=()
-  if [ "$AGENT" = claude ]; then
-    if [ "$kind" != work ] || [ "${plan:-0}" = 1 ]; then model="${PLAN_MODEL-opus}"; else model="${IMPLEMENT_MODEL-sonnet}"; fi
+  if [ "$AGENT" = claude ] || [ "$AGENT" = kiro ]; then
+    if [ "$kind" != work ] || [ "${plan:-0}" = 1 ]; then
+      if [ "$AGENT" = claude ]; then model="${PLAN_MODEL-opus}"; else model="${PLAN_MODEL-}"; fi
+    else
+      if [ "$AGENT" = claude ]; then model="${IMPLEMENT_MODEL-sonnet}"; else model="${IMPLEMENT_MODEL-}"; fi
+    fi
+    # ⚠ kiro has no default of ours: its model names are its own (claude-opus-5.5, not opus), so it is
+    # told one only when the walk's model list chose one, and is otherwise left to its config.
     [ -z "$model" ] || MODEL_ARGV=(--model "$model")
-    echo "   model ${model:-claude default}"
-    meta_set model="${model:-claude default}"   # what the web page's walk box shows beside the run
+    echo "   model ${model:-$AGENT default}"
+    meta_set model="${model:-$AGENT default}"   # what the web page's walk box shows beside the run
   else
-    meta_set model=""                           # codex, kiro and opencode read theirs from their own config
+    meta_set model=""                           # codex and opencode read theirs from their own config
   fi
   IN_SESSION="$kind"
   set +e

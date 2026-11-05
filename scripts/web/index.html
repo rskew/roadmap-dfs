@@ -870,8 +870,7 @@ function chrome(r) {
 
 /* ── the walk: start it, stop it, choose where it goes next ─────────────────────── */
 // A walk that is running, however it started, ends the numbers typed in the box: after it they show its own again.
-// A model name typed and not yet kept (its change event has not fired) is not a number of the walk and stays.
-function walkSeen(w) { if (w && w.on) S.walkDraft = S.walkDraft && S.walkDraft.models ? { models: S.walkDraft.models } : null; return w; }
+function walkSeen(w) { if (w && w.on) S.walkDraft = null; return w; }
 function walkHtml() {
   const w = S.walk;
   if (!w || !w.enabled) return "";
@@ -914,18 +913,24 @@ async function setAgent(agent) {
   try { S.walk = await api("/api/walk/agent", { agent }); toast("The next chain uses " + agent + "."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
-/* The model a claude session runs on, per role: plan (the first session on a task, the critic and the review)
-   and implement (every other). Empty keeps the runner's own opus and sonnet; "default" is claude's own default.
-   It applies to the next chain; the other agents read their model from their own config, which the placeholder says. */
+/* The model the next chain's agent runs on, per role: plan (the first session on a task, the critic and the review)
+   and implement (every other). A drop-down, so a choice is kept the moment it is made and never a half-typed name.
+   The first option is the runner's own choice (opus and sonnet for claude, the agent's config for kiro); claude also
+   offers its own default. The list is the agent's (the snapshot's model_choices); codex and opencode read their model
+   from their own config, so theirs is one fixed option. */
 function modelFields(w) {
-  const m = Object.assign({}, w.models, S.walkDraft && S.walkDraft.models);   // typed, not yet kept
-  const own = (w.agent || "the agent") + "'s own";   // another agent gets no model flag: its config decides
-  const d = w.model_defaults || {};
-  const field = (role, label, hint) => `<div class="row2"><label for="model-${role}">${label}</label><input type="text" id="model-${role}" data-role="${role}" value="${esc(m[role] || "")}" placeholder="${hint}" maxlength="64" autocapitalize="none" autocomplete="off" spellcheck="false"></div>`;
-  return field("plan", "Plan model", d.plan || own) + field("implement", "Implement model", d.implement || own);
+  const m = w.models || {}, d = w.model_defaults || {}, list = w.model_choices || [];
+  const own = (w.agent || "the agent") + "'s own";
+  const field = (role, label) => {
+    const first = list.length && d[role] ? `${d[role]} (the runner's)` : own + (list.length ? "" : ", not set here");
+    const opts = [`<option value=""${m[role] ? "" : " selected"}>${esc(first)}</option>`].concat(list.map(n =>
+      `<option value="${esc(n)}"${m[role] === n ? " selected" : ""}>${esc(n === "default" ? "claude's own default" : n)}</option>`));
+    return `<div class="row2"><label for="model-${role}">${label}</label><select id="model-${role}" data-role="${role}"${list.length ? "" : " disabled"}>${opts.join("")}</select></div>`;
+  };
+  return field("plan", "Plan model") + field("implement", "Implement model");
 }
 async function setModel(role, model) {
-  try { S.walk = await api("/api/walk/model", { role, model: model.trim() }); if (S.walkDraft && S.walkDraft.models) delete S.walkDraft.models[role]; toast(model.trim() ? "The " + role + " model is " + model.trim() + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }
+  try { S.walk = await api("/api/walk/model", { role, model }); toast(model ? "The " + role + " model is " + model + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
 async function setNext(item) {
@@ -1109,7 +1114,6 @@ const pinSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() =>
 function typingInBox() {
   const a = document.activeElement;
   if (!a || !a.closest("#walkbox") || !S.walk || !S.walk.enabled) return false;
-  if (a.dataset && a.dataset.role) return true;   // a model field is shown walking or not
   return (a.id === "bud" || a.id === "par") && !S.walk.on;
 }
 function drawTasks(push) {
@@ -2223,9 +2227,7 @@ document.addEventListener("focusout", e => setTimeout(function catchUp() {
   if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
 }, 0));
 document.addEventListener("input", e => {
-  const role = e.target.dataset && e.target.dataset.role;
-  if (role) { S.walkDraft = Object.assign({}, S.walkDraft); S.walkDraft.models = Object.assign({}, S.walkDraft.models, { [role]: e.target.value }); }
-  else if (e.target.id === "bud" || e.target.id === "par" || e.target.id === "stoplim") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value, stop: $("#stoplim").checked });
+  if (e.target.id === "bud" || e.target.id === "par" || e.target.id === "stoplim") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value, stop: $("#stoplim").checked });
 });
 document.addEventListener("keydown", e => { if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStart(); } });
 document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.role) setModel(e.target.dataset.role, e.target.value); });

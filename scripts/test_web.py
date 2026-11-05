@@ -841,28 +841,33 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(["open" in h for h in out], [False, False, False, True],
                          "only a reader's own toggle opens the panel, walking or not")
 
-    def test_a_model_field_holds_the_walk_box_back_from_a_push_walking_or_not(self):
-        """typingInBox() and walkSeen() in index.html, run under node (skipped when there is none);
+    def test_the_models_are_drop_downs_of_the_agents_models(self):
+        """modelFields() and walkSeen() in index.html, run under node (skipped when there is none);
         the source is checked either way, since the script is not always run."""
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("function typingInBox()"):src.index("function drawTasks(")]
-        self.assertIn("data-role", src[src.index("function modelFields"):src.index("async function setModel")])
-        self.assertIn("dataset.role", body, "typingInBox must hold for a model field")
+        fields = src[src.index("function modelFields"):src.index("async function setModel")]
+        self.assertIn("<select", fields)
+        self.assertNotIn('type="text"', fields, "a model is chosen from a list, not typed")
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
-            self.skipTest("no node on PATH (or DFS_NODE) to run the page's typingInBox()")
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's modelFields()")
         seen = src[src.index("function walkSeen("):src.index("function walkHtml()")]
-        js = ("let S, document; const box = {closest: s => s === '#walkbox'};" + body + seen +
-              "const at = (a, on) => { S = {walk: {enabled: true, on}}; document = {activeElement: a}; return typingInBox(); };"
-              "const model = {dataset: {role: 'plan'}, id: 'model-plan', closest: box.closest};"
-              "const bud = {dataset: {}, id: 'bud', closest: box.closest};"
-              "S = {walkDraft: {budget: '3', models: {plan: 'op'}}}; walkSeen({on: true}); const kept = S.walkDraft;"
-              "S = {walkDraft: {budget: '3'}}; walkSeen({on: true}); const dropped = S.walkDraft;"
-              "console.log(JSON.stringify([at(model, true), at(model, false), at(bud, true), at(bud, false), at(null, false), kept, dropped]))")
-        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(out[:5], [True, True, False, True, False], "a model field holds the box walking or not; the numbers only while off")
-        self.assertEqual(out[5], {"models": {"plan": "op"}}, "a walk starting keeps a model name being typed")
-        self.assertIsNone(out[6], "and drops the typed numbers")
+        js = ("const esc = s => String(s); let S;" + fields + seen +
+              "const claude = modelFields({agent: 'claude', models: {plan: 'opus', implement: ''}, model_defaults: {plan: 'opus', implement: 'sonnet'}, model_choices: ['opus', 'sonnet', 'haiku', 'default']});"
+              "const kiro = modelFields({agent: 'kiro', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: ['auto', 'claude-opus-5.5']});"
+              "const codex = modelFields({agent: 'codex', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: []});"
+              "S = {walkDraft: {budget: '3'}}; walkSeen({on: true});"
+              "console.log(JSON.stringify([claude, kiro, codex, S.walkDraft]))")
+        claude, kiro, codex, draft = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(claude.count("<select"), 2)
+        self.assertIn('<option value="opus" selected>opus</option>', claude, "the kept model is the selected one")
+        self.assertIn("opus (the runner's)", claude, "an unchosen plan model says what the runner uses")
+        self.assertIn("claude's own default", claude)
+        self.assertIn('value="claude-opus-5.5"', kiro)
+        self.assertNotIn('value="opus"', kiro, "claude's aliases are not kiro's models")
+        self.assertIn("kiro's own", kiro)
+        self.assertEqual(codex.count("disabled"), 2, "codex reads its model from its own config: nothing to choose")
+        self.assertIsNone(draft, "a walk starting drops the typed numbers")
 
     def test_the_artefacts_section_previews_each_artefact_and_offers_no_list_of_the_rest(self):
         """artefactsHtml() in index.html, run under node (skipped when there is none)."""

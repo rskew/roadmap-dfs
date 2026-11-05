@@ -23,7 +23,7 @@ import walk as dfs_walk   # noqa: E402
 
 def run(d, item, live=False, stop="", run_no="1", cap="5", resets=""):
     return dict(dir=d, item=item, live=live, mode="work", stop=stop, run=run_no, cap=cap,
-                resets=resets, pid=4242, agent="claude", state="live" if live else "finished",
+                resets=resets, pid=4242, agent="claude", kind="work", model="", state="live" if live else "finished",
                 rc="", sid="", peak="", turns="", started="", finished="", console="", mtime=0)
 
 
@@ -424,6 +424,43 @@ class Models(unittest.TestCase):
         with open(dfs_walk.models_file(), "w") as fh:
             fh.write("not json")
         self.assertEqual(self.w.models(), dict(plan="", implement=""))
+
+    def test_a_model_is_kept_per_agent_and_the_other_agents_choice_stays(self):
+        self.w.set_model("plan", "opus")
+        self.w.agent = "kiro"
+        self.assertEqual(self.w.models(), dict(plan="", implement=""))   # claude's opus is not a kiro name
+        self.w.set_model("implement", "claude-sonnet-5.5")
+        self.assertEqual(self.w.models(), dict(plan="", implement="claude-sonnet-5.5"))
+        self.w.agent = "claude"
+        self.assertEqual(self.w.models(), dict(plan="opus", implement=""))
+
+    def test_the_drop_down_lists_the_agents_models_and_keeps_a_name_already_chosen(self):
+        self.assertEqual(self.w.model_choices(), ["opus", "sonnet", "haiku", "default"])
+        self.w.set_model("plan", "claude-opus-4-5")
+        self.assertEqual(self.w.model_choices()[-1], "claude-opus-4-5")
+        self.w.agent = "kiro"
+        self.assertIn("claude-opus-5.5", self.w.model_choices())
+        self.assertNotIn("opus", self.w.model_choices())
+        self.assertEqual(self.w.snapshot()["model_choices"], self.w.model_choices())
+        self.w.agent = "codex"
+        self.assertEqual(self.w.model_choices(), [])
+        with self.assertRaises(ValueError):
+            self.w.set_model("plan", "opus")
+
+    def test_a_kiro_chain_gets_the_kiro_models(self):
+        self.w.set_model("plan", "opus")
+        self.w.agent = "kiro"
+        self.w.set_model("plan", "claude-opus-5.5")
+        w = dfs_walk.HeadlessWalk()
+        w.agent = "kiro"
+        w.reload = lambda data=None: None
+        with mock.patch.object(dfs_walk.dfs_runs, "live_for", return_value=None), \
+                mock.patch.object(dfs_walk.subprocess, "Popen") as popen:
+            popen.return_value.pid = 1
+            w.start_chain("W1", "5")
+        env = popen.call_args.kwargs["env"]
+        self.assertEqual(env["PLAN_MODEL"], "claude-opus-5.5")
+        self.assertNotIn("IMPLEMENT_MODEL", env)
 
     def chain_env(self):
         """The environment a chain really started by `start_chain` is given."""
