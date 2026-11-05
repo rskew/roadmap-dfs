@@ -2249,7 +2249,7 @@ document.addEventListener("change", e => { if (e.target.id === "nextsel") setNex
    starts again, rather than waiting for a timer that may be long overdue or already given up. */
 function comeBack() {
   if (document.visibilityState === "hidden") return;
-  if (EVENTS && EVENTS.readyState === 2) listen();     // a stream the browser gave up on is opened again; a new one is told where things stand
+  if (EVENTS && EVENTS.readyState === 2) listen();     // a stream the browser gave up on is opened again; a new one is told what came after the number the page's reads were made at (or at once, if the page failed to load)
   if ($("#chat").open) chatLoad();
 }
 document.addEventListener("visibilitychange", comeBack);
@@ -2261,7 +2261,10 @@ let pushT, EVENTS, pushed = new Set();      // `pushed`: the tasks changed since
 function listen() {
   if (!window.EventSource) return;
   if (EVENTS) EVENTS.close();
-  const es = EVENTS = new EventSource("/api/events" + (READ_AT < Infinity ? "?since=" + READ_AT : ""));
+  // A page that shows "Could not load" has nothing to be caught up from: its reads were lost, or only some landed at the
+  // number now held. `since=0` is behind every number the server holds, so the stream is told at once and the page reads again.
+  const failed = !!$("#view .wait[role=alert]");
+  const es = EVENTS = new EventSource("/api/events" + (failed ? "?since=0" : READ_AT < Infinity ? "?since=" + READ_AT : ""));
   es.addEventListener("change", e => {
     let tasks = null; try { tasks = JSON.parse(e.data).tasks; } catch (x) { /* not said: reread all */ }
     pushed = tasks && pushed ? new Set([...pushed, ...tasks]) : null;

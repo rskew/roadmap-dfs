@@ -1820,6 +1820,21 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert(connected === 1, "the page connected " + connected + " times");
     assert(reads.slice(0, before).filter(u => u === "/api/state").length <= 2 && reads.slice(0, before).filter(u => u === "/api/task/W9").length === 1, "the first load made more than one set of reads: " + JSON.stringify(reads.slice(0, before)));
   },
+  // A page whose first reads failed (a 500 on /api/state) shows "Could not load", then draws once its stream connects, with no Retry.
+  async push_failed_load(b) {
+    const ctx = await b.newContext({ ...PHONE });
+    const page = await ctx.newPage();
+    PAGES.push(page);
+    let fail = true, since = [];
+    await page.route("**/api/state*", r => fail ? r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom" }) }) : r.continue());
+    page.on("request", r => { const u = new URL(r.url()); if (u.pathname === "/api/events") since.push(u.searchParams.get("since")); });
+    await page.goto(URL_ + "#/t/W9");
+    await page.waitForSelector("#view .wait[role=alert]");
+    fail = false;                                 // the server answers again; the page is not told to retry
+    try { await page.waitForSelector(".row", { timeout: 5000 }); }
+    catch (e) { assert(false, "the page stayed on Could not load after its stream connected (since " + JSON.stringify(since) + ")"); }
+    assert(since[0] === "0", "the stream of a page that failed to load asked since=" + since[0]);
+  },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
     const box = sel => boxOf(page, sel);

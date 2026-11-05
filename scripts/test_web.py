@@ -1329,6 +1329,14 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         odd = self.events(since="%C2%B2", preamble=True)         # a superscript two passes str.isdigit but is no number: it is taken as no number (smoke only; green on the old check too)
         self.assertEqual(odd.id, str(dfs_web.HUB.version))        # treated as no number: told nothing, given the number to hold
 
+    def test_a_page_that_failed_to_load_connects_with_since_zero_and_is_told_at_once(self):
+        """`?since=0` is behind every number the hub holds (it starts at the epoch in ms), so the stream queues one
+        catch-up and a page that shows "Could not load" reads again without a Retry."""
+        self.assertGreater(dfs_web.HUB.version, 0)
+        name, data = self.events(since="0")()
+        self.assertEqual(name, "change")
+        self.assertIsNone(data["tasks"])              # not said which: reread everything
+
     def test_a_new_page_is_told_nothing_until_a_write_lands_and_a_reconnecting_one_is_told_it_missed_some(self):
         nxt = self.events()
         ts = self.task()["rows"][-1]["raises"][0]["ts"]

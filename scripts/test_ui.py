@@ -181,6 +181,7 @@ class Flows(unittest.TestCase):
 
     def test_a_change_made_before_the_event_stream_connects_is_still_shown(self):
         self.flow("push_gap")
+        self.flow("push_failed_load")
 
     def test_going_back_to_the_list_draws_it_without_waiting_on_its_reads(self):
         self.flow("backinstant")
