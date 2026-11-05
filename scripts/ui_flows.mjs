@@ -1480,7 +1480,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.check("#pk-off");
     await page.click("dialog button[value=ok]");
     await page.waitForFunction(() => document.querySelector('link[rel="apple-touch-icon"]').getAttribute("href") === "/apple-touch-icon.png");
-    same((await page.evaluate(async () => (await fetch("/icon")).status)), 404, "the custom icon is gone");
+    // not fetch() in the page: a 404 there is logged as a console error, which `errors` counts
+    same((await page.request.get(new URL("/icon", page.url()).href)).status(), 404, "the custom icon is gone");
     same(errors, [], "no page errors");
   },
 
