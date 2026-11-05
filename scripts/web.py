@@ -193,10 +193,33 @@ def archived_json():
     return dict(items=rows, archived_count=len(rows))
 
 
+_FULL = dict(sig=None, at=0.0, data=None)
+_FULL_LOCK = threading.Lock()
+FULL_TTL = 2.0
+
+
+def full_cached():
+    """`state.full()` for the page's reads. Every render asks for the list and the walk, and
+    each builds the whole state (about half a second on a hundred tasks), so two threads
+    built it at once and slowed each other. One build serves every read while the files the
+    pages watch (`roadmap_signature`) are unchanged, for at most `FULL_TTL` seconds, which
+    bounds how stale what the files do not show (git, a clock) can get. A caller that waits
+    on a build in progress gets it. The result is read, never edited. Writes read
+    `state.full()` afresh."""
+    sig = roadmap_signature()
+    with _FULL_LOCK:
+        now = time.monotonic()
+        if _FULL["sig"] == sig and now - _FULL["at"] < FULL_TTL:
+            return _FULL["data"]
+        data = dfs_state.full()
+        _FULL.update(sig=sig, at=now, data=data)
+        return data
+
+
 def state_json():
     """The task list: the rows `state.py --json` gives the terminal, plus `rev` and how many
     tasks are archived (`archived_json` has those)."""
-    data = dfs_state.full()
+    data = full_cached()
     running, nxt = walk_marks(data)
     items = []
     for it in data["items"]:
@@ -1041,9 +1064,9 @@ def chat_act(name, body=None, scope=None):
 
 def walk_json():
     if WALK["enabled"]:
-        return dict(walker().snapshot(), enabled=True)
+        return dict(walker().snapshot(full_cached()), enabled=True)
     # Off, the page still shows which task a chain is on and which is next, from the files.
-    running, nxt = walk_marks(dfs_state.full())
+    running, nxt = walk_marks(full_cached())
     return dict(enabled=False, next=nxt, live=[dict(item=i, progress=p) for i, p in running.items()])
 
 

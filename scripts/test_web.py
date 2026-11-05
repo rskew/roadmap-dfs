@@ -73,6 +73,7 @@ class Web(unittest.TestCase):
         self.port = self.server.server_address[1]
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         dfs_web._commit_cache.clear()
+        dfs_web._FULL.update(sig=None, data=None)
         self.fake = test_walker.FakeWalker()
         dfs_web.WALK.update(enabled=True, walker=self.fake)
 
@@ -117,6 +118,23 @@ class Web(unittest.TestCase):
         status, small, r = self.call("GET", "/api/archived", headers={"Accept-Encoding": "gzip"})
         self.assertIsNone(r.getheader("Content-Encoding"))              # too small to be worth it
         self.assertEqual(small["items"], [])
+
+    def test_the_list_and_the_walk_share_one_state_build_until_a_file_changes(self):
+        real = dfs_web.dfs_state.full
+        with mock.patch.object(dfs_web.dfs_state, "full", side_effect=real) as built:
+            self.call("GET", "/api/state")
+            self.call("GET", "/api/walk")
+            self.call("GET", "/api/state")
+            self.assertEqual(built.call_count, 1)                       # a render's two reads cost one build
+            path = self.root / ".dfs" / "items" / "W1.md"
+            path.write_text(path.read_text().replace("Bound the limiter", "Bound the table"))
+            os.utime(path, ns=(1, 2 * 10**18))                           # a write the cache must see at once
+            _, state, _ = self.call("GET", "/api/state")
+            self.assertEqual(built.call_count, 2)
+            self.assertEqual(state["items"][0]["goal"], "Bound the table")
+            with mock.patch.object(dfs_web, "FULL_TTL", 0.0):             # what the files do not show ages out
+                self.call("GET", "/api/state")
+            self.assertEqual(built.call_count, 3)
 
     def test_it_listens_on_this_machine_only_unless_told_otherwise(self):
         old = os.environ.pop("DFS_WEB_HOST", None)
