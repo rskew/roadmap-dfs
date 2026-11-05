@@ -1310,12 +1310,24 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         dfs_web.HUB.notify(["W1"])                    # made between the read and the connection
         late = self.events(since=read_at)
         name, data = late()
-        self.assertEqual((name, data["v"]), ("change", int(read_at) + 1))
-        name, data = up_to_date()                     # told nothing at connecting: the first thing it hears is the notify
-        self.assertEqual((name, data["tasks"]), ("change", ["W1"]))
+        self.assertEqual(name, "change")
+        self.assertGreater(data["v"], int(read_at))          # not "== read_at + 1": another notifier may have bumped it too
+        # Told nothing at connecting: what it hears is the notify. A watcher left running by an earlier test also
+        # notifies on the accept's write above, so an event that names no task may come first: wait for W1's.
+        def hear(stream, tasks):
+            heard = []
+            while tasks not in heard and len(heard) < 4:
+                name, data = stream()
+                self.assertEqual(name, "change")
+                heard.append(data["tasks"])
+            self.assertIn(tasks, heard)
+            return data
+        data = hear(up_to_date, ["W1"])
         again = self.events(since=read_at, last=str(data["v"]))     # a reconnect's own number wins over the first one
         dfs_web.HUB.notify(["W2"])
-        self.assertEqual(again()[1]["tasks"], ["W2"])
+        hear(again, ["W2"])
+        odd = self.events(since="%C2%B2", preamble=True)         # a superscript two passes str.isdigit but is no number: it is taken as no number (smoke only; green on the old check too)
+        self.assertEqual(odd.id, str(dfs_web.HUB.version))        # treated as no number: told nothing, given the number to hold
 
     def test_a_new_page_is_told_nothing_until_a_write_lands_and_a_reconnecting_one_is_told_it_missed_some(self):
         nxt = self.events()

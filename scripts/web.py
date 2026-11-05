@@ -14,8 +14,9 @@ The page is kept current by server-sent events (`/api/events`), not by asking: a
 watcher stats the task files once a second and a change, from here or from the
 terminal or from a chain, is pushed to every open page, naming the tasks whose files
 changed, and the page reads what it is showing; an open task is read again only if it is
-one of them. A page that has just loaded is told nothing; one that reconnects says what it
-last heard (`Last-Event-ID`) and is told if things moved on.
+one of them. A page that has just loaded connects with the number its first reads were made
+at (`?since=`), and one that reconnects says what it last heard (`Last-Event-ID`); either is
+told at once if things moved on.
 
 A task's page lists the chains that worked it (`runs.py`) and opens one's `console.log` (`/api/run/<name>`,
 read by the directory's name and never by a path), and each session it captured (`run-N.json`, by
@@ -1327,7 +1328,7 @@ class Handler(BaseHTTPRequestHandler):
         # A reconnect says the last number it heard. A new page says the number its first reads were made at (it
         # connects when they have landed), so a change made between those reads and this connection is told too.
         since = parse_qs(urlparse(self.path).query).get("since", [None])[0]
-        q, version = HUB.subscribe(self.headers.get("Last-Event-ID") or (since if since and since.isdigit() else None))
+        q, version = HUB.subscribe(self.headers.get("Last-Event-ID") or (since if since and since.isascii() and since.isdigit() else None))
         try:
             # The number the page starts from, with no event: the browser keeps it as its last id, so a page that has
             # heard no change still says where it was when it reconnects, and is told what it missed.
