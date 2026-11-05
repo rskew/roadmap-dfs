@@ -1755,7 +1755,8 @@ function chatOpen(scope) {
 $("#chat-form").addEventListener("submit", async ev => {
   ev.preventDefault();
   const input = $("#chat-input"), message = input.value.trim();
-  if (!message || !CHAT.scope) return;
+  // Send is disabled while a turn runs (or another terminal has the chat); requestSubmit, which Enter uses, ignores that, so the guard is here too.
+  if (!message || !CHAT.scope || $("#chat-send").disabled) return;
   $("#chat-send").disabled = true; CHAT.follow = true;
   try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatGrow(); chatDraft(CHAT.scope, ""); chatLoad(); }
   catch (e) {

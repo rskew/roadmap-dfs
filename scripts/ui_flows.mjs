@@ -1337,6 +1337,30 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // Enter sends from the keyboard, but not while a turn runs: Send is disabled then, and Enter must wait with it.
+  async chat_enter_busy(b) {
+    const { page, errors } = await open(b, DESKTOP);
+    const state = { scope: "W9", messages: [{ role: "you", text: "a long question" }], busy: true, busy_for: 12, live: false, elsewhere: false, note: "" };
+    const sends = [];
+    await page.route("**/api/chat/**", async r => {
+      if (r.request().url().endsWith("/api/chat/send")) { sends.push(r.request().postDataJSON()); state.messages.push({ role: "you", text: "sent" }); }
+      await r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await task(page, "W9");
+    await page.click("button.desk[data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => !document.querySelector("#chat-stop").hidden);
+    await page.fill("#chat-input", "the next thing"); await page.press("#chat-input", "Enter"); await page.waitForTimeout(500);
+    same(sends, [], "Enter does not send while a turn runs");
+    same(await page.inputValue("#chat-input"), "the next thing", "and the draft stays");
+    assert(!(await page.$("#toast.err")), "and says nothing of an error");
+    state.busy = false;
+    await page.waitForFunction(() => !document.querySelector("#chat-send").disabled, null, { timeout: 15000 });
+    await page.press("#chat-input", "Enter");
+    await page.waitForFunction(() => document.querySelector("#chat-input").value === "");
+    same(sends, [{ scope: "W9", message: "the next thing" }], "once the turn is over, Enter sends the draft");
+    same(errors, [], "no page errors");
+  },
+
   // Chats: start several, leave each, find them in the Chats section, pick one up again.
   async chats(b) {
     const { page, errors } = await open(b, PHONE);

@@ -372,6 +372,9 @@ class Flows(unittest.TestCase):
     def test_stop_is_shown_while_the_agent_answers_and_asks_the_server_to_stop_it(self):
         self.flow("chatstop")
 
+    def test_enter_does_not_send_while_a_turn_is_running(self):
+        self.flow("chat_enter_busy")
+
     def test_several_chats_are_found_again_in_the_chats_section(self):
         self.flow("chats")
 
