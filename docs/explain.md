@@ -10,8 +10,11 @@ starts with the call tree (who calls whom), then the legend, then one section pe
   code with `ast`. A call is drawn only when the text fixes its target: `f()` for a function in the
   files read, `self.f()` for a method of the class, its bases, or (for a mixin) the one subclass that
   defines it, and `Class.f()` or `Class(...).f()` for a class in the files read. A call on anything
-  else (`table.get()`, `thread.start()`) is left out, so the tree can miss a call but does not draw
-  one the code lacks.
+  else (`table.get()`, `thread.start()`) is left out, as is a call on a name the calling function binds
+  itself (a parameter or a local), so the tree can miss a call but does not draw one the code lacks.
+- The tree starts at the notes' `entries`. A function a note names that no entry reaches by a drawn
+  call (often one reached only through a call that was left out) is added after them, under "Named in
+  the notes below", so every function a note marks is in the tree with its lens dots.
 - Every other fact is a note in `docs/explain/<subject>.json`. A note names the function it is
   about; the generator fails if that function (or any function an arrow joins) is not in the
   files read, so a rename shows up as an error instead of a page that quietly lies.

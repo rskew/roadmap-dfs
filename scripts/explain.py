@@ -110,11 +110,25 @@ def read_code(paths):
 def _info(path, node, cls):
     raw = []
     errors = []
+    # A name the function binds itself (a parameter, an assignment, a loop or `with` target, a nested def)
+    # is not the module function of that name, so a call on it is left out.
+    a = node.args
+    bound = {x.arg for x in a.posonlyargs + a.args + a.kwonlyargs + [a.vararg, a.kwarg] if x}
+    for n in ast.walk(node):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            bound.add(n.id)
+        elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and n is not node:
+            bound.add(n.name)
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            bound.add(n.name)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            bound.update((x.asname or x.name).split(".")[0] for x in n.names)
     for n in ast.walk(node):
         if isinstance(n, ast.Call):
             f = n.func
             if isinstance(f, ast.Name):
-                raw.append(("name", f.id))
+                if f.id not in bound:
+                    raw.append(("name", f.id))
             elif isinstance(f, ast.Attribute):
                 owner = f.value.id if isinstance(f.value, ast.Name) else None
                 if isinstance(f.value, ast.Call) and isinstance(f.value.func, ast.Name):
@@ -237,6 +251,21 @@ def lenses_at(notes):
     return out
 
 
+def named_in_notes(notes, funcs):
+    """The functions the notes mark, in first-named order: an edge's `at`, `from` and `to` (when they are
+    functions and not places), and a handled note's `at`."""
+    out = []
+    def add(q):
+        if q in funcs and q not in out:
+            out.append(q)
+    for e in notes.get("edges", []):
+        for k in ("at", "from", "to"):
+            add(e.get(k))
+    for h in notes.get("handled", []):
+        add(h.get("at"))
+    return out
+
+
 def tree_html(funcs, notes):
     called = {c for f in funcs.values() for c in f["calls"]}
     roots = notes.get("entries") or [q for q in funcs if q not in called]
@@ -255,7 +284,14 @@ def tree_html(funcs, notes):
         return ('<li><span class="fn" data-node="t-%s"><b>ƒ %s</b> <small>%s:%d</small> %s</span>%s</li>'
                 % (esc(q), esc(q), esc(os.path.basename(f["file"])), f["line"], dots,
                    "<ul>%s</ul>" % kids if kids else ""))
-    return "<ul class=\"tree\">%s</ul>" % "".join(node(r, []) for r in roots)
+    main = "".join(node(r, []) for r in roots)
+    # A function a note marks that no entry reaches (a call the tree does not draw, such as one on an
+    # object of unknown type) still gets a place here, so each note has its function and dots in the tree.
+    extra = "".join(node(q, []) for q in named_in_notes(notes, funcs) if q not in seen)
+    if not extra:
+        return '<ul class="tree">%s</ul>' % main
+    return ('<ul class="tree">%s</ul>\n<p class="ask">Named in the notes below, but not called from the entries '
+            'by any call the code fixes:</p>\n<ul class="tree extra">%s</ul>' % (main, extra))
 
 
 def chip(ref, notes, funcs):
@@ -374,7 +410,7 @@ def page(notes, funcs):
     return ('<!doctype html>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             '<title>Explainer: %s</title>\n<style>%s</style>\n'
             '<h1>%s</h1>\n<p class="lede">%s</p>\n'
-            '<h2>The code at a glance</h2>\n<p class="ask">Who calls whom in %s. The coloured dots mark the functions each lens below has something to say about; tap one to see it.</p>\n%s\n'
+            '<h2>The code at a glance</h2>\n<p class="ask">Who calls whom in %s. The coloured dots mark the functions each lens below has something to say about; tap one to see it. Every such function is in the tree.</p>\n%s\n'
             '%s\n<div class="tabs" role="group" aria-label="Lenses">%s</div>\n%s\n<script>%s</script>\n'
             % (esc(notes["title"]), CSS, esc(notes["title"]), esc(notes.get("about", "")),
                esc(", ".join(notes["files"])), tree_html(funcs, notes), legend_html(), tabs,

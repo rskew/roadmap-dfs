@@ -52,7 +52,7 @@
     {"kind": "acquires", "from": "WalkMixin.walk_tick", "to": "budget", "label": "each new chain's cap is its share of what is left after live chains' caps", "at": "WalkMixin.walk_tick"},
     {"kind": "releases", "from": "WalkMixin.walk_judge", "to": "budget", "label": "charges the sessions actually run; the unused part of the cap is free again", "at": "WalkMixin.walk_judge"},
     {"kind": "acquires", "from": "WalkMixin.walk_tick", "to": "slots", "label": "one slot per chain; hand-started chains count against them", "at": "WalkMixin.walk_tick"},
-    {"kind": "releases", "from": "WalkMixin.walk_lower", "to": "slots", "label": "lowers a live chain's cap to its current run, so it ends after it", "at": "WalkMixin.walk_lower"},
+    {"kind": "sets", "from": "WalkMixin.walk_lower", "to": "chains", "label": "lowers a live chain's cap to its current run (and writes the cap file), so it ends after it; its slot and budget are freed later, when walk_judge judges it", "at": "WalkMixin.walk_lower"},
     {"kind": "acquires", "from": "WalkMixin.walk_poll_prs", "to": "prthread", "label": "a daemon thread every 300 s; skipped while the last is still running", "at": "WalkMixin.walk_poll_prs"},
 
     {"kind": "fails", "from": "WalkMixin.walk_judge", "to": "WalkMixin.walk_off", "label": "stop action (a limit with stop_on_limit, or a cause only a person can judge) → the whole walk ends", "at": "WalkMixin.walk_judge"},
@@ -72,7 +72,7 @@
     {"kind": "stops", "from": "WalkMixin.walk_tick", "to": "until", "label": "during a hold nothing new starts, but chains that ended are still judged", "at": "WalkMixin.walk_tick"}
   ],
   "handled": [
-    {"at": "walk_decide", "error": "a usage limit", "how": "hold until the reset, or stop the walk when stop_on_limit is set; the only cause it retries"},
+    {"at": "walk_decide", "error": "a usage limit", "how": "hold until the reset, or stop the walk when stop_on_limit is set; the only cause the walk waits out"},
     {"at": "walk_decide", "error": "idle: a session changed nothing in the repo", "how": "raise on the item, not a stop"},
     {"at": "walk_decide", "error": "a chain that moved nothing in its task tree (except done)", "how": "raise on the item"},
     {"at": "walk_decide", "error": "a cause it does not know (failed, brief, overbudget ...)", "how": "stop the whole walk, with the cause added to the reason"},

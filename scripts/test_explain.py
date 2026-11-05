@@ -113,6 +113,31 @@ class WrongOwners(unittest.TestCase):
         self.assertEqual(self.funcs["Base.ping"]["calls"], ["Mixin.pong"])
 
 
+SHADOWED = '''
+def go():
+    pass
+
+def by_parameter(go):
+    go()
+
+def by_assignment():
+    go = len
+    go("x")
+
+def plain():
+    go()
+'''
+
+
+class Shadowed(unittest.TestCase):
+    def test_a_name_the_function_binds_is_not_the_module_function(self):
+        d = tempfile.mkdtemp()
+        funcs = explain.read_code([write(d, "m.py", SHADOWED)])
+        self.assertEqual(funcs["by_parameter"]["calls"], [])
+        self.assertEqual(funcs["by_assignment"]["calls"], [])
+        self.assertEqual(funcs["plain"]["calls"], ["go"])
+
+
 class Duplicates(unittest.TestCase):
     def test_one_class_name_in_two_files_is_refused_and_async_is_read(self):
         d = tempfile.mkdtemp()
@@ -171,6 +196,32 @@ class Page(unittest.TestCase):
                 notes = json.load(fh)
             for e in notes["edges"]:
                 self.assertIn(explain.esc(e["label"]), text, "%s: edge %r is not drawn" % (name, e["label"]))
+
+    def test_every_function_a_shipped_note_names_is_in_the_tree_with_its_dots(self):
+        for name in sorted(f for f in os.listdir(NOTES) if f.endswith(".json")):
+            path = os.path.join(NOTES, name)
+            with open(path) as fh:
+                notes = json.load(fh)
+            funcs = explain.read_code([os.path.join(ROOT, f) for f in notes["files"]])
+            text = explain.build(path, ROOT)
+            named = explain.named_in_notes(notes, funcs)
+            self.assertTrue(named, name)
+            for q in named:
+                self.assertIn("<b>ƒ %s</b>" % explain.esc(q), text, "%s: %s is not in the tree" % (name, q))
+            for q, lenses in explain.lenses_at(notes).items():
+                span = text.split('data-node="t-%s"><b>' % explain.esc(q), 1)[1].split("</span>", 1)[0]
+                for l in lenses:
+                    self.assertIn('data-lens="%s"' % l, span, "%s: %s has no %s dot" % (name, q, l))
+
+
+class NotedButUnreached(unittest.TestCase):
+    def test_a_noted_function_no_entry_reaches_is_shown_after_the_entries(self):
+        d = tempfile.mkdtemp()
+        funcs = explain.read_code([write(d, "m.py", "def main():\n    pass\n\ndef alone():\n    pass\n")])
+        notes = {"entries": ["main"], "edges": [{"kind": "fails", "from": "alone", "to": "main", "label": "x", "at": "alone"}]}
+        text = explain.tree_html(funcs, notes)
+        self.assertLess(text.index("<b>ƒ main</b>"), text.index("<b>ƒ alone</b>"))
+        self.assertIn('data-lens="failure"', text.split("<b>ƒ alone</b>")[1])
 
 
 if __name__ == "__main__":
