@@ -1226,7 +1226,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), before)
 
     # ── being told, not asking ──────────────────────────────────────────────────
-    def events(self, last=None):
+    def events(self, last=None, preamble=False):
         """An open `/api/events`: a function that returns the next `event:` as (name, data)."""
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         conn.request("GET", "/api/events", headers={"Last-Event-ID": last} if last else {})
@@ -1238,13 +1238,36 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
             name = None
             while True:
                 line = r.fp.readline().decode()
+                if line.startswith("id:"):
+                    next_event.id = line.split(":", 1)[1].strip()
                 if line.startswith("event:"):
                     name = line.split(":", 1)[1].strip()
                 elif line.startswith("data:") and name:
                     return name, json.loads(line.split(":", 1)[1])
                 if not line:
                     return None
+        next_event.id = None
+        while preamble:                               # the lines before any event: retry and the number to start from
+            line = r.fp.readline().decode()
+            if line.startswith("id:"):
+                next_event.id = line.split(":", 1)[1].strip()
+            if line in ("\n", ""):
+                break
         return next_event
+
+    def test_a_page_that_has_heard_no_change_is_caught_up_on_reconnecting(self):
+        """The first connection hands the page the number it starts from, so a drop before any change
+        still reconnects with an id, and the changes made while it was away are told."""
+        first = self.events(preamble=True)
+        self.assertIsNotNone(first.id)
+        dfs_web.HUB.notify(["W1"])                    # made while the page was away
+        again = self.events(first.id)
+        name, data = again()
+        self.assertEqual(name, "change")
+        self.assertEqual(data["v"], int(first.id) + 1)
+        # a server that restarted holds a new number: the page's old one is not it
+        restarted = self.events(str(int(first.id) - 10 ** 6))
+        self.assertEqual(restarted()[0], "change")
 
     def test_a_new_page_is_told_nothing_until_a_write_lands_and_a_reconnecting_one_is_told_it_missed_some(self):
         nxt = self.events()

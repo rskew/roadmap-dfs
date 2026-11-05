@@ -1112,14 +1112,15 @@ class Hub:
         self.version = int(time.time() * 1000)  # a restarted server never repeats a number a page holds
 
     def subscribe(self, last=None):
-        """A listener. A page that reconnects says the number it last heard (`Last-Event-ID`) and
-        is told at once if things moved on; a new page has just read them, and is told nothing."""
+        """A listener and the number now. A page that reconnects says the number it last heard
+        (`Last-Event-ID`) and is told at once if things moved on; a new page has just read them,
+        and is told nothing, but is given the number to hold (see `Handler.events`)."""
         q = queue.Queue()
         with self.lock:
             self.clients.add(q)
             if last is not None and last != str(self.version):
                 q.put((self.version, None))
-        return q
+            return q, self.version
 
     def unsubscribe(self, q):
         with self.lock:
@@ -1294,9 +1295,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
-        q = HUB.subscribe(self.headers.get("Last-Event-ID"))
+        q, version = HUB.subscribe(self.headers.get("Last-Event-ID"))
         try:
-            self.wfile.write(b"retry: 2000\n\n")
+            # The number the page starts from, with no event: the browser keeps it as its last id, so a page that has
+            # heard no change still says where it was when it reconnects, and is told what it missed.
+            self.wfile.write(b"retry: 2000\nid: %d\n\n" % version)
             self.wfile.flush()
             while True:
                 try:
