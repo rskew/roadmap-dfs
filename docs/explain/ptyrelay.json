@@ -75,6 +75,7 @@
 
     {"kind": "fails", "from": "Relay._pump", "to": "Relay.failure", "label": "the child exits non-zero → its last 'dfs_run:' line becomes the reason", "at": "Relay.failure"},
     {"kind": "fails", "from": "Relay._typist", "to": "Relay.failure", "label": "the agent ended before a message was typed → 'before its message was typed'", "at": "Relay.failure"},
+    {"kind": "fails", "from": "ChatHost.ensure", "to": "web", "label": "make() or pty.fork raising is not caught: it reaches the caller, the lock is released by the with-block, and no new relay is stored (an ended one stays in relays)", "at": "ChatHost.ensure"},
     {"kind": "fails", "from": "Relay.send", "to": "web", "label": "False when the relay is not running; the text is not kept", "at": "Relay.send"},
     {"kind": "stops", "from": "Relay.failure", "to": "web", "label": "exit non-zero with no 'dfs_run:' line and nothing unsent → no reason; the chat just looks ended", "at": "Relay.failure"},
     {"kind": "stops", "from": "Relay._typist", "to": "agent", "label": "a failed write to the pty is swallowed by _try; the message still counts as typed", "at": "Relay._typist"},
