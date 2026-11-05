@@ -24,6 +24,9 @@ work, finishes the node and commits it. Backing up reverts the refuted node's co
 unless the evidence says why a change should stay; the commits stay in history as its
 evidence.
 
+Everything you write for a reader (a node, a raise, a log entry, a review finding, the
+Summary) is in plain, simple English: short sentences, everyday words.
+
 After every fifth work session on a task, a critic judges the tree's reasoning, not its
 code: whether the evidence is true and independent, whether it supports the path
 taken, and whether the path still serves the task's Goal. When the tree is complete, a reviewer judges the implementation against the
