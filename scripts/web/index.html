@@ -1680,12 +1680,12 @@ function chatDraw(st) {
   log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
-    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
-    + `<div class="chat-newest"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
+    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
+    + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
   $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy;
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
-  // A busy turn redraws every poll ("processing (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
+  // A busy turn redraws every poll ("Working on it (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
   CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
@@ -1775,16 +1775,18 @@ $("#chat-stop").addEventListener("click", async () => {
   catch (e) { toast(e.message, true); }
   finally { $("#chat-stop").disabled = false; }
 });
-// Enter sends where there is a keyboard (a fine pointer) and Shift+Enter adds a line; on a touch screen Enter stays a new line,
-// and Send is the button. Ctrl/cmd+Enter sends anywhere. A key that is choosing an input-method candidate is left alone.
 $("#chat-input").addEventListener("input", ev => { chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
 // The text box grows with what is typed, up to its CSS max-height (then it scrolls), and shrinks back when cleared.
 function chatGrow() {
   const el = $("#chat-input"); el.style.height = "auto";
   el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + "px";
 }
+// A width change (rotation, a resized window) rewraps the draft, so the height is measured again.
+addEventListener("resize", () => { if ($("#chat").open) chatGrow(); });
 const chatEnterSends = () => matchMedia("(pointer: fine)").matches;
 $("#chat-input").placeholder = chatEnterSends() ? "Ask about this. Enter sends, Shift+Enter adds a line" : "Ask about this";
+// Enter sends where there is a keyboard (a fine pointer) and Shift+Enter adds a line; on a touch screen Enter stays a new line,
+// and Send is the button. Ctrl/cmd+Enter sends anywhere. A key that is choosing an input-method candidate is left alone.
 $("#chat-input").addEventListener("keydown", ev => {
   if (ev.key !== "Enter" || ev.isComposing) return;
   if (ev.metaKey || ev.ctrlKey || (chatEnterSends() && !ev.shiftKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); }

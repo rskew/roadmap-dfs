@@ -540,16 +540,16 @@ const FLOWS = {
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
     await page.click("[data-act=chattop]"); await settle();
     same((await at()).y, s.tops[1], "in the middle of an answer, Top goes to that answer's top");
-    // a turn in progress redraws every poll as "processing (n seconds)"; that must not carry the reader back to the end
+    // a turn in progress redraws every poll as "Working on it (n seconds)"; that must not carry the reader back to the end
     state.busy = true; state.busy_for = 1;
     await page.waitForSelector("#chat-log .msg.wait"); await settle();
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
     await page.click("[data-act=chattop]"); await settle();
     same((await at()).y, s.tops[1], "while the agent is busy, Top still goes to that answer's top");
-    state.busy_for = 2; await page.waitForFunction(() => /processing \(2 seconds\)/.test(document.querySelector("#chat-log .wait").textContent));
+    state.busy_for = 2; await page.waitForFunction(() => /Working on it \(2 seconds\)/.test(document.querySelector("#chat-log .wait").textContent));
     await settle();
-    same((await at()).y, s.tops[1], "a redraw of the processing line leaves the reader where Top put them");
-    // short messages last: the reader's question under the processing line, then short answers that start below the top of
+    same((await at()).y, s.tops[1], "a redraw of the working line leaves the reader where Top put them");
+    // short messages last: the reader's question under the working line, then short answers that start below the top of
     // the view, where the log cannot scroll to them. Each press of Top must still move up, to the nearest message above the view.
     const toEnd = () => page.$eval("#chat-log", e => { e.scrollTo(0, e.scrollHeight); });
     const nearest = ({ y, tops }) => Math.max(...tops.filter(v => v <= y - 4));
@@ -1305,11 +1305,11 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await task(page, "W9");
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
     await page.waitForSelector("#chat-log .msg.wait");
-    same(await page.$$eval("#chat-log > *", e => e.map(x => x.className)), ["msg wait"], "before the prompt is recorded, only the wait is drawn");
+    same(await page.$$eval("#chat-log > :not(.chat-newest)", e => e.map(x => x.className)), ["msg wait"], "before the prompt is recorded, only the wait is drawn");
     assert(!/Ask about|full permissions/.test(await page.textContent("#chat-log")), "the page's own paragraph is gone");
     state.messages = [{ role: "prompt", text: "You are talking with the author about task W9: read .dfs/ROADMAP.md." }];
     await page.waitForSelector("#chat-log .msg.prompt", { timeout: 10000 });
-    same(await page.$$eval("#chat-log > *", e => e.map(x => x.className)), ["msg prompt", "msg wait"], "the prompt is the chat's first message");
+    same(await page.$$eval("#chat-log > :not(.chat-newest)", e => e.map(x => x.className)), ["msg prompt", "msg wait"], "the prompt is the chat's first message");
     same(await page.textContent("#chat-log .msg.prompt .who"), "Prompt", "labelled as the prompt");
     same(await page.textContent("#chat-log .msg.prompt .what"), state.messages[0].text, "in full, as the agent was given it");
     same(errors, [], "no page errors");
@@ -1334,6 +1334,71 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(stops, [{ scope: "W9" }], "Stop asks the server to stop W9's chat");
     assert(await page.$("#chat-log .msg.note"), "the log says it was stopped");
     assert(!(await page.$eval("#chat-send", e => e.disabled)), "and you can send again");
+    same(errors, [], "no page errors");
+  },
+
+  // The chat box on a desktop keyboard: Enter sends, Shift+Enter adds a line, an unsent draft survives closing, a long draft grows the box.
+  async chat_keys(b) {
+    const { page, errors } = await open(b, DESKTOP);
+    const state = { scope: "W9", messages: [{ role: "agent", text: "hello" }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    const sends = [];
+    await page.route("**/api/chat/**", async r => {
+      if (r.request().url().endsWith("/api/chat/send")) { sends.push(r.request().postDataJSON().message); state.messages.push({ role: "you", text: "sent" }); }
+      await r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await task(page, "W9");
+    const openChat = async () => { await page.click("button.desk[data-act=chat]"); await page.waitForSelector("#chat[open]"); await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length >= 1); };
+    await openChat();
+    const h0 = await page.$eval("#chat-input", e => e.offsetHeight);
+    // the page cancels a key's default (a new line) only when it sends; a synthetic keydown shows which
+    const cancelled = shift => page.$eval("#chat-input", (e, sh) => { const k = new KeyboardEvent("keydown", { key: "Enter", shiftKey: sh, bubbles: true, cancelable: true }); e.dispatchEvent(k); return k.defaultPrevented; }, shift);
+    await page.fill("#chat-input", "line one");
+    assert(!(await cancelled(true)), "Shift+Enter is left to add a line");
+    await page.waitForTimeout(300);
+    same(sends, [], "Shift+Enter sends nothing");
+    await page.$eval("#chat-input", e => { e.value = Array.from({ length: 8 }, (_, i) => "row " + i).join("\n"); e.dispatchEvent(new Event("input", { bubbles: true })); });
+    const h1 = await page.$eval("#chat-input", e => e.offsetHeight); assert(h1 > h0, "a long draft grows the text box");
+    await page.fill("#chat-input", "an unsent draft");
+    await page.click("[data-act=chatclose]"); await page.waitForFunction(() => !document.querySelector("#chat[open]"));
+    await openChat();
+    same(await page.inputValue("#chat-input"), "an unsent draft", "an unsent draft is back when the chat reopens");
+    await page.press("#chat-input", "Enter");
+    await page.waitForFunction(() => document.querySelector("#chat-input").value === "");
+    same(sends, ["an unsent draft"], "Enter sends the draft");
+    await page.click("[data-act=chatclose]"); await page.waitForFunction(() => !document.querySelector("#chat[open]"));
+    await openChat();
+    same(await page.inputValue("#chat-input"), "", "a sent draft is not kept");
+    same(errors, [], "no page errors");
+  },
+
+  // The chat box on a touch screen: Enter is a new line, the input row keeps its width when Stop shows, and Newest returns a scrolled-up log to its end.
+  async chat_touch(b) {
+    const { page, errors } = await open(b, { ...PHONE, viewport: { width: 360, height: 640 } });
+    const state = { scope: "W9", messages: Array.from({ length: 40 }, (_, i) => ({ role: i % 2 ? "you" : "agent", text: `message ${i}` })), busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    const sends = [];
+    await page.route("**/api/chat/**", async r => {
+      if (r.request().url().endsWith("/api/chat/send")) sends.push(1);
+      await r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 40); await page.waitForTimeout(700);
+    await page.fill("#chat-input", "a");
+    assert(!(await page.$eval("#chat-input", e => { const k = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }); e.dispatchEvent(k); return k.defaultPrevented; })), "on a touch screen Enter is left to add a line");
+    await page.waitForTimeout(300);
+    same(sends, [], "and sends nothing");
+    const shown = () => page.$eval(".chat-newest", e => e.classList.contains("on") && getComputedStyle(e.querySelector("button")).display !== "none");
+    assert(!(await shown()), "at the end of the log there is no Newest button");
+    await page.$eval("#chat-log", e => { e.scrollTo(0, 0); }); await page.waitForTimeout(400);
+    assert(await shown(), "scrolled away from the end, Newest shows");
+    await page.click("[data-act=chatbottom]");
+    await within(page.waitForFunction(() => { const e = document.querySelector("#chat-log"); return e.scrollHeight - e.scrollTop - e.clientHeight < 4; }), "Newest takes the log to its end");
+    assert(!(await shown()), "and goes away");
+    const w = () => page.$eval("#chat-input", e => Math.round(e.getBoundingClientRect().width));
+    const idle = await w();
+    state.busy = true; state.busy_for = 3;
+    await page.waitForFunction(() => !document.querySelector("#chat-stop").hidden, null, { timeout: 15000 });
+    same(await w(), idle, "the text box keeps its width when Stop takes Send's place");
     same(errors, [], "no page errors");
   },
 
