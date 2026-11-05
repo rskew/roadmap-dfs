@@ -81,6 +81,7 @@ def run_turn(argv, message, cwd, env, on_start=None):
 
 SCOPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]*$")
 MAX_MESSAGE = 4000
+ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is closed does not undo the end
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
 
@@ -516,8 +517,20 @@ class Chats:
         p = self.path(scope)
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(dict(sid=sid, agent=agent)))
+        rec = dict(sid=sid, agent=agent)
+        if "ended" in self.record(scope):       # ending a chat is kept when its session id is rewritten
+            rec["ended"] = self.record(scope)["ended"]
+        tmp.write_text(json.dumps(rec))
         os.replace(tmp, p)
+
+    def is_ended(self, scope, live=False, busy=False):
+        """Ended by the author and not spoken in since: a message sent from the page or typed at the
+        screen makes the transcript newer than the mark, so the chat is in progress again."""
+        ended = self.record(scope).get("ended")
+        if not isinstance(ended, (int, float)) or live or busy:
+            return False
+        sid = self.sid(scope)
+        return (transcript_mtime(sid, self.agent(scope)) or 0) <= ended + ENDED_SLACK
 
     def state(self, scope):
         self.check(scope)
@@ -547,6 +560,7 @@ class Chats:
             live = bool(w and w.chat_live(scope))
             talking = bool(live and w.chat_active(scope))      # a background chat that is answering
             return dict(scope=scope, messages=messages, busy=bool(started) or talking,
+                        ended=self.is_ended(scope, live, bool(started) or talking),
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
                         elsewhere=bool(sid) and not started and not live and running_elsewhere(sid, agent=agent),
@@ -764,8 +778,34 @@ class Chats:
             last = messages[-1] if messages else dict(role="", text="")
             updated = transcript_mtime(sid, agent) or p.stat().st_mtime
             out.append(dict(scope=scope, count=len(messages), role=last["role"], last=last["text"][:160],
-                            updated=updated, live=live, busy=busy, agent=agent))
+                            updated=updated, live=live, busy=busy, agent=agent,
+                            ended=self.is_ended(scope, live, busy)))
         return sorted(out, key=lambda c: -c["updated"])
+
+    def end(self, scope):
+        """Done with this chat: its agent is stopped and it is marked ended, so the Chats list can keep
+        what is in progress apart from what is over. The conversation stays and can be read; a message
+        sent to it later (here or at the screen) makes it in progress again. A chat with no
+        conversation has nothing to mark: use "New chat"."""
+        self.check(scope)
+        with self.lock:
+            if scope in self.busy:
+                raise ValueError("it is still answering: stop it or wait for it")
+            rec = self.record(scope)
+            if not rec.get("sid"):
+                raise ValueError("there is no conversation to end")
+            w = self.walker()
+            if w and w.chat_active(scope):
+                raise ValueError("it is still answering: stop it or wait for it")
+            chatlog.log(scope, "page: chat ended (session %s)" % rec["sid"])
+            if w:
+                w.chat_close(scope)
+            rec["ended"] = time.time()
+            tmp = self.path(scope).with_suffix(".tmp")
+            tmp.write_text(json.dumps(rec))
+            os.replace(tmp, self.path(scope))
+        self.on_change()
+        return self.state(scope)
 
     def clear(self, scope):
         """Start over: the next message is a new session. The old one stays in the agent's own history."""
