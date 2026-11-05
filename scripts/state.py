@@ -803,7 +803,8 @@ def _record_block(task, kind):
                 "the task is reopened anyway. If you added none, give the verdict `ok` "
                 "and list them in its body, one per line: the author reads them when "
                 "they accept the task.", ""]
-    out += ["  Keep the Approach concise, clear and standalone: name the file, "
+    out += ["  Keep the Approach concise, clear and standalone, in plain, simple English "
+            "(short sentences, everyday words): name the file, "
             "function, fault and check themselves, so a session that reads only this "
             "node knows what to do, never just \"see <id>\" or \"as <id> found\".", "",
             "  Leave any Hypothesis and Evidence to the session that takes it up, and do not "
