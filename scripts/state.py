@@ -356,6 +356,12 @@ def metrics(trees):
 
 
 def full():
+    # Every reader below loads each task, some of them more than once: one parse each.
+    with dfs_tree.read_scope():
+        return _full()
+
+
+def _full():
     its = items()
     trees = [dfs_tree.load(i["id"]) for i in its]
     raises, entries = [], []

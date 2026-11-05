@@ -85,8 +85,10 @@ import calendar
 import os
 import re
 import shutil
+import contextlib
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -488,16 +490,42 @@ def combine(task, parts, here=None):
     return t
 
 
+_reading = threading.local()
+
+
+@contextlib.contextmanager
+def read_scope():
+    """Inside it, `load` parses each task once and hands every caller the same tree. For a
+    pass that only READS many tasks and asks for each several times (`state.full()` loads
+    every task six times over): the caller must not edit what `load` returns. The scope is
+    per thread, so a request thread's pass never feeds another's, and it ends with the
+    block, so a later call reads the files afresh."""
+    outer = getattr(_reading, "memo", None)
+    if outer is None:
+        _reading.memo = {}
+    try:
+        yield
+    finally:
+        if outer is None:
+            _reading.memo = None
+
+
 def load(task, here=None):
     """The task as every reader should see it: every part, with each log's archived
     past merged back in. `here` defaults to this checkout's tag (None if detached)."""
     def read(p):
         return p.read_text() if p.exists() else ""
-    tags = part_tags(task)
     if here is None:
         here = dfs_paths.branch_tag_or_none()
-    return combine(task, [(g, read(part_path(task, g)), read(archive_part(task, g)))
-                          for g in tags], here)
+    memo = getattr(_reading, "memo", None)
+    if memo is not None and (task, here) in memo:
+        return memo[(task, here)]
+    tags = part_tags(task)
+    t = combine(task, [(g, read(part_path(task, g)), read(archive_part(task, g)))
+                       for g in tags], here)
+    if memo is not None:
+        memo[(task, here)] = t
+    return t
 
 
 def new_part(task, name=""):
@@ -1001,7 +1029,7 @@ def archive_blocker(task):
     if got is None:
         return "there is no origin branch to say it was pushed"
     if got[1].get(task):
-        return "%d of its commits are not on %s" % (got[1][task], default_ref())
+        return "%d of its commits are not on %s" % (got[1][task], default_ref(ttl=5.0))
     if uncommitted().get(task):
         return "its files have uncommitted changes"
     return ""
