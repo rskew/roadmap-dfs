@@ -1733,6 +1733,19 @@ class Branches(InARepo):
         self.assertGreater(len(dfs_tree.load("W1")["nodes"]), 0)   # the main checkout's tree is read
         self.assertEqual(dfs_paths.task_items("W1"), self.root / ".dfs" / "items")
 
+    def test_a_finished_task_with_a_leftover_directory_is_still_done_and_is_not_next(self):
+        # W130, 2026-11-05: the leftover read as an empty tree, so the walk took the finished task.
+        (self.root / ".dfs/order.md").write_text("W1\n")
+        self.write(task(node(1, "confirmed"), "- 2026-11-05T00:00:00Z · ready\n- 2026-11-05T00:00:01Z · accept\n"))
+        self.commit()
+        wt = self.worktree()
+        shutil.rmtree(wt / ".dfs")
+        (wt / ".dfs").mkdir()
+        shutil.rmtree(self.root / ".git" / "worktrees")
+        full = dfs_state.full()
+        self.assertEqual([(i["id"], i["status"]) for i in full["items"]], [("W1", "done")])
+        self.assertIsNone(full["next_item"])
+
     def test_a_task_never_committed_stays_listed_once_its_branch_is_worked(self):
         (self.root / ".dfs/items/W2.md").write_text(task(node(1), "").replace("W1", "W2"))
         self.assertEqual(dfs_tree.task_ids(), ["W1", "W2"])

@@ -1067,13 +1067,22 @@ trap on_exit EXIT
 trap on_interrupt INT TERM
 # An `enter` that fails (a BranchError, a traceback) is recorded as the stop, with its cause,
 # so the walk does not say the chain ended without recording why.
-if ! ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM" 2>"$RUNDIR/enter.err")"; then
+# ⚠ A DONE ITEM WITH NO BRANCH IS NOT CUT A WORKTREE. Its branch was merged and deleted (or it was
+# never branched): there is nothing left to work or merge, and the loop below ends `done` on the
+# first state it reads. On 2026-11-05 the walk started W130 3 seconds after W130 merged, over
+# a leftover directory taken for its worktree; `enter` handed that back and the chain died
+# saying the task file was missing, not that the item was finished.
+if [ "$(python3 "$HERE/state.py" --sh "$ITEM" | sed -n 's/^status=//p')" = done ] \
+   && ! git show-ref -q --verify "refs/heads/dfs/$ITEM"; then
+  echo "dfs_run: $ITEM is done and its branch dfs/$ITEM is merged, so there is nothing to work."
+  ITEM_TREE=""
+elif ! ITEM_TREE="$(python3 "$HERE/branch.py" enter "$ITEM" 2>"$RUNDIR/enter.err")"; then
   cat "$RUNDIR/enter.err" >&2
   stop_is brief
   meta_set cause="branch.py enter failed: $(tail -n 1 "$RUNDIR/enter.err")"
   exit 2
 fi
-cat "$RUNDIR/enter.err" >&2   # the notices it prints (a reused branch, a clash) are shown
+[ -f "$RUNDIR/enter.err" ] && cat "$RUNDIR/enter.err" >&2   # the notices it prints (a reused branch, a clash) are shown
 if [ -n "$ITEM_TREE" ]; then
   cd "$ITEM_TREE"
   eval "$(python3 "$HERE/paths.py" --sh)"

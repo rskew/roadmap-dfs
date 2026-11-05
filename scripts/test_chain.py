@@ -1477,6 +1477,22 @@ class Chain(unittest.TestCase):
         self.assertIn("W1.1: the step is done", self.git("log", "--format=%s"))
         self.assertTrue(self.log("accept"))
 
+    def test_a_chain_started_on_a_merged_item_says_it_is_done_even_over_a_leftover_directory(self):
+        # W130, 2026-11-05: the walk started the item 3 seconds after it merged; a leftover
+        # directory with a dangling `.git` was taken for its worktree and the chain died
+        # saying the task file was missing.
+        self.run_chain("work,confirm", cap=2)
+        subprocess.run([sys.executable, str(HERE / "tree.py"), "log", "W1", "accept"],
+                       cwd=self.root, check=True, capture_output=True, stdin=subprocess.DEVNULL)
+        self.assertEqual(self.git("branch", "--list", "dfs/W1"), "")
+        self.wt.mkdir(parents=True)
+        (self.wt / ".git").write_text("gitdir: %s\n" % (self.root / ".git" / "worktrees" / "W1"))
+        rc, meta, out = self.run_chain("work,confirm", cap=2)
+        self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
+        self.assertIn("W1 is done and its branch dfs/W1 is merged", out)
+        self.assertNotIn("cannot be briefed", out)
+        self.assertNotIn("not a git repository", out)
+
     def test_the_authors_accept_while_a_chain_reviews_leaves_the_merge_to_the_chain(self):
         rc, meta, out = self.run_chain("work,confirm,raccept,fixn,rok", MAIN_ROOT=str(self.root))
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
