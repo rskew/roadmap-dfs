@@ -334,6 +334,36 @@ class InARepo(unittest.TestCase):
                        shell=True, cwd=self.root, check=True)
 
 
+class ReadScope(InARepo):
+    def test_inside_the_scope_a_task_is_parsed_once_and_outside_it_every_time(self):
+        self.write(task())
+        self.assertIsNot(dfs_tree.load("W1"), dfs_tree.load("W1"))
+        with dfs_tree.read_scope():
+            first = dfs_tree.load("W1")
+            self.assertIs(first, dfs_tree.load("W1"))
+            with dfs_tree.read_scope():       # a nested scope shares the outer one
+                self.assertIs(first, dfs_tree.load("W1"))
+            self.assertIs(first, dfs_tree.load("W1"))
+        self.assertIsNot(first, dfs_tree.load("W1"))
+
+    def test_a_scope_ends_with_its_block_so_the_next_read_sees_the_file_again(self):
+        self.write(task())
+        with dfs_tree.read_scope():
+            self.assertEqual(len(dfs_tree.load("W1")["nodes"]), 0)
+        self.write(task(node(1)))
+        self.assertEqual(len(dfs_tree.load("W1")["nodes"]), 1)
+
+    def test_another_thread_does_not_see_the_scope(self):
+        import threading
+        self.write(task())
+        seen = []
+        with dfs_tree.read_scope():
+            mine = dfs_tree.load("W1")
+            t = threading.Thread(target=lambda: seen.append(dfs_tree.load("W1")))
+            t.start(); t.join()
+        self.assertIsNot(seen[0], mine)
+
+
 class NewTask(InARepo):
     def test_the_next_id_is_one_past_the_highest_and_the_words_go_in_unchanged(self):
         self.write(task())

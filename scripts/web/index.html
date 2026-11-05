@@ -523,11 +523,16 @@ async function reach(path, body) {
     throw Object.assign(new Error(NO_ANSWER), { network: true });
   }
 }
+/* `READ_AT` is the oldest number the server said it held when it began a read (`X-Roadmap-Version`). The page connects
+   for pushes after its first reads and asks for what came after it, so a change made while it was loading is told. */
+let READ_AT = Infinity;
 async function api(path, body) {
   if (body !== undefined) WROTE++;
   loading(1);
   try {
     const r = await reach(path, body);
+    const at = body === undefined ? parseInt(r.headers.get("X-Roadmap-Version"), 10) : NaN;
+    if (at < READ_AT) READ_AT = at;
     let j = {};
     try { j = await r.json(); } catch (e) { /* not JSON */ }
     if (!r.ok) throw new Error(j.error || ("error " + r.status));
@@ -665,6 +670,8 @@ if (MID.on) {
 
 let lastView = "";
 let RENDERS = 0;
+let PUSHES = 0;      // counts the pushes heard
+const stale = new Map();      // task id (or "*": any) -> the push that changed it, until a read of it has been kept
 /* A draw replaces the controls: for a keyboard user in the pinned Walk box, who goes there in the middle of a walk, put focus back on the same
    control (by id, or its action and target, else its place among the focusable controls) when the draw left it on the page. */
 const FOCUSABLE = "button, a[href], summary, textarea, input:not([type=hidden]), select, [tabindex]:not([tabindex='-1'])";
@@ -735,17 +742,17 @@ function findStep() {
   const el = route().view === "task" ? $("#view .row .main") : [...document.querySelectorAll("#view button.item[data-act=task]")].find(x => !x.closest("[hidden]"));
   if (el) { el.focus(); el.scrollIntoView({ block: "nearest" }); }
 }
-async function render(force) {
+async function render(force, changed) {
   const key = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
   const mine = RENDERS + 1;
-  await renderDraw(force);
+  await renderDraw(force, changed);
   const lost = !document.activeElement || document.activeElement === document.body;
   if (key && lost) {
     const el = (key.sel && $(key.sel)) || document.querySelectorAll(FOCUSABLE)[key.at]; if (el) el.focus();
   } else if (MID.picked && lost) midSelect();      // the selected control was drawn over: the middle's is selected again
   if (mine === RENDERS) focusRow();      // a newer render draws over this one, and gives the focus back after it
 }
-async function renderDraw(force) {
+async function renderDraw(force, changed) {
   // A render is a fetch and then a draw, and a newer one can start before an older one
   // lands: an older list render finishing after the tap on a task drew the list over it.
   // Only the newest draws.
@@ -758,10 +765,15 @@ async function renderDraw(force) {
   try {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
-      let t; const at = WROTE;
-      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/walk").then(walkSeen)]);
+      let t; const at = WROTE, seen = PUSHES;
+      // A push that names the tasks it changed, and not this one, leaves the task as it is: only the walk is read again.
+      // A change stays unread (`stale`) until a read of the task has landed and been kept, so a render that is replaced or
+      // fails before that does not make the next push trust the old copy.
+      const same = changed && !arrived && S.task && S.taskId === r.task && S.task.id === r.task && !stale.has(r.task) && !stale.has("*");
+      [t, S.walk] = await Promise.all([same ? S.task : api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/walk").then(walkSeen)]);
       S.walkAt = at;
       if (mine !== RENDERS) return;
+      if (!same) for (const k of [r.task, "*"]) if (stale.get(k) <= seen) stale.delete(k);      // a push that came in during the read stays
       S.node = r.node;
       const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + walkHere(r.task) + "|" + JSON.stringify(walkOf(r.task));
       S.task = t;
@@ -2237,7 +2249,7 @@ document.addEventListener("change", e => { if (e.target.id === "nextsel") setNex
    starts again, rather than waiting for a timer that may be long overdue or already given up. */
 function comeBack() {
   if (document.visibilityState === "hidden") return;
-  if (EVENTS && EVENTS.readyState === 2) listen();     // a stream the browser gave up on is opened again; a new one is told where things stand
+  if (EVENTS && EVENTS.readyState === 2) listen();     // a stream the browser gave up on is opened again; a new one is told what came after the number the page's reads were made at (or at once, if the page failed to load)
   if ($("#chat").open) chatLoad();
 }
 document.addEventListener("visibilitychange", comeBack);
@@ -2245,14 +2257,25 @@ addEventListener("pageshow", e => { if (e.persisted) comeBack(); });
 addEventListener("online", comeBack);
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
-let pushT, EVENTS;
+let pushT, EVENTS, pushed = new Set();      // `pushed`: the tasks changed since the last render; null: anything, or not said
 function listen() {
   if (!window.EventSource) return;
   if (EVENTS) EVENTS.close();
-  const es = EVENTS = new EventSource("/api/events");
-  es.addEventListener("change", () => {
+  // A page that shows "Could not load" has nothing to be caught up from: its reads were lost, or only some landed at the
+  // number now held. `since=0` is behind every number the server holds, so the stream is told at once and the page reads again.
+  const failed = !!$("#view .wait[role=alert]");
+  const es = EVENTS = new EventSource("/api/events" + (failed ? "?since=0" : READ_AT < Infinity ? "?since=" + READ_AT : ""));
+  es.addEventListener("change", e => {
+    let tasks = null; try { tasks = JSON.parse(e.data).tasks; } catch (x) { /* not said: reread all */ }
+    pushed = tasks && pushed ? new Set([...pushed, ...tasks]) : null;
+    PUSHES++; for (const k of tasks || ["*"]) stale.set(k, PUSHES);
     clearTimeout(pushT);
-    pushT = setTimeout(() => { if ($("#chat").open) chatLoad(); if ($("#form").open) S.dirty = true; else render(false); }, 120);
+    pushT = setTimeout(() => {
+      const changed = pushed; pushed = new Set();
+      if ($("#chat").open) chatLoad();
+      if ($("#form").open) S.dirty = true;      // the form's close reads everything again
+      else render(false, changed);
+    }, 120);
   });
   es.onopen = () => { $("#live").hidden = true; };
   es.onerror = () => { $("#live").hidden = false; };     // the browser reconnects by itself
@@ -2279,8 +2302,7 @@ $("#theme").onclick = () => {
 };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeLabel);
 themeLabel();
-listen();
-render(true);
+render(true).finally(listen);       // after the first reads, which name the number to be told after
 </script>
 </body>
 </html>

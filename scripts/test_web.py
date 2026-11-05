@@ -73,6 +73,7 @@ class Web(unittest.TestCase):
         self.port = self.server.server_address[1]
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         dfs_web._commit_cache.clear()
+        dfs_web._FULL.update(sig=None, data=None)
         self.fake = test_walker.FakeWalker()
         dfs_web.WALK.update(enabled=True, walker=self.fake)
 
@@ -100,6 +101,69 @@ class Web(unittest.TestCase):
             return r.status, json.loads(raw), r
         except ValueError:
             return r.status, raw, r
+
+    def test_big_text_is_gzipped_for_a_client_that_accepts_it_and_nothing_else_is(self):
+        import gzip
+        status, plain, r = self.call("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIsNone(r.getheader("Content-Encoding"))              # not asked for: sent as it was
+        self.assertEqual(r.getheader("Vary"), "Accept-Encoding")
+        status, packed, r = self.call("GET", "/", headers={"Accept-Encoding": "gzip, br"})
+        self.assertEqual(r.getheader("Content-Encoding"), "gzip")
+        self.assertEqual(int(r.getheader("Content-Length")), len(packed))
+        self.assertLess(len(packed), len(plain) // 2)
+        self.assertEqual(gzip.decompress(packed), plain)                # the same page, byte for byte
+        status, _, r = self.call("GET", "/icon-192.png", headers={"Accept-Encoding": "gzip"})
+        self.assertIsNone(r.getheader("Content-Encoding"))              # a picture is already compressed
+        status, small, r = self.call("GET", "/api/archived", headers={"Accept-Encoding": "gzip"})
+        self.assertIsNone(r.getheader("Content-Encoding"))              # too small to be worth it
+        self.assertEqual(small["items"], [])
+        self.assertEqual(r.getheader("Vary"), "Accept-Encoding")        # a body never compressed still varies, as a cache must know
+        for refused in ("gzip;q=0", "identity", "gzip; q=0.0"):
+            self.assertIsNone(self.call("GET", "/", headers={"Accept-Encoding": refused})[2].getheader("Content-Encoding"), refused)
+        self.assertEqual(self.call("GET", "/", headers={"Accept-Encoding": "br, gzip;q=0.5"})[2].getheader("Content-Encoding"), "gzip")
+        self.assertEqual(self.call("GET", "/", headers={"Accept-Encoding": "*;q=0, gzip"})[2].getheader("Content-Encoding"), "gzip")      # named beats the wildcard
+        self.assertIsNone(self.call("GET", "/", headers={"Accept-Encoding": "gzip;q=0, *"})[2].getheader("Content-Encoding"))
+        self.assertTrue(dfs_web.accepts_gzip("*"))
+        self.assertFalse(dfs_web.accepts_gzip("br, *;q=0"))
+
+    def test_the_list_and_the_walk_share_one_state_build_until_a_file_changes(self):
+        real = dfs_web.dfs_state.full
+        with mock.patch.object(dfs_web.dfs_state, "full", side_effect=real) as built:
+            self.call("GET", "/api/state")
+            self.call("GET", "/api/walk")
+            self.call("GET", "/api/state")
+            self.assertEqual(built.call_count, 1)                       # a render's two reads cost one build
+            path = self.root / ".dfs" / "items" / "W1.md"
+            path.write_text(path.read_text().replace("Bound the limiter", "Bound the table"))
+            os.utime(path, ns=(1, 2 * 10**18))                           # a write the cache must see at once
+            _, state, _ = self.call("GET", "/api/state")
+            self.assertEqual(built.call_count, 2)
+            self.assertEqual(state["items"][0]["goal"], "Bound the table")
+            with mock.patch.object(dfs_web, "FULL_TTL", 0.0):             # what the files do not show ages out
+                self.call("GET", "/api/state")
+            self.assertEqual(built.call_count, 3)
+
+    def test_a_git_only_change_shows_after_the_ttl_and_every_page_action_shows_at_once(self):
+        """The shared build may be up to `FULL_TTL` old for what the files do not show. Committing
+        the task file moves only git (`uncommitted`), so it lags; a page action writes a task file, so
+        the signature moves and the next read rebuilds."""
+        def row():
+            return self.call("GET", "/api/state")[1]["items"][0]
+        path = self.root / ".dfs" / "items" / "W1.md"
+        path.write_text(path.read_text().replace("Bound the limiter", "Bound the table"))
+        os.utime(path, ns=(1, 2 * 10**18))
+        self.assertTrue(row()["uncommitted"], "an edit not yet committed")
+        subprocess.run("git add -A && git -c user.name=t -c user.email=t@t commit -qm y",
+                       shell=True, cwd=self.root, check=True)
+        dfs_web.dfs_tree._uncommitted_seen.clear()                    # tree.py keeps git's answer 5 s of its own
+        with mock.patch.object(dfs_web, "FULL_TTL", 3600.0):              # inside the ttl, however slow the machine
+            self.assertTrue(row()["uncommitted"], "git moved, no watched file did: the build is reused")
+        with mock.patch.object(dfs_web, "FULL_TTL", 0.0):
+            self.assertFalse(row()["uncommitted"], "after the ttl the build is fresh")
+        self.assertFalse(row()["draft"])
+        self.assertEqual(self.call("POST", "/api/draft", dict(task="W1", draft=True))[0], 200)
+        self.assertTrue(row()["draft"], "a page action is seen by the very next read, inside the ttl")
 
     def test_it_listens_on_this_machine_only_unless_told_otherwise(self):
         old = os.environ.pop("DFS_WEB_HOST", None)
@@ -302,6 +366,17 @@ class Web(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("W1.7", json.dumps(data))
         self.assertIn(str(mine), [p for p, _ in dfs_web.roadmap_signature() if p == str(mine)])
+
+    def test_the_signature_moves_when_a_file_changes_size_within_the_same_mtime(self):
+        """A rewrite in the same clock tick as the last keeps the mtime: the size is what shows it."""
+        f = self.root / ".dfs" / "items" / "W1.md"
+        st = f.stat()
+        key = str(f)
+        before = dict(dfs_web.roadmap_signature())[key]
+        f.write_text(f.read_text() + "\nmore\n")
+        os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns))
+        self.assertEqual(f.stat().st_mtime_ns, st.st_mtime_ns)
+        self.assertNotEqual(dict(dfs_web.roadmap_signature())[key], before)
 
     def page_call(self, method, page, body=None, origin="null"):
         """What a sandboxed page sends: a plain-text body (no preflight) and the origin `null`."""
@@ -1191,39 +1266,139 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), before)
 
     # ── being told, not asking ──────────────────────────────────────────────────
-    def events(self):
-        """An open `/api/events`: a function that returns the next `event:` name."""
+    def events(self, last=None, preamble=False, since=None):
+        """An open `/api/events`: a function that returns the next `event:` as (name, data)."""
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        conn.request("GET", "/api/events")
+        conn.request("GET", "/api/events" + ("?since=%s" % since if since is not None else ""), headers={"Last-Event-ID": last} if last else {})
         r = conn.getresponse()
         self.assertEqual((r.status, r.getheader("Content-Type")), (200, "text/event-stream"))
         self.addCleanup(conn.close)
 
         def next_event():
+            name = None
             while True:
                 line = r.fp.readline().decode()
+                if line.startswith("id:"):
+                    next_event.id = line.split(":", 1)[1].strip()
                 if line.startswith("event:"):
-                    return line.split(":", 1)[1].strip()
+                    name = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and name:
+                    return name, json.loads(line.split(":", 1)[1])
                 if not line:
                     return None
+        next_event.id = None
+        while preamble:                               # the lines before any event: retry and the number to start from
+            line = r.fp.readline().decode()
+            if line.startswith("id:"):
+                next_event.id = line.split(":", 1)[1].strip()
+            if line in ("\n", ""):
+                break
         return next_event
 
-    def test_a_listener_is_told_where_things_stand_and_again_when_a_write_lands(self):
+    def test_a_page_that_has_heard_no_change_is_caught_up_on_reconnecting(self):
+        """The first connection hands the page the number it starts from, so a drop before any change
+        still reconnects with an id, and the changes made while it was away are told."""
+        first = self.events(preamble=True)
+        self.assertIsNotNone(first.id)
+        dfs_web.HUB.notify(["W1"])                    # made while the page was away
+        again = self.events(first.id)
+        name, data = again()
+        self.assertEqual(name, "change")
+        self.assertEqual(data["v"], int(first.id) + 1)
+        # a server that restarted holds a new number: the page's old one is not it
+        restarted = self.events(str(int(first.id) - 10 ** 6))
+        self.assertEqual(restarted()[0], "change")
+
+    def test_a_new_page_is_told_what_came_after_the_number_its_reads_were_made_at(self):
+        """A read says the number it was begun at; a page that connects after its reads says it as `since`,
+        and a change made between the two is told. A page whose reads are as new is told nothing."""
+        status, _, resp = self.call("GET", "/api/state")
+        read_at = resp.getheader("X-Roadmap-Version")
+        self.assertEqual((status, read_at), (200, str(dfs_web.HUB.version)))
+        self.assertIsNone(self.call("GET", "/")[2].getheader("X-Roadmap-Version"), "only the API's reads carry a number")
+        self.assertIsNone(self.call("POST", "/api/accept", dict(task="W1"))[2].getheader("X-Roadmap-Version"))
+        up_to_date = self.events(since=read_at)
+        dfs_web.HUB.notify(["W1"])                    # made between the read and the connection
+        late = self.events(since=read_at)
+        name, data = late()
+        self.assertEqual(name, "change")
+        self.assertGreater(data["v"], int(read_at))          # not "== read_at + 1": another notifier may have bumped it too
+        # Told nothing at connecting: what it hears is the notify. A watcher left running by an earlier test also
+        # notifies on the accept's write above, so an event that names no task may come first: wait for W1's.
+        def hear(stream, tasks):
+            heard = []
+            while tasks not in heard and len(heard) < 4:
+                name, data = stream()
+                self.assertEqual(name, "change")
+                heard.append(data["tasks"])
+            self.assertIn(tasks, heard)
+            return data
+        data = hear(up_to_date, ["W1"])
+        again = self.events(since=read_at, last=str(data["v"]))     # a reconnect's own number wins over the first one
+        dfs_web.HUB.notify(["W2"])
+        hear(again, ["W2"])
+        odd = self.events(since="%C2%B2", preamble=True)         # a superscript two passes str.isdigit but is no number: it is taken as no number (smoke only; green on the old check too)
+        self.assertEqual(odd.id, str(dfs_web.HUB.version))        # treated as no number: told nothing, given the number to hold
+
+    def test_a_page_that_failed_to_load_connects_with_since_zero_and_is_told_at_once(self):
+        """`?since=0` is behind every number the hub holds (it starts at the epoch in ms), so the stream queues one
+        catch-up and a page that shows "Could not load" reads again without a Retry."""
+        self.assertGreater(dfs_web.HUB.version, 0)
+        name, data = self.events(since="0")()
+        self.assertEqual(name, "change")
+        self.assertIsNone(data["tasks"])              # not said which: reread everything
+
+    def test_a_new_page_is_told_nothing_until_a_write_lands_and_a_reconnecting_one_is_told_it_missed_some(self):
         nxt = self.events()
-        self.assertEqual(nxt(), "change")             # on connecting
         ts = self.task()["rows"][-1]["raises"][0]["ts"]
         self.assertEqual(self.call("POST", "/api/answer", dict(task="W1", ts=ts, body="Many."))[0], 200)
-        self.assertEqual(nxt(), "change")             # the write
+        name, data = nxt()                            # the write is the first thing it hears
+        self.assertEqual((name, data["tasks"]), ("change", None))     # a write does not say which task
+        behind = self.events(str(data["v"] - 1))      # a page that last heard an older number
+        self.assertEqual(behind()[0], "change")
 
-    def test_a_change_made_elsewhere_reaches_the_listener(self):
+    def test_a_change_made_elsewhere_reaches_the_listener_with_the_task_it_changed(self):
         """A chain or the terminal screen writing the task file: the watcher notices."""
         stop = threading.Event()
         self.addCleanup(stop.set)
         threading.Thread(target=dfs_web.watch, args=(stop, 0.05), daemon=True).start()
         nxt = self.events()
-        self.assertEqual(nxt(), "change")
         dfs_tree.append_log("W1", "answer", [dfs_tree.open_raises(dfs_tree.load("W1"))[0]["ts"]], "Many.")
-        self.assertEqual(nxt(), "change")
+        name, data = nxt()
+        self.assertEqual((name, data["tasks"]), ("change", ["W1"]))
+
+    def test_which_tasks_a_change_names(self):
+        sig = [("/r/.dfs/items/W1.md", 1), ("/r/.dfs/items/W2/a.md", 1), ("/r/.dfs/state/archive/items/W3.md", 1),
+               ("order", 1), ("activity", 1), ("/tmp/runs/d1/meta.json", 1)]
+        bump = lambda key: [(k, v + 1 if k == key else v) for k, v in sig]
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/items/W1.md")), ["W1"])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/items/W2/a.md")), ["W2"])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/state/archive/items/W3.md")), ["W3"])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("order")), [])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("activity")), [])
+        self.assertIsNone(dfs_web.changed_tasks(sig, bump("/tmp/runs/d1/meta.json")))      # a chain's progress: any task page may show it
+        self.assertEqual(dfs_web.changed_tasks(sig, sig + [("/r/.dfs/items/W9.md", 1)]), ["W9"])    # a new task
+        self.assertEqual(dfs_web.changed_tasks(sig, sig[1:]), ["W1"])      # a removed one
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/items/W1.md") + [("/r/.dfs/items/W13@tag.md", 1)]), ["W1", "W13"])      # a branch's part is its task
+
+    def test_a_repo_under_an_items_directory_names_its_own_tasks(self):
+        # `~/items/app2/` holds the repo: the first `items/<name><digits>/` in the path is the directory, not a task.
+        for base in ("/home/u/items/app2", "/tmp/x/items/a1/.dfs/worktrees/W9", "C:\\items\\app2"):
+            sep = "\\" if "\\" in base else "/"
+            key = sep.join([base, ".dfs", "items", "W9.md"])
+            sig = [(key, 1), ("order", 1)]
+            self.assertEqual(dfs_web.changed_tasks(sig, [(key, 2), ("order", 1)]), ["W9"], base)
+            part = sep.join([base, ".dfs", "items", "W9", "a.md"])
+            self.assertEqual(dfs_web.changed_tasks([], [(part, 1)]), ["W9"], base)
+            arch = sep.join([base, ".dfs", "state", "archive", "items", "W3.md"])
+            self.assertEqual(dfs_web.changed_tasks([], [(arch, 1)]), ["W3"], base)
+        # a file in the repo that is no task's must not be named after the directory: rereads everything
+        self.assertIsNone(dfs_web.changed_tasks([], [("/home/u/items/app2/.dfs/runs/d1/meta.json", 1)]))
+
+    def test_a_burst_of_changes_is_one_with_the_tasks_of_all_and_unsaid_wins(self):
+        self.assertEqual(dfs_web.merge_changes((1, ["W2"]), (2, ["W1"])), (2, ["W1", "W2"]))
+        self.assertEqual(dfs_web.merge_changes((1, ["W2"]), (2, None)), (2, None))
+        self.assertEqual(dfs_web.merge_changes((1, None), (2, ["W1"])), (2, None))
 
     # ── what it shows ───────────────────────────────────────────────────────────
     def test_the_list_says_what_waits_on_the_author(self):

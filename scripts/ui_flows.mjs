@@ -1748,6 +1748,102 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       assert(!(await page.evaluate(() => (window.__seen || []).includes("task"))), how + ": a second Back after Back drew the task");
     }
   },
+  // A push names the tasks it changed: an open task is read again only when it is one of them, and a page that has
+  // just loaded draws once (the server tells a new listener nothing, as it has just read everything).
+  async push_scope(b) {
+    const { page } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.waitForTimeout(1500);
+    const reqs = [];
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/") && u !== "/api/events") reqs.push(u); });
+    const touch = id => { const f = path.join(DIR, ".dfs", "items", id + ".md"); const now = new Date(); fs.utimesSync(f, now, now); };
+    touch("W1");
+    await page.waitForTimeout(3000);
+    assert(reqs.length > 0 && reqs.every(u => !u.startsWith("/api/task/")), "a change to another task read the open task again: " + JSON.stringify(reqs));
+    reqs.length = 0;
+    touch("W9");
+    await page.waitForTimeout(3000);
+    assert(reqs.some(u => u.startsWith("/api/task/W9")), "a change to the open task did not read it again: " + JSON.stringify(reqs));
+  },
+  // A change to the open task that is pushed while a later push replaces its read, or whose read fails, is still shown by the next push.
+  async push_stale(b) {
+    const { page } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.waitForTimeout(1500);
+    const file = id => path.join(DIR, ".dfs", "items", id + ".md");
+    const touch = id => { const now = new Date(); fs.utimesSync(file(id), now, now); };
+    const retitle = to => fs.writeFileSync(file("W9"), fs.readFileSync(file("W9"), "utf8").replace(/^(### W9\.1 · ).*$/m, "$1" + to));
+    const shown = async text => { try { await page.waitForFunction(t => document.body.textContent.includes(t), text, { timeout: 5000 }); return true; } catch (e) { return false; } };
+    // 1. the read of W9 is held while another task's push arrives and replaces it
+    let hold = true, release; const gate = new Promise(r => { release = r; });
+    await page.route("**/api/task/W9*", async r => { if (hold) await gate; await r.continue(); });
+    let held = 0, walks = 0;
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/task/W9")) held++; if (u === "/api/walk") walks++; });
+    retitle("Held then replaced"); touch("W9");
+    for (let i = 0; i < 100 && !held; i++) await page.waitForTimeout(100);
+    assert(held, "the push for the open task did not read it");
+    const w = walks; touch("W1");
+    for (let i = 0; i < 100 && walks === w; i++) await page.waitForTimeout(100);
+    assert(walks > w, "the push for the other task did not render");
+    hold = false; release();
+    assert(await shown("Held then replaced"), "a change to the open task was lost when a later push replaced its read");
+    // 2. the read of W9 fails once, and the next push is for another task
+    await page.unroute("**/api/task/W9*");
+    let fail = true;
+    await page.route("**/api/task/W9*", r => fail ? r.abort() : r.continue());
+    retitle("Failed then pushed"); touch("W9");
+    await page.waitForTimeout(1500);
+    fail = false;
+    touch("W1");
+    assert(await shown("Failed then pushed"), "a change to the open task was lost when its read failed");
+  },
+  // A change made after the page's first reads and before its event stream connects (held here) is still shown once it connects,
+  // and the page made one set of reads.
+  async push_gap(b) {
+    const ctx = await b.newContext({ ...PHONE });
+    const page = await ctx.newPage();
+    PAGES.push(page);
+    let release; const gate = new Promise(r => { release = r; });
+    let connected = 0; const reads = [];
+    await page.route("**/api/events*", async r => { connected++; await gate; await r.continue(); });
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/") && u !== "/api/events") reads.push(u); });
+    await page.goto(URL_ + "#/t/W9");
+    await page.waitForSelector(".row");
+    await page.waitForTimeout(1000);
+    const file = path.join(DIR, ".dfs", "items", "W9.md");
+    fs.writeFileSync(file, fs.readFileSync(file, "utf8").replace(/^(### W9\.1 · ).*$/m, "$1Changed in the gap"));
+    await page.waitForTimeout(2500);        // the watcher announces it while the stream is still held
+    assert(!(await page.evaluate(() => document.body.textContent.includes("Changed in the gap"))), "the page showed the change before it was told");
+    const before = reads.length; release();
+    try { await page.waitForFunction(() => document.body.textContent.includes("Changed in the gap"), null, { timeout: 5000 }); }
+    catch (e) { assert(false, "a change made between the first reads and the connection was not shown (reads " + JSON.stringify(reads) + ")"); }
+    assert(connected === 1, "the page connected " + connected + " times");
+    assert(reads.slice(0, before).filter(u => u === "/api/state").length <= 2 && reads.slice(0, before).filter(u => u === "/api/task/W9").length === 1, "the first load made more than one set of reads: " + JSON.stringify(reads.slice(0, before)));
+  },
+  // A page whose first reads failed shows "Could not load", then draws once its stream connects, with no Retry.
+  // The task route reads /api/task/<id> and /api/walk (not /api/state). Two cases: every read fails, so the page holds no
+  // number to ask `?since=` from; and only the walk fails, where the task read may land (its number is then the live one,
+  // which a `?since=` of that number would be told nothing about) or may not have landed when the stream connects.
+  async push_failed_load(b) {
+    for (const [name, broken] of [["every read", /\/api\/(task|walk|state)/], ["the walk only", /\/api\/walk/]]) {
+      const ctx = await b.newContext({ ...PHONE });
+      const page = await ctx.newPage();
+      PAGES.push(page);
+      let fail = true; const since = [];
+      // The server answers again once the stream asks to connect, so the read that follows it cannot meet a failure.
+      // The alert is recorded as it is drawn: it is gone again when the page reads and draws, and has no height here
+      // (a one-line message where no font is installed), so it cannot be waited on as visible.
+      await page.addInitScript(() => { window.__alert = false; new MutationObserver(() => { if (document.querySelector("#view .wait[role=alert]")) window.__alert = true; }).observe(document, { childList: true, subtree: true }); });
+      await page.route(u => broken.test(new URL(u).pathname), r => fail ? r.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "boom" }) }) : r.continue());
+      page.on("request", r => { const u = new URL(r.url()); if (u.pathname === "/api/events") { since.push(u.searchParams.get("since")); fail = false; } });
+      await page.goto(URL_ + "#/t/W9");
+      try { await page.waitForSelector("#view .row", { timeout: 8000 }); }
+      catch (e) { assert(false, name + ": the page stayed on Could not load after its stream connected (since " + JSON.stringify(since) + ")"); }
+      assert(await page.evaluate(() => window.__alert), name + ": the page never showed Could not load, so the case did not happen");
+      assert(since.includes("0"), name + ": the stream of a page that failed to load never asked since=0 (" + JSON.stringify(since) + ")");
+      await ctx.close();
+    }
+  },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
     const box = sel => boxOf(page, sel);

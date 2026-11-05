@@ -12,8 +12,11 @@ start chains: that spends a subscription and belongs where the terminal is.
 
 The page is kept current by server-sent events (`/api/events`), not by asking: a
 watcher stats the task files once a second and a change, from here or from the
-terminal or from a chain, is pushed to every open page, which then reads what it is
-showing.
+terminal or from a chain, is pushed to every open page, naming the tasks whose files
+changed, and the page reads what it is showing; an open task is read again only if it is
+one of them. A page that has just loaded connects with the number its first reads were made
+at (`?since=`), and one that reconnects says what it last heard (`Last-Event-ID`); either is
+told at once if things moved on.
 
 A task's page lists the chains that worked it (`runs.py`) and opens one's `console.log` (`/api/run/<name>`,
 read by the directory's name and never by a path), and each session it captured (`run-N.json`, by
@@ -80,6 +83,7 @@ import html
 import subprocess
 import json
 import glob
+import gzip
 import os
 import queue
 import re
@@ -192,10 +196,34 @@ def archived_json():
     return dict(items=rows, archived_count=len(rows))
 
 
+_FULL = dict(sig=None, at=0.0, data=None)
+_FULL_LOCK = threading.Lock()
+FULL_TTL = 2.0
+
+
+def full_cached():
+    """`state.full()` for the page's reads. Every render asks for the list and the walk, and
+    each builds the whole state (about half a second on a hundred tasks), so two threads
+    built it at once and slowed each other. One build serves every read while the files the
+    pages watch (`roadmap_signature`) are unchanged, for at most `FULL_TTL` seconds, which
+    bounds how stale what the files do not show (git, a clock) can get: the list's ahead,
+    uncommitted and pr fields can lag by that much after a write that moved only git. A caller that waits
+    on a build in progress gets it. The result is read, never edited. Writes read
+    `state.full()` afresh."""
+    sig = roadmap_signature()
+    with _FULL_LOCK:
+        now = time.monotonic()
+        if _FULL["sig"] == sig and now - _FULL["at"] < FULL_TTL:
+            return _FULL["data"]
+        data = dfs_state.full()
+        _FULL.update(sig=sig, at=now, data=data)
+        return data
+
+
 def state_json():
     """The task list: the rows `state.py --json` gives the terminal, plus `rev` and how many
     tasks are archived (`archived_json` has those)."""
-    data = dfs_state.full()
+    data = full_cached()
     running, nxt = walk_marks(data)
     items = []
     for it in data["items"]:
@@ -1040,9 +1068,9 @@ def chat_act(name, body=None, scope=None):
 
 def walk_json():
     if WALK["enabled"]:
-        return dict(walker().snapshot(), enabled=True)
+        return dict(walker().snapshot(full_cached()), enabled=True)
     # Off, the page still shows which task a chain is on and which is next, from the files.
-    running, nxt = walk_marks(dfs_state.full())
+    running, nxt = walk_marks(full_cached())
     return dict(enabled=False, next=nxt, live=[dict(item=i, progress=p) for i, p in running.items()])
 
 
@@ -1075,37 +1103,76 @@ def walk_act(name, body):
 # ── pushing changes ───────────────────────────────────────────────────────────
 
 class Hub:
-    """Who is listening on `/api/events`, and what to tell them. A change is a counter
-    that goes up: the page does not need to know WHAT changed, only to read again."""
+    """Who is listening on `/api/events`, and what to tell them. A change is a counter that
+    goes up, with the ids of the tasks whose files changed (`None`: anything, or a write that
+    does not say). The page rereads what it shows; it need not reread a task that did not
+    change."""
 
     def __init__(self):
         self.lock = threading.Lock()
         self.clients = set()
-        self.version = 0
+        self.version = int(time.time() * 1000)  # a restarted server never repeats a number a page holds
 
-    def subscribe(self):
+    def subscribe(self, last=None):
+        """A listener and the number now. A page that reconnects says the number it last heard
+        (`Last-Event-ID`), and a new one the number its first reads were made at (`?since=`, see
+        `Handler.events`); either is told at once if things moved on. A page that says neither is
+        told nothing, but is given the number to hold."""
         q = queue.Queue()
         with self.lock:
             self.clients.add(q)
-            q.put(self.version)             # a new listener is told where things stand
-        return q
+            if last is not None and last != str(self.version):
+                q.put((self.version, None))
+            return q, self.version
 
     def unsubscribe(self, q):
         with self.lock:
             self.clients.discard(q)
 
-    def notify(self):
+    def notify(self, tasks=None):
         with self.lock:
             self.version += 1
             for q in self.clients:
-                q.put(self.version)
+                q.put((self.version, tasks))
+
+
+def merge_changes(a, b):
+    """Two changes as one: the newer number, and the tasks of both (`None` swallows the rest)."""
+    return (b[0], None if a[1] is None or b[1] is None else sorted(set(a[1]) | set(b[1])))
+
+
+# A task's file is `items/W13.md`, and a branch's part of it is `items/W13/<tag>.md` (or, tagged in the name, `items/W13@tag.md`): all the same task.
+# The id must be followed by nothing but the file name, so a repo that sits under a directory such as `~/items/app2/` is
+# not read as the task `app2`: only the `items/` that holds the file matches.
+TASK_FILE = re.compile(r"[/\\]items[/\\]([A-Za-z]+\d+)(?:@[^./\\]+)?(?:\.[^/\\]*|[/\\][^/\\]+)\Z")
+
+
+def changed_tasks(before, after):
+    """The task ids whose files differ between two signatures, or `None` when something else
+    that a task page shows moved (a chain's progress), which no task id names."""
+    old, new = dict(before), dict(after)
+    tasks = set()
+    for key in {k for k in old.keys() | new.keys() if old.get(k) != new.get(k)}:
+        m = TASK_FILE.search(key)
+        if m:
+            tasks.add(m.group(1))
+        elif key not in ("order", "activity"):      # the order and the walk's log move the list and the walk, not a task
+            return None
+    return sorted(tasks)
 
 
 HUB = Hub()
 
 
+def stamp(path):
+    """A file's mtime and size. The size too, since a rewrite within one clock tick of the last
+    keeps the mtime, and then only a changed size shows it."""
+    st = os.stat(path)
+    return (st.st_mtime_ns, st.st_size)
+
+
 def roadmap_signature():
-    """What the pages show, as the mtimes of the files it is read from: the task parts,
+    """What the pages show, as the mtime and size of the files it is read from: the task parts,
     their archives and the order file. Stat only; nothing is read or parsed."""
     sig = []
     roots = [dfs_paths.items(), dfs_paths.state() / "archive" / "items"]
@@ -1116,17 +1183,17 @@ def roadmap_signature():
             for f in files:
                 p = os.path.join(dirpath, f)
                 try:
-                    sig.append((p, os.stat(p).st_mtime_ns))
+                    sig.append((p, stamp(p)))
                 except OSError:
                     pass
     try:
-        sig.append(("order", os.stat(dfs_paths.order()).st_mtime_ns))
+        sig.append(("order", stamp(dfs_paths.order())))
     except OSError:
         pass
     # What the walk did (and so who started, stopped or pinned it, from the screen or
     # the page): the activity log both write.
     try:
-        sig.append(("activity", os.stat(os.path.join(dfs_runs.run_root(), "activity.log")).st_mtime_ns))
+        sig.append(("activity", stamp(os.path.join(dfs_runs.run_root(), "activity.log"))))
     except OSError:
         pass
     # A chain's progress (`run 2 of 5`) is its meta.json; its console is not watched, it
@@ -1136,7 +1203,7 @@ def roadmap_signature():
         for d in glob.glob(os.path.join(root, dfs_runs.GLOB)):
             p = os.path.join(d, "meta.json")
             try:
-                sig.append((p, os.stat(p).st_mtime_ns))
+                sig.append((p, stamp(p)))
             except OSError:
                 pass
     return sorted(sig)
@@ -1147,15 +1214,43 @@ def watch(stop, interval=1.0):
     while not stop.wait(interval):
         now = roadmap_signature()
         if now != last:
-            last = now
-            HUB.notify()
+            tasks, last = changed_tasks(last, now), now
+            HUB.notify(tasks)
 
 
 # ── the server ────────────────────────────────────────────────────────────────
 
+def gzippable(ctype, data):
+    """Text worth compressing: a page, a stylesheet, a script, a svg or JSON, and big enough that the
+    header and the work pay for themselves. Pictures are already compressed."""
+    return len(data) >= 1024 and (ctype.startswith("text/") or ctype.endswith(("json", "javascript", "svg+xml")))
+
+
+def accepts_gzip(header):
+    """Whether an `Accept-Encoding` value takes gzip. A named coding (`gzip`, `x-gzip`) decides, whatever
+    `*` says (RFC 9110); `*` speaks for it only when it is not named. `q=0` refuses."""
+    named, star = None, None
+    for part in header.split(","):
+        name, _, params = part.partition(";")
+        name = name.strip().lower()
+        if name not in ("gzip", "x-gzip", "*"):
+            continue
+        q = re.search(r"q\s*=\s*([0-9.]+)", params)
+        try:
+            ok = float(q.group(1)) > 0 if q else True
+        except ValueError:
+            ok = False
+        if name == "*":
+            star = ok if star is None else star
+        else:
+            named = ok if named is None else named
+    return named if named is not None else bool(star)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "roadmap-web"
     KEEPALIVE = 15
+    read_at = None      # the hub's number a read was begun at, sent with its answer (`handle_any`)
 
     def log_message(self, fmt, *args):         # the terminal belongs to the person running it
         pass
@@ -1164,6 +1259,12 @@ class Handler(BaseHTTPRequestHandler):
         data = body if isinstance(body, bytes) else body.encode()
         self.send_response(status)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if "text" in ctype or "json" in ctype else ""))
+        if gzippable(ctype, data) and accepts_gzip(self.headers.get("Accept-Encoding", "")):
+            data = gzip.compress(data, 1)      # level 1: about 3 ms for the largest task, a quarter of the bytes
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding")
+        if self.read_at is not None:
+            self.send_header("X-Roadmap-Version", str(self.read_at))
         self.send_header("Content-Length", str(len(data)))
         if not any(k == "Cache-Control" for k, _ in extra):
             self.send_header("Cache-Control", "no-store")
@@ -1224,16 +1325,21 @@ class Handler(BaseHTTPRequestHandler):
         return urlparse(origin).netloc == self.headers.get("Host", "")
 
     def events(self):
-        """Server-sent events: `change` whenever the roadmap does, and a comment every
-        few seconds so a proxy or a sleeping phone notices a dead connection."""
+        """Server-sent events: `change` whenever the roadmap does (with the tasks that changed),
+        and a comment every few seconds so a proxy or a sleeping phone notices a dead connection."""
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
-        q = HUB.subscribe()
+        # A reconnect says the last number it heard. A new page says the number its first reads were made at (it
+        # connects when they have landed), so a change made between those reads and this connection is told too.
+        since = parse_qs(urlparse(self.path).query).get("since", [None])[0]
+        q, version = HUB.subscribe(self.headers.get("Last-Event-ID") or (since if since and since.isascii() and since.isdigit() else None))
         try:
-            self.wfile.write(b"retry: 2000\n\n")
+            # The number the page starts from, with no event: the browser keeps it as its last id, so a page that has
+            # heard no change still says where it was when it reconnects, and is told what it missed.
+            self.wfile.write(b"retry: 2000\nid: %d\n\n" % version)
             self.wfile.flush()
             while True:
                 try:
@@ -1241,10 +1347,10 @@ class Handler(BaseHTTPRequestHandler):
                     # Coalesce a burst (a chain writing a task three times) into one.
                     while True:
                         try:
-                            v = q.get_nowait()
+                            v = merge_changes(v, q.get_nowait())
                         except queue.Empty:
                             break
-                    self.wfile.write(("event: change\ndata: %d\n\n" % v).encode())
+                    self.wfile.write(("id: %d\nevent: change\ndata: %s\n\n" % (v[0], json.dumps(dict(v=v[0], tasks=v[1])))).encode())
                 except queue.Empty:
                     self.wfile.write(b": keepalive\n\n")
                 self.wfile.flush()
@@ -1265,12 +1371,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_any(self, method):
         url = urlparse(self.path)
+        self.read_at = None      # a connection can carry many requests
         try:
             if not self.host_ok():
                 raise Refused("this server answers to its own address only", 421)
             if url.path.startswith("/artefact-state/"):
                 return self.artefact_api(method, url.path)
             if method == "GET":
+                # The number a read is made at, taken before it is built. A change is announced once its file is
+                # written, so a read has every change announced up to this number; the page asks after the rest.
+                self.read_at = HUB.version if url.path.startswith("/api/") and url.path != "/api/events" else None
                 return self.get(url.path)
             if not self.same_origin():
                 raise Refused("that request came from another site", 403)
