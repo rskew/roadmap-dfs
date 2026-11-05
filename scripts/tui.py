@@ -74,7 +74,7 @@ import runs as dfs_runs               # noqa: E402  (needs HERE on the path firs
 import order as dfs_order              # noqa: E402  (the same)
 import paths as dfs_paths              # noqa: E402  (the same)
 import limit as dfs_limit              # noqa: E402  (the same)
-from walk import (AGENTS, MAX_PARALLEL, MODEL_ROLES, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
+from walk import (AGENTS, MAX_PARALLEL, MODEL_AGENTS, MODEL_ROLES, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
                   WALK_STOP, WalkMixin, agent_file, read_agent, walk_decide, walk_held_for)
 import tree as dfs_tree               # noqa: E402  (the same)
 import github as dfs_github             # noqa: E402  (the same)
@@ -3554,7 +3554,9 @@ class UI(WalkMixin):
         """What a role with no chosen model runs on, as `:model` words it: run.sh's own
         for claude, and for another agent that it reads its own config."""
         d = self.model_defaults()[role]
-        return "(%s)" % d if d else "(%s's own, not set here)" % self.agent
+        if d:
+            return "(%s)" % d
+        return "(%s's own)" % self.agent if self.agent in MODEL_AGENTS else "(%s's own, not set here)" % self.agent
 
     def command_model(self, args):
         """`:model` shows the models chosen for the walk's claude sessions; `:model plan opus`
@@ -3573,7 +3575,7 @@ class UI(WalkMixin):
             except ValueError as e:
                 self.msg = str(e)
         else:
-            self.msg = ":model plan|implement <name>, <name> being default, none or a claude model"
+            self.msg = ":model plan|implement <name>, <name> being default (claude), none or a model of the next chain's agent"
         return True
 
     def item_index(self, iid):
