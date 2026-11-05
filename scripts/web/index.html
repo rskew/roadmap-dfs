@@ -1756,7 +1756,14 @@ $("#chat-stop").addEventListener("click", async () => {
   catch (e) { toast(e.message, true); }
   finally { $("#chat-stop").disabled = false; }
 });
-$("#chat-input").addEventListener("keydown", ev => { if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); } });
+// Enter sends where there is a keyboard (a fine pointer) and Shift+Enter adds a line; on a touch screen Enter stays a new line,
+// and Send is the button. Ctrl/cmd+Enter sends anywhere. A key that is choosing an input-method candidate is left alone.
+const chatEnterSends = () => matchMedia("(pointer: fine)").matches;
+$("#chat-input").placeholder = chatEnterSends() ? "Ask about this. Enter sends, Shift+Enter adds a line" : "Ask about this";
+$("#chat-input").addEventListener("keydown", ev => {
+  if (ev.key !== "Enter" || ev.isComposing) return;
+  if (ev.metaKey || ev.ctrlKey || (chatEnterSends() && !ev.shiftKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); }
+});
 // The colour can change under an open page (another tab, `.dfs/theme` by hand, a rename
 // that moves the one made from the name): the state says what it is now.
 function syncColour(state) {
