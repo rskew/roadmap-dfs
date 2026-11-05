@@ -1210,9 +1210,9 @@ if [ "$AGENT" = codex ]; then
 elif [ "$AGENT" = opencode ]; then
   echo "dfs_run: launching  ${AGENT_ARGV[*]} run --standalone --format json ${PERMISSION_ARGV[*]} <prompt>"
 elif [ "$AGENT" = kiro ]; then
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --agent dfs-inbox --no-interactive ${PERMISSION_ARGV[*]} <prompt>"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} ${AGENT_SUB[*]} --output-format stream-json --agent dfs-inbox --no-interactive ${PERMISSION_ARGV[*]} [--model \$PLAN_MODEL to plan, \$IMPLEMENT_MODEL to implement, when set] <prompt>"
 else
-  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --settings <the inbox hooks> --model <opus to plan, sonnet to implement> ${PERMISSION_ARGV[*]}"
+  echo "dfs_run: launching  ${AGENT_ARGV[*]} -p <prompt> --output-format json --settings <the inbox hooks> --model <\$PLAN_MODEL or opus to plan, \$IMPLEMENT_MODEL or sonnet to implement> ${PERMISSION_ARGV[*]}"
 fi
 total_turns=0
 total_cost=0
