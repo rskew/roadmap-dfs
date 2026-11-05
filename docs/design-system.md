@@ -32,6 +32,8 @@ A project may also have a **background picture** for each mode (`.dfs/background
 is in, fixed behind the page under a 90% veil of `--paper`, so the picture shows at 10% and text keeps 10:1 (body) and
 4:1 (muted) on a worst-case black or white pixel. It adds no colour of its own, and the opaque surfaces
 (the bar, the sheet, dialogs) stay paper.
+The installed app's **icon** is likewise the project's own: `.dfs/icon` (one picture, not one for each mode) replaces the
+built-in icons in the manifest and the home-screen link, chosen in the same dialog.
 Everything else is paper, panel, ink, muted and two rules. Square corners, no shadows, no
 icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes in ink, top left of the bar). The one flourish is the two-pixel line of the three, under the bar.
 

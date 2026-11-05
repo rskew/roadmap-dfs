@@ -45,6 +45,10 @@ mode that has none of its own): a png, jpeg, webp or gif of 8 MB or less, set at
 (base64 in JSON, with a `mode`; the one write allowed a body past 64 KB), served at GET /background-image
 (`?mode=light|dark`), and drawn fixed behind the page under a 90% veil of the paper so text keeps its
 contrast on any picture.
+THE INSTALLED APP'S ICON is `.dfs/icon`, one picture of the same kinds and size (not one for each mode), set at
+POST /api/icon (base64 in JSON; empty goes back to the built-in icons) and served at GET /icon and at every
+`/icon-*.png` and `/apple-touch-icon.png` while it exists. The manifest lists it, and the page's links carry
+its version. The project dialog cuts the chosen picture square and posts a 1024 px png.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the
