@@ -461,8 +461,13 @@ if [ "$MODE" = chatturn ]; then
       | python3 "$HERE/chat.py" --kiro-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
   fi
+  # A message the author sends while the turn answers lands in CHAT_INBOX (chat.py), and these two hooks
+  # hand it over at the next tool call, or as one more turn when the session would stop (inbox.py). The
+  # box is in the hook's command, not in the agent's environment: what the agent runs would inherit it.
+  inbox_flag=()
+  [ -z "${CHAT_INBOX:-}" ] || inbox_flag=(--settings "$(python3 "$HERE/inbox.py" --settings "$CHAT_INBOX")")
   exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json "${session_flag[@]}" \
-    "${PERMISSION_ARGV[@]}" < /dev/null
+    "${inbox_flag[@]}" "${PERMISSION_ARGV[@]}" < /dev/null
 fi
 
 # The caller may name the directory. tui.py does, because it starts a chain in the

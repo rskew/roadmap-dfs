@@ -32,6 +32,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import signal
 import sqlite3
 import subprocess
@@ -88,6 +89,7 @@ ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is cl
                     # (so a message answered within this long of the end leaves the chat ended too)
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
 TURN_TIMEOUT = 600          # seconds; a turn that takes longer is one nobody is waiting on
+STEERED = ("claude",)       # the agents whose headless turn reads the chat's inbox (inbox.py), so a message sent while it answers steers it
 
 
 def transcript_messages(sid, agent="claude"):
@@ -492,6 +494,23 @@ class Chats:
     def path(self, scope):
         return Path(dfs_runs.ensure_run_root()) / "chat" / (scope + ".json")
 
+    def dir(self, scope):
+        """The scope's steering directory: `inbox/` for the messages the turn has not read, `delivered/`
+        beside it for those it has (inbox.py), and `steers.json`, where each one stood in the conversation."""
+        return Path(dfs_runs.ensure_run_root()) / "chat" / scope
+
+    def box(self, scope):
+        return str(self.dir(scope) / dfs_runs.INBOX)
+
+    def steers(self, scope):
+        """[{name, text, at}] steering messages sent to this scope's turns: `at` is how many messages the
+        conversation held when it was sent, which is where it shows."""
+        try:
+            rows = json.loads((self.dir(scope) / "steers.json").read_text())
+        except (OSError, ValueError):
+            return []
+        return [r for r in rows if isinstance(r, dict) and isinstance(r.get("text"), str)] if isinstance(rows, list) else []
+
     def check(self, scope):
         if not SCOPE.fullmatch(scope or ""):
             raise ValueError("a chat is about a task, or the project")
@@ -559,6 +578,10 @@ class Chats:
                 messages += [dict(role="you", text=text) for text, _, _ in unrecorded]
             else:
                 self.pending.pop(scope, None)
+            waiting_names = {m["name"] for m in dfs_runs.messages(str(self.dir(scope))) if m["state"] == "waiting"}
+            for r in reversed(self.steers(scope)):      # last first, so an earlier `at` is not moved by a later insert
+                messages.insert(min(r.get("at", len(messages)), len(messages)),
+                                dict(role="you", text=r["text"], steer="waiting" if r.get("name") in waiting_names else "delivered"))
             messages += [dict(role="error", text=t) for t in self.notes.get(scope, [])]
             if scope in self.stops:
                 messages.append(dict(role="note", text="Stopped before it answered."))
@@ -613,6 +636,8 @@ class Chats:
                 self.stops.pop(scope, None)
                 self.on_change()
                 return self.state(scope)
+            if scope in self.busy and agent in STEERED:
+                return self.steer(scope, message)
             if scope in self.busy:
                 chatlog.log(scope, "page: message refused, the last turn (%ds) is still answering"
                             % (time.time() - self.busy[scope]))
@@ -630,6 +655,27 @@ class Chats:
         threading.Thread(target=self.turn, args=(scope, message, sid, False, agent), daemon=True).start()
         self.on_change()
         return self.state(scope)
+
+    def steer(self, scope, message):
+        """A message sent while the headless turn answers: left in the scope's inbox, where the hooks the
+        turn runs under (run.sh `--chat-turn`, inbox.py) hand it to the agent's next request, or as one more
+        turn if it is about to stop. The caller holds the lock."""
+        name = dfs_runs.post_message(str(self.dir(scope)), message)
+        rows = self.steers(scope) + [dict(name=name, text=message, at=self.held(scope))]
+        d = self.dir(scope)
+        tmp = d / ".steers.tmp"
+        tmp.write_text(json.dumps(rows))
+        os.replace(tmp, d / "steers.json")
+        chatlog.log(scope, "page: message of %d characters left in the inbox of the turn answering (%ds in)"
+                    % (len(message), time.time() - self.busy[scope]))
+        self.notes.pop(scope, None)
+        self.on_change()
+        return self.state(scope)
+
+    def held(self, scope):
+        """How many messages the conversation shows now, the author's sent ones not yet recorded among
+        them, and so where a steering message sent now stands."""
+        return sum(m["role"] in ("prompt", "you", "agent") and "steer" not in m for m in self.state(scope)["messages"])
 
     def interrupt(self, scope):
         """Stop pressed: end what the chat is doing and leave the conversation as it is. The screen's
@@ -696,6 +742,9 @@ class Chats:
             env.pop("RUNDIR", None)
             env.pop("CHAT_SID", None)
             env.pop("CHAT_RESUME", None)
+            env.pop("CHAT_INBOX", None)
+            if agent in STEERED:
+                env["CHAT_INBOX"] = self.box(scope)      # run.sh names it in the agent's hooks
             if not new_sid and agent == "claude":
                 # chosen here, not by run.sh, so a first turn that is stopped still has its session
                 new_sid = str(uuid.uuid4())
@@ -848,6 +897,7 @@ class Chats:
             self.pending.pop(scope, None)
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
+            shutil.rmtree(self.dir(scope), ignore_errors=True)      # its steering messages go with it
         self.on_change()
         return self.state(scope)
 

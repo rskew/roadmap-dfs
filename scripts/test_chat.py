@@ -1294,6 +1294,7 @@ class Chat(unittest.TestCase):
         self.assertIn("waiting on a dialog", log)
 
     def test_a_refused_send_and_a_new_chat_are_recorded(self):
+        self.chats.save_sid("W1", "sess_x", "codex")         # codex's turn reads no inbox, so a send during it is refused
         self.chats.busy["W1"] = time.time()
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")
@@ -1304,12 +1305,25 @@ class Chat(unittest.TestCase):
 
     def test_one_turn_at_a_time_and_clear_waits_for_it(self):
         os.environ["CHAT_STUB_SAY"] = "slowly"
+        self.chats.save_sid("W1", "sess_x", "codex")         # codex's turn reads no inbox, so a send during it is refused
         self.chats.busy["W1"] = time.time()                  # a turn in flight
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")
         with self.assertRaises(ValueError):
             self.chats.clear("W1")
         self.chats.busy.clear()
+
+    def test_a_message_sent_during_a_claude_turn_is_left_in_its_inbox_and_shown_as_waiting(self):
+        self.chats.busy["W1"] = time.time()                  # a turn in flight
+        st = self.chats.send("W1", "steer it")
+        self.assertEqual([(m["text"], m["steer"]) for m in st["messages"] if m["role"] == "you"], [("steer it", "waiting")])
+        self.assertEqual(len(os.listdir(self.chats.box("W1"))), 1)
+        self.assertIn("left in the inbox of the turn answering", self.record("W1"))
+        with self.assertRaises(ValueError):
+            self.chats.clear("W1")
+        self.chats.busy.clear()
+        self.chats.clear("W1")
+        self.assertFalse(self.chats.dir("W1").exists(), "a new chat starts with no steering messages")
 
     def test_clear_starts_over(self):
         self.chats.send("W1", "hello")

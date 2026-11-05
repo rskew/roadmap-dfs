@@ -461,6 +461,61 @@ class EndToEnd(unittest.TestCase):
         self.assertTrue(any("W104-PING from the page" in t.read_text() for t in transcripts), transcripts)
 
 
+@unittest.skipUnless(CLAUDE, "no claude here")
+class RealClaudeChat(unittest.TestCase):
+    """The page's chat (chat.py `Chats`, run.sh `--chat-turn`) around a real claude and a stand-in model:
+    a message sent while a turn answers is in that turn's next request."""
+
+    def setUp(self):
+        import paths as dfs_paths
+        import chat as dfs_chat
+        self.base = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        root, home = self.base / "repo", self.base / "home"
+        (root / ".dfs" / "items").mkdir(parents=True)
+        (root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
+        (home / ".claude").mkdir(parents=True)
+        (home / ".claude.json").write_text(json.dumps({"hasCompletedOnboarding": True,
+                                                       "customApiKeyResponses": {"approved": [KEY[-20:]], "rejected": []}}))
+        subprocess.run("git init -q -b main && git add -A && git -c user.name=t -c user.email=t@t commit -qm x", shell=True, cwd=root, check=True)
+        keys = ("CLAUDE_CMD", "HOME", "DFS_RUN_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "DISABLE_AUTOUPDATER")
+        saved = {k: os.environ.get(k) for k in keys}
+        self.addCleanup(lambda: [os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v) for k, v in saved.items()])
+        self.model = Model([("tool", "sleep 4"), ("text", "done")])
+        self.addCleanup(self.model.close)
+        os.environ.update(CLAUDE_CMD=CLAUDE, HOME=str(home), DFS_RUN_DIR=str(root / ".dfs" / "runs"), ANTHROPIC_API_KEY=KEY,
+                          DISABLE_AUTOUPDATER="1", ANTHROPIC_BASE_URL="http://127.0.0.1:%d" % self.model.server.server_address[1])
+        self.paths, work = dfs_paths, dfs_paths.work_root
+        dfs_paths.work_root = lambda: root
+        self.addCleanup(setattr, dfs_paths, "work_root", work)
+        self.chats = dfs_chat.Chats()
+
+    def settle(self):
+        end = time.time() + 90
+        while time.time() < end:
+            st = self.chats.state("project")
+            if not st["busy"]:
+                return st
+            time.sleep(0.2)
+        self.fail("the turn did not end")
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.chats.send("project", "look at the code")
+        end = time.time() + 60
+        while not self.model.requests and time.time() < end:
+            time.sleep(0.05)
+        time.sleep(0.5)                                 # the Bash call is running
+        sent = self.chats.send("project", "W141-STEER use the other file")
+        self.assertEqual([m.get("steer") for m in sent["messages"] if m["role"] == "you"][-1], "waiting")
+        st = self.settle()
+        self.assertEqual(len(self.model.requests), 2)
+        self.assertNotIn("W141-STEER", json.dumps(self.model.requests[0]))
+        self.assertIn("W141-STEER use the other file", json.dumps(self.model.requests[1]))
+        roles = [(m["role"], m["text"], m.get("steer")) for m in st["messages"] if m["role"] != "prompt"]
+        self.assertIn(("you", "W141-STEER use the other file", "delivered"), roles)
+        self.assertEqual(roles[-1][:2], ("agent", "done"))
+
+
 @unittest.skipUnless(CODEX, "no codex here")
 class RealCodex(unittest.TestCase):
     def session(self, command, meanwhile, model=None):
