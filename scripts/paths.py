@@ -568,6 +568,37 @@ def write_background_image(data, mode="") -> str:
     return background_image_version(mode)
 
 
+def icon_file() -> Path:
+    """The picture the installed app uses as its icon: `.dfs/icon`."""
+    return state() / "icon"
+
+
+def read_icon():
+    """The installed app's custom icon as (bytes, content type), None when there is none or
+    the file is not a picture."""
+    return _picture(icon_file())
+
+
+def icon_version() -> str:
+    """Which icon the app has, for a page to tell a new one from the old: the file's
+    modification time in nanoseconds, "" when it uses the built-in icon."""
+    return str(icon_file().stat().st_mtime_ns) if read_icon() else ""
+
+
+def write_icon(data) -> str:
+    """Set the installed app's icon (png, jpeg, webp or gif, at most 8 MB); empty or None goes
+    back to the built-in icon. Returns the version now shown."""
+    if not data:
+        _unlink(icon_file())
+        return ""
+    if len(data) > IMAGE_MAX:
+        raise ValueError("an icon is 8 MB or smaller")
+    if not image_type(data):
+        raise ValueError("an icon is a png, jpeg, webp or gif")
+    write_atomically(icon_file(), data)
+    return icon_version()
+
+
 def colour_from_name(name: str) -> str:
     """A colour for a name: its hash picks the hue, and lightness and saturation are fixed
     so white text reads on it. The same name is always the same colour."""

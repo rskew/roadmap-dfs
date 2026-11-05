@@ -940,6 +940,43 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertFalse((self.root / ".dfs" / "background-image").exists())
         self.assertEqual(self.call("GET", "/api/state")[1]["background"]["light"], "#fff2cc")
 
+    def test_the_installed_icon_is_set_served_everywhere_it_is_asked_for_and_cleared(self):
+        import base64
+        png, gif = b"\x89PNG\r\n\x1a\n" + b"icon", b"GIF89a...."
+        send = lambda raw, **kw: self.call("POST", "/api/icon", dict(image=base64.b64encode(raw).decode(), **kw))
+        paths = ("/icon", "/icon-192.png", "/icon-512.png", "/icon-1024.png", "/icon-maskable-512.png",
+                 "/icon-maskable-1024.png", "/apple-touch-icon.png")
+        built_in = {p: self.call("GET", p)[1] for p in paths[1:]}
+        self.assertEqual(self.call("GET", "/icon")[0], 404)
+        self.assertEqual(self.call("GET", "/api/state")[1]["icon"], "")
+        manifest = self.call("GET", "/manifest.json")[1]
+        self.assertEqual(sorted({i["src"] for i in manifest["icons"]}), ["/icon-1024.png", "/icon-192.png", "/icon-512.png",
+                                                                        "/icon-maskable-1024.png", "/icon-maskable-512.png"])
+        status, body, _ = send(png)
+        ver = body["icon"]
+        self.assertEqual((status, bool(ver)), (200, True))
+        for p in paths:
+            status, raw, r = self.call("GET", p)
+            self.assertEqual((status, raw, r.getheader("Content-Type"), r.getheader("Cache-Control")), (200, png, "image/png", "no-cache"), p)
+        self.assertEqual(self.call("GET", "/icon?v=" + ver)[1], png)
+        icons = self.call("GET", "/manifest.json")[1]["icons"]
+        self.assertEqual({(i["src"], i["type"]) for i in icons}, {("/icon?v=" + ver, "image/png")})
+        self.assertEqual(self.call("GET", "/api/state")[1]["icon"], ver)
+        self.assertEqual(send(gif)[1]["icon"] != ver, True)
+        self.assertEqual(self.call("GET", "/icon-512.png")[2].getheader("Content-Type"), "image/gif")
+        for bad in (dict(), dict(image=5), dict(image="not base64!"), dict(image=base64.b64encode(b"text").decode()),
+                    dict(image=base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"\0" * dfs_paths.IMAGE_MAX).decode())):
+            self.assertEqual(self.call("POST", "/api/icon", bad)[0], 400, str(bad)[:30])
+        self.assertEqual(self.call("GET", "/icon")[1], gif)
+        self.assertEqual(self.call("POST", "/api/icon", dict(image=""), headers={"Origin": "https://evil.example"})[0], 403)
+        self.assertEqual(self.call("POST", "/api/icon", "{}", ctype="text/plain")[0], 415)
+        self.assertEqual(self.call("GET", "/icon", headers={"Host": "evil.example"})[0], 421)
+        self.assertEqual(self.call("POST", "/api/icon", dict(image=""))[1], dict(icon=""))
+        self.assertFalse((self.root / ".dfs" / "icon").exists())
+        self.assertEqual(self.call("GET", "/icon")[0], 404)
+        self.assertEqual({p: self.call("GET", p)[1] for p in paths[1:]}, built_in)
+        self.assertEqual(len(self.call("GET", "/manifest.json")[1]["icons"]), 5)
+
     def test_each_mode_has_its_own_picture_and_one_for_both_serves_the_rest(self):
         import base64
         png, gif = b"\x89PNG\r\n\x1a\n" + b"pixels", b"GIF89a...."
