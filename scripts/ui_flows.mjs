@@ -1455,7 +1455,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
-  // Reorder: the list's Reorder switch gives each row left and right arrows and a grip on its right to drag it by.
+  // Reorder: the list's Reorder switch gives each row Break and Stop break buttons and a grip on its right to drag it by.
   // A drag writes order.md and redraws the list, a move that cannot be made says why, and switching it off restores the rows.
   // Going back from a task shows the list and stays on it: the screens drawn after Back are the list alone.
   async backflash(b) {
