@@ -1575,8 +1575,10 @@ def row_state(it):
     true, and a fence would otherwise have said it about whole segments at a time.
     """
     held = it.get("blocked_by") or it.get("waiting_on")
-    if it["status"] == "open" and not held and it.get("draft"):
-        # The author's own mark, that the walk passes it over: said where `open` was.
+    if it["status"] == "open" and not it.get("blocked_by") and it.get("draft"):
+        # The author's own mark, that the walk passes it over: said where `open` was. A
+        # break above it does not hide the mark (a draft holds no fence and is passed over
+        # whatever is before it); a raise above it does, since that is the move to make.
         return "draft"
     if it["status"] != "open" or not held:
         return it["status"]

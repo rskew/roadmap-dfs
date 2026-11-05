@@ -769,8 +769,12 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.assertEqual(say(dict(status="done", waiting_on="W2")), "done")
         self.assertEqual(say(dict(status="blocked", waiting_on="W2")), "blocked")
         self.assertEqual(say(dict(status="open", draft=1)), "draft")
-        self.assertEqual(say(dict(status="open", draft=1, waiting_on="W2")), "»W2",
-                         "a held draft says what holds it")
+        self.assertEqual(say(dict(status="open", draft=1, waiting_on="W2")), "draft",
+                         "a draft behind a break is still a draft")
+        self.assertEqual(say(dict(status="open", draft=1, blocked_by="W7")), "↳W7",
+                         "a raise above a draft is still the move to make")
+        self.assertEqual(say(dict(status="open", draft=1, blocked_by="W7", waiting_on="W2")),
+                         "↳W7")
         self.assertEqual(say(dict(status="done", draft=1)), "done")
 
     def test_b_again_takes_it_away(self):
