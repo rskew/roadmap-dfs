@@ -58,6 +58,7 @@
     {"kind": "fails", "from": "WalkMixin.walk_judge", "to": "WalkMixin.walk_off", "label": "stop action (a limit with stop_on_limit, or a cause only a person can judge) → the whole walk ends", "at": "WalkMixin.walk_judge"},
     {"kind": "stops", "from": "WalkMixin.walk_judge", "to": "tasklog", "label": "idle, or a chain that moved nothing → a raise on that item; the other tasks go on", "at": "WalkMixin.walk_judge"},
     {"kind": "fails", "from": "WalkMixin.walk_raise", "to": "WalkMixin.walk_off", "label": "the raise cannot be written, or next_item still names the item → the walk ends", "at": "WalkMixin.walk_raise"},
+    {"kind": "fails", "from": "WalkMixin.walk_off", "to": "WalkMixin.walk_lower", "label": "the walk ending reaches every other live chain: each is told to end after the run it is on", "at": "WalkMixin.walk_off"},
     {"kind": "fails", "from": "WalkMixin.walk_tick", "to": "WalkMixin.walk_off", "label": "a chain still not on the box after 15 s → the walk ends, with console.log's cause", "at": "WalkMixin.walk_tick"},
     {"kind": "fails", "from": "WalkMixin.walk_tick", "to": "WalkMixin.walk_off", "label": "start_chain returns None → the walk ends; chains already started are told to end", "at": "WalkMixin.walk_tick"},
     {"kind": "stops", "from": "WalkMixin.walk_lower", "to": "author", "label": "a chain whose cap file cannot be written is returned in a list; the screen's message names the first", "at": "WalkMixin.walk_lower"},

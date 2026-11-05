@@ -63,6 +63,7 @@
     {"kind": "releases", "from": "Relay._pump", "to": "pty", "label": "closes the master fd and reaps the child (waitpid) when its output ends", "at": "Relay._pump"},
     {"kind": "releases", "from": "Relay.close", "to": "pty", "label": "SIGTERM; SIGKILL after 2 s if the child is still there", "at": "Relay.close"},
     {"kind": "acquires", "from": "Relay.close", "to": "threads", "label": "a short reaper thread for the SIGKILL, unless wait=True", "at": "Relay.close"},
+    {"kind": "releases", "from": "Relay._pump", "to": "threads", "label": "ends by itself when a read fails or returns nothing", "at": "Relay._pump"},
     {"kind": "releases", "from": "Relay._typist", "to": "threads", "label": "returns when the relay is no longer live", "at": "Relay._typist"},
     {"kind": "releases", "from": "Relay._watch", "to": "threads", "label": "returns when the relay is no longer live", "at": "Relay._watch"},
     {"kind": "acquires", "from": "ChatHost.ensure", "to": "lock", "label": "held while make() runs and the child is forked", "at": "ChatHost.ensure"},
@@ -87,7 +88,7 @@
     {"kind": "takes", "from": "Relay._typist", "to": "outbox", "label": "one text at a time, then waits until the agent is ready (up to 25 s, 90 s for kiro and opencode)", "at": "Relay._typist"},
     {"kind": "takes", "from": "Relay.interrupt", "to": "outbox", "label": "empties it; the dropped count is returned", "at": "Relay.interrupt"},
     {"kind": "stops", "from": "Relay._typist", "to": "outbox", "label": "the agent ended: the text it holds is dropped and the ones behind it are never taken", "at": "Relay._typist"},
-    {"kind": "reads", "from": "ChatHost.reap_idle", "to": "outbox", "label": "empty? A text the typist already took is not in it, so this check cannot see it", "at": "ChatHost.reap_idle"}
+    {"kind": "reads", "from": "ChatHost.reap_idle", "to": "outbox", "label": "empty? A text the typist already took is not in it, so this check cannot see it (the screen passes a 30 minute limit, so it only matters for a chat quiet that long)", "at": "ChatHost.reap_idle"}
   ],
   "handled": [
     {"at": "_try", "error": "OSError, ValueError or termios.error from a write, ioctl or kill", "how": "returns None; every caller carries on"},

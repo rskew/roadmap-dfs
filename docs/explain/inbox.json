@@ -36,6 +36,7 @@
     {"kind": "stops", "from": "waiting", "to": "box", "label": "inbox/ cannot be listed → no messages", "at": "waiting"},
     {"kind": "stops", "from": "take", "to": "msg", "label": "rename failed: another hook took it → skip, return nothing for it", "at": "take"},
     {"kind": "fails", "from": "take", "to": "delivered", "label": "read fails after the rename → the message counts as delivered and the model never gets it", "at": "take"},
+    {"kind": "stops", "from": "take", "to": "msg", "label": "a blank message is moved to delivered/ and dropped from the texts: delivered, but the model is told nothing", "at": "take"},
     {"kind": "stops", "from": "hook_input", "to": "stdin", "label": "input is not JSON → {} → treated as the main session, which may claim", "at": "hook_input"},
     {"kind": "fails", "from": "main", "to": "model", "label": "peek or ack with no DFS_INBOX → message on stderr, exit 2", "at": "main"},
     {"kind": "stops", "from": "from_subagent", "to": "box", "label": "a subagent's hook claims nothing, so the message waits for the main session", "at": "main"},
