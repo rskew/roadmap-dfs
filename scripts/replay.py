@@ -9,7 +9,7 @@ chain (run.sh) work the task, and measures the result with history.py's `session
 
   python3 <scripts>/replay.py candidates [--repo PATH] [--recorded-as PATH] [--limit USD]   (tasks the loop's selection rule picks from)
   python3 <scripts>/replay.py plan    TASK [--repo PATH] [--recorded-as PATH]
-  python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE] [--agent A]
+  python3 <scripts>/replay.py prepare TASK DEST [--repo PATH] [--tool DIR | --tool-ref REV] [--law FILE] [--agent A] [--shell NAME] [--also A,B]
   python3 <scripts>/replay.py run     DEST TASK [--cap N] [--tool DIR] [--bash-minutes M] [--agent A]    (inside proot)
   python3 <scripts>/replay.py score   DEST TASK [--repo PATH] [--recorded-as PATH]
   python3 <scripts>/replay.py replay  TASK DEST [--recorded-as PATH] [--cap N] [--bash-minutes M] [... prepare's flags]   (all three)
@@ -17,6 +17,14 @@ chain (run.sh) work the task, and measures the result with history.py's `session
 `--recorded-as PATH` names the path the checkout's sessions were recorded under, when `--repo` is a
 copy (optimisation-data/shop-app): the original to compare with, and the replay's session cap, are
 read from there. `prepare` and `run` look up no original and refuse it.
+
+`--shell NAME` (prepare, replay) is for a checkout whose tasks are checked with more than the agent's
+tools: shop-app's Playwright specs need nix, node and a browser. NAME is a `devShells` entry of the
+checkout's flake (`shop-app-e2e`). The box then gets a store of its own (`seed_store`) holding the
+sandbox's closure, nix and that shell, and nix runs on it inside the sandbox. `--also A,B` adds flake
+outputs to that store (`shop-app`, `db-create-views`, `devShells.x86_64-linux.db`: what the e2e check's
+database and backend run from; `docs/dfs-shop-app-e2e-up.sh` starts them). Without it a roadmap-dfs
+replay is built as before.
 
 The replay runs under the agent the screen is set to (`.dfs/runs/agent`: claude, codex, kiro or
 opencode), or the one `--agent` names; `prepare` records it. `score` reads claude's transcripts and
@@ -193,7 +201,7 @@ def seal(dest):
     git(dest, "gc", "-q", "--prune=now")
 
 
-def prepare(repo, task, dest, tool=None, tool_ref=None, law=None, agent=None):
+def prepare(repo, task, dest, tool=None, tool_ref=None, law=None, agent=None, shell=None, also=()):
     dest = Path(dest).resolve()
     if "dfs-replay-" not in dest.name:
         raise SystemExit("replay: DEST's name must contain 'dfs-replay-' (history.py skips it by that)")
@@ -226,7 +234,9 @@ def prepare(repo, task, dest, tool=None, tool_ref=None, law=None, agent=None):
     git(dest, "commit", "-q", "--allow-empty", "-m",
         f"replay: {task} as the author left it, from {sha[:8]}", "--no-verify")
     (dest / ".git" / "replay.json").write_text(json.dumps({"task": task, "from": sha, "tool": str(tool),
-                                                            "agent": configured_agent(repo, agent)}))
+                                                            "agent": configured_agent(repo, agent),
+                                                            **({"shell": shell} if shell else {}),
+                                                            **({"also": list(also)} if also else {})}))
     return dest, tool
 
 
@@ -444,6 +454,29 @@ def store_closure(paths):
     return sorted(set(r.stdout.split()))
 
 
+def seed_store(dest, paths, shell, run=subprocess.run, also=()):
+    """The box's own nix store, `<box>/store`, for a task whose check needs more than the agent's
+    tools (shop-app's Playwright e2e specs: nix, node, a browser). It is a local store that holds
+    `paths` (the sandbox's closure, nix itself included), the build of the flake's dev shell `shell`
+    (a name under `devShells`) and the flake's inputs, copied from the host's store, which is never
+    bound: the host store also holds the `*-source` copies of other tasks' files. Nix then works
+    inside the proot on that store with no daemon. `also` names more flake outputs to build and copy
+    (`shop-app`, `db-create-views`, `devShells.x86_64-linux.db`: the e2e check's backend and database).
+    Copying again adds only what is missing."""
+    dest = Path(dest).resolve()
+    root = f"local?root={box_of(dest) / 'store'}"
+    out = run(["nix", "build", "--no-link", "--print-out-paths", f".#devShells.x86_64-linux.{shell}", *[f".#{a}" for a in also]],
+              cwd=dest, capture_output=True, text=True)
+    if out.returncode or not out.stdout.strip():
+        raise SystemExit(f"replay: nix could not build the dev shell {shell}: {out.stderr.strip()[-300:]}")
+    for argv in (["nix", "copy", "--no-check-sigs", "--to", root, *paths, *out.stdout.split()],
+                 ["nix", "flake", "archive", "--to", root, str(dest)]):
+        r = run(argv, cwd=dest, capture_output=True, text=True)
+        if r.returncode:
+            raise SystemExit(f"replay: {' '.join(argv[:3])} into the box store failed: {r.stderr.strip()[-300:]}")
+    return box_of(dest) / "store"
+
+
 def tool_docs(dest, tool):
     """The box's `docs`: a copy of every entry of the tool's `docs` except the hidden ones
     (`HIDDEN_DOCS`: the findings, rounds, break-it and optimization files, which name the original
@@ -498,13 +531,16 @@ def hidden_docs_named(tool):
     return sorted(n for n in named if (tool / "docs" / n).exists())
 
 
-def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None, docs=None):
+def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None, docs=None, box_store=None):
     """The command that runs `inner` in a proot of DEST: an empty root, the store paths it runs from
     (`store_closure`; the rest of /nix/store, with its `*-source` copies of task files, is not there), /proc and /dev, the
     nix `bash` as /bin/sh and `env` as /usr/bin/env, the network files of /etc, the box's home as
     HOME, DEST at its own path, and (unless the tool is in the store) the tool's own entries at
     theirs: never the tool as a whole, which when it is the live checkout holds its `.dfs/`.
-    `docs` is the directory `tool_docs` made, laid over the tool's own `docs`. Nothing is written here.
+    `docs` is the directory `tool_docs` made, laid over the tool's own `docs`. `box_store` is a store
+    `seed_store` made for the box (a task whose check needs nix, node and a browser): it is bound as
+    `/nix/store` and `/nix/var` in place of the store paths above, so nix runs on a store the sessions
+    own and sees only what was copied. Nothing is written here.
     The sessions see the host's `/workspace/...` only as the path down to DEST."""
     dest, tool, box = Path(dest).resolve(), Path(tool).resolve(), box_of(dest)
     # The store paths the chain runs from (the bins, the tool when it is in the store, and the
@@ -512,8 +548,11 @@ def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None, docs=
     if store is None:
         store = store_closure([*bins.values(), tool, *env.get("PATH", "").split(":")])
     cmd = [bins["proot"], "-r", str(box / "root")]
-    for path in store:
-        cmd += ["-b", path]
+    if box_store:
+        cmd += ["-b", f"{box_store}/nix/store:/nix/store", "-b", f"{box_store}/nix/var:/nix/var"]
+    else:
+        for path in store:
+            cmd += ["-b", path]
     cmd += ["-b", "/proc", "-b", "/dev", "-b", f"{bins['bash']}:/bin/sh", "-b", f"{bins['env']}:/usr/bin/env"]
     for e in ETC:
         if os.path.exists(e):
@@ -534,7 +573,7 @@ def sandbox_argv(dest, tool, inner, bins, env, agent="claude", store=None, docs=
     return cmd + ["-w", str(dest), "/usr/bin/env", "-i", *[f"{k}={v}" for k, v in env.items()], *inner]
 
 
-def launch(dest, task, cap, tool, bash_minutes, repo=None, agent="claude"):
+def launch(dest, task, cap, tool, bash_minutes, repo=None, agent="claude", shell=None, also=()):
     """(argv, environment) of the chain's launch: run.sh inside the sandbox, told which agent
     to run (`--kiro`, `--codex`, `--opencode`; none for claude, run.sh's default)."""
     dest = Path(dest).resolve()
@@ -545,8 +584,16 @@ def launch(dest, task, cap, tool, bash_minutes, repo=None, agent="claude"):
     bins = tool_bins(repo or main_checkout(), agent)
     flag = [] if agent == "claude" else [f"--{agent}"]
     inner = ["bash", str(tool / "scripts" / "run.sh"), *flag, task, str(cap or 6)]
-    argv = sandbox_argv(dest, tool, inner, bins, sandbox_env(tool, bins, bash_minutes, agent), agent,
-                        docs=tool_docs(dest, tool))
+    env, box_store = sandbox_env(tool, bins, bash_minutes, agent), None
+    if shell:   # the task's check needs nix, node and a browser: the box gets a store of its own with them
+        nix = shutil.which("nix")
+        nix = os.path.realpath(nix) if nix else None   # PATH may reach it through a link
+        if not nix or not nix.startswith("/nix/store/"):
+            raise SystemExit("replay: --shell needs nix on PATH from /nix/store, to copy its closure into the box")
+        env["PATH"] = f"{Path(nix).parent}:{env['PATH']}"
+        env["NIX_CONFIG"] = "experimental-features = nix-command flakes\nsandbox = false"   # no namespaces under proot
+        box_store = seed_store(dest, store_closure([*bins.values(), tool, *env["PATH"].split(":")]), shell, also=also)
+    argv = sandbox_argv(dest, tool, inner, bins, env, agent, docs=tool_docs(dest, tool), box_store=box_store)
     # proot unpacks its loader into PROOT_TMP_DIR, which has to be able to execute: the box is
     # beside DEST, on the mount DEST is on
     return argv, {"PROOT_TMP_DIR": str(box_of(dest) / "tmp"), "PATH": os.environ.get("PATH", "")}
@@ -557,7 +604,7 @@ def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES, repo=None, a
     info = json.loads((dest / ".git" / "replay.json").read_text())
     tool = Path(tool or info["tool"])
     # the agent `prepare` recorded, unless this run names another
-    cmd, env = launch(dest, task, cap, tool, bash_minutes, repo, configured_agent(repo, agent) if agent else info.get("agent", "claude"))
+    cmd, env = launch(dest, task, cap, tool, bash_minutes, repo, configured_agent(repo, agent) if agent else info.get("agent", "claude"), shell=info.get("shell"), also=info.get("also", ()))
     # The chain's own words are kept beside the replay: its last "dfs_run: DONE|BLOCKED|CAP"
     # line is why it stopped, which the runner's meta.json (the task's status) does not say.
     with subprocess.Popen(cmd, cwd=dest, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -868,7 +915,7 @@ def main(argv):
         sys.stdout.write(__doc__)
         return 2
     cmd, rest = argv[0], argv[1:]
-    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES, "agent": None, "recorded-as": None, "limit": "3.0"}
+    opts = {"repo": main_checkout(), "cap": None, "tool": None, "tool-ref": None, "law": None, "bash-minutes": BASH_MINUTES, "agent": None, "recorded-as": None, "limit": "3.0", "shell": None, "also": None}
     pos = []
     it = iter(rest)
     for a in it:
@@ -879,6 +926,11 @@ def main(argv):
         else:
             pos.append(a)
     repo = opts["repo"]
+    also = [a for a in (opts["also"] or "").split(",") if a]
+    if also and not opts["shell"]:
+        raise SystemExit("replay: --also adds to the box store that --shell makes; name a --shell too")
+    if (opts["shell"] or also) and cmd not in ("prepare", "replay"):   # `run` takes the shell `prepare` recorded
+        raise SystemExit(f"replay: --shell and --also do nothing for {cmd}; they are recorded by prepare (and replay)")
     if opts["recorded-as"] and cmd in ("prepare", "run"):   # they never look up an original: say so rather than drop it
         raise SystemExit(f"replay: --recorded-as does nothing for {cmd}; it names where the original's sessions were "
                          "recorded, for candidates, plan, score and replay")
@@ -899,7 +951,7 @@ def main(argv):
         compare(task, before, None)
     elif cmd == "prepare":
         task, dest = pos
-        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], opts["agent"])
+        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], opts["agent"], opts["shell"], also)
         sys.stdout.write(f"prepared {dest} under tool {tool}, agent {configured_agent(repo, opts['agent'])}\n")
     elif cmd == "run":
         dest, task = pos
@@ -913,7 +965,7 @@ def main(argv):
         if agent not in SCORABLE:   # refuse before spending: run it with `prepare` and `run`, score by hand
             raise SystemExit(f"replay: the agent is {agent}, whose transcripts score cannot read yet; "
                              "use prepare and run, or --agent claude")
-        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], agent)
+        dest, tool = prepare(repo, task, dest, opts["tool"], opts["tool-ref"], opts["law"], agent, opts["shell"], also)
         before = original(repo, task, opts["recorded-as"])
         cap = opts["cap"] or (max(6, 2 * sum(before["sessions"].values())) if before else 6)
         run(dest, task, cap, tool, opts["bash-minutes"], repo, agent)

@@ -115,6 +115,23 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(rec["verdicts"], [("review", "issues")])
         self.assertAlmostEqual(rec["units"], 3 * 2 + 160_000 * 0.1 + 3_000 * 2 + 600 * 5)
 
+    def test_a_verdict_the_command_failed_or_tree_py_refused_is_not_a_round(self):
+        issues = "python3 $S/tree.py log W13 review issues <<'EOF'\nx\nEOF"
+        rec = self.record([
+            user("You are the implementation reviewer for task W13. Everything below", "2026-10-01T00:00:00Z"),
+            assistant("m1", [bash("t1", issues)], "2026-10-01T00:01:00Z"),
+            user([result("t1", "dfs_tree: a review's `issues` is for a finding put in the tree\nExit code 2", True)],
+                 "2026-10-01T00:02:00Z"),
+            assistant("m2", [bash("t2", issues)], "2026-10-01T00:03:00Z"),
+            # exit 0 but tree.py still printed its refusal
+            user([result("t2", "dfs_tree: W13 has no such node")], "2026-10-01T00:04:00Z"),
+            assistant("m3", [bash("t3", "cd /nowhere && " + issues)], "2026-10-01T00:05:00Z"),
+            user([result("t3", "cd: no such directory", True)], "2026-10-01T00:06:00Z"),
+            assistant("m4", [bash("t4", "python3 $S/tree.py log W13 review ok")], "2026-10-01T00:07:00Z"),
+            user([result("t4", "2026-10-01T00:08:00Z")], "2026-10-01T00:08:00Z"),
+        ])
+        self.assertEqual(rec["verdicts"], [("review", "ok")])
+
     def test_a_refusal_counts_once_under_each_reason_it_lists(self):
         refusal = ("dfs_check: the roadmap broke its own rules.\n\n"
                    "  - .dfs/items/W13.md is ~9,000 tokens, over the 8,000 budget, and this commit\n    grew it.\n"

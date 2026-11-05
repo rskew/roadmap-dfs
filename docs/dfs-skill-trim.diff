@@ -1,0 +1,73 @@
+83,84c83,84
+< - **The Determination is the verdict and nothing else**: what you found, in one
+<   sentence, which is what the author reads under the node. The hand-off ("Next, check
+---
+> - **The Determination is the verdict and nothing else**: what you found, which is
+>   what the author reads under the node. The hand-off ("Next, check
+93c93
+<   keep it short: one or two sentences, not the history of how you got there. Keep the
+---
+>   keep it short, not the history of how you got there. Keep the
+104c104
+<   then `Wrong if`) and a Determination stays one sentence, both in the same plain words.
+---
+>   then `Wrong if`) and a Determination stays the verdict alone, both in the same plain words.
+122,123c122
+< - Add nodes freely and keep them small. After each node, re-plan the open nodes ahead:
+<   edit, add or refute them. Backing up is normal.
+---
+> - Add nodes freely and keep them small.
+150c149
+< - Stage the node's paths by name, never `git add -A`, and read the diff first. A file
+---
+> - Stage the node's paths by name and read the diff first. A file
+174,200c173,181
+< A chain runs every session of an item (work, critic and review) in a git worktree,
+< `.dfs/worktrees/<task>`, on the branch `dfs/<task>`, which the first run cuts from the
+< default branch (`main` or `master`). Your CWD is that worktree: edit and commit there,
+< and the author's checkout stays on the default branch. The law in your briefing is the
+< main checkout's current `.dfs/ROADMAP.md`, not this branch's older copy. The branch writes plain ids
+< (`W13.4`, no `@<tag>`), so its nodes merge into the default branch's task file as
+< written. You never merge, switch branch or remove the worktree yourself: when the
+< review passes (or the author accepts), the runner rebases `dfs/<task>` onto the default
+< branch and merges it in with `--no-ff`, locally and without a push, and removes the worktree and the
+< branch. A rebase that conflicts is not done: the runner aborts it and adds an open node asking
+< for `dfs/<task>` to be rebased onto the default branch and the conflicts resolved, so the next
+< session takes it up like any open node. Edits of the author's on the default branch
+< that git refuses the merge over are set aside in a stash for the length of the merge and put
+< back (a raise only when they conflict with what it brought in, with the stash kept; an
+< untracked file of theirs that the branch adds, or an edit under `.dfs`, is a raise too, left where it is); a
+< merge, cherry-pick, revert or rebase of theirs left unfinished in the checkout is a raise
+< (a rebase detaches HEAD, and the raise says so), which the runner leaves untouched. The rebase rewrites the
+< branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
+< by a hash that would dangle once the branch is merged and deleted. Until then a task in
+< flight has its current file only on its branch: the default branch's copy is stale or
+< empty, so to read another task's tree or log use `git show dfs/<task>:.dfs/items/<task>.md`.
+< 
+< Two cases have no branch: a first run while the checkout is off `main`/`master`, and a repo
+< with no commit yet. Then the item is worked in place, on whatever is checked out, and
+< nothing is rebased or merged, since there is nothing to cut a branch from or merge into. A
+< task that already has a worktree is still worked in it off `main`/`master`, and its merge
+< is the raise above until the checkout is back on the default branch.
+---
+> A chain runs every session of an item in a git worktree, `.dfs/worktrees/<task>`, on the
+> branch `dfs/<task>`. Your CWD is that worktree: edit and commit there. The branch writes
+> plain ids (`W13.4`, no `@<tag>`). You never merge, switch branch or remove the worktree
+> yourself; the runner does that when the review passes. It rebases the branch, so cite a
+> node by its id or a commit by its subject in Evidence, never by a hash. Until then a task
+> in flight has its current file only on its branch, so to read another task's tree or log
+> use `git show dfs/<task>:.dfs/items/<task>.md`. With no branch (a first run off
+> `main`/`master`, or a repo with no commit yet) the item is worked in place and nothing is
+> rebased or merged.
+290,291c271
+< It is `claude -p`: when you end your turn the process exits. A background command, a
+< `Monitor`, or "I'll report when it finishes" is a promise to a turn that never comes.
+---
+> When you end your turn the process exits. A background command or "I'll report when it finishes" is a promise to a turn that never comes.
+297,302d276
+< 
+< ## Shell discipline
+< 
+< Every result stays in context for good. Read a slice, never a whole file twice
+< (`sed -n 'a,bp'`, `grep -c`, `--stat`, `| head`). Prefer one command that answers the
+< question to three that circle it.

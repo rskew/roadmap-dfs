@@ -1,0 +1,34 @@
+--- /nix/store/pbqwhdjz8dds81713jnbf6b2j7wg140x-roadmap-dfs-d02e23e/share/roadmap-dfs/scripts/state.py	1970-01-01 00:00:01.000000000 +0000
++++ scripts/state.py	2026-11-04 08:56:58.986013683 +0000
+@@ -614,6 +614,10 @@
+            "nothing; the node's commit replaces `started` with its ruling, and a "
+            "session cut off mid-node leaves it for the next to see."
+            % (dfs_paths.rel(dfs_paths.SCRIPTS), task),
++           "- **After you fix a finding** (an open node a review or the critic added), "
++           "before you commit: run again every check the earlier nodes ran, not only the "
++           "one for this finding, and search the code for the same fault in the other "
++           "places it can occur. A fix that opens a new finding costs another review.",
+            "- **Session %d** since the author last spoke on this task. The critic "
+            "reviews after %d more."
+            % (st["sessions"] + 1, max(dfs_tree.CRITIC_EVERY - st["since_critic"] - 1, 0)),
+@@ -910,12 +914,18 @@
+ def _round_note(t):
+     """Which review round this is, and what the one after it does."""
+     n = dfs_tree.review_rounds_unsettled(t)
++    walk = ["**Walk the Goal in this round.** Split the Goal into its separate clauses, "
++            "each thing it asks for. For every clause say where the code delivers it "
++            "(file and line) and what you ran to see it work, and try the empty case, "
++            "the repeated case and the interrupted case wherever they apply. Report "
++            "every clause that is not delivered, or delivered in part, in this one "
++            "verdict: a later round is not there to find what this one could have.", ""]
+     if not n:
+-        return []
++        return walk
+     last = max(e["ts"] for e in t["log"] if e["kind"] == "review")
+     return ["This is review round %d: %d review%s since the author last spoke found "
+             "issues, and the fixes are in. Start from the commits made since %s." % (
+-                n + 1, n, "" if n == 1 else "s", last), ""]
++                n + 1, n, "" if n == 1 else "s", last), ""] + walk
+ 
+ 
+ def review_brief(task: str) -> str:

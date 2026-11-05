@@ -1,0 +1,14 @@
+# A review told to walk every Goal clause (walk) against the unmodified review (control), each run once on a copy of the finished tree (docs/dfs-review-only.py). 'named' is one reader's reading of the review's added lines against the clause; the last four trees meet every rubric clause.
+replay	clauses unmet in both judgings (outside W22 C6, W5 C7)	walk verdict	walk credits	walk names	control verdict	control credits	control names
+W11-c1c	C4	issues	5.1	C4 (empty Goal falls back to the name, in part)	ok	3.0	C4 (same note, under ok)
+W11-c2a	C1	issues	3.0	C1 (a Fix node: the name cannot be edited, the page shows the old name)	ok	1.9	C1 (a note under ok)
+W36-c1c	C4	issues	2.7	-	issues	1.5	-
+W5-c1a	C3 C4 C10	issues	3.6	C3 C4 C10 (minor lines: links and lists left as typed; no test outside the browser flow)	issues	3.6	C10
+W5-c1b	C3 C10	issues	2.7	C10	issues	2.9	-
+W5-c1c	C3 C4	issues	4.2	-	ok	1.6	-
+W5-c2a	C4 C5	issues	4.0	-	ok	2.8	-
+W11-c1a	-	issues	5.9	-	ok	2.5	-
+W11-b1a	-	issues	4.3	-	issues	3.2	-
+W36-b4a	-	issues	4.7	-	issues	3.2	-
+W36-c1a	-	issues	4.6	-	issues	3.9	-
+total	12 clauses	issues 11 of 11	44.9	6 of 12	issues 6 of 11	30.2	3 of 12

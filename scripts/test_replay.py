@@ -458,6 +458,55 @@ echo "[workspace]"; ls /workspace 2>&1; ls /tmp"""
         self.assertTrue((replay.box_of(self.dest) / "docs" / "artefacts.md").is_file())
         self.assertIn(f"{replay.box_of(self.dest) / 'docs'}:{tool.resolve() / 'docs'}", argv)
 
+    def test_a_box_store_is_bound_as_the_store_and_state_in_place_of_the_closure_paths(self):
+        bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
+                "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
+        box_store = replay.box_of(self.dest) / "store"
+        plain = replay.sandbox_argv(self.dest, "/nix/store/t/x", ["true"], bins, {}, store=["/nix/store/a"])
+        argv = replay.sandbox_argv(self.dest, "/nix/store/t/x", ["true"], bins, {}, store=["/nix/store/a"], box_store=box_store)
+        binds = [argv[i + 1] for i, a in enumerate(argv) if a == "-b"]
+        self.assertIn(f"{box_store}/nix/store:/nix/store", binds)
+        self.assertIn(f"{box_store}/nix/var:/nix/var", binds)
+        self.assertNotIn("/nix/store/a", binds)            # one store, the box's: not the host's paths beside it
+        # without one (every roadmap-dfs task) the command is as it was
+        self.assertIn("/nix/store/a", [plain[i + 1] for i, a in enumerate(plain) if a == "-b"])
+        self.assertFalse([a for a in plain if "/nix/var" in a])
+        self.assertEqual(plain, replay.sandbox_argv(self.dest, "/nix/store/t/x", ["true"], bins, {}, store=["/nix/store/a"], box_store=None))
+
+    def test_seeding_the_box_store_copies_the_closure_the_shell_and_the_flake_inputs_and_nothing_else(self):
+        calls = []
+
+        def fake(argv, **kw):
+            calls.append(argv)
+            return mock.Mock(returncode=0, stdout="/nix/store/sh-nix-shell\n", stderr="")
+        got = replay.seed_store(self.dest, ["/nix/store/a", "/nix/store/b"], "shop-app-e2e", run=fake)
+        root = f"local?root={replay.box_of(self.dest) / 'store'}"
+        self.assertEqual(got, replay.box_of(self.dest) / "store")
+        build, copy, archive = calls
+        self.assertEqual(build[:2], ["nix", "build"])
+        self.assertIn(".#devShells.x86_64-linux.shop-app-e2e", build)
+        self.assertEqual(copy[:5], ["nix", "copy", "--no-check-sigs", "--to", root])
+        self.assertEqual(copy[5:], ["/nix/store/a", "/nix/store/b", "/nix/store/sh-nix-shell"])
+        self.assertEqual(archive, ["nix", "flake", "archive", "--to", root, str(self.dest.resolve())])
+
+    def test_seeding_the_box_store_builds_and_copies_the_extra_outputs_too(self):
+        calls = []
+
+        def fake(argv, **kw):
+            calls.append(argv)
+            return mock.Mock(returncode=0, stdout="/nix/store/sh-nix-shell /nix/store/app\n", stderr="")
+        replay.seed_store(self.dest, ["/nix/store/a"], "shop-app-e2e", run=fake, also=["shop-app", "devShells.x86_64-linux.db"])
+        build, copy, _ = calls
+        self.assertEqual(build[-3:], [".#devShells.x86_64-linux.shop-app-e2e", ".#shop-app", ".#devShells.x86_64-linux.db"])
+        self.assertIn("/nix/store/app", copy)
+
+    def test_also_needs_a_shell_and_is_refused_where_it_does_nothing(self):
+        for argv in (["prepare", "W1", "/x/dfs-replay-a", "--also", "shop-app"],
+                     ["run", "/x/dfs-replay-a", "W1", "--shell", "e2e", "--also", "shop-app"]):
+            with self.assertRaises(SystemExit) as e:
+                replay.main(argv)
+            self.assertIn("--also", str(e.exception))
+
     def test_a_tool_in_the_store_is_not_bound_and_the_box_keeps_to_its_own_directories(self):
         bins = {"proot": "/nix/store/p/bin/proot", "claude": "/nix/store/c/bin/claude",
                 "bash": "/nix/store/b/bin/bash", "env": "/nix/store/e/bin/env"}
@@ -1072,6 +1121,17 @@ class KiroStreamTest(unittest.TestCase):
         t = tasks[("kiro", "W5")]
         self.assertEqual((t["unit"], t["credits"], t["usd"], t["unpriced"]), ("credits", 12.5, 0.0, 1))
         self.assertEqual((t["nodes"], t["first_review"], t["sessions"]), (1, "issues", {"work": 1, "review": 1}))
+
+    def test_a_verdict_the_command_failed_or_tree_py_refused_is_not_a_round(self):
+        refused = "dfs_tree: a review's `issues` is for a finding put in the tree as an open node\n\nExit Code: 2"
+        text = (acp_call("a", "execute", "Run Command", {"command": "python3 tree.py log W5 review issues"},
+                         "dfs_tree: /x/.dfs/items/.dfs/items/W5.md\n\nExit Code: 2", exit_code=2, status="failed") +
+                acp_call("b", "execute", "Run Command", {"command": "python3 tree.py log W5 review issues"},
+                         refused, exit_code=2, status="failed") +
+                acp_call("c", "execute", "Run Command", {"command": "python3 tree.py log W5 review ok"},
+                         "2026-11-05T00:44:44Z\n\nExit Code: 0"))
+        d = kiro_run_dir(self.tmp.name, name="dfs_run_b", runs=[("review", text)])
+        self.assertEqual(history.stream_session(str(d / "run-1.json"))["verdicts"], [("review", "ok")])
 
     def test_a_log_with_no_console_header_is_another_kind_not_a_guess(self):
         (self.d / "console.log").write_text("")

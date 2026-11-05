@@ -1,0 +1,27 @@
+replay	reviews (in order)	clauses of the rubric unmet in both judgings	n clauses
+W11-b1a	ok	-	8
+W11-c1a	ok	-	8
+W11-c1b	ok	-	8
+W11-c1c	ok	C4	8
+W11-c2a	ok	C1	8
+W22-b1a	issues ok	C6	8
+W22-c1a	ok	C6	8
+W22-c1b	ok	C6	8
+W22-c1c	issues ok	C6	8
+W22-c2a	ok	C6	8
+W36-b4a	ok	-	9
+W36-c1a	ok	-	9
+W36-c1b	ok	-	9
+W36-c1c	issues ok	C4	9
+W36-c4a	issues ok	-	9
+W5-b1a	issues ok	C7	10
+W5-c1a	issues issues ok	C3 C4 C7 C10	10
+W5-c1b	issues ok	C3 C7 C10	10
+W5-c1c	issues ok	C3 C4 C7	10
+W5-c2a	issues ok	C4 C5 C7	10
+
+# Second and later issues reviews, by whether the fault was there at the earlier round (one reader's placing; the finding is named so a reader can flip a row)
+source	round	finding	placed
+replay W5-c1a (control)	2	task status line, task-list reasons and Accept dialog still show typed markers (round 1 found the same kind in the Assumptions view, answer-form quote, task head)	present at round one
+W130 (10:22 review)	2	history.verdicts stopped reading `S=$DIR/tree.py` (the fix of the round-1 minor finding broke it)	introduced by the round-1 fix
+W130 (23:26 review)	2	the Summary and docs say shop-app "cannot be replayed" on an unchecked reading (the text stood since the first cycle; the 10:27 review noted it in passing)	present at round one

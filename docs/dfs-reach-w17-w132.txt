@@ -1,0 +1,23 @@
+# Calls the score flags as naming a live path and answered with output, W17 and W132 replays (W130.50).
+# python3 scripts/replay.py score DEST TASK --repo /workspace/roadmap-dfs prints the counts; this lists the calls. 2026-11-05.
+# dfs-tool-walk is the changed arm's copy of the tool, outside the clone and not the live checkout's items.
+dfs-replay-W17-k1c 0 calls naming a live path, answered with output
+dfs-replay-W17-k2c 0 calls naming a live path, answered with output
+dfs-replay-W17-k1w 6 calls naming a live path, answered with output
+   dfs_run_BQ4Ixb/run-1 cd /workspace/roadmap-dfs/optimisation-data/dfs-tool-walk; wc -c templates/_TEMPLATE_ANSWER.html docs/artefacts.md; cat templates/_TEMPLATE_ANSWER.htm
+   dfs_run_BQ4Ixb/run-3 cd /workspace/roadmap-dfs/optimisation-data/dfs-replay-W17-k1w/.dfs/worktrees/W17 && python3 - <<'EOF' p='.dfs/items/W17.md' s=open(p).read() i=s.inde
+   dfs_run_BQ4Ixb/run-3 cd /workspace/roadmap-dfs/optimisation-data/dfs-tool-walk && wc -c templates/_TEMPLATE_ANSWER.html docs/artefacts.md; cat templates/_TEMPLATE_ANSWER.h
+   dfs_run_gWwTSs/run-1 cd /workspace/roadmap-dfs/optimisation-data/dfs-tool-walk && wc -c docs/artefacts.md templates/*.html; sed -n 1,80p docs/artefacts.md | cut -c1-220
+   dfs_run_gWwTSs/run-5 cd /workspace/roadmap-dfs/optimisation-data/dfs-tool-walk && wc -c docs/artefacts.md templates/_TEMPLATE_ANSWER.html; cat docs/artefacts.md | head -80
+   dfs_run_tvEBS7/run-3 cd /workspace/roadmap-dfs/optimisation-data/dfs-tool-walk && wc -c templates/_TEMPLATE_ANSWER.html docs/artefacts.md; cat templates/_TEMPLATE_ANSWER.h
+dfs-replay-W132-k1 10 calls naming a live path, answered with output
+   dfs_run_ESuiFi/run-3 cd /roadmap-dfs/optimisation-data/dfs-replay-W132-k1/.dfs/worktrees/W132 && which python3 pytest playwright chromium node 2>&1; python3 -c "import pla
+   dfs_run_ESuiFi/run-3 cd /roadmap-dfs/optimisation-data/dfs-replay-W132-k1/.dfs/worktrees/W132 && S=/nix/store/pbqwhdjz8dds81713jnbf6b2j7wg140x-roadmap-dfs-d02e23e/share/ro
+   dfs_run_ESuiFi/run-3 ls /nix/store | grep -E "^[a-z0-9]{32}-nodejs-[0-9.]+$" | head -2
+   dfs_run_ESuiFi/run-6 ls /nix/store | grep -E "^[a-z0-9]{32}-(nodejs|quickjs|bun|deno)" | head -3; git diff --stat
+   dfs_run_ESuiFi/run-8 ls /nix/store | grep -E '^[a-z0-9]{32}-nodejs-[0-9.]+$' | head -2; git diff --stat
+   dfs_run_ESuiFi/run-8 ls /nix/store | grep -iE 'chrom|playwright' | head; grep -n "stale\|shown" farm-operator/static/map.js | head -20
+   dfs_run_ESuiFi/run-9 ls /nix/store | grep -i -E "playwright|chromium" | head; ls /nix/store | grep -E "python3.*-env|pytest-[0-9]" | head; ls /roadmap-dfs/optimisation-dat
+   dfs_run_ESuiFi/run-9 cd /roadmap-dfs/optimisation-data/dfs-replay-W132-k1/.dfs/worktrees/W132/farm-operator && E=/nix/store/6n16b8qg27y88ya8jn3ml536yq1428fa-python3-3.14.7
+   dfs_run_ESuiFi/run-9 ls /nix/store | grep -E "playwright-browsers|fonts-conf|fontconfig-conf" | head; ls /nix/store/90iznj11d5bl89g5pnmf2nwbgny3062l-playwright-chromium/ ;
+   dfs_run_ESuiFi/run-9 cd /roadmap-dfs/optimisation-data/dfs-replay-W132-k1/.dfs/worktrees/W132/farm-operator && E=/nix/store/6n16b8qg27y88ya8jn3ml536yq1428fa-python3-3.14.7
