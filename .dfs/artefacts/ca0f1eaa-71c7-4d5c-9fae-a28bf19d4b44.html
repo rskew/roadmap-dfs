@@ -1,0 +1,199 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>May the list be up to 2 s old for what only git shows?</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tl { position: relative; height: 110px; margin: 12px 0; border-left: 3px solid #333; border-right: 3px solid #333; }
+  .tl .bar { position: absolute; top: 44px; left: 0; right: 0; height: 3px; background: #333; }
+  .tl .m { position: absolute; top: 0; transform: translateX(-50%); font-size: 13px; text-align: center; width: 90px; }
+  .tl .m i { display: block; width: 3px; height: 44px; background: #888; margin: 0 auto; }
+  .tl .m.g i, .tl .m.g { color: #b3261e; background: none; }
+  .tl .m.g i { background: #b3261e; }
+  .tl .win { position: absolute; top: 38px; height: 15px; background: #f2c14e88; border: 1.5px dashed #a06a00; }
+  .tl .lbl { position: absolute; top: 62px; font-size: 13px; }
+  .modes button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; margin: 0 6px 6px 0; }
+  .modes button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .out { padding: 8px 12px; border-radius: 6px; background: #fff; border: 1.5px solid #333; }
+  .bad { color: #b3261e; } .good { color: #1b6e2d; }
+</style>
+<h1>May the list be up to 2 s old for what only git shows?</h1>
+<p>The page's list and walk reads share one build of the roadmap for up to 2 s while no watched file changes. A change that moves only git (a commit of a task file clears its "uncommitted" mark; a push changes "ahead") touches no watched file, so the shared build keeps showing the old value until the 2 s are up.</p>
+<div class="modes" role="group" aria-label="What a read does">
+  <button type="button" id="m0" aria-pressed="true">Shared build, 2 s (now)</button>
+  <button type="button" id="m1" aria-pressed="false">No sharing</button>
+</div>
+<div class="modes" role="group" aria-label="What changed">
+  <button type="button" id="c0" aria-pressed="true">A git commit</button>
+  <button type="button" id="c1" aria-pressed="false">A page action</button>
+</div>
+<div class="tl" aria-hidden="true">
+  <div class="bar"></div>
+  <div class="m" style="left:10%"><i></i>build</div>
+  <div class="win" style="left:10%;width:60%"></div>
+  <div class="m g" id="chg" style="left:35%"><i></i>change</div>
+  <div class="m" style="left:55%"><i></i>read</div>
+  <div class="m" style="left:90%"><i></i>2 s up</div>
+  <div class="lbl" style="left:12%">shared build is reused</div>
+</div>
+<p class="out" id="out" aria-live="polite"></p>
+<h2>What was checked</h2>
+<p>Every page action (accept, draft, add, edit, delete, archive, open PR, answer, new task, order, walk and chain actions) writes a task file, the order file or the activity log, all of which the build is keyed on. So the very next read after a page action is a fresh build, and the lag is only for a change made outside the page. Nothing pushes that kind of change to a page either way: the page learns of it at its next read, so the shared build adds at most 2 s to that.</p>
+<p>The assumption is wrong if a page action moves only git and the page re-reads the list within 2 s.</p>
+<script>
+  var mode = 0, ch = 0;
+  function show() {
+    var out = document.getElementById('out');
+    document.getElementById('chg').style.left = ch === 0 ? '35%' : '35%';
+    out.innerHTML = mode === 1 ? '<span class="good">Every read builds afresh: it shows the change. Cost: two whole-state builds per render again (first draw about 1.9 s instead of 0.6 s).</span>'
+      : ch === 1 ? '<span class="good">The action wrote a watched file, so the build is not reused: the read shows the change at once.</span>'
+      : '<span class="bad">A commit made outside the page: the read inside the 2 s still shows the old mark. The next read after 2 s shows it.</span>';
+    for (var i = 0; i < 2; i++) { document.getElementById('m' + i).setAttribute('aria-pressed', String(mode === i)); document.getElementById('c' + i).setAttribute('aria-pressed', String(ch === i)); }
+  }
+  [0, 1].forEach(function (i) { document.getElementById('m' + i).onclick = function () { mode = i; show(); }; document.getElementById('c' + i).onclick = function () { ch = i; show(); }; });
+  show();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep the 2 s shared build: a change only git shows may lag a read by up to 2 s, and no page action is affected."> Keep the 2 s shared build</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Drop the sharing: every read builds afresh, so first draw is slow again."> Drop the sharing</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

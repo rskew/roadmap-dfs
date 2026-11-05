@@ -144,6 +144,27 @@ class Web(unittest.TestCase):
                 self.call("GET", "/api/state")
             self.assertEqual(built.call_count, 3)
 
+    def test_a_git_only_change_shows_after_the_ttl_and_every_page_action_shows_at_once(self):
+        """The shared build may be up to `FULL_TTL` old for what the files do not show. Committing
+        the task file moves only git (`uncommitted`), so it lags; a page action writes a task file, so
+        the signature moves and the next read rebuilds."""
+        def row():
+            return self.call("GET", "/api/state")[1]["items"][0]
+        path = self.root / ".dfs" / "items" / "W1.md"
+        path.write_text(path.read_text().replace("Bound the limiter", "Bound the table"))
+        os.utime(path, ns=(1, 2 * 10**18))
+        self.assertTrue(row()["uncommitted"], "an edit not yet committed")
+        subprocess.run("git add -A && git -c user.name=t -c user.email=t@t commit -qm y",
+                       shell=True, cwd=self.root, check=True)
+        dfs_web.dfs_tree._uncommitted_seen.clear()                    # tree.py keeps git's answer 5 s of its own
+        with mock.patch.object(dfs_web, "FULL_TTL", 3600.0):              # inside the ttl, however slow the machine
+            self.assertTrue(row()["uncommitted"], "git moved, no watched file did: the build is reused")
+        with mock.patch.object(dfs_web, "FULL_TTL", 0.0):
+            self.assertFalse(row()["uncommitted"], "after the ttl the build is fresh")
+        self.assertFalse(row()["draft"])
+        self.assertEqual(self.call("POST", "/api/draft", dict(task="W1", draft=True))[0], 200)
+        self.assertTrue(row()["draft"], "a page action is seen by the very next read, inside the ttl")
+
     def test_it_listens_on_this_machine_only_unless_told_otherwise(self):
         old = os.environ.pop("DFS_WEB_HOST", None)
         try:
