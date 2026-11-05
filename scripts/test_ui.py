@@ -194,6 +194,9 @@ class Flows(unittest.TestCase):
     def test_a_chat_names_the_agent_it_runs_under_in_its_header_and_in_the_list(self):
         self.flow("chat_agent")
 
+    def test_a_chat_keeps_its_log_and_asks_again_when_the_server_cannot_be_reached(self):
+        self.flow("chat_lost")
+
     def test_the_chat_follows_a_reader_near_its_end_or_just_after_sending_and_no_one_else(self):
         self.flow("chat_follow")
 

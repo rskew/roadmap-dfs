@@ -482,6 +482,38 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A request that never gets an answer (a phone's browser after another app was on top) must not wipe the chat or
+  // stop its poll: the conversation stays under a notice, the page asks again, and it reads at once on coming back.
+  async chat_lost(b) {
+    const { page } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: "W81.10 is open." }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "" };
+    let down = false, asked = 0, posted = 0;
+    await page.route("**/api/chat/**", r => { asked++; if (r.request().method() === "POST") posted++; return down ? r.abort("failed") : r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }); });
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    down = true;
+    await page.evaluate(() => { clearTimeout(CHAT.busyT); chatLoad(); });      // the poll that fires as the page wakes
+    await within(page.waitForFunction(() => !document.querySelector("#chat-lost").hidden), "the notice for a server that cannot be reached", 6000);
+    same(await page.$$eval("#chat-log .msg", e => e.length), 2, "the conversation stays while the server cannot be reached");
+    assert(!(await page.$eval("#chat-log", e => e.textContent.includes("Failed to fetch"))), "the log does not show the browser's own message");
+    const before = asked;
+    for (let i = 0; i < 160 && asked <= before; i++) await page.waitForTimeout(50);
+    assert(asked > before, "the page asks again while the server cannot be reached");
+    down = false;
+    await page.evaluate(() => { clearTimeout(CHAT.busyT); document.dispatchEvent(new Event("visibilitychange")); });   // back from the other app
+    await within(page.waitForFunction(() => document.querySelector("#chat-lost").hidden), "the notice leaves once the server answers", 6000);
+    same(await page.$$eval("#chat-log .msg", e => e.length), 2, "the conversation is still there");
+    // a message that got no answer stays in the box, and the page does not send it again
+    down = true;
+    await page.fill("#chat-input", "hello again");
+    const sends = posted; await page.click("#chat-send");
+    await page.waitForFunction(() => /may or may not have gone/.test(document.querySelector("#toast").textContent));
+    same(await page.$eval("#chat-input", e => e.value), "hello again", "the unsent message is kept");
+    await page.waitForTimeout(1500);
+    same(posted - sends, 1, "a send the server did not answer is sent once, not again");
+  },
+
   // The chat's Top button goes to the top of the message being read, and on again to the one before.
   async chat_top(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });

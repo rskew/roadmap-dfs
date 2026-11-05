@@ -1,0 +1,247 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat only, and a send is never repeated</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lede { margin: 0 0 16px; color: #444; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .tabs button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; margin: 0 0 14px; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .box b { display: block; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  .box.ok { border-color: #2a7a3b; }
+  .box.no { border-color: #b3261e; }
+  .box.mid { border-color: #a86400; }
+  .link { display: flex; flex-direction: column; align-items: center; padding: 2px 0; font-size: 14px; color: #333; }
+  .link::after { content: "\2193"; font-size: 22px; line-height: 1; }
+  .verdict { font-size: 14px; color: #444; margin: 0 0 8px; }
+  details { margin: 10px 0; }
+  summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+  ul { padding-left: 20px; margin: 4px 0; }
+  @media (min-width: 720px) {
+    .dg { flex-direction: row; align-items: stretch; }
+    .box { flex: 1 1 0; }
+    .link { justify-content: center; padding: 0 10px; }
+    .link::after { content: "\2192"; }
+  }
+</style>
+
+<h1>Chat only, and a send is never repeated</h1>
+<p class="lede">Two choices were made for you in the fix. Pick one to see what the page does on a failed
+  request after coming back from another app, and what the other way would change.</p>
+
+<div class="tabs" role="group" aria-label="Choice">
+  <button type="button" data-case="scope" aria-pressed="true">Scope: chat only</button>
+  <button type="button" data-case="wide" aria-pressed="false">Other way: whole page</button>
+  <button type="button" data-case="send" aria-pressed="false">Send: never repeated</button>
+  <button type="button" data-case="retry" aria-pressed="false">Other way: retry once</button>
+</div>
+
+<p class="verdict" id="verdict" aria-live="polite"></p>
+<div class="dg" id="dg"></div>
+
+<details>
+  <summary>Evidence so far</summary>
+  <ul>
+    <li><code>comeBack</code> in <code>scripts/web/index.html</code> reloads only the open chat (and reopens a dropped live stream). The other views are not refreshed by it.</li>
+    <li>A failed read in a view still ends in "Could not load: ..." with a Retry button, after one extra try 600 ms later.</li>
+    <li>The send handler never calls the request a second time; the text stays in the box.</li>
+    <li>Nothing was run on a phone, so whether a lost send had reached the server is not known.</li>
+  </ul>
+</details>
+
+<script>
+  var CASES = {
+    scope: {
+      verdict: "As built. Only the open chat keeps its view and keeps polling.",
+      boxes: [
+        ["Request fails on return", "the browser rejects it with no answer", ""],
+        ["Open chat", "keeps its log, shows 'Could not reach the server', polls every 2 s, reloads on return", "ok"],
+        ["Any other view", "a read tries twice, then shows 'Could not load' with a Retry button; the reader taps it", "mid"]
+      ]
+    },
+    wide: {
+      verdict: "Not built. Reads the Goal as the whole page recovering.",
+      boxes: [
+        ["Request fails on return", "the browser rejects it with no answer", ""],
+        ["Every view", "keeps what it shows, shows the same notice, and reloads by itself on return", "ok"],
+        ["Cost", "more code in every view; a stale screen can be mistaken for a current one", "mid"]
+      ]
+    },
+    send: {
+      verdict: "As built. A send that gets no answer is not repeated.",
+      boxes: [
+        ["Send fails with no answer", "the server may or may not have taken the message", ""],
+        ["Page", "keeps the text in the box, says the message may have gone, and reloads the chat", "ok"],
+        ["Cost", "if it never reached the server, the reader must tap send again", "mid"]
+      ]
+    },
+    retry: {
+      verdict: "Not built. Fewer taps, but a message can be posted twice.",
+      boxes: [
+        ["Send fails with no answer", "the server may or may not have taken the message", ""],
+        ["Page", "sends it once more after a short wait", "mid"],
+        ["Cost", "if the first one had arrived, the chat gets the same message twice", "no"]
+      ]
+    }
+  };
+  var current = "scope";
+  function draw() {
+    var c = CASES[current], dg = document.getElementById("dg");
+    document.getElementById("verdict").textContent = c.verdict;
+    dg.innerHTML = "";
+    c.boxes.forEach(function (b, i) {
+      if (i) { var l = document.createElement("div"); l.className = "link"; dg.appendChild(l); }
+      var d = document.createElement("div");
+      d.className = "box " + b[2]; d.setAttribute("data-node", current + i);
+      var t = document.createElement("b"); t.textContent = b[0];
+      var s = document.createElement("span"); s.textContent = b[1];
+      d.appendChild(t); d.appendChild(s); dg.appendChild(d);
+    });
+    document.querySelectorAll(".tabs button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-case") === current));
+    });
+  }
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      current = b.getAttribute("data-case"); draw();
+      if (window.dfsAnswer) window.dfsAnswer.keep();
+    });
+  });
+  window.dfsPageState = function () { return { current: current }; };
+  document.addEventListener("dfs-state", function (e) {
+    if (e.detail && CASES[e.detail.current]) { current = e.detail.current; draw(); }
+  });
+  draw();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep both: only the open chat recovers, and a failed send is never repeated by the page."> Keep both as they are</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Widen the scope: every view keeps what it shows through a failed request and refreshes when the page returns."> Widen to the whole page</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Retry a failed send once, accepting that a message may be posted twice."> Retry a failed send once</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
