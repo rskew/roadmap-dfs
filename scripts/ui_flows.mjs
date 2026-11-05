@@ -1490,6 +1490,10 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.click("[data-act=reorder]");
     await page.waitForSelector(".moves");
     same(await page.$$eval(".moves .btn, .grip", es => es.filter(e => e.getBoundingClientRect().height < 44 || e.getBoundingClientRect().width < 44).length), 0, "every move and grip is tap-sized");
+    // a row is short: its reason line is not drawn, and its goal and tags take one line each (two 44px lines of moves at most, plus padding)
+    same(await page.$$eval(".item.reorder .why", es => es.filter(e => getComputedStyle(e).display !== "none").length), 0, "no Reorder row draws its reason line");
+    same(await page.$$eval(".item.reorder", es => es.filter(e => e.getBoundingClientRect().height > 190).length), 0, "no Reorder row is taller than 190px");
+    same(await page.$$eval(".item.reorder", es => es.filter(e => !e.title.includes(e.querySelector(".goal").textContent)).length), 0, "a row's title carries its whole goal, which the row may cut");
     assert(!(await page.$("[data-move=up], [data-move=down], [data-move=out], [data-move=in]")), "up, down, out and in buttons are gone");
     assert(!(await page.$("button.item")), "a row is not a button while the moves are on it");
     // the grip sits at the right edge of its row
