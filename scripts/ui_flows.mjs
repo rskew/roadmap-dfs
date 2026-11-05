@@ -1490,8 +1490,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.click("[data-act=reorder]");
     await page.waitForSelector(".moves");
     same(await page.$$eval(".moves .btn, .grip", es => es.filter(e => e.getBoundingClientRect().height < 44 || e.getBoundingClientRect().width < 44).length), 0, "every move and grip is tap-sized");
-    assert(!(await page.$("[data-move=up], [data-move=down]")), "up and down buttons are gone");
-    same(await page.$$eval(".moves [data-move=out], .moves [data-move=in]", es => es.map(e => e.textContent.trim())).then(a => a.join("")), "\u2190\u2192".repeat(before.length), "out and in are arrows");
+    assert(!(await page.$("[data-move=up], [data-move=down], [data-move=out], [data-move=in]")), "up, down, out and in buttons are gone");
     assert(!(await page.$("button.item")), "a row is not a button while the moves are on it");
     // the grip sits at the right edge of its row
     const edge = await page.$eval(`[data-grip=${before[0]}]`, g => { const r = g.getBoundingClientRect(), row = g.closest("[data-row]").getBoundingClientRect(); return row.right - r.right; });
@@ -1573,8 +1572,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => !document.querySelector(".item.pending") && !S.stale, null, { timeout: 8000 });
     same((await ids()).slice(0, 2).join(), [before[0], before[1]].join(), "the written order stands once the write is done");
     await page.unroute("**/api/order");
-    // out, in and break have no preview, but the row says it is saving all the same
-    for (const act of ["break", "break", "in", "out"]) {
+    // break has no preview, but the row says it is saving all the same
+    for (const act of ["break", "break"]) {
       let rel; const hold = new Promise(r => { rel = r; });
       await page.route("**/api/order", async r => { await hold; await r.continue(); });
       await page.click(`[data-row=${before[1]}] [data-move=${act}]`);
