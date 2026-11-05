@@ -1106,6 +1106,7 @@ class ArtefactsOfAWorkedTask(unittest.TestCase):
         main_dir, wt = root / ".dfs" / "artefacts", root / ".dfs" / "worktrees" / "W1"
         (wt / ".dfs" / "artefacts").mkdir(parents=True)
         main_dir.mkdir(parents=True)
+        (wt / "elsewhere").mkdir()   # the gitdir its `.git` names
         (wt / ".git").write_text("gitdir: elsewhere\n")
         (main_dir / "main.html").write_text("<title>On main</title>")
         (wt / ".dfs" / "artefacts" / "wt.html").write_text("<title>On the\n branch</title>")

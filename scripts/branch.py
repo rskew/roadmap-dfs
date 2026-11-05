@@ -1073,7 +1073,7 @@ def merge(task):
             _put_back_shared_edits(aside)
         if dfs_paths.ignored():
             rescue_ignored_state(wt)
-        for what, r in (("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))),
+        for what, r in (("its worktree could not be removed", remove_worktree(wt)),
                         ("its branch could not be deleted", _git("branch", "-d", name))):
             if r.returncode != 0:
                 print("dfs_branch: %s merged, but %s: %s" % (task, what, " ".join(out_of(r).split())),
@@ -1091,6 +1091,57 @@ def merge(task):
             _stash_kept(task, paths, saved, "was interrupted, and")
         raise
     return "merged"
+
+
+def _make_writable(top):
+    """Give the owner write and search permission on every directory under `top` (symlinks are
+    not followed), so what is below can be unlinked: a directory copied from the nix store is
+    0555, and a file in it cannot be deleted until its directory is writable."""
+    for d, dirs, _ in os.walk(top):
+        for x in [d] + [os.path.join(d, n) for n in dirs]:
+            try:
+                if not os.path.islink(x):
+                    os.chmod(x, os.stat(x).st_mode | 0o700)
+            except OSError:
+                pass
+
+
+def _left_behind(wt, limit=3):
+    """The first few paths still under `wt`, relative to it, for a message."""
+    left = []
+    for d, dirs, files in os.walk(wt):
+        for n in sorted(dirs + files):
+            left.append(os.path.relpath(os.path.join(d, n), wt))
+            if len(left) == limit:
+                return left
+    return left
+
+
+def remove_worktree(wt):
+    """`git worktree remove --force wt`, and the directory gone when git stops half way. Git
+    drops the worktree's gitdir (`.git/worktrees/<task>`), deletes what it can and stops at
+    what it cannot (a replay box holding a copy of the nix store has read-only directories):
+    the directory stays, and its `.git` file points at a gitdir that is gone. When git no
+    longer knows the worktree, the owner's write permission is given back below it and the
+    rest is removed. A worktree git still knows (locked, or refused for another reason) is not
+    touched again. Returns the git result, its `stderr` naming the directory still there, what
+    is left in it and why when the directory could not be removed."""
+    wt = Path(wt)
+    r = _git("worktree", "remove", "--force", str(wt))
+    if r.returncode == 0 or not wt.is_dir() or dfs_paths.is_worktree_dir(wt):
+        return r
+    why = " ".join(out_of(r).split())
+    _make_writable(wt)
+    try:
+        shutil.rmtree(wt)
+        return subprocess.CompletedProcess(r.args, 0, "", "")
+    except OSError as e:
+        why = "%s; then %s: %s" % (why, e.filename, e.strerror)
+    left = _left_behind(wt)
+    return subprocess.CompletedProcess(
+        r.args, r.returncode, "",
+        "%s is left on disk (git no longer lists it as a worktree): %s%s. Remove it by hand"
+        % (wt, why, ", holding " + ", ".join(left) + (" and more" if len(left) == 3 else "") if left else ""))
 
 
 def keep_leftover_work(task, verb="deleted"):
@@ -1132,7 +1183,7 @@ def release(task, verb="deleted"):
     if wt:
         if dfs_paths.ignored():
             rescue_ignored_state(wt)
-        steps.append(("its worktree could not be removed", _git("worktree", "remove", "--force", str(wt))))
+        steps.append(("its worktree could not be removed", remove_worktree(wt)))
     if _has_branch(name):
         steps.append(("its branch could not be renamed", _git("branch", "-m", name, "dfs-%s/%s" % (verb, task))))
     for what, r in steps:
@@ -1152,7 +1203,7 @@ def main(argv):
             return MERGE_EXIT["blocked"]
         print("dfs_branch: %s: %s" % (argv[2], {
             "merged": "dfs/%s merged into %s%s" % (argv[2], dfs_paths.branch(),
-                      ", its worktree removed" if dfs_paths.worktree(argv[2]) is None else ""),
+                      ", its worktree removed" if not (dfs_paths.worktrees() / argv[2]).exists() else ""),
             "dirty": "not merged: its worktree holds uncommitted work that is not the task's, so a node asks for it to be committed or dropped",
             "guard": "not merged: a hook refused the commit, so a node asks for what it names to be fixed",
             "conflict": "not merged: it conflicts with %s, so a node asks for the branch to be rebased onto it" %

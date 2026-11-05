@@ -269,7 +269,7 @@ def land(task, url, head=""):
             kept = "; %s holds work the pull request lacks, kept as %s" % (name, keep_as)
         steps = []
         if wt is not None:
-            steps.append(("its worktree", dfs_branch._git("worktree", "remove", "--force", str(wt))))
+            steps.append(("its worktree", dfs_branch.remove_worktree(wt)))
         if has_branch:   # a worktree removed by hand leaves the branch behind, and git's entry for it
             if wt is None:
                 dfs_branch._git("worktree", "prune")

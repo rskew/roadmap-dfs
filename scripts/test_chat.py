@@ -401,6 +401,7 @@ class Chat(unittest.TestCase):
         (self.root / ".dfs" / "worktrees" / "W1" / ".dfs" / "items").mkdir(parents=True)
         (self.root / ".dfs" / "worktrees" / "W1" / ".dfs" / "items" / "W1.md").write_text(
             "# W1 · sample\n\n## Goal\n\nDo it.\n\n## Tree\n\n### W1.1 · a node\nStatus: open\nApproach: x\n")
+        (self.root / ".dfs" / "worktrees" / "W1" / "elsewhere").mkdir()   # the gitdir its `.git` names
         (self.root / ".dfs" / "worktrees" / "W1" / ".git").write_text("gitdir: elsewhere\n")
         self.chats.send("W1", "again")
         self.settle("W1")
