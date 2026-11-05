@@ -1,0 +1,246 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Is a rejected fetch what the phone raises on return?</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .lede { margin: 0 0 16px; color: #444; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .tabs button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; margin: 0 0 14px; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .box b { display: block; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  .box.ok { border-color: #2a7a3b; }
+  .box.no { border-color: #b3261e; }
+  .box.mid { border-color: #a86400; }
+  .link { display: flex; flex-direction: column; align-items: center; padding: 2px 0; font-size: 14px; color: #333; }
+  .link::after { content: "\2193"; font-size: 22px; line-height: 1; }
+  .verdict { font-size: 14px; color: #444; margin: 0 0 8px; }
+  details { margin: 10px 0; }
+  summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+  ul { padding-left: 20px; margin: 4px 0; }
+  @media (min-width: 720px) {
+    .dg { flex-direction: row; align-items: stretch; }
+    .box { flex: 1 1 0; }
+    .link { justify-content: center; padding: 0 10px; }
+    .link::after { content: "\2192"; }
+  }
+</style>
+
+<h1>Is a rejected fetch what the phone raises on return?</h1>
+<p class="lede">The fix was built on one assumption: when the phone's browser comes back from another app,
+  the chat's request is rejected by the browser ("Failed to fetch"). I could only simulate that in
+  headless chromium, not on a phone. Pick what the phone might really be doing to see what the page does now.</p>
+
+<div class="tabs" role="group" aria-label="What the phone does on return">
+  <button type="button" data-case="reject" aria-pressed="true">Request rejected</button>
+  <button type="button" data-case="hang" aria-pressed="false">Request hangs</button>
+  <button type="button" data-case="sse" aria-pressed="false">Live stream stale</button>
+  <button type="button" data-case="five" aria-pressed="false">Proxy answers 5xx</button>
+</div>
+
+<p class="verdict" id="verdict" aria-live="polite"></p>
+<div class="dg" id="dg"></div>
+
+<details>
+  <summary>Evidence so far</summary>
+  <ul>
+    <li>For: the report says "failed to fetch", the text of the error a rejected fetch gives. Rejecting fetch in headless chromium produced the same text and the same broken chat.</li>
+    <li>Limit: <code>scripts/web/index.html</code> has no timeout or abort on any fetch, so a request that hangs and never rejects is not cut.</li>
+    <li>Limit: nothing here was run on a phone.</li>
+  </ul>
+</details>
+
+<script>
+  var CASES = {
+    reject: {
+      verdict: "The assumption itself. Covered by the fix.",
+      boxes: [
+        ["Phone returns", "the first request fails at once: TypeError 'Failed to fetch' or 'Load failed'", ""],
+        ["Page now", "a read waits 600 ms and tries once more; if that fails the chat keeps its log and shows 'Could not reach the server'", "ok"],
+        ["Then", "polls again every 2 s, clears the notice when the server answers; return fetches at once", "ok"]
+      ]
+    },
+    hang: {
+      verdict: "Not covered while the page stays in view.",
+      boxes: [
+        ["Phone returns", "the request is never rejected and never answered", ""],
+        ["Page now", "the poll waits on it for good; no timeout cuts it, so the next poll is never scheduled", "no"],
+        ["Then", "only a visibilitychange, pageshow or online event starts a fresh request; a hang with the page in view stays stuck", "mid"]
+      ]
+    },
+    sse: {
+      verdict: "Covered by the fix, but untested on a phone.",
+      boxes: [
+        ["Phone returns", "the live-update stream (EventSource) was dropped while away", ""],
+        ["Page now", "reopens the stream on return and reads the open chat at once", "ok"],
+        ["Then", "polling carries on whether or not the stream comes back", "ok"]
+      ]
+    },
+    five: {
+      verdict: "Not what 'Failed to fetch' means; unchanged by the fix.",
+      boxes: [
+        ["Phone returns", "a proxy answers 502 or 503 with a body", ""],
+        ["Page now", "this is an answer, so it is not marked as a network failure; the chat shows 'Not available' with the server's text", "no"],
+        ["Then", "a browser gives a 5xx an HTTP status, not the 'Failed to fetch' text in the report, so this fits the report poorly", "mid"]
+      ]
+    }
+  };
+  var current = "reject";
+  function draw() {
+    var c = CASES[current], dg = document.getElementById("dg");
+    document.getElementById("verdict").textContent = c.verdict;
+    dg.innerHTML = "";
+    c.boxes.forEach(function (b, i) {
+      if (i) { var l = document.createElement("div"); l.className = "link"; dg.appendChild(l); }
+      var d = document.createElement("div");
+      d.className = "box " + b[2]; d.setAttribute("data-node", current + i);
+      var t = document.createElement("b"); t.textContent = b[0];
+      var s = document.createElement("span"); s.textContent = b[1];
+      d.appendChild(t); d.appendChild(s); dg.appendChild(d);
+    });
+    document.querySelectorAll(".tabs button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-case") === current));
+    });
+  }
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      current = b.getAttribute("data-case"); draw();
+      if (window.dfsAnswer) window.dfsAnswer.keep();
+    });
+  });
+  window.dfsPageState = function () { return { current: current }; };
+  document.addEventListener("dfs-state", function (e) {
+    if (e.detail && CASES[e.detail.current]) { current = e.detail.current; draw(); }
+  });
+  draw();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="The phone rejects the request: keep the fix as it is."> The phone rejects the request</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="The phone's request hangs: add a timeout so a hung poll is cut and retried."> The request hangs: add a timeout</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
