@@ -331,32 +331,6 @@ class Commanding(unittest.TestCase):
         self.assertEqual((killed, ui.msg), ([], "left it running"))
 
 
-class NeedsYou(unittest.TestCase):
-    def items(self):
-        return [item("W1"), dict(item("W2", status="blocked")), item("W3"),
-                dict(item("W4"), standing=["an assumption"])]
-
-    def test_m_shows_only_what_waits_on_the_author_and_j_walks_it(self):
-        ui = a_screen(self.items())
-        ui.act(ord("m"))
-        self.assertEqual([ui.items[n]["id"] for n in ui.visible()], ["W2", "W4"])
-        self.assertEqual(ui.current()["id"], "W2")
-        ui.act(ord("j"))
-        self.assertEqual(ui.current()["id"], "W4")
-        ui.act(ord("m"))
-        self.assertEqual(len(ui.visible()), 4)
-
-    def test_nothing_to_show_leaves_it_off(self):
-        ui = a_screen([item("W1")])
-        ui.act(ord("m"))
-        self.assertFalse(ui.only_mine)
-
-    def test_moves_are_refused_while_filtered(self):
-        ui = a_screen(self.items(), only_mine=True, sel=1)
-        self.assertFalse(ui.retree([("W2", 0)], ui.current(), ""))
-        self.assertIn("filtered", ui.msg)
-
-
 class Undoing(unittest.TestCase):
     def setUp(self):
         import tempfile

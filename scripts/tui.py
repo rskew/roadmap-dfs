@@ -730,7 +730,6 @@ KEYS = [
     ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (run.sh --chat project)"),
     ("items", "o", ord("o"), "open", "open a new task (run.sh --open)"),
     ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
-    ("items", "m", ord("m"), "needs-you", "show only what is waiting on you, or everything"),
     ("items", "[  -", ord("["), "up", "move up among its siblings"),
     ("items", "]  = +", ord("]"), "down", "move down among its siblings"),
     ("items", "{  <", ord("{"), "out", "move out of its branch"),
@@ -1818,7 +1817,6 @@ class UI(WalkMixin):
     input = None
     clip = None
     events = ()
-    only_mine = False
     order_undo = ()
     answers = ()
     real = False     # only a screen made by __init__ writes the log or rings
@@ -1838,7 +1836,6 @@ class UI(WalkMixin):
         self.keys_from = ("item", "list")   # (pane, focus) `?` was pressed from
         self.last_search = ""       # `/`, repeated by an empty one
         self.input = None           # what is being typed, while it is — `read_line`
-        self.only_mine = False      # `m`: only the items waiting on the author
         self.order_undo = []        # `z`: (order.md before, order.md we wrote)
         self.answers = []           # `:`'s arguments, handed to the prompts it meets
         # The activity log: what this screen and its walk DID, newest last. Read back
@@ -2000,10 +1997,8 @@ class UI(WalkMixin):
         elif self.tree_focused():
             self.tree_sel = max(0, min(self.tree_sel + step, len(self.tree_rows()) - 1))
         else:
-            shown = self.visible()
-            if shown:
-                at = shown.index(self.sel) if self.sel in shown else 0
-                self.sel = shown[max(0, min(at + step, len(shown) - 1))]
+            if self.items:
+                self.sel = max(0, min(self.sel + step, len(self.items) - 1))
             self.scroll = 0         # a new item is read from its top
 
     def nodes(self):
@@ -2020,15 +2015,12 @@ class UI(WalkMixin):
         is the whole of what a fence has to do from here.
         """
         rows, seg = [], 0
-        shown = set(self.visible())
         for idx, it in enumerate(self.items):
             while seg < it.get("segment", 0):
                 seg += 1
-                if not self.only_mine:
-                    rows.append(("break", it.get("waiting_on"),
-                                 bool(it.get("stop")) and seg == it.get("segment", 0)))
-            if idx in shown:
-                rows.append(("item", idx))
+                rows.append(("break", it.get("waiting_on"),
+                             bool(it.get("stop")) and seg == it.get("segment", 0)))
+            rows.append(("item", idx))
         return rows
 
     def reorder(self, step):
@@ -2149,11 +2141,6 @@ class UI(WalkMixin):
         """
         if after is None:
             self.msg = "%s %s" % (it["id"], refusal)
-            return False
-        if self.only_mine:
-            # The rows around it are hidden, so "up one" would be up past items
-            # nobody can see: a move is made on the whole tree or not at all.
-            self.msg = "the list is filtered to what needs you — m shows it all to move"
             return False
         before = read_text_or_none(dfs_paths.order())
         dfs_order.write_order(after)
@@ -2520,8 +2507,7 @@ class UI(WalkMixin):
         # parked, pruned, critic, review, sessions, tokens — kept for an experiment
         # (the old roadmap's §0.6) that ended with it on 2026-09-25. Totals that only
         # grow are read by nobody at a glance; the one that asked for action (open
-        # raises, standing assumptions) is `need you` here, the same number `m`
-        # filters to. The rest are at the top of `h`, and in metrics.py.
+        # raises, standing assumptions) is `need you` here. The rest are at the top of `h`, and in metrics.py.
         mine = sum(1 for it in self.items if self.needs_you(it))
         # ⚠️ The header leads with the PROJECT'S name, in its colour (`.dfs/theme`), not
         # the word "roadmap": with two or three terminals open on different projects,
@@ -3599,8 +3585,6 @@ class UI(WalkMixin):
         if n is None:
             self.msg = "no item %s" % iid
             return False
-        if self.only_mine and not self.needs_you(self.items[n]):
-            self.only_mine = False
         self.sel, self.scroll = n, 0
         self.pane, self.focus = "item", "list"
         return True
@@ -3677,13 +3661,10 @@ class UI(WalkMixin):
             return ([text(r) for r in self.tree_rows()], self.tree_sel,
                     lambda i: setattr(self, "tree_sel", i))
         if self.pane == "item":
-            shown = self.visible()
-
             def land(i):
-                self.sel, self.scroll = shown[i], 0
-            return (["%s %s %s" % (self.items[n]["id"], self.items[n]["goal"],
-                                   self.items[n].get("why", "")) for n in shown],
-                    shown.index(self.sel) if self.sel in shown else 0, land)
+                self.sel, self.scroll = i, 0
+            return (["%s %s %s" % (it["id"], it["goal"], it.get("why", ""))
+                     for it in self.items], self.sel, land)
         # A pane with no cursor: the match's line goes to the top, and reading
         # somewhere is not following the end.
         lines = self.detail_lines(self.main_w())
@@ -3737,37 +3718,13 @@ class UI(WalkMixin):
         elif self.last_search:
             self.search(self.last_search)
 
-    # m
+    # needs you
 
     def needs_you(self, it):
-        """What `m` keeps: an item with a question for the author — its own raise, a
+        """What the header counts: an item with a question for the author — its own raise, a
         standing assumption to keep or redirect, a correction not yet carried out."""
         return bool(it["status"] == "blocked" or it.get("open_raises")
                     or it.get("standing") or it.get("corrections"))
-
-    def visible(self):
-        """Indices of the items the list shows. The selected one always, so turning
-        the filter on, or an answer landing, never leaves the cursor on nothing."""
-        if not self.only_mine:
-            return list(range(len(self.items)))
-        return [n for n, it in enumerate(self.items)
-                if self.needs_you(it) or n == self.sel]
-
-    def toggle_mine(self):
-        self.only_mine = not self.only_mine
-        if self.only_mine:
-            mine = [n for n, it in enumerate(self.items) if self.needs_you(it)]
-            if not mine:
-                self.only_mine = False
-                self.msg = "nothing is waiting on you"
-                return
-            if self.sel not in mine:
-                self.sel = mine[0]
-            self.msg = "%d of %d need you — m shows everything" % (len(mine),
-                                                                    len(self.items))
-        else:
-            self.msg = "all %d items" % len(self.items)
-        self.scroll = 0
 
     # the walk's plan, shown while `w` asks for its budget
 
@@ -4936,8 +4893,6 @@ class UI(WalkMixin):
         elif ch == ord("h"):
             self.pane = "item" if self.pane == "activity" else "activity"
             self.scroll = 10 ** 6            # newest last, so it opens at the end
-        elif ch == ord("m"):
-            self.toggle_mine()
         elif ch == ord("M") and self.pane == "agentlog":
             self.send_message(self.open_run)
         elif ch == ord("z"):
