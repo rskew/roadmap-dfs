@@ -1402,6 +1402,30 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // The Enter that confirms an input-method candidate is the input method's: Safari sends it with isComposing false and keyCode 229.
+  async chat_ime(b) {
+    const { page, errors } = await open(b, DESKTOP);
+    const state = { scope: "W9", messages: [{ role: "agent", text: "hello" }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    const sends = [];
+    await page.route("**/api/chat/**", async r => {
+      if (r.request().url().endsWith("/api/chat/send")) { sends.push(r.request().postDataJSON().message); state.messages.push({ role: "you", text: "sent" }); }
+      await r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await task(page, "W9");
+    await page.click("button.desk[data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length >= 1);
+    await page.fill("#chat-input", "konnichi");
+    const enter = init => page.$eval("#chat-input", (e, i) => { const k = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true, ...i }); e.dispatchEvent(k); return k.defaultPrevented; }, init);
+    assert(!(await enter({ keyCode: 229, isComposing: false })), "an Enter with keyCode 229 is left to the input method");
+    assert(!(await page.$eval("#chat-input", e => { e.dispatchEvent(new CompositionEvent("compositionend")); const k = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }); e.dispatchEvent(k); return k.defaultPrevented; })), "and so is an Enter right after compositionend");
+    await page.waitForTimeout(200);
+    same(sends, [], "neither sends");
+    assert(await enter({}), "a plain Enter later still sends");
+    await page.waitForFunction(() => document.querySelector("#chat-input").value === "");
+    same(sends, ["konnichi"], "the draft went once");
+    same(errors, [], "no page errors");
+  },
+
   // Enter sends from the keyboard, but not while a turn runs: Send is disabled then, and Enter must wait with it.
   async chat_enter_busy(b) {
     const { page, errors } = await open(b, DESKTOP);

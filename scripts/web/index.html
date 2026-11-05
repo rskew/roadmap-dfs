@@ -468,6 +468,11 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 <script>
 "use strict";
 const $ = (s, el = document) => el.querySelector(s);
+/* An Enter that belongs to the input method (choosing a Japanese, Chinese or Korean candidate) is not the page's to act on.
+   Safari sends that keydown after `compositionend`, with isComposing false and keyCode 229, so all three are checked. */
+let IME_ENDED = 0;
+addEventListener("compositionend", () => { IME_ENDED = performance.now(); }, true);
+const imeEnter = ev => ev.isComposing || ev.keyCode === 229 || performance.now() - IME_ENDED < 50;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 /* A task's id in a row of tasks: a branch's tag (`W1@serve-real-records`) is drawn apart from its number, as a small line
    at the top of the goal's column, right of the number, so the numbers line up and a long tag has the row's width. */
@@ -1535,7 +1540,7 @@ function form(html, onsubmit) {
   for (const el of f.querySelectorAll("textarea.line")) {
     const grow = () => { el.style.height = "auto"; el.style.height = el.scrollHeight + el.offsetHeight - el.clientHeight + "px"; };
     el.addEventListener("input", grow);
-    el.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); f.requestSubmit($("button[value=ok]", f)); } });
+    el.addEventListener("keydown", ev => { if (ev.key === "Enter" && !imeEnter(ev)) { ev.preventDefault(); f.requestSubmit($("button[value=ok]", f)); } });
     grow();
   }
   for (const el of f.querySelectorAll("textarea:not(.line)")) attachTo(el);
@@ -1788,7 +1793,7 @@ $("#chat-input").placeholder = chatEnterSends() ? "Ask about this. Enter sends, 
 // Enter sends where there is a keyboard (a fine pointer) and Shift+Enter adds a line; on a touch screen Enter stays a new line,
 // and Send is the button. Ctrl/cmd+Enter sends anywhere. A key that is choosing an input-method candidate is left alone.
 $("#chat-input").addEventListener("keydown", ev => {
-  if (ev.key !== "Enter" || ev.isComposing) return;
+  if (ev.key !== "Enter" || imeEnter(ev)) return;
   if (ev.metaKey || ev.ctrlKey || (chatEnterSends() && !ev.shiftKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); }
 });
 // The colour can change under an open page (another tab, `.dfs/theme` by hand, a rename
@@ -1909,7 +1914,7 @@ function accountForm() {
     on("acct-cancel", () => api("/api/login/cancel", {}));
     on("acct-send", () => api("/api/login/code", { code: $("#acct-code", box).value }));
     const c = $("#acct-code", box);
-    if (c) c.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); $("#acct-send", box).click(); } });
+    if (c) c.addEventListener("keydown", ev => { if (ev.key === "Enter" && !imeEnter(ev)) { ev.preventDefault(); $("#acct-send", box).click(); } });
     if (busy || st.phase === "waiting") poll();
   };
   const poll = () => { clearTimeout(ACCT_T); ACCT_T = setTimeout(async () => { try { draw(await api("/api/login")); } catch (e) { toast(e.message, true); } }, 1000); };

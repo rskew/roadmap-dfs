@@ -381,6 +381,9 @@ class Flows(unittest.TestCase):
     def test_enter_does_not_send_while_a_turn_is_running(self):
         self.flow("chat_enter_busy")
 
+    def test_enter_that_confirms_an_input_method_candidate_does_not_send(self):
+        self.flow("chat_ime")
+
     def test_several_chats_are_found_again_in_the_chats_section(self):
         self.flow("chats")
 
