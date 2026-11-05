@@ -7,7 +7,7 @@
     "web": {"kind": "actor", "label": "the web page / screen", "note": "calls ChatHost and Relay from outside this file"},
     "agent": {"kind": "actor", "label": "the agent process", "note": "claude, codex, kiro or opencode, started by run.sh on the pty"},
     "term": {"kind": "actor", "label": "the real terminal", "note": "only while someone is attached"},
-    "chatlog": {"kind": "store", "label": "the chat's log", "note": "chatlog.log, bound to the scope; the only record of what happened here"},
+    "chatlog": {"kind": "store", "label": "the chat's log", "note": "chatlog.log, bound to the scope; the record of what happened here (the exit code, reason and screen tail are also kept on the Relay)"},
     "pty": {"kind": "resource", "label": "pty master + child process", "note": "one file descriptor and one pid per Relay"},
     "threads": {"kind": "resource", "label": "three daemon threads", "note": "_pump, _typist, _watch; a fourth short one when close does not wait"},
     "lock": {"kind": "resource", "label": "Relay.lock and ChatHost.lock", "note": "the host lock is taken first, then a relay's"},
@@ -15,7 +15,7 @@
     "outbox": {"kind": "queue", "label": "outbox", "note": "queue.Queue of texts to type; no size limit; first in, first out"},
     "life": {"kind": "state", "label": "life: fd, pid, rc, closing, why", "note": "live means fd is set and not closing; rc is set once the child is reaped"},
     "tail": {"kind": "state", "label": "tail", "note": "the last 16384 bytes the agent wrote"},
-    "typing": {"kind": "state", "label": "typing: unsent, typed, answered, stops", "note": "how far the first message has got; stops counts interrupts"},
+    "typing": {"kind": "state", "label": "typing: unsent, typed, answered, stops", "note": "unsent counts every message not yet typed, stops every interrupt; typed and answered say how far the first message has got"},
     "startup": {"kind": "state", "label": "start-up: opening, handed, first_out, awaiting", "note": "tells run.sh's own output from the agent's first output"},
     "modes": {"kind": "state", "label": "terminal modes", "note": "alt screen, mouse, bracketed paste ... as the agent last left them"},
     "relays": {"kind": "state", "label": "ChatHost.relays", "note": "scope to Relay"}
@@ -40,7 +40,7 @@
     {"kind": "sets", "from": "Relay.close", "to": "life", "label": "closing = True and why, before SIGTERM", "at": "Relay.close"},
     {"kind": "reads", "from": "Relay.live", "to": "life", "label": "fd is set and not closing", "at": "Relay.live"},
     {"kind": "sets", "from": "Relay._pump", "to": "tail", "label": "appends, then trims to the last 16384 bytes", "at": "Relay._pump"},
-    {"kind": "reads", "from": "Relay._ready", "to": "tail", "label": "does the screen show the agent's prompt? Only until the first message is typed; after that one second of quiet is all it asks", "at": "Relay._ready"},
+    {"kind": "reads", "from": "Relay._ready", "to": "tail", "label": "does the screen show the agent's prompt (kiro and opencode only)? Only until the first message is typed; after that it still asks for the opening turn over, some output and one second of quiet, but not the prompt", "at": "Relay._ready"},
     {"kind": "reads", "from": "Relay.failure", "to": "tail", "label": "looks for a 'dfs_run:' line the launcher printed", "at": "Relay.failure"},
     {"kind": "sets", "from": "Relay.send", "to": "typing", "label": "unsent + 1", "at": "Relay.send"},
     {"kind": "sets", "from": "Relay._typist", "to": "typing", "label": "typed = True, unsent - 1, after the text is written", "at": "Relay._typist"},
@@ -73,8 +73,8 @@
     {"kind": "releases", "from": "Relay.attach", "to": "rawterm", "label": "in a finally: modes off, handler and terminal settings put back", "at": "Relay.attach"},
     {"kind": "acquires", "from": "ChatHost.close_all", "to": "threads", "label": "one thread per relay, so the closes run together; all joined", "at": "ChatHost.close_all"},
 
-    {"kind": "fails", "from": "Relay._pump", "to": "Relay.failure", "label": "the child exits non-zero → its last 'dfs_run:' line becomes the reason", "at": "Relay.failure"},
-    {"kind": "fails", "from": "Relay._typist", "to": "Relay.failure", "label": "the agent ended before a message was typed → 'before its message was typed'", "at": "Relay.failure"},
+    {"kind": "fails", "from": "Relay._pump", "to": "Relay.failure", "label": "the child exits non-zero and nobody closed the chat → its last 'dfs_run:' line, not counting the opening-turn and interactive-session notes, becomes the reason", "at": "Relay.failure"},
+    {"kind": "fails", "from": "Relay._typist", "to": "Relay.failure", "label": "the agent ended before a message was typed: _typist logs the drop, and Relay.failure answers 'before its message was typed' when unsent is above 0 (a dfs_run: line wins if the exit is non-zero)", "at": "Relay.failure"},
     {"kind": "fails", "from": "ChatHost.ensure", "to": "web", "label": "make() or pty.fork raising is not caught: it reaches the caller, the lock is released by the with-block, and no new relay is stored (an ended one stays in relays)", "at": "ChatHost.ensure"},
     {"kind": "fails", "from": "Relay.send", "to": "web", "label": "False when the relay is not running; the text is not kept", "at": "Relay.send"},
     {"kind": "stops", "from": "Relay.failure", "to": "web", "label": "exit non-zero with no 'dfs_run:' line and nothing unsent → no reason; the chat just looks ended", "at": "Relay.failure"},
@@ -86,10 +86,10 @@
     {"kind": "stops", "from": "Relay.interrupt", "to": "typing", "label": "messages not yet typed are dropped; only a count is returned and logged", "at": "Relay.interrupt"},
 
     {"kind": "puts", "from": "Relay.send", "to": "outbox", "label": "the text, at the back; refused when the relay is not live", "at": "Relay.send"},
-    {"kind": "takes", "from": "Relay._typist", "to": "outbox", "label": "one text at a time, then waits until the agent is ready (up to 25 s, 90 s for kiro and opencode)", "at": "Relay._typist"},
+    {"kind": "takes", "from": "Relay._typist", "to": "outbox", "label": "one text at a time, then waits until the agent is ready (a wait of up to 25 s, 90 s for kiro and opencode, that restarts during the opening turn and is stretched to 90 s after handoff)", "at": "Relay._typist"},
     {"kind": "takes", "from": "Relay.interrupt", "to": "outbox", "label": "empties it; the dropped count is returned", "at": "Relay.interrupt"},
     {"kind": "stops", "from": "Relay._typist", "to": "outbox", "label": "the agent ended: the text it holds is dropped and the ones behind it are never taken", "at": "Relay._typist"},
-    {"kind": "reads", "from": "ChatHost.reap_idle", "to": "outbox", "label": "empty? A text the typist already took is not in it, so this check cannot see it (the screen passes a 30 minute limit, so it only matters for a chat quiet that long)", "at": "ChatHost.reap_idle"}
+    {"kind": "reads", "from": "ChatHost.reap_idle", "to": "outbox", "label": "empty? A text the typist already took is not in it, so this check cannot see it (the screen passes the limit, DFS_CHAT_IDLE, 30 minutes by default, so it only matters for a chat quiet that long)", "at": "ChatHost.reap_idle"}
   ],
   "handled": [
     {"at": "_try", "error": "OSError, ValueError or termios.error from a write, ioctl or kill", "how": "returns None; every caller carries on"},

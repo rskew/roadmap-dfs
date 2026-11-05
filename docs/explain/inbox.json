@@ -12,10 +12,10 @@
     "msg": {"kind": "state", "label": "a message's state", "note": "waiting while it is in inbox/, delivered once moved"},
     "msgfile": {"kind": "resource", "label": "the open message file", "note": "a file handle, open only while its text is read"},
     "stdin": {"kind": "actor", "label": "the hook's input", "note": "JSON from the agent on stdin"},
-    "agentfile": {"kind": "store", "label": ".kiro/agents/dfs-inbox.json", "note": "written into the worktree for kiro"}
+    "agentfile": {"kind": "store", "label": ".kiro/agents/dfs-inbox.json", "note": "written into the directory given to --kiro-agent (run.sh passes the worktree) for kiro"}
   },
   "edges": [
-    {"kind": "moves", "from": "author", "to": "box", "label": "message text, written aside then renamed in", "at": null},
+    {"kind": "moves", "from": "author", "to": "box", "label": "message text, written aside as a dot-file then renamed in (runs.post_message, not this file; take skips dot-files)", "at": null},
     {"kind": "moves", "from": "box", "to": "waiting", "label": "the file names", "at": "waiting"},
     {"kind": "moves", "from": "claim", "to": "take", "label": "every waiting name", "at": "claim"},
     {"kind": "moves", "from": "take", "to": "answer", "label": "the texts, oldest first", "at": "main"},
@@ -40,11 +40,11 @@
     {"kind": "fails", "from": "take", "to": "delivered", "label": "an OSError reading it after the rename → skipped, the message counts as delivered and the model never gets it; a file that is not valid text raises UnicodeDecodeError, which take does not catch, so it leaves take and the hook after the rename", "at": "take"},
     {"kind": "stops", "from": "take", "to": "msg", "label": "a blank message is moved to delivered/ and dropped from the texts: delivered, but the model is told nothing", "at": "take"},
     {"kind": "stops", "from": "hook_input", "to": "stdin", "label": "input is not JSON → {} → treated as the main session, which may claim", "at": "hook_input"},
-    {"kind": "fails", "from": "main", "to": "model", "label": "peek or ack with no DFS_INBOX → message on stderr, exit 2", "at": "main"},
+    {"kind": "fails", "from": "main", "to": "model", "label": "peek or ack with no DFS_INBOX → message on stderr, exit 2; the caller is the opencode plugin, so the model does not see it", "at": "main"},
     {"kind": "stops", "from": "from_subagent", "to": "box", "label": "a subagent's hook claims nothing, so the message waits for the main session", "at": "main"},
     {"kind": "stops", "from": "install_kiro_agent", "to": "agentfile", "label": "git or the exclude file fails → the agent file is still written, the exclude is skipped", "at": "install_kiro_agent"},
 
-    {"kind": "puts", "from": "author", "to": "box", "label": "one file per message, never a partial one", "at": null},
+    {"kind": "puts", "from": "author", "to": "box", "label": "one .txt file per message, never a partial one (runs.post_message writes aside and renames; this file only skips dot-files and non-.txt names)", "at": null},
     {"kind": "takes", "from": "claim", "to": "box", "label": "everything waiting at once, oldest first; claude, codex and kiro move it before reading (at most once)", "at": "claim"},
     {"kind": "takes", "from": "peek", "to": "box", "label": "opencode reads without moving, then ack moves (at least once: a refused prompt leaves it waiting)", "at": "peek"},
     {"kind": "takes", "from": "take", "to": "box", "label": "two hooks at once cannot both get a file: the second rename fails", "at": "take"},
@@ -54,6 +54,6 @@
     {"at": "main", "error": "stdin cannot be read", "how": "uses empty input"},
     {"at": "main", "error": "wrong arguments", "how": "prints usage, exit 2"},
     {"at": "main", "error": "no inbox named", "how": "hooks do nothing; peek/ack exit 2"},
-    {"at": "self_as_subagent", "error": "kiro starting its own agent as a sub-agent", "how": "refused, exit 2, so it cannot take the message"}
+    {"at": "main", "error": "kiro starting its own agent as a sub-agent (self_as_subagent only detects it)", "how": "main refuses in the pre hook, after the agent_id check: message on stderr, exit 2, so it cannot take the message"}
   ]
 }
