@@ -461,6 +461,61 @@ class EndToEnd(unittest.TestCase):
         self.assertTrue(any("W104-PING from the page" in t.read_text() for t in transcripts), transcripts)
 
 
+@unittest.skipUnless(CLAUDE, "no claude here")
+class RealClaudeChat(unittest.TestCase):
+    """The page's chat (chat.py `Chats`, run.sh `--chat-turn`) around a real claude and a stand-in model:
+    a message sent while a turn answers is in that turn's next request."""
+
+    def setUp(self):
+        import paths as dfs_paths
+        import chat as dfs_chat
+        self.base = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        root, home = self.base / "repo", self.base / "home"
+        (root / ".dfs" / "items").mkdir(parents=True)
+        (root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
+        (home / ".claude").mkdir(parents=True)
+        (home / ".claude.json").write_text(json.dumps({"hasCompletedOnboarding": True,
+                                                       "customApiKeyResponses": {"approved": [KEY[-20:]], "rejected": []}}))
+        subprocess.run("git init -q -b main && git add -A && git -c user.name=t -c user.email=t@t commit -qm x", shell=True, cwd=root, check=True)
+        keys = ("CLAUDE_CMD", "HOME", "DFS_RUN_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "DISABLE_AUTOUPDATER")
+        saved = {k: os.environ.get(k) for k in keys}
+        self.addCleanup(lambda: [os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v) for k, v in saved.items()])
+        self.model = Model([("tool", "sleep 4"), ("text", "done")])
+        self.addCleanup(self.model.close)
+        os.environ.update(CLAUDE_CMD=CLAUDE, HOME=str(home), DFS_RUN_DIR=str(root / ".dfs" / "runs"), ANTHROPIC_API_KEY=KEY,
+                          DISABLE_AUTOUPDATER="1", ANTHROPIC_BASE_URL="http://127.0.0.1:%d" % self.model.server.server_address[1])
+        self.paths, work = dfs_paths, dfs_paths.work_root
+        dfs_paths.work_root = lambda: root
+        self.addCleanup(setattr, dfs_paths, "work_root", work)
+        self.chats = dfs_chat.Chats()
+
+    def settle(self):
+        end = time.time() + 90
+        while time.time() < end:
+            st = self.chats.state("project")
+            if not st["busy"]:
+                return st
+            time.sleep(0.2)
+        self.fail("the turn did not end")
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.chats.send("project", "look at the code")
+        end = time.time() + 60
+        while not self.model.requests and time.time() < end:
+            time.sleep(0.05)
+        time.sleep(0.5)                                 # the Bash call is running
+        sent = self.chats.send("project", "W141-STEER use the other file")
+        self.assertEqual([m.get("steer") for m in sent["messages"] if m["role"] == "you"][-1], "waiting")
+        st = self.settle()
+        self.assertEqual(len(self.model.requests), 2)
+        self.assertNotIn("W141-STEER", json.dumps(self.model.requests[0]))
+        self.assertIn("W141-STEER use the other file", json.dumps(self.model.requests[1]))
+        roles = [(m["role"], m["text"], m.get("steer")) for m in st["messages"] if m["role"] != "prompt"]
+        self.assertIn(("you", "W141-STEER use the other file", "delivered"), roles)
+        self.assertEqual(roles[-1][:2], ("agent", "done"))
+
+
 @unittest.skipUnless(CODEX, "no codex here")
 class RealCodex(unittest.TestCase):
     def session(self, command, meanwhile, model=None):
@@ -607,6 +662,103 @@ class RealOpencode(unittest.TestCase):
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
 
 
+class ChatSteer:
+    """The page's chat (chat.py `Chats`, run.sh `--chat-turn`) around a real codex or opencode and a stand-in
+    model whose first step is a slow tool call: a message sent while the turn answers is in a later request of
+    that same turn, the first request did not hold it, and the page shows it delivered."""
+    agent = ""
+
+    def make(self, model, env):
+        """Set the scope up: `model` is the stand-in, `env` what the agent needs in the environment
+        (a dict, or a function of the home directory)."""
+        import paths as dfs_paths
+        import chat as dfs_chat
+        self.base = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        self.root, self.home = self.base / "repo", self.base / "home"
+        (self.root / ".dfs" / "items").mkdir(parents=True)
+        (self.root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
+        self.home.mkdir()
+        subprocess.run("git init -q -b main && git add -A && git -c user.name=t -c user.email=t@t commit -qm x",
+                       shell=True, cwd=self.root, check=True)
+        self.model = model
+        model.__enter__()
+        self.addCleanup(model.__exit__, None, None, None)
+        env = dict(env(self.home) if callable(env) else env, HOME=str(self.home), DFS_RUN_DIR=str(self.root / ".dfs" / "runs"), AGENT_NIXPKGS_REV="none")
+        saved = {k: os.environ.get(k) for k in list(env) + ["DFS_INBOX", "CHAT_INBOX"]}
+        os.environ.update(env)
+        self.addCleanup(lambda: [os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v) for k, v in saved.items()])
+        for k in ("CODEX_HOME", "CODEX_THREAD_ID", "CODEX_SESSION_ID", "CLAUDE_CODE_SESSION_ID", "DFS_INBOX", "CHAT_INBOX", "CHAT_SID", "CHAT_RESUME", "CHAT_SHARE"):
+            os.environ.pop(k, None)
+        work = dfs_paths.work_root
+        dfs_paths.work_root = lambda: self.root
+        dfs_paths._TAG_CACHE.clear()
+        self.addCleanup(setattr, dfs_paths, "work_root", work)
+        Path(dfs_chat.agent_file()).parent.mkdir(parents=True, exist_ok=True)
+        Path(dfs_chat.agent_file()).write_text(self.agent + "\n")
+        self.chats = dfs_chat.Chats(on_change=lambda: None)
+
+    def settle(self):
+        end = time.time() + 300
+        while time.time() < end:
+            st = self.chats.state("project")
+            if not st["busy"]:
+                return st
+            time.sleep(0.2)
+        self.fail("the turn did not end")
+
+    def steer(self, started):
+        """Send a first message, wait until `started()` says the tool call is running, send the steering one."""
+        self.chats.send("project", "look at the code")
+        end = time.time() + 90
+        while not started() and time.time() < end:
+            time.sleep(0.05)
+        time.sleep(1)                                   # the command is running
+        sent = self.chats.send("project", "W141-STEER use the other file")
+        self.assertEqual([m.get("steer") for m in sent["messages"] if m["role"] == "you"][-1], "waiting")
+        st = self.settle()
+        bodies = [b.decode() for _, b in self.model.requests]
+        self.assertNotIn("W141-STEER", bodies[0])
+        self.assertIn("W141-STEER use the other file", bodies[-1])
+        self.assertEqual(sum("W141-STEER" in b for b in bodies[-1:]), 1)
+        roles = [(m["role"], m["text"], m.get("steer")) for m in st["messages"] if m["role"] != "prompt"]
+        self.assertIn(("you", "W141-STEER use the other file", "delivered"), roles)
+        self.assertEqual(roles[-1][:2], ("agent", "done"))
+        self.assertEqual(len([r for r in roles if r[0] == "you"]), 2, roles)      # sent once: not again as a turn of its own
+
+
+@unittest.skipUnless(CODEX, "no codex here")
+class RealCodexChat(ChatSteer, unittest.TestCase):
+    agent = "codex"
+
+    def setUp(self):
+        model = ToolCodexModel("sleep 4")
+        self.make(model, dict(model.env(), CODEX_CMD=""))
+        (self.home / ".codex").mkdir()
+        (self.home / ".codex" / "config.toml").write_text('[projects."%s"]\ntrust_level = "trusted"\n' % self.root)
+        cmd = self.base / "codex-with-fake-model"       # CODEX_CMD is split on spaces: the model's arguments live in a script
+        cmd.write_text("#!/bin/sh\nexec %s %s \"$@\"\n" % (CODEX, " ".join("'%s'" % a for a in model.args())))
+        cmd.chmod(0o755)
+        os.environ["CODEX_CMD"] = str(cmd)
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.steer(lambda: self.model.requests)
+
+
+@unittest.skipUnless(OPENCODE, "no opencode 2 here")
+class RealOpencodeChat(ChatSteer, unittest.TestCase):
+    agent = "opencode"
+
+    def setUp(self):
+        model = ToolOpenAIModel("sleep 4")
+        self.make(model, lambda home: dict(model.env(), OPENCODE_CMD=OPENCODE, OPENCODE_DISABLE_AUTOUPDATE="true",
+                                           XDG_DATA_HOME=str(home / "data"), XDG_CONFIG_HOME=str(home / "cfg"),
+                                           XDG_CACHE_HOME=str(home / "cache"), XDG_STATE_HOME=str(home / "state")))
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.steer(lambda: len(self.model.requests) >= 2)
+
+
 class SubagentKiroModel(FakeKiroModel):
     """A stand-in kiro model that first asks to invoke the roadmap's own agent as a sub-agent, then, once that
     is refused, lists a directory, asks again if that call is held back, and answers. `conversations` is the
@@ -714,6 +866,116 @@ class RealKiro(unittest.TestCase):
         model, run_dir, out = self.session(send)
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["waiting"])
         self.assertNotIn("W104-PING", "".join(self.asked(model)))
+
+
+MCP_STUB = """import json, sys
+for line in sys.stdin:
+    try:
+        m = json.loads(line)
+    except ValueError:
+        continue
+    i, meth = m.get("id"), m.get("method")
+    if meth == "initialize":
+        r = {"protocolVersion": m["params"].get("protocolVersion", "2024-11-05"), "capabilities": {"tools": {}}, "serverInfo": {"name": "w141", "version": "1"}}
+    elif meth == "tools/list":
+        r = {"tools": [{"name": "stubtool_w141", "description": "a stub", "inputSchema": {"type": "object", "properties": {}}}]}
+    elif i is None:
+        continue
+    else:
+        r = {}
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": i, "result": r}) + "\\n")
+    sys.stdout.flush()
+"""
+
+
+@unittest.skipUnless(KIRO, "no kiro-cli here")
+class RealKiroChat(ChatSteer, unittest.TestCase):
+    """The page's chat around a real kiro-cli: a message sent while a turn waits for its model is held
+    against the turn's next tool call, through the agent named by the chat's box. A second chat in the
+    same working directory has an agent and a box of its own."""
+    agent = "kiro"
+
+    def setUp(self):
+        model = FakeKiroModel()
+        model.lag = 3
+        self.make(model, dict(model.env(), KIRO_CMD=KIRO, KIRO_NO_AUTO_UPDATE="1"))
+
+    def asked(self):
+        return [b for t, b in self.model.requests if t.endswith("GenerateAssistantResponse")]
+
+    def test_a_message_sent_while_a_turn_answers_steers_it_and_shows_as_delivered(self):
+        self.chats.send("project", "use a tool please")
+        end = time.time() + 90
+        while not self.asked() and time.time() < end:
+            time.sleep(0.05)
+        sent = self.chats.send("project", "W141-STEER use the other file")
+        self.assertEqual([m.get("steer") for m in sent["messages"] if m["role"] == "you"][-1], "waiting")
+        st = self.settle()
+        bodies = [b.decode() for b in self.asked()]
+        self.assertNotIn("W141-STEER", bodies[0])
+        self.assertIn("W141-STEER use the other file", bodies[1])
+        self.assertIn(("you", "W141-STEER use the other file", "delivered"),
+                      [(m["role"], m["text"], m.get("steer")) for m in st["messages"]])
+        agents = sorted(p.name for p in (self.root / ".kiro" / "agents").glob("*.json"))
+        self.assertEqual(agents, [inbox.kiro_agent_for(str(self.chats.box("project"))) + ".json"])
+        self.assertNotIn("kiro/agents", subprocess.run(["git", "status", "--short"], cwd=self.root, capture_output=True, text=True).stdout)
+
+    def test_the_second_turn_of_a_session_resumed_under_the_chat_agent_is_steered_too(self):
+        """Every message after the first is `--resume-id` under the agent; a steered one is read there as well."""
+        self.chats.send("project", "hello")
+        self.settle()
+        self.model.requests_seen = 0                    # the stand-in waits again before the next turn's first answer
+        before = len(self.asked())
+        self.chats.send("project", "use a tool please")
+        end = time.time() + 90
+        while len(self.asked()) == before and time.time() < end:
+            time.sleep(0.05)
+        self.chats.send("project", "W141-RESUMED use the other file")
+        st = self.settle()
+        bodies = [b.decode() for b in self.asked()][before:]
+        self.assertNotIn("W141-RESUMED", bodies[0])
+        self.assertIn("W141-RESUMED use the other file", bodies[1])
+        self.assertIn(("you", "W141-RESUMED use the other file", "delivered"),
+                      [(m["role"], m["text"], m.get("steer")) for m in st["messages"]])
+
+    def test_a_chat_turn_under_the_agent_asks_the_model_for_what_the_default_agent_does(self):
+        """The agent file names no resources or MCP servers; kiro still gives the turn the workspace and the user's
+        steering files, AGENTS.md, MCP tools and every built-in tool, so only the default agent's own system prompt
+        and its built-in sub-agents differ (kiro-cli 2.35.1)."""
+        (self.root / "AGENTS.md").write_text("W141-AGENTS-MARK\n")
+        (self.root / ".kiro" / "steering").mkdir(parents=True)
+        (self.root / ".kiro" / "steering" / "w.md").write_text("W141-STEERING-MARK\n")
+        (self.root / ".kiro" / "settings").mkdir(parents=True)
+        (self.home / ".kiro" / "steering").mkdir(parents=True)
+        (self.home / ".kiro" / "steering" / "g.md").write_text("W141-GLOBAL-MARK\n")
+        stub = self.base / "mcp_stub.py"
+        stub.write_text(MCP_STUB)
+        (self.root / ".kiro" / "settings" / "mcp.json").write_text(json.dumps(
+            {"mcpServers": {"w141srv": {"command": "python3", "args": [str(stub)]}}}))
+        self.model.lag = 0
+        seen = {}
+        for label, extra in (("default", []), ("agent", ["--agent", inbox.kiro_agent_for(str(self.chats.box("project")))])):
+            inbox.install_kiro_agent(str(self.root), str(self.chats.box("project")), inbox.kiro_agent_for(str(self.chats.box("project"))))
+            n = len(self.asked())
+            subprocess.run([KIRO, "chat", "--v3", "--output-format", "stream-json", *extra, "--no-interactive", "--trust-all-tools",
+                            "--", "hello"], cwd=self.root, capture_output=True, text=True, timeout=240, stdin=subprocess.DEVNULL,
+                           env=dict(os.environ))
+            request = json.loads(self.asked()[n])
+            seen[label] = (sorted(t["toolSpecification"]["name"] for t in
+                                  request["conversationState"]["currentMessage"]["userInputMessage"]["userInputMessageContext"]["tools"]),
+                           json.dumps(request))
+        self.assertIn("stubtool_w141", seen["default"][1])         # the MCP server is loaded at all
+        self.assertIn("stubtool_w141", seen["agent"][1])
+        self.assertEqual(seen["agent"][0], seen["default"][0])
+        for mark in ("W141-AGENTS-MARK", "W141-STEERING-MARK", "W141-GLOBAL-MARK"):
+            self.assertIn(mark, seen["default"][1])
+            self.assertIn(mark, seen["agent"][1])
+
+    def test_two_boxes_have_two_agents_and_the_chat_agents_cannot_be_invoked_as_subagents(self):
+        a, b = inbox.kiro_agent_for("/x/chat/W1/inbox"), inbox.kiro_agent_for("/x/chat/W2/inbox")
+        self.assertNotEqual(a, b)
+        self.assertEqual(json.loads(inbox.kiro_agent("/x/chat/W1/inbox", a))["name"], a)
+        self.assertTrue(inbox.self_as_subagent(dict(tool_name="invoke_sub_agent", tool_input=dict(name=a))))
 
 
 class OpencodeWiring(unittest.TestCase):

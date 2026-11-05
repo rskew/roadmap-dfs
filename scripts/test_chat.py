@@ -21,10 +21,13 @@ FIXTURES = HERE / "fixtures" / "kiro"          # output a real kiro-cli 2.27.1 w
 sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
+import inbox as dfs_inbox     # noqa: E402
+import runs as dfs_runs     # noqa: E402
 
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
 echo "$@" >> "$CHAT_STUB_LOG"
+[ -z "${CHAT_INBOX+x}" ] || echo "CHAT_INBOX=$CHAT_INBOX" >> "$CHAT_STUB_LOG.env"
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo "boom: not logged in" >&2; exit 1; }
 sid=""; prev=""; prompt=""
@@ -49,6 +52,11 @@ printf '{"type":"result","is_error":false,"result":"I read it. %s","session_id":
 CODEX_STUB = r"""#!/usr/bin/env bash
 # a codex that records its arguments and what it was told, keeps a rollout as codex does, and
 # prints `exec --json` events. `resume <id>` alone is the interactive chat: it only records itself.
+# a page turn gets the inbox hooks as `-c` flags before `exec`: they are noted in "$CHAT_STUB_LOG.hooks" and dropped, as codex takes them
+hooks=""; while [ "${1:-}" = -c ] || [ "${1:-}" = --dangerously-bypass-hook-trust ]; do
+  if [ "$1" = -c ]; then hooks="$hooks $2"; shift; fi; shift
+done
+[ -z "$hooks" ] || echo "$hooks" >> "$CHAT_STUB_LOG.hooks"
 echo "$@" >> "$CHAT_STUB_LOG"
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","message":"not logged in"}'; echo '{"type":"turn.failed","error":{"message":"not logged in"}}'; exit 1; }
 [ "$1" = exec ] || exit 0
@@ -79,6 +87,7 @@ OPENCODE_STUB = r"""#!/usr/bin/env bash
 # an opencode that records its arguments and what it was told, keeps its sessions in a sqlite store
 # as opencode does, and prints `run --format json` events, in the shapes a real opencode 2.1.1 wrote. Without `run` it is the interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
+[ -z "${DFS_INBOX:-}" ] || echo "$DFS_INBOX" >> "$CHAT_STUB_LOG.inbox"      # a page turn names its inbox to the plugin
 [ "$1" = run ] || exit 0
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"not logged in","statusCode":401}}}'; exit 1; }
@@ -134,6 +143,7 @@ KIRO_STUB = r"""#!/usr/bin/env bash
 # test_kiro's stream is a stand-in too). Without `--output-format` it is the
 # interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
+[ -z "${CHAT_INBOX+x}" ] || echo "CHAT_INBOX=$CHAT_INBOX" >> "$CHAT_STUB_LOG.env"
 case "$*" in *--output-format*) ;; *) exit 0 ;; esac
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 if [ -n "${CHAT_STUB_FAIL:-}" ]; then
@@ -253,8 +263,21 @@ class Chat(unittest.TestCase):
             time.sleep(0.05)
         self.fail("a relay's exit was not in the chat log in %ds: %s" % (timeout, text))
 
+    def end_turns(self, timeout=30):
+        """Stop every headless turn the test left running and wait until it has logged its end. A turn's thread
+        logs from `chatlog` after the agent is gone, so one still running when tearDown puts DFS_RUN_DIR and the
+        work root back would write its line into `<cwd>/.dfs/runs/chat/` (the repo's `scripts/`)."""
+        for scope in list(self.chats.busy):
+            self.chats.interrupt(scope)
+        end = time.time() + timeout
+        while self.chats.busy and time.time() < end:
+            time.sleep(0.05)
+        if self.chats.busy:
+            self.fail("a turn was still running %ds after it was stopped: %s" % (timeout, sorted(self.chats.busy)))
+
     def tearDown(self):
         try:
+            self.end_turns()
             self.end_hosts()
         finally:
             for k, v in self._env.items():
@@ -360,6 +383,8 @@ class Chat(unittest.TestCase):
         self.chats.procs["W1"] = Done()
         self.chats.interrupt("W1")
         self.assertNotIn("W1", self.chats.stopped, "an answer already given is not stopped")
+        self.chats.busy.pop("W1")       # a turn made up by hand has no thread to end it
+        self.chats.procs.pop("W1")
 
     def test_stop_with_nothing_answering_changes_nothing(self):
         st = self.chats.interrupt("W1")
@@ -820,11 +845,54 @@ class Chat(unittest.TestCase):
         self.chats.send("W1", "-and then?")
         st = self.settle("W1")
         first, first_prompt, second, second_prompt = self.calls()
-        self.assertEqual(first, "chat --v3 --output-format stream-json --no-interactive --trust-all-tools -- %s" % first_prompt[len("prompt: "):])
+        agent = dfs_inbox.kiro_agent_for(str(self.chats.box("W1")))      # the chat's own agent, over its box
+        self.assertEqual(first, "chat --v3 --output-format stream-json --agent %s --no-interactive --trust-all-tools -- %s" % (agent, first_prompt[len("prompt: "):]))
         self.assertIn("The author writes: Where is the work?", first_prompt)
-        self.assertEqual(second, "chat --v3 --output-format stream-json --no-interactive --trust-all-tools --resume-id %s -- -and then?" % rec["sid"])
+        self.assertEqual(second, "chat --v3 --output-format stream-json --agent %s --no-interactive --trust-all-tools --resume-id %s -- -and then?" % (agent, rec["sid"]))
         self.assertEqual(second_prompt, "prompt: -and then?", "`--` keeps a message that starts with a dash from being a flag")
         self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["Where is the work?", "-and then?"])
+
+    def test_starting_a_kiro_chat_over_takes_back_its_agent_file_and_leaves_the_others(self):
+        self.use_kiro()
+        self.chats.send("W1", "hi")
+        self.settle("W1")
+        keep = dfs_inbox.install_kiro_agent(str(self.root), "/x/chat/W2/inbox", dfs_inbox.kiro_agent_for("/x/chat/W2/inbox"))
+        mine = self.root / ".kiro" / "agents" / (dfs_inbox.kiro_agent_for(str(self.chats.box("W1"))) + ".json")
+        self.assertTrue(mine.exists())
+        self.chats.clear("W1")
+        self.assertFalse(mine.exists(), "its agent file goes with the chat")
+        self.assertTrue(os.path.exists(keep), "another chat's stays")
+        exclude = subprocess.run(["git", "-C", str(self.root), "rev-parse", "--git-path", "info/exclude"],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+        text = (self.root / exclude).read_text()
+        self.assertNotIn(mine.name, text)
+        self.assertIn(os.path.basename(keep), text)
+
+    def test_a_kiro_turn_whose_agent_file_cannot_be_written_fails_with_that_reason_and_is_not_run(self):
+        self.use_kiro()
+        (self.root / ".kiro").write_text("a file where the agents directory should go\n")
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"] if m["role"] != "you"][0:1], ["error"])
+        self.assertIn("could not write the kiro inbox agent", "\n".join(m["text"] for m in st["messages"] if m["role"] == "error"))
+        self.assertFalse(self.log.exists(), "kiro was not started with an empty `--agent`")
+
+    def test_the_inbox_is_not_in_the_environment_of_the_agent_a_chat_turn_starts(self):
+        for use in (lambda: None, self.use_kiro):
+            use()
+            self.chats.send("W1", "hi")
+            self.settle("W1")
+            self.assertTrue(self.log.exists(), "the stub ran")
+            self.assertFalse(Path(str(self.log) + ".env").exists(), "the agent's environment held CHAT_INBOX")
+            self.chats.clear("W1")
+            self.log.unlink()
+
+    def test_a_scope_that_would_name_another_scopes_chat_file_is_refused(self):
+        for scope in ("W1.json", "W1.log", "project.json"):
+            self.assertFalse(dfs_chat.SCOPE.fullmatch(scope), scope)
+            with self.assertRaises(ValueError):
+                self.chats.check(scope)
+        self.assertTrue(dfs_chat.SCOPE.fullmatch("W1@fx") and dfs_chat.SCOPE.fullmatch("W1"))
 
     def test_a_failed_kiro_turn_says_why_and_leaves_no_conversation(self):
         self.use_kiro()
@@ -1294,6 +1362,9 @@ class Chat(unittest.TestCase):
         self.assertIn("waiting on a dialog", log)
 
     def test_a_refused_send_and_a_new_chat_are_recorded(self):
+        self.addCleanup(setattr, dfs_chat, "STEERED", dfs_chat.STEERED)
+        dfs_chat.STEERED = ()                                # an agent whose turn reads no inbox: a send during it is refused
+        self.chats.save_sid("W1", "sess_x", "kiro")
         self.chats.busy["W1"] = time.time()
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")
@@ -1304,12 +1375,99 @@ class Chat(unittest.TestCase):
 
     def test_one_turn_at_a_time_and_clear_waits_for_it(self):
         os.environ["CHAT_STUB_SAY"] = "slowly"
+        self.addCleanup(setattr, dfs_chat, "STEERED", dfs_chat.STEERED)
+        dfs_chat.STEERED = ()                                # an agent whose turn reads no inbox: a send during it is refused
+        self.chats.save_sid("W1", "sess_x", "kiro")
         self.chats.busy["W1"] = time.time()                  # a turn in flight
         with self.assertRaises(ValueError):
             self.chats.send("W1", "second")
         with self.assertRaises(ValueError):
             self.chats.clear("W1")
         self.chats.busy.clear()
+
+    def test_a_message_sent_during_a_claude_turn_is_left_in_its_inbox_and_shown_as_waiting(self):
+        self.chats.busy["W1"] = time.time()                  # a turn in flight
+        st = self.chats.send("W1", "steer it")
+        self.assertEqual([(m["text"], m["steer"]) for m in st["messages"] if m["role"] == "you"], [("steer it", "waiting")])
+        self.assertTrue(st["steer"], "the page may send during this turn")
+        self.assertEqual(len(os.listdir(self.chats.box("W1"))), 1)
+        self.assertIn("left in the inbox of the turn answering", self.record("W1"))
+        with self.assertRaises(ValueError):
+            self.chats.clear("W1")
+        self.chats.busy.clear()
+        self.chats.clear("W1")
+        self.assertFalse(self.chats.dir("W1").exists(), "a new chat starts with no steering messages")
+
+    def test_a_codex_or_opencode_turn_is_given_the_chats_inbox_and_takes_a_message_while_it_answers(self):
+        for agent in ("codex", "opencode"):
+            with self.subTest(agent=agent):
+                getattr(self, "use_" + agent)()
+                self.log.write_text("")
+                for f in ("stub.log.hooks", "stub.log.inbox"):
+                    (self.root / f).unlink(missing_ok=True)
+                os.environ["CHAT_STUB_SLEEP"] = "2"
+                self.chats.send("W1", "first")
+                end = time.time() + 10
+                while "started" not in self.log.read_text() and time.time() < end:
+                    time.sleep(0.05)
+                st = self.chats.send("W1", "W141-STEER " + agent)
+                self.assertTrue(st["steer"], "the page may send during this turn")
+                self.assertEqual([m["steer"] for m in st["messages"] if m.get("steer")], ["waiting"])
+                os.environ.pop("CHAT_STUB_SLEEP")
+                self.settle("W1", 60)
+                box = str(self.chats.box("W1"))
+                if agent == "codex":        # the hooks are `-c` flags over this chat's box, ahead of `exec`
+                    hooks = (self.root / "stub.log.hooks").read_text().splitlines()
+                    self.assertTrue(hooks and all("inbox.py post" in h and "inbox.py stop" in h and box in h for h in hooks), hooks)
+                else:                       # the plugin finds the box in DFS_INBOX
+                    self.assertEqual(set((self.root / "stub.log.inbox").read_text().split()), {box})
+                self.chats.clear("W1")
+
+    def test_a_steering_message_the_turn_never_read_is_sent_as_the_next_turn_once(self):
+        os.environ["CHAT_STUB_SLEEP"] = "2"                  # the stub reads no inbox
+        self.chats.send("W1", "first")
+        end = time.time() + 10
+        while not (self.log.exists() and "started" in self.log.read_text()) and time.time() < end:
+            time.sleep(0.05)
+        self.chats.send("W1", "W141-LATE and this")
+        os.environ.pop("CHAT_STUB_SLEEP")
+        st = self.settle("W1", 40)
+        turns = [c for c in self.calls() if c != "started"]
+        self.assertEqual(len(turns), 2, turns)
+        self.assertIn("--resume", turns[1])
+        self.assertIn("W141-LATE and this", turns[1])
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you" and m["text"].startswith("W141-LATE")], ["W141-LATE and this"])
+        self.assertEqual([m.get("steer") for m in st["messages"] if m["role"] == "you"], [None, None], "shown as a sent message, not a waiting steer")
+        self.assertEqual(os.listdir(self.chats.box("W1")), [])
+
+    def test_a_steering_message_a_stopped_turn_never_read_is_dropped(self):
+        os.environ["CHAT_STUB_SLEEP"] = "60"
+        self.chats.send("W1", "first")
+        end = time.time() + 10
+        while not (self.log.exists() and "started" in self.log.read_text()) and time.time() < end:
+            time.sleep(0.05)
+        self.chats.send("W1", "W141-DROP me")
+        self.chats.interrupt("W1")
+        st = self.settle("W1", 40)
+        self.assertEqual(len([c for c in self.calls() if c != "started"]), 1)
+        self.assertNotIn("W141-DROP me", [m["text"] for m in st["messages"] if m["role"] != "error"], "not sent as a message")
+        self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "error" and "W141-DROP me" in m["text"]].__len__(), 1,
+                         "but its text stays in front of the author, in a note")
+        self.assertEqual(os.listdir(self.chats.box("W1")), [])
+        self.assertIn("never read and are dropped", self.record("W1"))
+
+    def test_a_message_left_waiting_by_a_turn_a_restart_cut_off_is_not_handed_to_the_next_turn(self):
+        self.chats.send("W1", "first")
+        self.settle("W1")
+        dfs_runs.post_message(str(self.chats.dir("W1")), "W141-STALE message")     # waiting, with no turn to read it
+        self.chats.send("W1", "second")
+        st = self.settle("W1")
+        turns = self.calls()
+        self.assertEqual(len(turns), 2, turns)
+        self.assertNotIn("W141-STALE", turns[1])
+        self.assertEqual(os.listdir(self.chats.box("W1")), [])
+        self.assertEqual(len([m for m in st["messages"] if m["role"] == "error" and "W141-STALE message" in m["text"]]), 1,
+                         "its text is in a note, not lost")
 
     def test_clear_starts_over(self):
         self.chats.send("W1", "hello")

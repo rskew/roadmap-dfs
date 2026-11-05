@@ -270,7 +270,7 @@ fi
 # kiro-cli and opencode update themselves unless told not to, and a chain's agent is the
 # pinned one.
 AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
-           -u KIRO_SESSION_ID KIRO_NO_AUTO_UPDATE=1
+           -u KIRO_SESSION_ID -u CHAT_INBOX KIRO_NO_AUTO_UPDATE=1
            OPENCODE_DISABLE_AUTOUPDATE=true
            BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-3600000}"
            BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS:-21600000}")
@@ -285,8 +285,12 @@ AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
 # stored the message (the page reads a message stored twice once) but not an answer to be asked for twice.
 # A store that could not be read (`unreadable`) on either side shows nothing, so the turn is run again.
 opencode_turn() {
-  local prompt tries=0 out err sid="" answers="" now a
+  local prompt tries=0 out err sid="" answers="" now a inbox_env=()
   prompt="$(cat; echo x)"; prompt="${prompt%x}"
+  # A chat turn of the page (CHAT_INBOX) reads the author's steering messages through the plugin, as a
+  # chain session does (inbox.py, opencode_inbox/). DFS_INBOX is in opencode's own environment because the
+  # plugin lives in its process; `--standalone` below is what lets this turn's plugin and box be seen.
+  [ -z "${CHAT_INBOX:-}" ] || inbox_env=(DFS_INBOX="$CHAT_INBOX" OPENCODE_CONFIG_CONTENT="$(python3 "$HERE/inbox.py" --opencode-config)")
   for a in "$@"; do [ "$sid" = "?" ] && sid="$a"; [ "$a" = --session ] && sid="?"; done
   [ "$sid" = "?" ] && sid=""
   [ -z "$sid" ] || answers="$(python3 "$HERE/chat.py" --opencode-answers "$sid")"
@@ -296,7 +300,7 @@ opencode_turn() {
   trap 'rm -f "$out" "$err"' EXIT
   trap 'exit 143' TERM INT HUP
   while :; do
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" 2> "$err" || true
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${inbox_env[@]}" "${AGENT_ARGV[@]}" run --standalone --format json "$@" > "$out" 2> "$err" || true
     tries=$((tries + 1))
     if [ "$tries" -ge 5 ] || grep -q '"type":"step_start"' "$out"; then break; fi
     if ! grep -q '"type":"error".*Transport:' "$out" && { [ -s "$out" ] || ! grep -q 'exited before reporting readiness' "$err"; }; then break; fi
@@ -441,7 +445,13 @@ if [ "$MODE" = chatturn ]; then
     # its length is not an argv's. codex prints a stream of events, read down to the one JSON
     # line chat.py wants; the pipeline's status is the reader's, which fails when the turn did.
     resume_word=(); [ -n "${CHAT_SID:-}" ] && [ -n "${CHAT_RESUME:-}" ] && resume_word=(resume)
-    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" exec "${resume_word[@]}" --json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" - \
+    # The author's steering messages reach the turn through the two hooks a chain session has, over
+    # CHAT_INBOX. ⚠ BEFORE `exec`: a `-c` after it replaces every `-c` the launch command gave before it.
+    inbox_args=(); inbox_arg=""
+    if [ -n "${CHAT_INBOX:-}" ]; then
+      while IFS= read -r inbox_arg; do inbox_args+=("$inbox_arg"); done < <(python3 "$HERE/inbox.py" --codex-args "$CHAT_INBOX")
+    fi
+    printf '%s' "$prompt" | "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${inbox_args[@]}" exec "${resume_word[@]}" --json "${PERMISSION_ARGV[@]}" "${session_flag[@]}" - \
       | python3 "$HERE/chat.py" --codex-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
   fi
@@ -456,13 +466,33 @@ if [ "$MODE" = chatturn ]; then
     # stderr goes into the stream: kiro says a failed login or a limit there, and the reader
     # takes what is not JSON as the error. `--` keeps a message that starts with a dash from
     # being read as a flag.
-    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json --no-interactive "${PERMISSION_ARGV[@]}" \
+    # The author's steering messages reach it through its own agent over CHAT_INBOX (inbox.py): a hook is
+    # found only in an agent file in the working directory, and one file names one box, so the agent is
+    # named by the box and a work session or another chat there keeps its own.
+    # If the agent file cannot be written (a read-only work root) the turn fails with that reason: an
+    # empty name would be passed to kiro as `--agent ""`.
+    kiro_agent=()
+    if [ -n "${CHAT_INBOX:-}" ]; then
+      if ! kiro_name="$(python3 "$HERE/inbox.py" --kiro-chat-agent "$PWD" "$CHAT_INBOX" 2>&1)" || [ -z "$kiro_name" ]; then
+        printf '%s\n' "could not write the kiro inbox agent in $PWD: $(printf '%s' "${kiro_name:-no reason given}" | tail -n 1)" \
+          | python3 "$HERE/chat.py" --kiro-result "${CHAT_SID:-}"
+        exit 1
+      fi
+      kiro_agent=(--agent "$kiro_name")
+    fi
+    "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json "${kiro_agent[@]}" --no-interactive "${PERMISSION_ARGV[@]}" \
       "${session_flag[@]}" -- "$prompt" 2>&1 < /dev/null \
       | python3 "$HERE/chat.py" --kiro-result "${CHAT_SID:-}"
     exit "${PIPESTATUS[1]}"
   fi
+  # A message the author sends while the turn answers lands in CHAT_INBOX (chat.py), and these two hooks
+  # hand it over at the next tool call, or as one more turn when the session would stop (inbox.py). The
+  # box is in the hook's command, and AGENT_ENV takes CHAT_INBOX out of the agent's environment: what the
+  # agent runs would inherit it. (opencode's plugin lives in its process, so its DFS_INBOX is the exception.)
+  inbox_flag=()
+  [ -z "${CHAT_INBOX:-}" ] || inbox_flag=(--settings "$(python3 "$HERE/inbox.py" --settings "$CHAT_INBOX")")
   exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json "${session_flag[@]}" \
-    "${PERMISSION_ARGV[@]}" < /dev/null
+    "${inbox_flag[@]}" "${PERMISSION_ARGV[@]}" < /dev/null
 fi
 
 # The caller may name the directory. tui.py does, because it starts a chain in the
