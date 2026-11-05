@@ -1442,6 +1442,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(sends, [], "Enter does not send while a turn runs");
     same(await page.inputValue("#chat-input"), "the next thing", "and the draft stays");
     assert(!(await page.$("#toast.err")), "and says nothing of an error");
+    assert(/Waiting for the answer/.test(await page.textContent("#toast")), "but says why nothing was sent");
     state.busy = false;
     await page.waitForFunction(() => !document.querySelector("#chat-send").disabled, null, { timeout: 15000 });
     await page.press("#chat-input", "Enter");

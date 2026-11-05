@@ -1754,6 +1754,8 @@ function chatOpen(scope) {
   CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false);
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
   $("#chat-log").innerHTML = ""; $("#chat-input").value = chatDraft(scope); $("#chat-agent").hidden = true;
+  // The last chat's buttons are not this one's: Send waits for the first draw, which says whether a turn is running.
+  $("#chat-stop").hidden = true; $("#chat-send").hidden = false; $("#chat-send").disabled = true;
   $("#chat").showModal(); chatGrow(); $("#chat-input").focus();
   chatBegin(scope);
 }
@@ -1761,9 +1763,14 @@ $("#chat-form").addEventListener("submit", async ev => {
   ev.preventDefault();
   const input = $("#chat-input"), message = input.value.trim();
   // Send is disabled while a turn runs (or another terminal has the chat); requestSubmit, which Enter uses, ignores that, so the guard is here too.
-  if (!message || !CHAT.scope || $("#chat-send").disabled) return;
+  if (!message || !CHAT.scope) return;
+  if ($("#chat-send").disabled) { toast("Waiting for the answer. Send again once it has arrived."); return; }
   $("#chat-send").disabled = true; CHAT.follow = true;
-  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatGrow(); chatDraft(CHAT.scope, ""); chatLoad(); }
+  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message }));
+    // what was typed while the request was in flight stays; only the sent text is cleared
+    if (input.value.trim() === message) { input.value = ""; chatGrow(); chatDraft(CHAT.scope, ""); }
+    chatLoad();
+  }
   catch (e) {
     // no answer is not "not sent": the server may have taken the message. The page does not send it again; the chat is
     // read, and the message stays in the box until the reader sees it among the sent ones.
@@ -1783,8 +1790,12 @@ $("#chat-stop").addEventListener("click", async () => {
 $("#chat-input").addEventListener("input", ev => { chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
 // The text box grows with what is typed, up to its CSS max-height (then it scrolls), and shrinks back when cleared.
 function chatGrow() {
-  const el = $("#chat-input"); el.style.height = "auto";
+  const el = $("#chat-input"), log = $("#chat-log");
+  const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 4;   // a reader at the end stays there as the box takes the log's room
+  el.style.height = "auto";
   el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + "px";
+  if (atEnd) log.scrollTop = log.scrollHeight;
+  chatNewest();
 }
 // A width change (rotation, a resized window) rewraps the draft, so the height is measured again.
 addEventListener("resize", () => { if ($("#chat").open) chatGrow(); });
