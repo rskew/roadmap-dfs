@@ -2105,7 +2105,7 @@ const KEYS = [
   { id: "find", keys: ["/"], show: "/", does: "Search the tasks, or the nodes of a task", on: "both" },
   { id: "flag", keys: ["n"], show: "n", does: "Go to the next node that wants you", on: "task" },
   { id: "flagged", keys: ["f"], show: "f", does: "Show only the nodes that want you, or all", on: "task" },
-  { id: "correct", keys: ["c"], show: "c", does: "Confirm or refute the open node", on: "task" },
+  { id: "correct", keys: ["c"], show: "c", does: "Confirm or refute the open node (not while it has an open raise)", on: "task" },
   { id: "help", keys: ["?"], show: "?", does: "This list", on: "both" },
 ];
 const is = (id, e) => KEYS.find(k => k.id === id).keys.includes(e.key);

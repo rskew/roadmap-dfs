@@ -745,7 +745,7 @@ KEYS = [
     ("tree", "n  N", ord("n"), "next-flag", "next, previous raise or ⚑ in the tree"),
     ("tree", "^d  ^u", 4, "card-scroll", "scroll the node panel at the right"),
     ("tree", "i", ord("i"), "add", "add a node under the one at the cursor (none: under the task)"),
-    ("tree", "f", ord("f"), "correct", "correct this node: it was really confirmed or refuted"),
+    ("tree", "f", ord("f"), "correct", "correct this node: it was really confirmed or refuted (not while it has an open raise)"),
     ("tree", "A", ord("A"), "accept", "accept a finished tree (asks first)"),
     ("tree", "D", ord("D"), "delete-node", "delete the node under the cursor and all below it; the log keeps their text (asks first)"),
     ("tree", "tab", 9, "list", "back to the item list"),

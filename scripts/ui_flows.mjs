@@ -650,6 +650,7 @@ const FLOWS = {
   async no_correct_on_raise(b) {
     const { page, errors } = await open(b, PHONE);
     await task(page, "W9");
+    const id = await page.getAttribute(".row.hasraise .main", "data-id");
     await page.click(".row.hasraise .main");
     await page.waitForSelector("#sheet.open");
     assert(await page.locator("#sheet [data-act=answer]").count() === 1, "the raise is answered from the card");
@@ -669,6 +670,18 @@ const FLOWS = {
     };
     assert(await menu(".row.hasraise") === 0, "its menu offers no Refute/confirm either");
     assert(await menu(".row:not(.hasraise)") === 1, "a node without a raise keeps Refute/confirm");
+    // Answering the raise gives Refute/confirm back (last: it removes the raise the checks above need).
+    await page.click(".row.hasraise .main");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=answer]"); await dialog(page);
+    await page.fill("dialog textarea", "Spinning disks. Test on one.");
+    await page.click("dialog button[value=ok]");
+    await page.waitForFunction(() => !document.querySelector(".row.hasraise"));
+    if (!(await page.$("#sheet.open"))) {
+      await page.click(".row .main[data-act=node][data-id=" + JSON.stringify(id) + "]");
+      await page.waitForSelector("#sheet.open");
+    }
+    assert(await page.locator("#sheet [data-act=correct]").count() === 1, "once the raise is answered the card offers Refute/confirm again");
     same(desk.errors, [], "no page errors on desktop");
     same(errors, [], "no page errors");
   },
