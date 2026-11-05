@@ -1499,7 +1499,7 @@ function drawSheet() {
   $("#sheet").innerHTML = `<div class="sheet-body"><div class="cap where">${i + 1} of ${rows.length}</div><h3>${esc(r.id)}  ${inline(r.title)}</h3>
       ${metaHtml}${r.raises.map(x => raiseCard(x, "")).join("")}${restHtml}</div>
     ${t.archived ? "" : `<div class="sheet-actions">
-      <button class="btn" data-act="correct" data-id="${esc(r.id)}">Refute/confirm</button>
+      ${r.raises.length ? "" : `<button class="btn" data-act="correct" data-id="${esc(r.id)}">Refute/confirm</button>`}
       ${r.editable ? `<button class="btn" data-act="editnode" data-id="${esc(r.id)}">Edit</button>` : ""}
       <button class="btn" data-act="add" data-parent="${esc(r.id)}">Add under</button>
       <button class="btn" data-act="deletenode" data-id="${esc(r.id)}">Delete</button></div>`}
@@ -2172,7 +2172,7 @@ addEventListener("keydown", e => {
     if (is("fold", e) ? !folded : folded) { folded ? s.delete(cur.id) : s.add(cur.id); S.focusId = cur.id; S.sig = ""; render(true); }
   }
   else if (is("open", e) && !S.node && e.target === document.body) { const first = visibleRows(S.task).find(x => x.kind === "node"); if (first) go(`t/${S.task.id}/${first.id}`); }
-  else if (is("correct", e) && open) correctForm(open.id);
+  else if (is("correct", e) && open && !open.raises.length) correctForm(open.id);
   else if (is("flagged", e)) { S.flagged = !S.flagged; S.sig = ""; render(true); }
 });
 /* Right-click on a node: its actions at the pointer, the same ones the sheet has. Any click, Escape or scroll closes it. */
@@ -2185,7 +2185,7 @@ document.addEventListener("contextmenu", e => {
   const id = main.dataset.id, r = S.task.rows.find(x => x.id === id), m = $("#ctx");
   const open = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>`;
   m.innerHTML = S.task.archived ? open : `${open}
-    <button role="menuitem" data-act="correct" data-id="${esc(id)}">Refute/confirm</button>
+    ${r && r.raises.length ? "" : `<button role="menuitem" data-act="correct" data-id="${esc(id)}">Refute/confirm</button>`}
     ${r && r.editable ? `<button role="menuitem" data-act="editnode" data-id="${esc(id)}">Edit</button>` : ""}
     <button role="menuitem" data-act="add" data-parent="${esc(id)}">Add under</button>
     <button role="menuitem" data-act="deletenode" data-id="${esc(id)}">Delete</button>`;
