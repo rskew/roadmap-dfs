@@ -80,6 +80,7 @@ import html
 import subprocess
 import json
 import glob
+import gzip
 import os
 import queue
 import re
@@ -1153,6 +1154,12 @@ def watch(stop, interval=1.0):
 
 # ── the server ────────────────────────────────────────────────────────────────
 
+def gzippable(ctype, data):
+    """Text worth compressing: a page, a stylesheet, a script, a svg or JSON, and big enough that the
+    header and the work pay for themselves. Pictures are already compressed."""
+    return len(data) >= 1024 and (ctype.startswith("text/") or ctype.endswith(("json", "javascript", "svg+xml")))
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "roadmap-web"
     KEEPALIVE = 15
@@ -1164,6 +1171,10 @@ class Handler(BaseHTTPRequestHandler):
         data = body if isinstance(body, bytes) else body.encode()
         self.send_response(status)
         self.send_header("Content-Type", ctype + ("; charset=utf-8" if "text" in ctype or "json" in ctype else ""))
+        if gzippable(ctype, data) and "gzip" in self.headers.get("Accept-Encoding", ""):
+            data = gzip.compress(data, 1)      # level 1: about 3 ms for the largest task, a quarter of the bytes
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(data)))
         if not any(k == "Cache-Control" for k, _ in extra):
             self.send_header("Cache-Control", "no-store")

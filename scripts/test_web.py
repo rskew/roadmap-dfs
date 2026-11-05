@@ -101,6 +101,23 @@ class Web(unittest.TestCase):
         except ValueError:
             return r.status, raw, r
 
+    def test_big_text_is_gzipped_for_a_client_that_accepts_it_and_nothing_else_is(self):
+        import gzip
+        status, plain, r = self.call("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIsNone(r.getheader("Content-Encoding"))              # not asked for: sent as it was
+        self.assertEqual(r.getheader("Vary"), "Accept-Encoding")
+        status, packed, r = self.call("GET", "/", headers={"Accept-Encoding": "gzip, br"})
+        self.assertEqual(r.getheader("Content-Encoding"), "gzip")
+        self.assertEqual(int(r.getheader("Content-Length")), len(packed))
+        self.assertLess(len(packed), len(plain) // 2)
+        self.assertEqual(gzip.decompress(packed), plain)                # the same page, byte for byte
+        status, _, r = self.call("GET", "/icon-192.png", headers={"Accept-Encoding": "gzip"})
+        self.assertIsNone(r.getheader("Content-Encoding"))              # a picture is already compressed
+        status, small, r = self.call("GET", "/api/archived", headers={"Accept-Encoding": "gzip"})
+        self.assertIsNone(r.getheader("Content-Encoding"))              # too small to be worth it
+        self.assertEqual(small["items"], [])
+
     def test_it_listens_on_this_machine_only_unless_told_otherwise(self):
         old = os.environ.pop("DFS_WEB_HOST", None)
         try:
