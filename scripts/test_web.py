@@ -785,7 +785,7 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const md = s => esc(s), SCROLL = { at: {} }, PROJECT = "p", toasts = [];
-const toast = (m, bad) => toasts.push(m);
+const toast = (m, bad) => toasts.push(m), chatGrow = () => {};   // chatGrow sizes the box to its text: no layout here
 let reply = null; const sent = [];
 const api = async (p, b) => { if (b) sent.push(p); await new Promise(r => setTimeout(r, 5)); return JSON.parse(JSON.stringify(reply)); };
 """ + body + """
