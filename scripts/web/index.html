@@ -191,6 +191,19 @@ pre.runlog .r-err { color: var(--attention); }
 .item.reorder { grid-template-columns: 3.2rem minmax(0, 1fr) var(--hit); }
 .moves { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 .moves .btn { min-width: var(--hit); padding: 0 var(--s3); }
+/* A short row: the goal and the tags take one line each, the reason line is left to the task's own screen, and the
+   padding is halved. Every move and the grip stay --hit high. From 600px the moves sit in the row, beside the text. */
+.item.reorder { padding-block: var(--s2); align-items: center; }
+.item.reorder .goal { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item.reorder .meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; margin-top: 2px; }
+.item.reorder .meta .tag { max-width: none; white-space: nowrap; }
+.item.reorder .why { display: none; }
+.item.reorder .moves { margin-top: var(--s1); }
+@media (min-width: 600px) {
+  .item.reorder { grid-template-columns: 3.2rem minmax(0, 1fr) auto var(--hit); }
+  .item.reorder .moves { grid-column: 3; grid-row: 1; margin-top: 0; flex-wrap: nowrap; }
+  .item.reorder .grip { grid-column: 4; grid-row: 1; }
+}
 /* the grip at the row's right edge: drag it to a new place among the siblings */
 .grip { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-self: end; width: var(--hit); min-height: var(--hit); display: flex; align-items: center; justify-content: center; color: var(--muted); cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .grip svg { width: calc(18px * var(--z)); height: calc(18px * var(--z)); fill: currentColor; pointer-events: none; }

@@ -1,0 +1,209 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W140: what "Reorder tasks is too big in y" means, and the compact row</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .cap { color: #444; font-size: 14px; margin: 6px 0 0; }
+  .screen { border: 1.5px solid #333; background: #f5f4ef; width: 100%; max-width: 360px; box-sizing: border-box; }
+  .screen.wide { max-width: 100%; }
+  .scroll { overflow-x: auto; }
+  .tr { display: grid; align-items: center; gap: 0 8px; border-bottom: 1px solid #bbb; box-sizing: border-box; font-size: 14px; }
+  .iid { font-weight: 600; }
+  .goal { font-weight: 500; }
+  .st { font-size: 12px; letter-spacing: .1em; color: #555; }
+  .moves { display: flex; gap: 4px; }
+  .b { min-width: 44px; min-height: 44px; border: 1.5px solid #333; display: inline-flex; align-items: center; justify-content: center; background: #fff; box-sizing: border-box; font-size: 14px; }
+  .grip { width: 44px; min-height: 44px; display: flex; align-items: center; justify-content: center; color: #555; }
+  /* now: padding 12px, goal wraps, tags wrap, the moves sit under the text */
+  .now .tr { grid-template-columns: 52px 1fr 44px; padding: 12px 0; }
+  .now .moves { grid-column: 2; margin-top: 8px; }
+  .now .grip { grid-column: 3; grid-row: 1 / span 3; }
+  .now .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 8px; }
+  .now .why { grid-column: 2; margin-top: 4px; color: #555; }
+  .now .goal { overflow-wrap: anywhere; }
+  /* compact, phone: one-line goal, one-line tags, no reason line, moves under */
+  .new .tr { grid-template-columns: 52px 1fr 44px; padding: 4px 0; }
+  .new .goal { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .new .tags { white-space: nowrap; overflow: hidden; }
+  .new .moves { grid-column: 2; margin-top: 2px; }
+  .new .grip { grid-column: 3; grid-row: 1 / span 2; }
+  .new .why { display: none; }
+  /* compact, wide: one row: id, text, moves, grip */
+  .new.wide .tr { grid-template-columns: 52px 1fr auto 44px; }
+  .new.wide .moves { grid-column: 3; grid-row: 1; margin: 0; }
+  .new.wide .grip { grid-column: 4; grid-row: 1; }
+  .gl { display: inline-block; width: 18px; height: 18px; background: radial-gradient(#555 1.7px, transparent 2px) 0 0 / 6px 6px; }
+</style>
+
+<h1>Reorder rows are tall</h1>
+<p>In Reorder mode each task row holds its id, a goal that wraps, a line of status tags, a reason line, a strip of four 44px
+  move buttons under all that, and 12px of padding above and below. A row is often 150 to 250px high, so a screen shows three or four.</p>
+<p>My reading: the web page's Reorder list is what is too tall. The fix keeps every tap target at 44px and removes the rest:
+  a one-line goal, one line of tags, no reason line, less padding, and on a wide screen the moves beside the text.</p>
+
+<div class="tabs" role="group" aria-label="Which layout">
+  <button type="button" id="b-now" aria-pressed="true">Now</button>
+  <button type="button" id="b-new" aria-pressed="false">Compact</button>
+  <button type="button" id="b-w" aria-pressed="false">Wide screen</button>
+</div>
+
+<div class="scroll">
+<div class="screen now" id="screen" data-node="rows">
+  <div class="tr"><span class="iid">W31</span><span><span class="goal">Stop the cache stampedes when many workers ask for the same key at once</span>
+    <span class="tags"><span class="st">BLOCKED</span><span class="st">held by W30</span></span></span><span class="grip"><i class="gl"></i></span>
+    <span class="why">Waiting on the author about the key format.</span>
+    <span class="moves"><span class="b">←</span><span class="b">→</span><span class="b">Break</span><span class="b">Stop</span></span></div>
+  <div class="tr"><span class="iid">W32</span><span><span class="goal">Add a retry</span>
+    <span class="tags"><span class="st">OPEN</span></span></span><span class="grip"><i class="gl"></i></span>
+    <span class="why"></span>
+    <span class="moves"><span class="b">←</span><span class="b">→</span><span class="b">Break</span><span class="b">Stop</span></span></div>
+</div>
+</div>
+<p class="cap" id="cap">Now: the goal and the tags wrap, and the moves are a third line.</p>
+
+<h2>What follows</h2>
+<ul>
+  <li>Every move button and the grip stay 44px, so nothing gets harder to tap.</li>
+  <li>The reason line is not shown in Reorder. It is still on the task's own screen.</li>
+  <li>Tags stay on one line and are clipped if there are many. A goal cut short ends in an ellipsis.</li>
+</ul>
+<p><b>Wrong if</b> "Reorder tasks" means something else: the TUI's reorder, or the order of the Reorder tab in the bar.</p>
+
+<script>
+  var cap = {
+    now: 'Now: the goal and the tags wrap, and the moves are a third line.',
+    new: 'Compact, phone: goal and tags on one line each, moves under them, little padding.',
+    w: 'Compact, wide: id, text, moves and grip on one 52px row.'
+  };
+  function show(k) {
+    var s = document.getElementById('screen');
+    s.className = 'screen ' + (k === 'now' ? 'now' : k === 'new' ? 'new' : 'new wide');
+    ['now', 'new', 'w'].forEach(function (n) { document.getElementById('b-' + n).setAttribute('aria-pressed', String(n === k)); });
+    document.getElementById('cap').textContent = cap[k];
+  }
+  ['now', 'new', 'w'].forEach(function (n) { document.getElementById('b-' + n).addEventListener('click', function () { show(n); }); });
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
