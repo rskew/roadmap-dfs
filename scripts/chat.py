@@ -660,6 +660,7 @@ class Chats:
             self.expect(scope, message, agent, sid)
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
+            self.unread(scope, True, "", sid, agent)    # no turn runs, so a message still waiting is left by one a restart cut off
             self.busy[scope] = time.time()
         threading.Thread(target=self.turn, args=(scope, message, sid, False, agent), daemon=True).start()
         self.on_change()
@@ -936,6 +937,7 @@ class Chats:
             self.pending.pop(scope, None)
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
+            dfs_inbox.remove_kiro_agent(str(dfs_paths.work_root()), dfs_inbox.kiro_agent_for(self.box(scope)))   # kiro's agent over its box
             shutil.rmtree(self.dir(scope), ignore_errors=True)      # its steering messages go with it
         self.on_change()
         return self.state(scope)

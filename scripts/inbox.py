@@ -208,6 +208,26 @@ def install_kiro_agent(directory, box=None, name=KIRO_AGENT):
     return path
 
 
+def remove_kiro_agent(directory, name):
+    """Take back what `install_kiro_agent` wrote for `name`: its agent file and its line in `info/exclude`."""
+    try:
+        os.remove(os.path.join(directory, ".kiro", "agents", name + ".json"))
+    except OSError:
+        pass
+    try:
+        exclude = subprocess.run(["git", "-C", directory, "rev-parse", "--git-path", "info/exclude"],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+        exclude = os.path.join(directory, exclude)
+        with open(exclude) as fh:
+            lines = fh.read().splitlines()
+        line = "/.kiro/agents/%s.json" % name
+        if line in lines:
+            with open(exclude, "w") as fh:
+                fh.write("".join(l + "\n" for l in lines if l != line))
+    except (OSError, subprocess.CalledProcessError):
+        pass
+
+
 def settings(box=None):
     """The claude `--settings` JSON naming this file as both hooks."""
     hook = lambda ev: [{"hooks": [{"type": "command", "command": command(ev, box)}]}]

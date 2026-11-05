@@ -22,6 +22,7 @@ sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import chat as dfs_chat     # noqa: E402
 import inbox as dfs_inbox     # noqa: E402
+import runs as dfs_runs     # noqa: E402
 
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
@@ -260,8 +261,19 @@ class Chat(unittest.TestCase):
             time.sleep(0.05)
         self.fail("a relay's exit was not in the chat log in %ds: %s" % (timeout, text))
 
+    def end_turns(self, timeout=30):
+        """Stop every headless turn the test left running and wait until it has logged its end. A turn's thread
+        logs from `chatlog` after the agent is gone, so one still running when tearDown puts DFS_RUN_DIR and the
+        work root back would write its line into `<cwd>/.dfs/runs/chat/` (the repo's `scripts/`)."""
+        for scope in list(self.chats.busy):
+            self.chats.interrupt(scope)
+        end = time.time() + timeout
+        while self.chats.busy and time.time() < end:
+            time.sleep(0.05)
+
     def tearDown(self):
         try:
+            self.end_turns()
             self.end_hosts()
         finally:
             for k, v in self._env.items():
@@ -834,6 +846,22 @@ class Chat(unittest.TestCase):
         self.assertEqual(second_prompt, "prompt: -and then?", "`--` keeps a message that starts with a dash from being a flag")
         self.assertEqual([m["text"] for m in st["messages"] if m["role"] == "you"], ["Where is the work?", "-and then?"])
 
+    def test_starting_a_kiro_chat_over_takes_back_its_agent_file_and_leaves_the_others(self):
+        self.use_kiro()
+        self.chats.send("W1", "hi")
+        self.settle("W1")
+        keep = dfs_inbox.install_kiro_agent(str(self.root), "/x/chat/W2/inbox", dfs_inbox.kiro_agent_for("/x/chat/W2/inbox"))
+        mine = self.root / ".kiro" / "agents" / (dfs_inbox.kiro_agent_for(str(self.chats.box("W1"))) + ".json")
+        self.assertTrue(mine.exists())
+        self.chats.clear("W1")
+        self.assertFalse(mine.exists(), "its agent file goes with the chat")
+        self.assertTrue(os.path.exists(keep), "another chat's stays")
+        exclude = subprocess.run(["git", "-C", str(self.root), "rev-parse", "--git-path", "info/exclude"],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+        text = (self.root / exclude).read_text()
+        self.assertNotIn(mine.name, text)
+        self.assertIn(os.path.basename(keep), text)
+
     def test_a_failed_kiro_turn_says_why_and_leaves_no_conversation(self):
         self.use_kiro()
         os.environ["CHAT_STUB_FAIL"] = "1"
@@ -1395,6 +1423,19 @@ class Chat(unittest.TestCase):
                          "but its text stays in front of the author, in a note")
         self.assertEqual(os.listdir(self.chats.box("W1")), [])
         self.assertIn("never read and are dropped", self.record("W1"))
+
+    def test_a_message_left_waiting_by_a_turn_a_restart_cut_off_is_not_handed_to_the_next_turn(self):
+        self.chats.send("W1", "first")
+        self.settle("W1")
+        dfs_runs.post_message(str(self.chats.dir("W1")), "W141-STALE message")     # waiting, with no turn to read it
+        self.chats.send("W1", "second")
+        st = self.settle("W1")
+        turns = self.calls()
+        self.assertEqual(len(turns), 2, turns)
+        self.assertNotIn("W141-STALE", turns[1])
+        self.assertEqual(os.listdir(self.chats.box("W1")), [])
+        self.assertEqual(len([m for m in st["messages"] if m["role"] == "error" and "W141-STALE message" in m["text"]]), 1,
+                         "its text is in a note, not lost")
 
     def test_clear_starts_over(self):
         self.chats.send("W1", "hello")
