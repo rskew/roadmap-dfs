@@ -89,7 +89,9 @@ def run_turn(argv, message, cwd, env, on_start=None):
     return subprocess.CompletedProcess(argv, p.returncode, out, err)
 
 
-SCOPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@-]*$")
+# A scope ending `.json` or `.log` is refused: `chat/<scope>.json` and `.log` sit beside the steering directory
+# `chat/<scope>`, so scope `a.json` would name the file of scope `a`.
+SCOPE = re.compile(r"^(?!.*\.(?:json|log)$)[A-Za-z0-9][A-Za-z0-9._@-]*$")
 MAX_MESSAGE = 4000
 ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is closed does not undo the end
                     # (so a message answered within this long of the end leaves the chat ended too)

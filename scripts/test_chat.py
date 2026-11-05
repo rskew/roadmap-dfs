@@ -27,6 +27,7 @@ import runs as dfs_runs     # noqa: E402
 STUB = r"""#!/usr/bin/env bash
 # a claude that records its arguments, keeps a transcript as claude does, and answers in -p JSON
 echo "$@" >> "$CHAT_STUB_LOG"
+[ -z "${CHAT_INBOX+x}" ] || echo "CHAT_INBOX=$CHAT_INBOX" >> "$CHAT_STUB_LOG.env"
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo "boom: not logged in" >&2; exit 1; }
 sid=""; prev=""; prompt=""
@@ -142,6 +143,7 @@ KIRO_STUB = r"""#!/usr/bin/env bash
 # test_kiro's stream is a stand-in too). Without `--output-format` it is the
 # interactive chat.
 echo "$@" >> "$CHAT_STUB_LOG"
+[ -z "${CHAT_INBOX+x}" ] || echo "CHAT_INBOX=$CHAT_INBOX" >> "$CHAT_STUB_LOG.env"
 case "$*" in *--output-format*) ;; *) exit 0 ;; esac
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 if [ -n "${CHAT_STUB_FAIL:-}" ]; then
@@ -270,6 +272,8 @@ class Chat(unittest.TestCase):
         end = time.time() + timeout
         while self.chats.busy and time.time() < end:
             time.sleep(0.05)
+        if self.chats.busy:
+            self.fail("a turn was still running %ds after it was stopped: %s" % (timeout, sorted(self.chats.busy)))
 
     def tearDown(self):
         try:
@@ -379,6 +383,8 @@ class Chat(unittest.TestCase):
         self.chats.procs["W1"] = Done()
         self.chats.interrupt("W1")
         self.assertNotIn("W1", self.chats.stopped, "an answer already given is not stopped")
+        self.chats.busy.pop("W1")       # a turn made up by hand has no thread to end it
+        self.chats.procs.pop("W1")
 
     def test_stop_with_nothing_answering_changes_nothing(self):
         st = self.chats.interrupt("W1")
@@ -861,6 +867,32 @@ class Chat(unittest.TestCase):
         text = (self.root / exclude).read_text()
         self.assertNotIn(mine.name, text)
         self.assertIn(os.path.basename(keep), text)
+
+    def test_a_kiro_turn_whose_agent_file_cannot_be_written_fails_with_that_reason_and_is_not_run(self):
+        self.use_kiro()
+        (self.root / ".kiro").write_text("a file where the agents directory should go\n")
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
+        self.assertEqual([m["role"] for m in st["messages"] if m["role"] != "you"][0:1], ["error"])
+        self.assertIn("could not write the kiro inbox agent", "\n".join(m["text"] for m in st["messages"] if m["role"] == "error"))
+        self.assertFalse(self.log.exists(), "kiro was not started with an empty `--agent`")
+
+    def test_the_inbox_is_not_in_the_environment_of_the_agent_a_chat_turn_starts(self):
+        for use in (lambda: None, self.use_kiro):
+            use()
+            self.chats.send("W1", "hi")
+            self.settle("W1")
+            self.assertTrue(self.log.exists(), "the stub ran")
+            self.assertFalse(Path(str(self.log) + ".env").exists(), "the agent's environment held CHAT_INBOX")
+            self.chats.clear("W1")
+            self.log.unlink()
+
+    def test_a_scope_that_would_name_another_scopes_chat_file_is_refused(self):
+        for scope in ("W1.json", "W1.log", "project.json"):
+            self.assertFalse(dfs_chat.SCOPE.fullmatch(scope), scope)
+            with self.assertRaises(ValueError):
+                self.chats.check(scope)
+        self.assertTrue(dfs_chat.SCOPE.fullmatch("W1@fx") and dfs_chat.SCOPE.fullmatch("W1"))
 
     def test_a_failed_kiro_turn_says_why_and_leaves_no_conversation(self):
         self.use_kiro()

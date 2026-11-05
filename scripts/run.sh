@@ -270,7 +270,7 @@ fi
 # kiro-cli and opencode update themselves unless told not to, and a chain's agent is the
 # pinned one.
 AGENT_ENV=(env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID
-           -u KIRO_SESSION_ID KIRO_NO_AUTO_UPDATE=1
+           -u KIRO_SESSION_ID -u CHAT_INBOX KIRO_NO_AUTO_UPDATE=1
            OPENCODE_DISABLE_AUTOUPDATE=true
            BASH_DEFAULT_TIMEOUT_MS="${BASH_DEFAULT_TIMEOUT_MS:-3600000}"
            BASH_MAX_TIMEOUT_MS="${BASH_MAX_TIMEOUT_MS:-21600000}")
@@ -469,8 +469,17 @@ if [ "$MODE" = chatturn ]; then
     # The author's steering messages reach it through its own agent over CHAT_INBOX (inbox.py): a hook is
     # found only in an agent file in the working directory, and one file names one box, so the agent is
     # named by the box and a work session or another chat there keeps its own.
+    # If the agent file cannot be written (a read-only work root) the turn fails with that reason: an
+    # empty name would be passed to kiro as `--agent ""`.
     kiro_agent=()
-    [ -z "${CHAT_INBOX:-}" ] || kiro_agent=(--agent "$(python3 "$HERE/inbox.py" --kiro-chat-agent "$PWD" "$CHAT_INBOX")")
+    if [ -n "${CHAT_INBOX:-}" ]; then
+      if ! kiro_name="$(python3 "$HERE/inbox.py" --kiro-chat-agent "$PWD" "$CHAT_INBOX" 2>&1)" || [ -z "$kiro_name" ]; then
+        printf '%s\n' "could not write the kiro inbox agent in $PWD: $(printf '%s' "${kiro_name:-no reason given}" | tail -n 1)" \
+          | python3 "$HERE/chat.py" --kiro-result "${CHAT_SID:-}"
+        exit 1
+      fi
+      kiro_agent=(--agent "$kiro_name")
+    fi
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" "${AGENT_SUB[@]}" --output-format stream-json "${kiro_agent[@]}" --no-interactive "${PERMISSION_ARGV[@]}" \
       "${session_flag[@]}" -- "$prompt" 2>&1 < /dev/null \
       | python3 "$HERE/chat.py" --kiro-result "${CHAT_SID:-}"
@@ -478,7 +487,8 @@ if [ "$MODE" = chatturn ]; then
   fi
   # A message the author sends while the turn answers lands in CHAT_INBOX (chat.py), and these two hooks
   # hand it over at the next tool call, or as one more turn when the session would stop (inbox.py). The
-  # box is in the hook's command, not in the agent's environment: what the agent runs would inherit it.
+  # box is in the hook's command, and AGENT_ENV takes CHAT_INBOX out of the agent's environment: what the
+  # agent runs would inherit it. (opencode's plugin lives in its process, so its DFS_INBOX is the exception.)
   inbox_flag=()
   [ -z "${CHAT_INBOX:-}" ] || inbox_flag=(--settings "$(python3 "$HERE/inbox.py" --settings "$CHAT_INBOX")")
   exec "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json "${session_flag[@]}" \
