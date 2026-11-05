@@ -404,7 +404,7 @@ it). Each names the file it changes and the replay that tests it.
 |---|---|---|---|---|
 | 1 | **Break it before finishing.** The last node of a tree is a node that tries to break the work: for each Goal clause, a check that would fail were the clause not met, and the cases the work's own tests skip (interrupted, empty, repeated, a short screen). The tree may not be declared complete with that node absent. | 40.9% of spend follows an issues review; 101 of 207 review finding lines are defects, but only 2 of them say a test or check is absent. Redone in W130 over the three checkouts (the section "Re-counted on the three checkouts" below): of the 40 defects whose review says it reproduced the fault (`docs/dfs-break-it-cases.tsv`; one reading by one session, so a reader can disagree row by row; roadmap-dfs alone gave 23 on 2026-10-28), 11 are in the cases this node names (5 repeated, 5 interrupted, 1 empty, none a short screen), 10 more only if "interrupted" is stretched to a failure path, a race or a stale state, and 19 are not. So 11 of the 307 defect lines are shown to be ones this node would have looked for, 21 on the widest reading; the other 267 do not say they were reproduced and cannot be placed, so 11 is a floor. 13 refuted nodes and 8 backtracks against 535 confirmed is consistent with sessions rarely looking for evidence against their own work, which it does not show. The rank above 2 is kept because neither is stronger on this evidence (2's 28 lines repeat across rounds) and the order is not moved by it. | `SKILL.md` "Ending a node" | W55 and the other small roadmap-dfs tasks whose first review cited an untested case (no changed arm has run on shop-app or farm-app: with `--shell shop-app-e2e` the replay box holds nix, node, playwright, chromium, Postgres and the backend, and one shop-app control of W32 ran; one farm-app control of W132 ran under kiro and ranks nothing; see "Next") |
 | 2 | **Name assumptions as they are made.** A pass before commit that lists every choice the Goal did not settle and writes each as a Hypothesis or says there is none. | 28 of 207 review finding lines are unmarked assumptions (some repeat across rounds). | `SKILL.md` "A node" | any task whose original review cited an unmarked assumption (find with `audit.py findings`, rows of class `assumption` in `docs/dfs-review-findings.tsv`) |
-| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (21 tasks; 26 have two or more issues reviews), 3 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 20 name code the fixes changed (either could hold), 13 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 3 to 23 present ones; the three are in W75, W88 and W91 |
+| 3 | **One review finds all of it.** The reviewer lists every finding it can ground before stopping, ranked, instead of the first few. | Weak, and tested only on roadmap-dfs: of 43 defect lines in a second or later issues review (21 tasks; 26 have two or more issues reviews), 3 name code no commit since the earlier review touched or came near, 7 name code that review could not have seen, 20 name code the fixes changed (either could hold), 13 name no code the check can place (`docs/dfs-rounds.tsv`, `audit.py rounds`). The premise, that most later findings were there at round one, is not shown. | the review prompt (`run.sh`) | only worth a replay if a reviewer given the same tree can be shown to find the 3 to 23 present ones; the three are in W75, W88 and W91; the one pair run on a task above $3.5 (W17, with candidate 6 beside it) read better on quality at about four times the credits, see "Candidates 3 and 6 were then run" below |
 | 4 | **Stop refusals at the source.** Show the guard's three most common refusals (task file over budget, a file:line coordinate, a Parent that does not exist) in the skill, and let `tree.py` report the first two before the commit. | 236 of 2,043 sessions hit a refusal, 304 refusals; each costs a retry. | `SKILL.md`, `tree.py` | any task, scored on `refused commits` alone; the smallest effect, cheapest to try |
 | 5 | **Cap a review loop.** After three issues rounds the task raises for the author instead of continuing. | 30 of 276 reviewed tasks (11%) had three or more issues rounds and hold 34.3% of all dfs dollars (`history.py`); the cap saves only what is spent after the third round, less than that. Does not improve quality, it limits the loss, and hands the author the tail. Counted in W130.47 (`docs/dfs-cap-bound.py`, output `docs/dfs-cap-bound.txt`, 292 reviewed tasks over every checkout): 36 tasks reach a third issues review and 11.9% of all units (12.0% of dollars) fall after it: 21.2% of roadmap-dfs's, 8.6% of chirpstack-docker's, 7.4% of house's and 7.7% of shop-app's. One task, W75 (16 issues reviews), is 21.8 of the 44.5 million units after the cap in roadmap-dfs; without it the figure is about 9% of all units. What the cut rounds found, in the 9 rounds after the third that the review files cover (roadmap-dfs only, 12 tasks): 11 of 23 finding lines are defects (7 reproduced), 8 minor, 4 assumptions; of the 11 defects 5 name a fault the previous fix made or left. So the tail is not mostly stale sentences, and a raise stops the task until the author answers. Not made: parked, because the saving rests on the author preferring to decide at round three, which is theirs to say (the Hypothesis page of W130.47). | `state.py` | none: read from history by counting what the cap would have saved (done) |
 
@@ -786,6 +786,43 @@ round (W5, the same kind of fault left in other places), and W130 has two, one f
 On the replays a pair would have one round in sixteen to remove, but see the correction above: the
 replays are the cheap tasks, so this says nothing of the dearer ones. Not shown, no pair run, nothing merged.
 
+Candidates 3 and 6 were then run as one bundle on a task above $3.5 (W130.48): W17, "How to end chat
+sessions so we don't leak resources on the sever" (the original: $4.49, 7 sessions, 3 reviews, 2 with
+issues; it names no evidence outside the repo). The changed tool is the current one with the two
+lines of `docs/dfs-w17-changed-tool.diff` in `state.py`: the walk-every-clause note in the review brief
+and the re-run-the-checks line in the work brief; `run.sh` and the other scripts are the control's. The
+rubric (`docs/dfs-rubrics/W17.md`, 10 clauses) was written first, from the Goal and the starting code.
+Two controls and one changed arm ran under kiro (`dfs-replay-W17-k1c` and `-k2c`, `-k1w`), the changed arm
+cut off at its third resume. Scores are in `docs/dfs-w17-scores.jsonl`, two judgings of each tree.
+
+| arm | sessions | issues reviews | credits | merged | rubric (two judgings) |
+|---|---|---|---|---|---|
+| control 1 | 4 | 1 of 2 | 24.0 | yes | 5, 5 of 10 |
+| control 2 | 4 | 1 of 2 | 20.3 | yes | 7, 6 of 10 |
+| changed | 18 (7 + 5 + 3 + 3 in four runs of the chain; the first two were cut off mid-session and the third by a tool call that timed out) | 6 of 6, and 2 of its 2 critic sessions said issues | 94.7 or more (2 sessions unpriced) | no: the critic's last backtrack was open at the cap | 8, 9 of 10 |
+
+Under step 5 the pair is better on tier 1: 8.5 against 5.0 (difference 3.5) and against 6.5 (difference
+2.0), both above 1.5 clauses, and both of the control's missing clauses C4 (a screen stopped by SIGTERM
+or SIGHUP closes its chats) and C6 (a page turn running when the server ends is ended) are unmet in all four
+judgings of the controls and met in both of the changed tree's. C1 and C10 (a hangup-ignoring agent is
+killed, and tested) are unmet in both judgings of control 1 and met in the changed tree (C1 is also unmet in
+one judging of control 2); C2 (the agent's helpers that left its group) is unmet in both judgings of the
+changed tree and of control 1 and met in control 2's; C7 (the idle limit can be set) is met by control 1,
+unmet in both judgings of control 2 and unmet in one of the changed tree's. Credits are 3.9 to 4.7 times the
+controls', which tier 2 does not weigh when quality differs. The sandbox held: of the 90 calls the score flags
+as naming a live path (the clone sits under the live checkout's directory), none names a path outside the
+clone and the tool copy.
+
+What it says of the two candidates' premises: neither removed a round or cut credits. A review told to walk
+every clause did not report them all at round one: it found the page turn outliving the server (C6) in
+round one, but SIGTERM (C4) only in round four, the 11th session; both controls' second reviews said ok
+with C4 and C6 unmet. The extra rounds are where the quality came from, so the pair cannot say whether the
+walk wording found more or any longer loop would have: that needs the control given the same number of
+review rounds, not run. It is one task and one changed arm, so it keeps nothing (step 5 needs three pairs, and
+W17 is not in step 4's order), and a dearer tree that scores better counts as better under the rule as written,
+at four times the credits: whether that is a gain is the author's to say. The chain was stopped at the
+cap with the critic's backtrack open and the tree judged as it stood at the last commit.
+
 Candidate 4 was bounded on the history again, with the refusal reasons split by period (`history.py
 --json`, 2,126 dfs sessions, 29 September to 31 October). The file:line coordinate refusal, 113 of
 1,393 sessions up to 19 October, was 7 of 480 from 22 October. The two reasons the candidate would
@@ -833,7 +870,9 @@ map tests ran green offline in its node and the last session). Scored against `d
 both judgings, C1 unmet (a label's box keeps its second line's height when that line is empty). Of 10 calls the score flags as naming a live path with
 output, all are `ls /nix/store | grep ...` of the box's own store, none shows the live checkout, and no node of the original appeared in any
 result. One tree, no changed arm and a task that was not merged: it ranks no candidate.
-What is next is a candidate of the remaining ones (2, 3, 4, 5) run as a pair against a
+Candidates 3 and 6 were run once on W17, a task above $3.5, with two controls: better on quality (8.5 against 5.0 and
+6.5 of 10), 18 sessions and at least 94.7 credits against 4 sessions and 20.3 and 24.0, the task not finished at the cap; kept
+by nothing, since one task is one pair. What is next, besides a second pair on a dear task, is a candidate of the remaining ones (2, 4, 5) run as a pair against a
 same-sitting control, on the tasks whose control trees fall short of the rubric in the clauses the
 candidate targets (the kiro control's first review said issues in 5 of 12 replays, none in W11; the
 rubric scores of the control trees are in `docs/dfs-quality-scores.jsonl`).
