@@ -32,7 +32,7 @@ trap 'kill "${SRV:-}" 2>/dev/null || true; rm -rf "$COPY" "$LOG"' EXIT
 TASK=W130
 for ((i = 1; i <= $#; i++)); do [ "${!i}" = "--task" ] && { j=$((i + 1)); TASK="${!j}"; }; done
 OWN="$(ls "$COPY"/.dfs/items/"$TASK".md)"
-OTHER="$(ls "$COPY"/.dfs/items/*.md | grep -v "/$TASK.md" | head -1)"
+OTHER="$(ls "$COPY"/.dfs/items/*.md | grep -v "/$TASK.md" | sed -n 1p)"
 
 (cd "$COPY" && exec python3 -u "$HERE/web.py" --no-walk --host 127.0.0.1 --port 0 >"$LOG" 2>&1) &
 SRV=$!

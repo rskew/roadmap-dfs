@@ -12,8 +12,10 @@ start chains: that spends a subscription and belongs where the terminal is.
 
 The page is kept current by server-sent events (`/api/events`), not by asking: a
 watcher stats the task files once a second and a change, from here or from the
-terminal or from a chain, is pushed to every open page, which then reads what it is
-showing.
+terminal or from a chain, is pushed to every open page, naming the tasks whose files
+changed, and the page reads what it is showing; an open task is read again only if it is
+one of them. A page that has just loaded is told nothing; one that reconnects says what it
+last heard (`Last-Event-ID`) and is told if things moved on.
 
 A task's page lists the chains that worked it (`runs.py`) and opens one's `console.log` (`/api/run/<name>`,
 read by the directory's name and never by a path), and each session it captured (`run-N.json`, by
@@ -1099,30 +1101,57 @@ def walk_act(name, body):
 # ── pushing changes ───────────────────────────────────────────────────────────
 
 class Hub:
-    """Who is listening on `/api/events`, and what to tell them. A change is a counter
-    that goes up: the page does not need to know WHAT changed, only to read again."""
+    """Who is listening on `/api/events`, and what to tell them. A change is a counter that
+    goes up, with the ids of the tasks whose files changed (`None`: anything, or a write that
+    does not say). The page rereads what it shows; it need not reread a task that did not
+    change."""
 
     def __init__(self):
         self.lock = threading.Lock()
         self.clients = set()
-        self.version = 0
+        self.version = int(time.time() * 1000)  # a restarted server never repeats a number a page holds
 
-    def subscribe(self):
+    def subscribe(self, last=None):
+        """A listener. A page that reconnects says the number it last heard (`Last-Event-ID`) and
+        is told at once if things moved on; a new page has just read them, and is told nothing."""
         q = queue.Queue()
         with self.lock:
             self.clients.add(q)
-            q.put(self.version)             # a new listener is told where things stand
+            if last is not None and last != str(self.version):
+                q.put((self.version, None))
         return q
 
     def unsubscribe(self, q):
         with self.lock:
             self.clients.discard(q)
 
-    def notify(self):
+    def notify(self, tasks=None):
         with self.lock:
             self.version += 1
             for q in self.clients:
-                q.put(self.version)
+                q.put((self.version, tasks))
+
+
+def merge_changes(a, b):
+    """Two changes as one: the newer number, and the tasks of both (`None` swallows the rest)."""
+    return (b[0], None if a[1] is None or b[1] is None else sorted(set(a[1]) | set(b[1])))
+
+
+TASK_FILE = re.compile(r"[/\\]items[/\\]([A-Za-z]+\d+)[./\\]")
+
+
+def changed_tasks(before, after):
+    """The task ids whose files differ between two signatures, or `None` when something else
+    that a task page shows moved (a chain's progress), which no task id names."""
+    old, new = dict(before), dict(after)
+    tasks = set()
+    for key in {k for k in old.keys() | new.keys() if old.get(k) != new.get(k)}:
+        m = TASK_FILE.search(key)
+        if m:
+            tasks.add(m.group(1))
+        elif key not in ("order", "activity"):      # the order and the walk's log move the list and the walk, not a task
+            return None
+    return sorted(tasks)
 
 
 HUB = Hub()
@@ -1171,8 +1200,8 @@ def watch(stop, interval=1.0):
     while not stop.wait(interval):
         now = roadmap_signature()
         if now != last:
-            last = now
-            HUB.notify()
+            tasks, last = changed_tasks(last, now), now
+            HUB.notify(tasks)
 
 
 # ── the server ────────────────────────────────────────────────────────────────
@@ -1258,14 +1287,14 @@ class Handler(BaseHTTPRequestHandler):
         return urlparse(origin).netloc == self.headers.get("Host", "")
 
     def events(self):
-        """Server-sent events: `change` whenever the roadmap does, and a comment every
-        few seconds so a proxy or a sleeping phone notices a dead connection."""
+        """Server-sent events: `change` whenever the roadmap does (with the tasks that changed),
+        and a comment every few seconds so a proxy or a sleeping phone notices a dead connection."""
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
-        q = HUB.subscribe()
+        q = HUB.subscribe(self.headers.get("Last-Event-ID"))
         try:
             self.wfile.write(b"retry: 2000\n\n")
             self.wfile.flush()
@@ -1275,10 +1304,10 @@ class Handler(BaseHTTPRequestHandler):
                     # Coalesce a burst (a chain writing a task three times) into one.
                     while True:
                         try:
-                            v = q.get_nowait()
+                            v = merge_changes(v, q.get_nowait())
                         except queue.Empty:
                             break
-                    self.wfile.write(("event: change\ndata: %d\n\n" % v).encode())
+                    self.wfile.write(("id: %d\nevent: change\ndata: %s\n\n" % (v[0], json.dumps(dict(v=v[0], tasks=v[1])))).encode())
                 except queue.Empty:
                     self.wfile.write(b": keepalive\n\n")
                 self.wfile.flush()

@@ -173,6 +173,9 @@ class Flows(unittest.TestCase):
     def test_going_back_from_a_task_draws_the_list_once_and_stays(self):
         self.flow("backflash")
 
+    def test_a_push_reads_again_only_the_task_that_changed(self):
+        self.flow("push_scope")
+
     def test_going_back_to_the_list_draws_it_without_waiting_on_its_reads(self):
         self.flow("backinstant")
 

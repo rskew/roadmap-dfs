@@ -1226,39 +1226,62 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual((self.root / ".dfs" / "items" / "W1.md").read_text(), before)
 
     # ── being told, not asking ──────────────────────────────────────────────────
-    def events(self):
-        """An open `/api/events`: a function that returns the next `event:` name."""
+    def events(self, last=None):
+        """An open `/api/events`: a function that returns the next `event:` as (name, data)."""
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
-        conn.request("GET", "/api/events")
+        conn.request("GET", "/api/events", headers={"Last-Event-ID": last} if last else {})
         r = conn.getresponse()
         self.assertEqual((r.status, r.getheader("Content-Type")), (200, "text/event-stream"))
         self.addCleanup(conn.close)
 
         def next_event():
+            name = None
             while True:
                 line = r.fp.readline().decode()
                 if line.startswith("event:"):
-                    return line.split(":", 1)[1].strip()
+                    name = line.split(":", 1)[1].strip()
+                elif line.startswith("data:") and name:
+                    return name, json.loads(line.split(":", 1)[1])
                 if not line:
                     return None
         return next_event
 
-    def test_a_listener_is_told_where_things_stand_and_again_when_a_write_lands(self):
+    def test_a_new_page_is_told_nothing_until_a_write_lands_and_a_reconnecting_one_is_told_it_missed_some(self):
         nxt = self.events()
-        self.assertEqual(nxt(), "change")             # on connecting
         ts = self.task()["rows"][-1]["raises"][0]["ts"]
         self.assertEqual(self.call("POST", "/api/answer", dict(task="W1", ts=ts, body="Many."))[0], 200)
-        self.assertEqual(nxt(), "change")             # the write
+        name, data = nxt()                            # the write is the first thing it hears
+        self.assertEqual((name, data["tasks"]), ("change", None))     # a write does not say which task
+        behind = self.events(str(data["v"] - 1))      # a page that last heard an older number
+        self.assertEqual(behind()[0], "change")
 
-    def test_a_change_made_elsewhere_reaches_the_listener(self):
+    def test_a_change_made_elsewhere_reaches_the_listener_with_the_task_it_changed(self):
         """A chain or the terminal screen writing the task file: the watcher notices."""
         stop = threading.Event()
         self.addCleanup(stop.set)
         threading.Thread(target=dfs_web.watch, args=(stop, 0.05), daemon=True).start()
         nxt = self.events()
-        self.assertEqual(nxt(), "change")
         dfs_tree.append_log("W1", "answer", [dfs_tree.open_raises(dfs_tree.load("W1"))[0]["ts"]], "Many.")
-        self.assertEqual(nxt(), "change")
+        name, data = nxt()
+        self.assertEqual((name, data["tasks"]), ("change", ["W1"]))
+
+    def test_which_tasks_a_change_names(self):
+        sig = [("/r/.dfs/items/W1.md", 1), ("/r/.dfs/items/W2/a.md", 1), ("/r/.dfs/state/archive/items/W3.md", 1),
+               ("order", 1), ("activity", 1), ("/tmp/runs/d1/meta.json", 1)]
+        bump = lambda key: [(k, v + 1 if k == key else v) for k, v in sig]
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/items/W1.md")), ["W1"])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/items/W2/a.md")), ["W2"])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("/r/.dfs/state/archive/items/W3.md")), ["W3"])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("order")), [])
+        self.assertEqual(dfs_web.changed_tasks(sig, bump("activity")), [])
+        self.assertIsNone(dfs_web.changed_tasks(sig, bump("/tmp/runs/d1/meta.json")))      # a chain's progress: any task page may show it
+        self.assertEqual(dfs_web.changed_tasks(sig, sig + [("/r/.dfs/items/W9.md", 1)]), ["W9"])    # a new task
+        self.assertEqual(dfs_web.changed_tasks(sig, sig[1:]), ["W1"])      # a removed one
+
+    def test_a_burst_of_changes_is_one_with_the_tasks_of_all_and_unsaid_wins(self):
+        self.assertEqual(dfs_web.merge_changes((1, ["W2"]), (2, ["W1"])), (2, ["W1", "W2"]))
+        self.assertEqual(dfs_web.merge_changes((1, ["W2"]), (2, None)), (2, None))
+        self.assertEqual(dfs_web.merge_changes((1, None), (2, ["W1"])), (2, None))
 
     # ── what it shows ───────────────────────────────────────────────────────────
     def test_the_list_says_what_waits_on_the_author(self):

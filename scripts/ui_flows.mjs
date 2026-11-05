@@ -1748,6 +1748,23 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       assert(!(await page.evaluate(() => (window.__seen || []).includes("task"))), how + ": a second Back after Back drew the task");
     }
   },
+  // A push names the tasks it changed: an open task is read again only when it is one of them, and a page that has
+  // just loaded draws once (the server tells a new listener nothing, as it has just read everything).
+  async push_scope(b) {
+    const { page } = await open(b, PHONE);
+    await task(page, "W9");
+    await page.waitForTimeout(1500);
+    const reqs = [];
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/") && u !== "/api/events") reqs.push(u); });
+    const touch = id => { const f = path.join(DIR, ".dfs", "items", id + ".md"); const now = new Date(); fs.utimesSync(f, now, now); };
+    touch("W1");
+    await page.waitForTimeout(3000);
+    assert(reqs.length > 0 && reqs.every(u => !u.startsWith("/api/task/")), "a change to another task read the open task again: " + JSON.stringify(reqs));
+    reqs.length = 0;
+    touch("W9");
+    await page.waitForTimeout(3000);
+    assert(reqs.some(u => u.startsWith("/api/task/W9")), "a change to the open task did not read it again: " + JSON.stringify(reqs));
+  },
   async reorder(b) {
     const { page, errors } = await open(b, PHONE);
     const box = sel => boxOf(page, sel);

@@ -735,17 +735,17 @@ function findStep() {
   const el = route().view === "task" ? $("#view .row .main") : [...document.querySelectorAll("#view button.item[data-act=task]")].find(x => !x.closest("[hidden]"));
   if (el) { el.focus(); el.scrollIntoView({ block: "nearest" }); }
 }
-async function render(force) {
+async function render(force, changed) {
   const key = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
   const mine = RENDERS + 1;
-  await renderDraw(force);
+  await renderDraw(force, changed);
   const lost = !document.activeElement || document.activeElement === document.body;
   if (key && lost) {
     const el = (key.sel && $(key.sel)) || document.querySelectorAll(FOCUSABLE)[key.at]; if (el) el.focus();
   } else if (MID.picked && lost) midSelect();      // the selected control was drawn over: the middle's is selected again
   if (mine === RENDERS) focusRow();      // a newer render draws over this one, and gives the focus back after it
 }
-async function renderDraw(force) {
+async function renderDraw(force, changed) {
   // A render is a fetch and then a draw, and a newer one can start before an older one
   // lands: an older list render finishing after the tap on a task drew the list over it.
   // Only the newest draws.
@@ -759,7 +759,9 @@ async function renderDraw(force) {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
       let t; const at = WROTE;
-      [t, S.walk] = await Promise.all([api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/walk").then(walkSeen)]);
+      // A push that names the tasks it changed, and not this one, leaves the task as it is: only the walk is read again.
+      const same = changed && !arrived && S.task && S.taskId === r.task && !changed.has(r.task) && S.task.id === r.task;
+      [t, S.walk] = await Promise.all([same ? S.task : api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/walk").then(walkSeen)]);
       S.walkAt = at;
       if (mine !== RENDERS) return;
       S.node = r.node;
@@ -2245,14 +2247,21 @@ addEventListener("pageshow", e => { if (e.persisted) comeBack(); });
 addEventListener("online", comeBack);
 
 /* ── being told: the server pushes `change` when the roadmap does ──────────────── */
-let pushT, EVENTS;
+let pushT, EVENTS, pushed = new Set();      // `pushed`: the tasks changed since the last render; null: anything, or not said
 function listen() {
   if (!window.EventSource) return;
   if (EVENTS) EVENTS.close();
   const es = EVENTS = new EventSource("/api/events");
-  es.addEventListener("change", () => {
+  es.addEventListener("change", e => {
+    let tasks = null; try { tasks = JSON.parse(e.data).tasks; } catch (x) { /* not said: reread all */ }
+    pushed = tasks && pushed ? new Set([...pushed, ...tasks]) : null;
     clearTimeout(pushT);
-    pushT = setTimeout(() => { if ($("#chat").open) chatLoad(); if ($("#form").open) S.dirty = true; else render(false); }, 120);
+    pushT = setTimeout(() => {
+      const changed = pushed; pushed = new Set();
+      if ($("#chat").open) chatLoad();
+      if ($("#form").open) S.dirty = true;      // the form's close reads everything again
+      else render(false, changed);
+    }, 120);
   });
   es.onopen = () => { $("#live").hidden = true; };
   es.onerror = () => { $("#live").hidden = false; };     // the browser reconnects by itself
