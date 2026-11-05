@@ -365,10 +365,16 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
 ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } ul.md li, ol.md li { margin: 0 0 2px; overflow-wrap: anywhere; }
 .msg pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
+/* "Newest": a zero-height row stuck to the bottom of the log, so its button floats just above the input; shown only while scrolled away from the end. */
+.chat-newest { position: sticky; bottom: 0; height: 0; text-align: center; pointer-events: none; }
+.chat-newest .btn { display: none; position: absolute; left: 50%; bottom: var(--s2); transform: translateX(-50%); pointer-events: auto; background: var(--panel); }
+.chat-newest.on .btn { display: inline-block; }
 #chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 #chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: calc(var(--vvh, 100dvh) * .3); resize: none; }
 #chat-form .btn { flex: none; }
-#chat-stop[hidden] { display: none; }
+/* Stop takes Send's place while a turn runs (Send waits then anyway), so the text box keeps its width. */
+#chat-stop[hidden], #chat-send[hidden] { display: none; }
+#chat-send, #chat-stop { min-width: calc(72px * var(--z)); }
 
 /* A keyboard shrinks the VISUAL viewport and may leave the layout one as it was: the dialogs
    are fitted to the visual one (--vvh, --vvt, set below), their fields scroll, and the row of
@@ -462,6 +468,11 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 <script>
 "use strict";
 const $ = (s, el = document) => el.querySelector(s);
+/* An Enter that belongs to the input method (choosing a Japanese, Chinese or Korean candidate) is not the page's to act on.
+   Safari sends that keydown after `compositionend`, with isComposing false and keyCode 229, so all three are checked. */
+let IME_ENDED = 0;
+addEventListener("compositionend", () => { IME_ENDED = performance.now(); }, true);
+const imeEnter = ev => ev.isComposing || ev.keyCode === 229 || performance.now() - IME_ENDED < 50;
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 /* A task's id in a row of tasks: a branch's tag (`W1@serve-real-records`) is drawn apart from its number, as a small line
    at the top of the goal's column, right of the number, so the numbers line up and a long tag has the row's width. */
@@ -1529,7 +1540,7 @@ function form(html, onsubmit) {
   for (const el of f.querySelectorAll("textarea.line")) {
     const grow = () => { el.style.height = "auto"; el.style.height = el.scrollHeight + el.offsetHeight - el.clientHeight + "px"; };
     el.addEventListener("input", grow);
-    el.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); f.requestSubmit($("button[value=ok]", f)); } });
+    el.addEventListener("keydown", ev => { if (ev.key === "Enter" && !imeEnter(ev)) { ev.preventDefault(); f.requestSubmit($("button[value=ok]", f)); } });
     grow();
   }
   for (const el of f.querySelectorAll("textarea:not(.line)")) attachTo(el);
@@ -1658,6 +1669,11 @@ function correctForm(id) {
 const chatOn = () => !!(S.walk && S.walk.enabled);
 const CHAT = { scope: null, busyT: null, last: "", fresh: false, follow: false };
 const chatKey = () => "chat:" + CHAT.scope;
+// What was typed and not sent is kept for the tab, per chat, so closing the dialog by accident (or Back) loses nothing.
+const chatDraft = (scope, text) => {
+  try { const k = "chatdraft:" + scope; if (text === undefined) return sessionStorage.getItem(k) || ""; if (text) sessionStorage.setItem(k, text); else sessionStorage.removeItem(k); } catch (e) { /* no storage: no draft */ }
+  return "";
+};
 function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -1666,18 +1682,25 @@ function chatDraw(st) {
   if (sig === CHAT.last) return;
   CHAT.last = sig;
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
-  log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">Running in the terminal's process: type here, or press <code>c</code> there to look at it.</p>` : "")
+  log.innerHTML = (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
     + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
-    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">processing (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "");
-  $("#chat-stop").hidden = !st.busy;
+    + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
+    + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
+  $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy;
   $("#chat-send").disabled = st.busy || st.elsewhere; $("#chat-input").disabled = !!st.elsewhere;
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
-  // A busy turn redraws every poll ("processing (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
+  // A busy turn redraws every poll ("Working on it (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
   CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
   else if (atEnd || follow) log.scrollTop = log.scrollHeight;
+  chatNewest();
+}
+// The Newest button shows while the reader is more than a screen's edge away from the end of the log.
+function chatNewest() {
+  const log = $("#chat-log"), box = log.querySelector(".chat-newest");
+  if (box) box.classList.toggle("on", log.scrollHeight - log.scrollTop - log.clientHeight > 80);
 }
 // The Top button: to the top of the message being read. That is the last one when the log is at its end
 // (a long answer has just landed there), else the one crossing the log's top edge; already at its top, the one before.
@@ -1730,16 +1753,24 @@ async function chatBegin(scope) {
 function chatOpen(scope) {
   CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false);
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
-  $("#chat-log").innerHTML = ""; $("#chat-input").value = ""; $("#chat-agent").hidden = true;
-  $("#chat").showModal(); $("#chat-input").focus();
+  $("#chat-log").innerHTML = ""; $("#chat-input").value = chatDraft(scope); $("#chat-agent").hidden = true;
+  // The last chat's buttons are not this one's: Send waits for the first draw, which says whether a turn is running.
+  $("#chat-stop").hidden = true; $("#chat-send").hidden = false; $("#chat-send").disabled = true;
+  $("#chat").showModal(); chatGrow(); $("#chat-input").focus();
   chatBegin(scope);
 }
 $("#chat-form").addEventListener("submit", async ev => {
   ev.preventDefault();
   const input = $("#chat-input"), message = input.value.trim();
+  // Send is disabled while a turn runs (or another terminal has the chat); requestSubmit, which Enter uses, ignores that, so the guard is here too.
   if (!message || !CHAT.scope) return;
+  if ($("#chat-send").disabled) { toast("Waiting for the answer. Send again once it has arrived."); return; }
   $("#chat-send").disabled = true; CHAT.follow = true;
-  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message })); input.value = ""; chatLoad(); }
+  try { chatDraw(await api("/api/chat/send", { scope: CHAT.scope, message }));
+    // what was typed while the request was in flight stays; only the sent text is cleared
+    if (input.value.trim() === message) { input.value = ""; chatGrow(); chatDraft(CHAT.scope, ""); }
+    chatLoad();
+  }
   catch (e) {
     // no answer is not "not sent": the server may have taken the message. The page does not send it again; the chat is
     // read, and the message stays in the box until the reader sees it among the sent ones.
@@ -1756,7 +1787,26 @@ $("#chat-stop").addEventListener("click", async () => {
   catch (e) { toast(e.message, true); }
   finally { $("#chat-stop").disabled = false; }
 });
-$("#chat-input").addEventListener("keydown", ev => { if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); } });
+$("#chat-input").addEventListener("input", ev => { chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
+// The text box grows with what is typed, up to its CSS max-height (then it scrolls), and shrinks back when cleared.
+function chatGrow() {
+  const el = $("#chat-input"), log = $("#chat-log");
+  const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 4;   // a reader at the end stays there as the box takes the log's room
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + "px";
+  if (atEnd) log.scrollTop = log.scrollHeight;
+  chatNewest();
+}
+// A width change (rotation, a resized window) rewraps the draft, so the height is measured again.
+addEventListener("resize", () => { if ($("#chat").open) chatGrow(); });
+const chatEnterSends = () => matchMedia("(pointer: fine)").matches;
+$("#chat-input").placeholder = chatEnterSends() ? "Ask about this. Enter sends, Shift+Enter adds a line" : "Ask about this";
+// Enter sends where there is a keyboard (a fine pointer) and Shift+Enter adds a line; on a touch screen Enter stays a new line,
+// and Send is the button. Ctrl/cmd+Enter sends anywhere. A key that is choosing an input-method candidate is left alone.
+$("#chat-input").addEventListener("keydown", ev => {
+  if (ev.key !== "Enter" || imeEnter(ev)) return;
+  if (ev.metaKey || ev.ctrlKey || (chatEnterSends() && !ev.shiftKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); }
+});
 // The colour can change under an open page (another tab, `.dfs/theme` by hand, a rename
 // that moves the one made from the name): the state says what it is now.
 function syncColour(state) {
@@ -1875,7 +1925,7 @@ function accountForm() {
     on("acct-cancel", () => api("/api/login/cancel", {}));
     on("acct-send", () => api("/api/login/code", { code: $("#acct-code", box).value }));
     const c = $("#acct-code", box);
-    if (c) c.addEventListener("keydown", ev => { if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); $("#acct-send", box).click(); } });
+    if (c) c.addEventListener("keydown", ev => { if (ev.key === "Enter" && !imeEnter(ev)) { ev.preventDefault(); $("#acct-send", box).click(); } });
     if (busy || st.phase === "waiting") poll();
   };
   const poll = () => { clearTimeout(ACCT_T); ACCT_T = setTimeout(async () => { try { draw(await api("/api/login")); } catch (e) { toast(e.message, true); } }, 1000); };
@@ -1986,8 +2036,8 @@ document.addEventListener("click", e => {
     answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm,
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
-    chat: () => chatOpen(d.scope), chattop: chatTop, chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
-    chatclear: async () => { try { CHAT.last = ""; keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
+    chat: () => chatOpen(d.scope), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
+    chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     walkstart: walkStart, walkstop: walkStop,
     chainstop: () => chainStopForm(d.item),
@@ -2029,7 +2079,7 @@ const up = () => {
 $("#back").onclick = up;
 $("#sheet").addEventListener("scroll", e => { if (S.node && e.target.isConnected && e.target.classList.contains("sheet-body")) keepScroll(sheetKey(), e.target.scrollTop); }, true);
 $("#chat-log").addEventListener("scroll", e => {
-  const l = e.target; if (!CHAT.scope || CHAT.fresh) return;
+  const l = e.target; chatNewest(); if (!CHAT.scope || CHAT.fresh) return;
   keepScroll(chatKey(), l.scrollHeight - l.scrollTop - l.clientHeight < 40 ? null : l.scrollTop);
 }, { passive: true });
 // One redraw path for the table's room: the observer sees a viewport crossing and a classic scrollbar appearing or going (which leaves the media query unchanged); the media listener is only the fallback where there is no ResizeObserver, since both together redraw twice.
