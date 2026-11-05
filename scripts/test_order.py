@@ -575,6 +575,31 @@ class ThroughTheDerivation(InAWorkRoot):
         self.assertEqual(by["W1"]["segment"], 1)
         self.assertEqual(by["W1"]["waiting_on"], "W3")
 
+    def tagged(self, *names):
+        for name in names:
+            (dfs_paths.items() / ("%s.md" % name)).write_text(
+                "# %s · branch\n\n## Goal\n\nbranch\n\n## Tree\n\n## Log\n" % name)
+        dfs_paths._TAG_CACHE.clear()
+
+    def rows(self):
+        return [(i["id"], i["depth"], i["segment"]) for i in dfs_state.full()["items"]]
+
+    def test_a_task_begun_on_a_branch_sits_beside_its_base_task_not_after_every_break(self):
+        self.tagged("W1@fx")
+        dfs_order.write_order([("W1", 0), ("W2", 0), (dfs_order.BREAK, 0), ("W3", 0)])
+        self.assertEqual(self.rows(), [("W1", 0, 0), ("W1@fx", 0, 0), ("W2", 0, 0), ("W3", 0, 1)])
+
+    def test_a_branch_task_goes_after_the_whole_subtree_of_its_base_at_its_depth(self):
+        self.tagged("W2@fx", "W2@ab")
+        dfs_order.write_order([("W1", 0), ("W2", 1), ("W3", 2), (dfs_order.BREAK, 0)])
+        self.assertEqual(self.rows(), [("W1", 0, 0), ("W2", 1, 0), ("W3", 2, 0),
+                                       ("W2@ab", 1, 0), ("W2@fx", 1, 0)])
+
+    def test_a_branch_task_whose_base_is_not_placed_stays_last_and_a_placed_one_stays_put(self):
+        self.tagged("W1@fx", "W3@fx")
+        dfs_order.write_order([("W3@fx", 0), ("W2", 0), (dfs_order.BREAK, 0), ("W3", 0)])
+        self.assertEqual([r[0] for r in self.rows()], ["W3@fx", "W2", "W3", "W1", "W1@fx"])
+
     def test_a_segment_whose_items_are_all_gone_still_leaves_its_gap(self):
         # W9 was closed and its file deleted; the fences around it are still two
         # fences, and the screen has to be able to put both back where they were.
