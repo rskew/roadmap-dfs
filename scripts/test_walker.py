@@ -384,6 +384,9 @@ class PullRequests(unittest.TestCase):
         self.assertTrue(any("could not be read: gh is not logged in" in e[2] for e in self.w.events))
 
 
+REAL = dfs_walk.fetch_kiro_models   # Models patches the module's name; the parsing is tested through this
+
+
 class Models(unittest.TestCase):
     """The models chosen for the walk: kept in the run root, given to a chain as the
     variables run.sh reads, claude's own roles and nothing else."""
@@ -394,7 +397,20 @@ class Models(unittest.TestCase):
         patch = mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp.name})
         patch.start()
         self.addCleanup(patch.stop)
+        cache = mock.patch.dict(dfs_walk._kiro_models, {"ids": [], "at": 0.0, "busy": False})
+        cache.start()
+        self.addCleanup(cache.stop)
+        fetch = mock.patch.object(dfs_walk, "fetch_kiro_models", return_value=[])   # never run the real kiro-cli
+        self.fetch = fetch.start()
+        self.addCleanup(fetch.stop)
         self.w = FakeWalker()
+
+    def wait_for_kiro_list(self):
+        for _ in range(200):
+            if not dfs_walk._kiro_models["busy"]:
+                return
+            time.sleep(0.01)
+        self.fail("the kiro model list was never read")
 
     def test_nothing_is_chosen_until_one_is(self):
         self.assertEqual(self.w.snapshot()["models"], dict(plan="", implement=""))
@@ -435,7 +451,8 @@ class Models(unittest.TestCase):
         self.assertEqual(self.w.models(), dict(plan="opus", implement=""))
 
     def test_the_drop_down_lists_the_agents_models_and_keeps_a_name_already_chosen(self):
-        self.assertEqual(self.w.model_choices(), ["opus", "sonnet", "haiku", "default"])
+        self.assertEqual(self.w.model_choices(), dfs_walk.MODEL_CHOICES["claude"])
+        self.assertIn("opus[1m]", self.w.model_choices())
         self.w.set_model("plan", "claude-opus-4-5")
         self.assertEqual(self.w.model_choices()[-1], "claude-opus-4-5")
         self.w.agent = "kiro"
@@ -446,6 +463,39 @@ class Models(unittest.TestCase):
         self.assertEqual(self.w.model_choices(), [])
         with self.assertRaises(ValueError):
             self.w.set_model("plan", "opus")
+
+    def test_the_kiro_drop_down_lists_every_model_kiro_cli_names_and_falls_back_when_it_cannot(self):
+        self.w.agent = "kiro"
+        self.assertEqual(self.w.model_choices(), dfs_walk.MODEL_CHOICES["kiro"])   # the first look: not read yet
+        self.wait_for_kiro_list()
+        self.assertEqual(self.w.model_choices(), dfs_walk.MODEL_CHOICES["kiro"])   # it said nothing: the fixed list
+        self.assertEqual(self.fetch.call_count, 1)
+        self.fetch.return_value = ["auto", "gpt-5.6-sol", "qwen3-coder-next"]
+        dfs_walk._kiro_models["at"] = 0.0          # the list is old
+        self.w.model_choices()                     # asks again, without waiting for the answer
+        self.wait_for_kiro_list()
+        self.assertEqual(self.w.model_choices(), ["auto", "gpt-5.6-sol", "qwen3-coder-next"])
+        self.w.set_model("plan", "my-own-model")   # a typed name joins the list
+        self.assertEqual(self.w.model_choices()[-1], "my-own-model")
+        self.assertEqual(self.fetch.call_count, 2, "a fresh list is not read again")
+        self.fetch.return_value = []               # a later failure keeps the last good list
+        dfs_walk._kiro_models["at"] = 0.0
+        self.w.model_choices()
+        self.wait_for_kiro_list()
+        self.assertIn("gpt-5.6-sol", self.w.model_choices())
+
+    def test_fetch_kiro_models_reads_the_ids_from_the_json_kiro_cli_prints(self):
+        out = '{"models":[{"model_id":"auto"},{"model_id":"claude-opus-5.5"},{"model_id":"-x"},{"model_name":"n"}],"default_model":"auto"}'
+        with mock.patch.object(dfs_walk.subprocess, "run") as run_:
+            run_.return_value.stdout = out
+            with mock.patch.dict(os.environ, {"KIRO_CMD": "kiro-cli --flag"}):
+                self.assertEqual(REAL(), ["auto", "claude-opus-5.5"])
+        self.assertEqual(run_.call_args.args[0], ["kiro-cli", "--flag", "chat", "--list-models", "--format", "json"])
+        with mock.patch.object(dfs_walk.subprocess, "run", side_effect=OSError("no kiro-cli")):
+            self.assertEqual(REAL(), [])
+        with mock.patch.object(dfs_walk.subprocess, "run") as run_:
+            run_.return_value.stdout = "not json"
+            self.assertEqual(REAL(), [])
 
     def test_a_kiro_chain_gets_the_kiro_models(self):
         self.w.set_model("plan", "opus")
