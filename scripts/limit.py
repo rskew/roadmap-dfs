@@ -47,7 +47,8 @@ So the STRUCTURED field is read first and the prose is a fallback:
           is the session's own, cannot convict it. The status is the provider's, so
           this reads a quota or rate limit of ANY provider the user configured.
 
-Usage:  limit.py <log> <agent>   ->  limit=0|1  resets='<text>'  (shell-quotable)
+Usage:  limit.py <log> <agent>   ->  limit=0|1  resets='<text>'  http=<5xx or 0>  http_words='<text>'
+        (shell-quotable)
 """
 import json
 import re
@@ -242,6 +243,37 @@ def classify(raw, agent):
     return True, resets_in(raw)
 
 
+def server_error(raw, agent):
+    """(status, words) when the run died on the model service's own 5xx (a 502 Bad Gateway, a 503
+    overloaded), else (0, ""). Read from the structured status alone, as the limit is: claude's
+    `api_error_status` and opencode's `error` event `data.statusCode`. A 5xx is the service's
+    fault and passes, so `run.sh` runs the session again a few times before it stops the walk;
+    kiro and codex give no status that is pinned, so they are never read as one."""
+    if agent == "opencode":
+        for line in raw.splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("type") == "error":
+                data = _opencode_error(rec)
+                code = data.get("statusCode")
+                if isinstance(code, int) and 500 <= code <= 599:
+                    return code, str(data.get("message") or "")
+        return 0, ""
+    if agent in ("kiro", "codex"):
+        return 0, ""
+    try:
+        rec = json.loads(raw)
+    except Exception:
+        return 0, ""
+    if isinstance(rec, dict) and rec.get("is_error"):
+        code = rec.get("api_error_status")
+        if isinstance(code, int) and not isinstance(code, bool) and 500 <= code <= 599:
+            return code, str(rec.get("result") or "")
+    return 0, ""
+
+
 def main(argv):
     if len(argv) != 3:
         print("usage: limit.py <log> <agent>", file=sys.stderr)
@@ -255,6 +287,9 @@ def main(argv):
     limit, resets = classify(raw, agent)
     print("limit=%d" % int(limit))
     print("resets=%s" % shlex.quote(resets))
+    status, words = server_error(raw, agent)
+    print("http=%d" % status)
+    print("http_words=%s" % shlex.quote(" ".join(words.split())[:200]))
     return 0
 
 
