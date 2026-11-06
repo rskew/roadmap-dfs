@@ -957,6 +957,11 @@ class WalkMixin:
         if name and name != "default" and not MODEL_NAME.match(name):
             raise ValueError("%r is not a model name: letters, digits and . _ : [ ] -, "
                              "not starting with -" % name)
+        if self.agent == "kiro" and name in MODEL_CHOICES["claude"] and name != "default":
+            have = kiro_models()             # a name claude has and kiro does not list fails when the chain starts
+            if name not in have:
+                raise ValueError("kiro has no model %r (that is a claude name); its models are: %s"
+                                 % (name, ", ".join(have)))
         path = os.path.join(dfs_runs.ensure_run_root(), "models")
         try:
             with open(path, errors="replace") as fh:

@@ -484,6 +484,28 @@ class Models(unittest.TestCase):
         self.wait_for_kiro_list()
         self.assertIn("gpt-5.6-sol", self.w.model_choices())
 
+    def test_a_kiro_walk_refuses_a_name_only_claude_has_and_says_which_names_kiro_has(self):
+        self.w.agent = "kiro"
+        for name in ("opus", "sonnet", "haiku", "opusplan", "opus[1m]", "sonnet[1m]"):
+            with self.assertRaises(ValueError) as e:
+                self.w.set_model("implement", name)
+            self.assertIn("claude-opus-5.5", str(e.exception))      # it names the ids kiro does have
+        self.assertEqual(self.w.models(), dict(plan="", implement=""))
+        self.w.set_model("implement", "claude-opus-5.5")            # kiro's own id saves
+        self.w.set_model("plan", "my-own-model")                    # so does a name nobody lists
+        self.w.set_model("plan", "default")                         # run.sh passes no --model for this
+        self.w.agent = "claude"
+        self.w.set_model("implement", "opus")                       # claude still takes its alias
+
+    def test_a_kiro_walk_takes_a_claude_looking_name_that_kiro_itself_lists(self):
+        self.w.agent = "kiro"
+        self.fetch.return_value = ["auto", "opus"]
+        dfs_walk._kiro_models["at"] = 0.0
+        self.w.model_choices()
+        self.wait_for_kiro_list()
+        self.w.set_model("plan", "opus")
+        self.assertEqual(self.w.models()["plan"], "opus")
+
     def test_fetch_kiro_models_reads_the_ids_from_the_json_kiro_cli_prints(self):
         out = '{"models":[{"model_id":"auto"},{"model_id":"claude-opus-5.5"},{"model_id":"-x"},{"model_name":"n"}],"default_model":"auto"}'
         with mock.patch.object(dfs_walk.subprocess, "run") as run_:

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -22,6 +23,7 @@ sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import tree as dfs_tree     # noqa: E402
 import web as dfs_web       # noqa: E402
+import walk as dfs_walk     # noqa: E402
 import test_walker          # noqa: E402  (its in-memory world, for the walk endpoints)
 
 TASK = """# W1 · Bound the limiter
@@ -1991,6 +1993,20 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
             self.assertEqual(snap["models"]["plan"], "")
             self.assertEqual(self.call("POST", "/api/walk/model", dict(role="review", model="opus"))[0], 409)
             self.assertEqual(self.call("POST", "/api/walk/model", dict(role="plan", model="--help"))[0], 409)
+
+    def test_a_kiro_walk_answers_409_for_the_claude_name_opus_and_names_kiros_models(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}), \
+                mock.patch.object(dfs_walk, "fetch_kiro_models", return_value=[]), \
+                mock.patch.dict(dfs_walk._kiro_models, {"ids": [], "at": time.time(), "busy": False}):
+            self.call("POST", "/api/walk/agent", dict(agent="kiro"))
+            try:
+                status, body, _ = self.call("POST", "/api/walk/model", dict(role="implement", model="opus"))
+                self.assertEqual(status, 409)
+                self.assertIn("claude-opus-5.5", json.dumps(body))
+                status, snap, _ = self.call("POST", "/api/walk/model", dict(role="implement", model="claude-opus-5.5"))
+                self.assertEqual((status, snap["models"]["implement"]), (200, "claude-opus-5.5"))
+            finally:
+                self.call("POST", "/api/walk/agent", dict(agent="claude"))
 
     def test_the_snapshot_gives_the_defaults_of_the_agent_the_next_chain_uses(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
