@@ -603,6 +603,34 @@ class Web(unittest.TestCase):
         # a link in prose opens the viewer in the page: none opens a window of its own
         self.assertNotIn("target", "".join(out))
 
+    def test_the_phone_page_keeps_its_small_faults_fixed(self):
+        """Read from the page's source: a --no-walk server's Chats route says chat is off, the fold button is 44px, the phone
+        adds a task from a tab and not from a button over the rows, and a scrolling note box shows a shadow."""
+        src = (HERE / "web" / "index.html").read_text()
+        css = (HERE / "web" / "design.css").read_text()
+        self.assertIn("drawChatsOff(list.off)", src)
+        self.assertRegex(src, r"\.row \.fold \{ flex: 0 0 calc\(44px")
+        self.assertIn('class="tab-add" data-act="newtask"', src)
+        self.assertRegex(src, r"max-width: 899\.98px\) \{ \.fab, \.fab-gap \{ display: none")
+        quote = css[css.index("dialog .quote {"):]
+        self.assertIn("no-repeat local", quote[:quote.index("}")])
+        # The form is a flex column that scrolls: without `flex: none` the box shrank to its padding (20px) in the
+        # Accept dialog of a task with several assumptions, and its notes could not be read.
+        self.assertIn("flex: none", quote[:quote.index("}")])
+        # The answer page's frame is in the same column: without `flex: none` it shrank to ~150px of its 40dvh, so the
+        # options and the Send button inside it could be reached through a slot three lines high.
+        frame = css[css.index("dialog .answerpage {"):]
+        self.assertIn("flex: none", frame[:frame.index("}")])
+        # The raw `Answer with: .dfs/artefacts/<uuid>.html` line is not shown above the frame that is that page.
+        self.assertIn("r.body.replace(/^[ \\t]*Answer with:", src)
+
+    def test_the_walk_boxs_activity_list_wraps_the_runner_line_and_is_a_44px_target(self):
+        """Read from the page's source: the Activity line `$ <path>/run.sh W7 1 (pid N)` is one unbreakable word, which
+        pushed the walk box sideways at 320px (377 of 320 wide), and the Activity summary was 40px high."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertRegex(src, r"\.walk \.ev li span \{[^}]*overflow-wrap: anywhere")
+        self.assertRegex(src, r"\.walk details > summary \{ min-height: var\(--hit\);")
+
     def test_the_viewer_route_and_its_frame_are_keyed_on_task_and_name(self):
         """route() and drawArtefact() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
@@ -1487,6 +1515,55 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(n["page"], "e1ab3804-4db6-4358-a8dc-45beed23a27c.html")
         status, data, _ = self.call("GET", "/api/assumptions")
         self.assertEqual(data["assumed"][0]["wrong"], "a client returns inside one window.")
+
+    def test_the_accept_dialogs_assumption_carries_its_first_evidence_lines(self):
+        """The dialog's assumptions list shows each one's Evidence: four lines at most, each cut at a word, a picture's
+        markdown dropped, and how many more the node sheet holds. A shelved node's lives in the archive."""
+        path = self.root / ".dfs" / "items" / "W1.md"
+        long = "for: " + "word " * 80
+        lines = ["for: a line ![shot](.dfs/artefacts/aa.png) with a picture and [a page](.dfs/artefacts/bb.html) link", long, "against: b", "for: c", "for: d", "for: e"]
+        text = path.read_text().replace("Determination: Confirmed: memory is flat over 10k ids.",
+                                        "Evidence:\n" + "".join("- %s\n" % l for l in lines) +
+                                        "Determination: Confirmed: memory is flat over 10k ids.", 1)
+        path.write_text(text)
+        os.utime(path, (time.time() + 10, time.time() + 10))     # the page reads a task again when its file's time moves
+        ev = self.task()["assumed"][0]["evidence"]
+        self.assertEqual(len(ev["lines"]), 4)
+        self.assertEqual(ev["more"], 2)
+        self.assertEqual(ev["lines"][0], "for: a line with a picture and a page link")
+        self.assertTrue(ev["lines"][1].endswith(" …") and len(ev["lines"][1]) <= 222, ev["lines"][1][-30:])
+        # Evidence shelved to the archive is read from there.
+        path.write_text(text.replace("Evidence:\n" + "".join("- %s\n" % l for l in lines), "Evidence: archived.\n"))
+        arc = self.root / ".dfs" / "archive" / "items" / "W1.md"
+        arc.parent.mkdir(parents=True, exist_ok=True)
+        arc.write_text("**W1.2 Evidence**:\n- for: shelved.\n- against: and this.\n")
+        for f in (path, arc):
+            os.utime(f, (time.time() + 20, time.time() + 20))
+        ev = self.task()["assumed"][0]["evidence"]
+        self.assertEqual((ev["lines"], ev["more"]), (["for: shelved.", "against: and this."], 0))
+
+    def test_a_dialog_opens_at_its_heading_not_scrolled_to_its_first_box(self):
+        # A source check: plain unittest has no browser. `docs/ux-web-dialogs.py` draws it. It found chromium scrolling
+        # the focused box into view after showModal even with preventScroll, so the form is put back until touched.
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function form(html, onsubmit)"):]
+        body = body[:body.index("f.addEventListener(\"submit\"")]
+        self.assertIn("if (!touched) f.scrollTop = 0", body)
+        for ev in ("pointerdown", "touchstart", "wheel", "keydown"):
+            self.assertIn(ev, body)              # the reader's own scroll is never undone
+
+    def test_the_accept_dialog_lists_assumptions_in_a_box_that_scrolls_and_keeps_its_buttons(self):
+        src = (HERE / "web" / "index.html").read_text()
+        css = (HERE / "web" / "design.css").read_text()
+        self.assertIn("evidenceHtml(x)", src)
+        self.assertIn('<span class="way ${m[1]}">', src)   # "for:" and "against:" are drawn apart from the line
+        self.assertIn("dialog ul.ev .way.against", css)
+        self.assertIn('<ul class="assume"', src)
+        box = css[css.index("dialog ul.assume {"):]
+        box = box[:box.index("}")]
+        self.assertIn("flex: none", box)         # a flex column shrinks a box without it to its padding
+        self.assertIn("max-height", box)         # so Cancel and Accept stay on screen
+        self.assertIn("overflow: auto", box)
 
     def test_the_assumptions_across_tasks(self):
         status, data, _ = self.call("GET", "/api/assumptions")

@@ -25,7 +25,7 @@
      solid mark, -wash is the tint a whole row or card takes. */
   --settled: #1f5aa6;      --settled-wash: #d4e2f4;
   --attention: #ad2b20;    --attention-wash: #f8d9d3;
-  --assumption: #8a5a00;   --assumption-wash: #fbe8a6;   --assumption-fill: #e0a400;
+  --assumption: #855600;   --assumption-wash: #fbe8a6;   --assumption-fill: #e0a400;
   --on-attention: #fff;    /* text on a solid attention surface (an error toast) */
   --scrim: rgba(60, 56, 48, .22);
 
@@ -174,10 +174,29 @@ dialog { width: min(calc(560px * var(--z)), calc(100vw - 2 * var(--s4))); max-he
 dialog::backdrop { background: var(--scrim); }
 dialog form { display: flex; flex-direction: column; gap: var(--s3); padding: 20px; }
 dialog h3 { margin: 0; font-size: var(--fs-title); font-weight: 500; line-height: 1.25; }
-dialog .quote { max-height: 40dvh; overflow: auto; padding: 10px var(--s3); border: var(--rule) solid var(--line); background: var(--paper); white-space: pre-wrap; font-size: var(--fs-small); }
-dialog .answerpage { width: 100%; height: 40dvh; border: var(--rule) solid var(--line); background: #fff; }
+/* A box that scrolls says so: a shadow at the edge with more text behind it. The cover scrolls with the text and hides the shadow at the end. */
+dialog .quote { max-height: 40dvh; flex: none; overflow: auto; padding: 10px var(--s3); border: var(--rule) solid var(--line); white-space: pre-wrap; font-size: var(--fs-small);
+  background:
+    linear-gradient(var(--paper), var(--paper)) 0 100% / 100% 28px no-repeat local,
+    linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .22)) 0 100% / 100% 28px no-repeat scroll,
+    linear-gradient(var(--paper), var(--paper)) 0 0 / 100% 100% no-repeat; }
+dialog .answerpage { width: 100%; height: 40dvh; flex: none; border: var(--rule) solid var(--line); background: #fff; }
 dialog .row-btns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 10px; }
 dialog .row-btns .btn { white-space: nowrap; padding-left: var(--s2); padding-right: var(--s2); }
 dialog ul { margin: 0; padding-left: 1.1em; }
+/* The assumptions list scrolls inside the dialog so Cancel and Accept stay in view; the shadow says there is more. */
+dialog ul.assume { flex: none; max-height: 38dvh; overflow: auto; padding: 10px var(--s3) 4px 1.6em; border: var(--rule) solid var(--line);
+  background:
+    linear-gradient(var(--panel), var(--panel)) 0 100% / 100% 28px no-repeat local,
+    linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .22)) 0 100% / 100% 28px no-repeat scroll,
+    linear-gradient(var(--panel), var(--panel)) 0 0 / 100% 100% no-repeat; }
+/* Both boxes in one dialog: the notes give up height to the assumptions, which a decision turns on. */
+dialog ul.assume ~ .quote { max-height: 26dvh; }
+dialog ul.ev { margin: 4px 0 0; padding-left: 1.1em; font-size: var(--fs-small); color: var(--muted, inherit); }
+dialog ul.ev li { margin: 0 0 3px; }
+dialog ul.ev .way { font-weight: 600; letter-spacing: .04em; }
+dialog ul.ev .way.for { color: var(--settled); }
+dialog ul.ev .way.against { color: var(--assumption, #855600); }
+dialog .ev.none, dialog .ev.more { font-size: var(--fs-small); margin-top: 2px; }
 dialog li { margin: 0 0 6px; }
 dialog .warn { margin: 0; color: var(--assumption); font-size: var(--fs-small); }

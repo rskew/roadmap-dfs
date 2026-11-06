@@ -282,6 +282,20 @@ class Detail(unittest.TestCase):
                          "the latest archived wording, not the stub")
         self.assertNotIn("Approach", got)
 
+    def test_evidence_moved_to_the_archive_is_read_back_and_the_latest_block_wins(self):
+        arc = ("**W1.1 Evidence**:\n- for: an older line.\n\n"
+               "**W1.1 Evidence**:\n- for: first line, which wraps\n  onto a second.\n- against: a counter.\n\n"
+               "**W1.1 Approach**: x\n- not evidence.\n")
+        self.assertEqual(TUI.archived_evidence(arc),
+                         {"W1.1": ["for: first line, which wraps onto a second.", "against: a counter."]})
+        nd = dfs_tree.by_id(tree())["W1.1"]
+        nd = dict(nd, evidence=[])        # the file says `Evidence: archived.`
+        got = [t for l, t in TUI.node_detail(nd, TUI.archived_fields(arc, "W1.1")) if l == "Evidence"]
+        self.assertEqual(got, ["for: first line, which wraps onto a second.", "against: a counter."])
+        own = dict(nd, evidence=["for: its own."])
+        self.assertEqual([t for l, t in TUI.node_detail(own, TUI.archived_fields(arc, "W1.1")) if l == "Evidence"],
+                         ["for: its own."], "evidence still in the file is not replaced")
+
     def test_a_plan_load_put_back_is_labelled_as_the_archives(self):
         nd = dfs_tree.by_id(tree())["W1.1"]
         nd = dict(nd, fields=dict(nd["fields"], Approach="the whole of it"),
@@ -300,6 +314,20 @@ class Detail(unittest.TestCase):
         labels = [l for l, _ in TUI.node_detail(
             nd, {}, [("abcdef1234", "W1.1: the slice", "2026-09-27T01:00:00Z")])]
         self.assertEqual(labels, ["Approach", "Evidence", "Determination", "Commit"])
+
+    def test_an_approach_keeps_its_bold_labels_and_bullets_on_their_own_lines(self):
+        """The parser joined a wrapped field into one line, so the web sheet drew an Approach's
+        `**The question**` and its bullets as one run-on paragraph; the opened node keeps the
+        line breaks and the joined `fields["Approach"]` stays one line for the checks."""
+        text = ("# W1 · A task\n\n## Goal\nx\n\n## Tree\n\n### W1.1 · A node\nStatus: open\n"
+                "Approach: **The question**\n- Is it so?\n**What this node does**\n- Reads it.\n- Tests it.\n")
+        nd = dfs_tree.parse_nodes(text.split("## Tree", 1)[1], "W1")[0]
+        self.assertNotIn("\n", nd["fields"]["Approach"])
+        shown = dict(TUI.node_detail(nd))["Approach"]
+        self.assertEqual(shown.splitlines(), ["**The question**", "- Is it so?",
+                                              "**What this node does**", "- Reads it.", "- Tests it."])
+        one = dfs_tree.parse_nodes("### W1.1 · A\nStatus: open\nApproach: one line\n", "W1")[0]
+        self.assertEqual(dict(TUI.node_detail(one))["Approach"], "one line")
 
     def test_a_node_lists_the_code_files_its_commits_changed(self):
         """A reviewer sees which files a node touched, not only the commit's subject; the
@@ -406,7 +434,7 @@ class Pane(unittest.TestCase):
         ui.typed = ""
         ui.compose = lambda frame: (ui.composed.append(frame) or ui.typed)
         ui.prompted = ""
-        ui.prompt = lambda label, default="": ui.prompted or default
+        ui.prompt = lambda label, default="", leave="": ui.prompted or default
         ui.choose = lambda label, keys: ui.prompted[:1] if ui.prompted[:1] in keys else ""
         ui.live = lambda mode="work": []
         self.ui = ui
@@ -454,6 +482,134 @@ class Pane(unittest.TestCase):
         text = "\n".join(l for l, *_ in self.ui.lines_assumptions(100))
         self.assertIn("wrong if it leaks.", text)
         self.assertNotIn("e1ab3804", text)
+
+    def test_H_shows_each_assumptions_first_evidence_lines_as_the_web_accept_dialog_does(self):
+        """The terminal's accept prompt is one line, so `H` carries the evidence: four lines at most, a
+        picture and a page path dropped, how many more are on the node, and 'no evidence yet' for none."""
+        ev = "".join("- %s\n" % l for l in ["for: a ![shot](.dfs/artefacts/aa.png) line", "against: b",
+                                           "for: c", "for: d", "for: e", "for: f"])
+        text = TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if it leaks.\n"
+            "Evidence:\n" + ev + "Determination: Confirmed: it holds. Next, more.")
+        t = dfs_tree.parse(text, "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        self.ui.data["items"][0]["assumptions"] = dfs_tree.assumed(t)
+        self.ui.act(ord("H"))
+        out = "\n".join(l for l, *_ in self.ui.lines_assumptions(100))
+        self.assertIn("· for: a line", out)
+        self.assertNotIn("aa.png", out)
+        self.assertIn("· for: d", out)
+        self.assertNotIn("for: e", out)
+        self.assertIn("· 2 more on the node", out)
+        t2 = self.flagged_tree()
+        self.ui.data["items"][0]["assumptions"] = dfs_tree.assumed(t2)
+        out = "\n".join(l for l, *_ in self.ui.lines_assumptions(100))
+        self.assertIn("· no evidence yet", out)
+
+    def test_the_accept_prompt_is_one_short_line_that_points_at_H(self):
+        t = self.flagged_tree()
+        ui = self.ui
+        ui.data["items"][0].update(assumptions=dfs_tree.assumed(t), status="done")
+        ui.current = lambda: ui.data["items"][0]
+        ui.tree_acceptable = lambda it: True
+        asked = []
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or "n"
+        ui.tree_accept("W1")
+        self.assertEqual(len(asked), 1)
+        self.assertNotIn("\n", asked[0])
+        self.assertEqual(asked[0], "accept W1? 1 assumption on H [y/N]:")
+        self.assertLess(len(asked[0]), 60, "the footer clips a longer one before its [y/N]:")
+        # a tree with no assumption or note keeps the plain question
+        ui.tree_of = lambda task: (dfs_tree.parse(TREE, "W1"), ARCHIVE, {})
+        asked.clear()
+        ui.tree_accept("W1")
+        self.assertEqual(asked, ["accept W1's tree as finished? [y/N]:"])
+
+    def drive_accept(self, keys, assumptions=True):
+        """Press `A` on W1's tree with the REAL `prompt`/`read_line` fed `keys` one at a time (a fake screen),
+        and return the keys the screen was not asked for."""
+        ui = self.ui
+        t = self.flagged_tree() if assumptions else dfs_tree.parse(TREE, "W1")
+        ui.tree_of = lambda task: (t, ARCHIVE, {})
+        ui.data["items"][0].update(assumptions=dfs_tree.assumed(t), status="done")
+        ui.current = lambda: ui.data["items"][0]
+        ui.tree_acceptable = lambda it: True
+        ui.prompt = TUI.UI.prompt.__get__(ui)
+        ui.answers, ui.pane, ui.focus, ui.input = [], "item", "tree", None
+        ui.draw = lambda: None
+        pending = list(keys)
+
+        class Scr:
+            def timeout(self, n): pass
+            def get_wch(self):
+                return pending.pop(0)
+        ui.scr = Scr()
+        real = TUI.curses.curs_set
+        TUI.curses.curs_set = lambda n: None
+        self.addCleanup(setattr, TUI.curses, "curs_set", real)
+        ui.act(ord("A"))
+        return pending
+
+    def test_H_at_the_accept_prompt_opens_the_evidence_and_Esc_A_asks_again(self):
+        """The prompt says the assumptions are 'on H'; `read_line` types every printable key, so an `H` at the
+        prompt used to be the answer 'H', read as 'not accepted'. Now `H` first on the line opens the list
+        (one Esc back, `A` for the prompt again), and the accept is only logged by a `y`."""
+        ui = self.ui
+        self.assertEqual(self.drive_accept(["H"]), [])
+        self.assertEqual(ui.pane, "assumptions")
+        self.assertEqual(self.logged, [])
+        self.assertIn("Esc", ui.msg)
+        ui.act(27)                                  # one Esc: back to the tree, still focused
+        self.assertEqual((ui.pane, ui.focus), ("item", "tree"))
+        ui.scr.get_wch = lambda keys=list("y\n"): keys.pop(0)
+        ui.act(ord("A"))
+        self.assertEqual([(task, kind) for task, kind, *_ in self.logged], [("W1", "accept")])
+
+    def test_H_typed_after_other_text_or_with_nothing_to_list_is_just_an_answer(self):
+        self.assertEqual(self.drive_accept(["x", "H", "\n"]), [])
+        self.assertEqual((self.ui.pane, self.ui.msg, self.logged), ("item", "not accepted", []))
+        self.assertEqual(self.drive_accept(["H", "\n"], assumptions=False), [])
+        self.assertEqual((self.ui.pane, self.ui.msg, self.logged), ("item", "not accepted", []))
+
+    def test_the_accept_prompt_says_where_each_thing_it_counts_is(self):
+        """The reviewer's notes are in the tree's notes section and `H` lists assumptions only, so the prompt must not
+        send the reader to `H` for notes (it did: 'N notes: H shows them'), nor to nowhere when there is no assumption."""
+        noted = TREE.replace("## Log\n", "## Log\n\n- 2026-09-27T02:00:00Z · review · ok\n  A minor wording to read.\n", 1)
+        ui = self.ui
+        ui.data["items"][0]["status"] = "done"
+        ui.current = lambda: ui.data["items"][0]
+        ui.tree_acceptable = lambda it: True
+        asked = []
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or "n"
+        ui.tree_of = lambda task: (dfs_tree.parse(noted, "W1"), ARCHIVE, {})
+        ui.tree_accept("W1")
+        self.assertEqual(asked.pop(), "accept W1? 1 note in the tree [y/N]:")
+        t = dfs_tree.parse(noted.replace("Status: confirmed\nApproach: go deeper.",
+                                         "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if it leaks.\n"
+                                         "Determination: Confirmed: it holds."), "W1")
+        ui.tree_of = lambda task: (t, ARCHIVE, {})
+        ui.tree_accept("W1")
+        self.assertEqual(asked.pop(), "accept W1? 1 assumption on H, 1 note in the tree [y/N]:")
+
+    def test_H_has_a_heading_per_task_and_opens_on_the_current_task(self):
+        """`H` lists every unaccepted task's assumptions; the accept prompt's 'on H' means the task being accepted, so each
+        task's block has a heading and the cursor starts on the current task's first assumption, not the first task's."""
+        ui = self.ui
+        t = self.flagged_tree()
+        other = dict(id="W2", goal="Another task.", status="done", assumptions=dfs_tree.assumed(t))
+        mine = dict(id="W1", goal="Make the thing.", status="done", assumptions=dfs_tree.assumed(t))
+        ui.data["items"] = [other, mine]
+        ui.sel = 1
+        ui.act(ord("H"))
+        self.assertEqual(ui.asm_rows()[ui.asm_sel][0], 1, "the cursor starts on the current task")
+        lines = [l for l, *_ in ui.lines_assumptions(100)]
+        heads = [l for l in lines if l.startswith("W")]
+        self.assertEqual(heads, ["W2 · Another task.", "W1 · Make the thing."])
+        ui.sel = 0
+        ui.act(ord("H"))   # closes the pane
+        ui.act(ord("H"))
+        self.assertEqual(ui.asm_rows()[ui.asm_sel][0], 0)
 
     def test_n_walks_the_raises_and_assumptions_and_wraps(self):
         ui = self.ui
@@ -506,7 +662,7 @@ class Pane(unittest.TestCase):
         TUI.dfs_tree.add_node = lambda *a: added.append(a) or "W1.5"
         self.addCleanup(setattr, TUI.dfs_tree, "add_node", saved)
         answers = iter(["", "a title"])
-        ui.prompt = lambda label, default="": next(answers)
+        ui.prompt = lambda label, default="", leave="": next(answers)
         ui.tree_add("W1")
         self.assertEqual(added, [], "an empty answer to the warning adds nothing")
         self.assertEqual(ui.msg, "no node added")
@@ -520,7 +676,7 @@ class Pane(unittest.TestCase):
         TUI.dfs_tree.add_node = lambda *a: added.append(a) or "W1.5"
         self.addCleanup(setattr, TUI.dfs_tree, "add_node", saved)
         answers = iter(["a title", ""])
-        ui.prompt = lambda label, default="": next(answers)
+        ui.prompt = lambda label, default="", leave="": next(answers)
         ui.tree_add("W1")
         self.assertEqual(added, [("W1", "a title", "W1.3", "")])
 
@@ -537,12 +693,12 @@ class Pane(unittest.TestCase):
         self.to("W1.1")
         calls = self.stub_delete("delete_node", ["W1.1", "W1.2", "W1.3"])
         asked = []
-        ui.prompt = lambda label, default="": asked.append(label) or ""
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or ""
         ui.act(ord("D"))
         self.assertEqual(calls, [], "an empty answer deletes nothing")
         self.assertIn("W1.2, W1.3", asked[0])
         self.assertEqual(ui.msg, "W1.1 kept")
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertEqual(calls, [("W1", "W1.1")])
         self.assertEqual(ui.msg, "deleted W1.1, W1.2, W1.3")
@@ -552,7 +708,7 @@ class Pane(unittest.TestCase):
         ui.open_tree()
         self.to("section:W1:Goal")
         calls = self.stub_delete("delete_node", [])
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertEqual(calls, [])
         self.assertEqual(ui.msg, "the cursor is not on a node")
@@ -566,7 +722,7 @@ class Pane(unittest.TestCase):
             raise ValueError("the raise at T names W1.4; answer it first")
         TUI.dfs_tree.delete_node = refuse
         self.addCleanup(setattr, TUI.dfs_tree, "delete_node", saved)
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertEqual(ui.msg, "not deleted: the raise at T names W1.4; answer it first")
 
@@ -574,12 +730,12 @@ class Pane(unittest.TestCase):
         ui = self.ui
         calls = self.stub_delete("delete_task", ["items/W1.md"])
         asked = []
-        ui.prompt = lambda label, default="": asked.append(label) or ""
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or ""
         ui.act(ord("D"))
         self.assertEqual(calls, [])
         self.assertIn("delete W1?", asked[0])
         self.assertEqual(ui.msg, "W1 kept")
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.focus = "list"
         ui.act(ord("D"))
         self.assertEqual(calls, [("W1",)])
@@ -592,7 +748,7 @@ class Pane(unittest.TestCase):
             raise ValueError("%s is being worked on by a running session; stop it first" % task)
         TUI.dfs_tree.delete_task = refuse
         self.addCleanup(setattr, TUI.dfs_tree, "delete_task", saved)
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertTrue(ui.msg.startswith("not deleted: W1 is being worked on"), ui.msg)
 

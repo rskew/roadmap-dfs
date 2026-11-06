@@ -294,6 +294,9 @@ def plain(card):
     return out
 
 
+evidence_lines = dfs_tui.evidence_lines     # the Accept dialog and the terminal's assumptions view share it
+
+
 def raise_json(r):
     return dict(ts=r["ts"], age=dfs_tui.age(r["ts"]),
                 on=r["args"][0] if r["args"] else "", body=r["body"].strip())
@@ -445,12 +448,14 @@ def task_json(task, include_archived=False):
                 answered=bool(story["answered"]), overruled=bool(story["overruled"]),
                 card=plain(card[1:])))      # [1:]: the heading is the row
     nodes = dfs_tree.by_id(t)
+    held = dfs_tui.archived_evidence(archive)
     assumed = []
     for nid in ([] if accepted else dfs_tree.assumed(t)):
         f = nodes[nid]["fields"]
         assumption, wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f.get("Hypothesis")))
         assumed.append(dict(task=task, id=nid, title=nodes[nid]["title"],
-                            assumption=assumption, wrong=wrong, ask=f.get("Ask", "")))
+                            assumption=assumption, wrong=wrong, ask=f.get("Ask", ""),
+                            evidence=evidence_lines(nodes[nid], held.get(nid, ()))))
     return dict(id=task, goal=t["name"] or (t["goal"].splitlines() or [""])[0],
                 name=t["name"], goal_text=t["goal"], runs=runs_for(task),
                 artefacts=artefacts_for("\n".join(strings(t))),

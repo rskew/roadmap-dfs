@@ -255,8 +255,53 @@ def archived_fields(text, nid):
     A session over the task file's budget moves a determined node's Approach,
     Hypothesis and Determination there (`tree.py shelve`) and leaves `archived.`; the review should
     read the words the work was judged against, not the stub. `dfs_tree.load` already
-    puts them back, so this is for a node parsed from the file alone."""
-    return dfs_tree.archived_fields(text).get(nid, {})
+    puts them back, so this is for a node parsed from the file alone. A node whose Evidence was
+    moved there has it under "Evidence" as a list of lines: `dfs_tree.load` leaves those in the archive,
+    so without them an old node reads as having no evidence at all."""
+    out = dict(dfs_tree.archived_fields(text).get(nid, {}))
+    held = archived_evidence(text).get(nid)
+    if held:
+        out["Evidence"] = held
+    return out
+
+
+EVIDENCE_HEAD = re.compile(r"^\*\*(%s) Evidence\*\*:\s*$" % dfs_tree.NODE_RE)
+
+
+def archived_evidence(text):
+    """{node id: [evidence line, ...]} for every `**<id> Evidence**:` block an archive holds, a
+    block being the `- ` lines under it (a wrapped line joins the one before). The latest block
+    for a node wins, since the archive only grows."""
+    out, cur = {}, None
+    for line in (text or "").splitlines():
+        m = EVIDENCE_HEAD.match(line.rstrip())
+        if m:
+            cur = out[m.group(1)] = []
+        elif cur is not None and line.startswith("- "):
+            cur.append(line[2:].strip())
+        elif cur is not None and line.strip() and cur and not line.startswith("**"):
+            cur[-1] += " " + line.strip()
+        else:
+            cur = None
+    return out
+
+
+EVIDENCE_SHOWN, EVIDENCE_CUT = 4, 220     # lines the Accept dialog shows per assumption, and characters per line
+PICTURE = re.compile(r"!\[[^\]]*\]\([^)]*\)\s*")
+LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")      # [label](path): the dialog shows the label, not the markup
+
+
+def evidence_lines(nd, held=()):
+    """A node's Evidence for the Accept dialog: its first few lines, each cut at a word, and how many
+    more the node sheet holds. A picture's markdown is dropped (the dialog draws text), a link is cut to its label and an answer
+    page's path is dropped. `held` is the evidence the task's archive holds for the node, which is where a
+    shelved node's lives. `{lines: [...], more: N}`."""
+    lines = []
+    for ev in (nd["evidence"] or held):
+        ev = " ".join(LINK.sub(r"\1", PICTURE.sub("", dfs_tree.without_page(ev) or "")).split())
+        if ev:
+            lines.append(ev if len(ev) <= EVIDENCE_CUT else ev[:EVIDENCE_CUT].rsplit(" ", 1)[0].rstrip(",;:") + " …")
+    return dict(lines=lines[:EVIDENCE_SHOWN], more=max(0, len(lines) - EVIDENCE_SHOWN))
 
 
 def node_detail(nd, archived=None, commits=()):
@@ -268,9 +313,11 @@ def node_detail(nd, archived=None, commits=()):
             out.append(("%s (archive)" % k, f[k]))
         elif k in archived and ("archive" in f.get(k, "") or k not in f):
             out.append(("%s (archive)" % k, archived[k]))
+        elif k == "Approach" and nd.get("approach_text"):
+            out.append((k, nd["approach_text"]))      # with its line breaks: a label and its bullets
         elif k in f:
             out.append((k, f[k]))
-    out += [("Evidence", ev) for ev in nd["evidence"]]
+    out += [("Evidence", ev) for ev in (nd["evidence"] or archived.get("Evidence", ()))]
     if "Determination" in f:
         out.append(("Determination", f["Determination"]))
     skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination", "Ask", "Corrects")
@@ -1887,6 +1934,7 @@ class UI(WalkMixin):
         self.keys_from = ("item", "list")   # (pane, focus) `?` was pressed from
         self.last_search = ""       # `/`, repeated by an empty one
         self.input = None           # what is being typed, while it is — `read_line`
+        self.left_with = None       # the `leave` key that ended the last `read_line`, if one did
         self.order_undo = []        # `z`: (order.md before, order.md we wrote)
         self.answers = []           # `:`'s arguments, handed to the prompts it meets
         # The activity log: what this screen and its walk DID, newest last. Read back
@@ -2888,8 +2936,16 @@ class UI(WalkMixin):
             out.append(("  none: every task is accepted, or none states a hypothesis",
                         look("chrome")))
             return out
+        task_idx = None
         for i, (idx, nd) in enumerate(rows):
             sel = i == self.asm_sel
+            if idx != task_idx:
+                # A heading per task: the accept prompt's "on H" means this task's block, and rows of
+                # several tasks otherwise run together.
+                task_idx = idx
+                it = self.items[idx]
+                out.append(("%s · %s" % (it["id"], it["goal"]),
+                            look("chrome") | curses.A_BOLD))
             if sel:
                 self._sel_row = len(out)
             f = nd["fields"]
@@ -2902,6 +2958,15 @@ class UI(WalkMixin):
                     para("wrong if " + wrong, look("amber"), indent="    ")
             if f.get("Ask"):
                 para("ask: " + f["Ask"], curses.color_pair(1), indent="    ")
+            # The same first lines the web Accept dialog shows, so the terminal's one-line accept
+            # prompt can stay one line: the evidence is here, not one ⏎ per assumption away.
+            ev = evidence_lines(nd, archived_evidence(self.tree_of(self.items[idx]["id"])[1]).get(nd["id"], ()))
+            for line in ev["lines"]:
+                para("· " + line, look("chrome"), indent="    ")
+            if ev["more"]:
+                para("· %d more on the node (⏎)" % ev["more"], look("chrome"), indent="    ")
+            elif not ev["lines"] and f.get("Hypothesis"):
+                para("· no evidence yet", look("chrome"), indent="    ")
             out.append(("", 0))
         return out
 
@@ -4798,39 +4863,55 @@ class UI(WalkMixin):
             self.msg = "%s is not a finished tree waiting to be accepted" % item
             return
         t, _, _ = self.tree_of(item)
-        assumed = assumed_nodes(t)
-        # ⚠️ NAMED IN THE QUESTION, with what would show each one wrong, because accepting
-        # is the moment they stop being looked at; and the reviewer's notes are counted.
+        # ⚠️ ONE SHORT LINE. The footer draws this label from column 1 and clips it at the screen's
+        # edge, so a prompt that named every assumption and its test (W75: 472 characters) showed the
+        # reader the first one and never its `[y/N]:`. It counts what rests on the author and says where
+        # each is: the assumptions on `H` (each with its test and first evidence lines), the reviewer's
+        # notes in the tree's "Reviewer and critic notes" section, which `H` does not list.
+        n, kept = len(assumed_nodes(t)), len(dfs_tree.notes(t))
         bits = []
-        nodes = dfs_tree.by_id(t)
-        for nid in assumed:
-            f = nodes[nid]["fields"]
-            wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f.get("Hypothesis")))[1] or f.get("Ask", "")
-            bits.append("%s (%s)" % (nid, clip(wrong, 36)) if wrong else nid)
-        note = (" Assumptions: %s." % "; ".join(bits)) if bits else ""
-        kept = len(dfs_tree.notes(t))
+        if n:
+            bits.append("%d assumption%s on H" % (n, "" if n == 1 else "s"))
         if kept:
-            note += " %d reviewer note%s above." % (kept, "" if kept == 1 else "s")
-        if self.prompt("accept %s's tree as finished?%s [y/N]:" % (item, note))[:1].lower() != "y":
+            bits.append("%d note%s in the tree" % (kept, "" if kept == 1 else "s"))
+        ask = "accept %s? %s [y/N]:" % (item, ", ".join(bits)) if bits \
+            else "accept %s's tree as finished? [y/N]:" % item
+        self.left_with = None
+        got = self.prompt(ask, leave="H" if n else "")
+        if self.left_with == "H":
+            # `H` at the prompt: show the evidence now. Esc closes the list; `A` asks again.
+            self.left_with = None
+            self.open_assumptions()
+            self.msg = "H: the assumptions; Esc goes back, A accepts"
+            return
+        if got[:1].lower() != "y":
             self.msg = "not accepted"
             return
         dfs_tree.append_log(item, "accept")
         self.reload()
         self.msg = self.event("review", "accepted %s's tree" % item)
 
-    def prompt(self, label, default=""):
+    def open_assumptions(self):
+        """The `H` pane, opened on the current task's first assumption (the one being accepted), not the
+        first of all tasks."""
+        self.pane = "assumptions"
+        self.asm_sel = next((i for i, (idx, _nd) in enumerate(self.asm_rows()) if idx == self.sel), 0)
+        self.scroll = 0
+
+    def prompt(self, label, default="", leave=""):
         """A line typed on the footer: what was typed, `default` for an empty ⏎, and
         "" for Esc — which cancels past the default, since Esc then ⏎ at `cap [5]:`
         used to start a chain. A `:` command's arguments answer these first
-        (`answers`), so `:walk 20` is `w` and 20 without the question."""
+        (`answers`), so `:walk 20` is `w` and 20 without the question.
+        `leave` is keys that end the line at once when typed first (see `read_line`)."""
         if self.answers:
             return self.answers.pop(0)
-        got = self.read_line(label)
+        got = self.read_line(label, leave=leave)
         if got is None:
             return ""
         return got or default
 
-    def read_line(self, label, on_change=None, menu=None, hint=None, complete=None):
+    def read_line(self, label, on_change=None, menu=None, hint=None, complete=None, leave=""):
         """Read a line where the footer is, a key at a time. None means Esc.
 
         ⚠️ `getstr` IS GONE, for the three things it could not do: Esc was typed as a
@@ -4842,9 +4923,14 @@ class UI(WalkMixin):
         `on_change(text)` runs after each edit; `menu(text)` gives the rows to show
         above the line and their title; `complete(text, row)` is what Tab makes of
         the text given the picked row.
+
+        `leave` is keys that end the read like Esc (None) when typed on an empty line,
+        and are left in `self.left_with` for the caller: `tree_accept` offers `H`, since
+        a letter typed into a y/N line would otherwise be an answer of "no".
         """
         inp = self.input = dict(label=label, text="", pos=0, hint=hint, menu=[],
                                 pick=0)
+        self.left_with = None
         self.scr.timeout(-1)
         try:
             curses.curs_set(1)
@@ -4869,6 +4955,9 @@ class UI(WalkMixin):
                 if ch in ("\n", "\r", curses.KEY_ENTER):
                     return text.strip()
                 if ch == "\x1b":
+                    return None
+                if leave and not text and isinstance(ch, str) and ch in leave:
+                    self.left_with = ch
                     return None
                 if ch == curses.KEY_RESIZE:
                     continue
@@ -4982,8 +5071,10 @@ class UI(WalkMixin):
         elif ch == ord(":"):
             return self.command()
         elif ch == ord("H"):
-            self.pane = "item" if self.pane == "assumptions" else "assumptions"
-            self.asm_sel = 0
+            if self.pane == "assumptions":
+                self.pane = "item"
+            else:
+                self.open_assumptions()
             self.scroll = 0
         elif ch == ord("h"):
             self.pane = "item" if self.pane == "activity" else "activity"

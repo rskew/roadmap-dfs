@@ -14,6 +14,9 @@
 <style>
   body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
          font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  /* A long name or path wraps, not off a phone's edge. Prose only: on a table cell or grid column `anywhere`
+     would shrink the column to one letter and split ordinary words (113 on the 175 pages made before). */
+  p, li, h1, h2, h3, .box, .legend, .lede { overflow-wrap: break-word; }
   h1 { font-size: 20px; margin: 0 0 4px; }
   .lede { margin: 0 0 20px; max-width: 62ch; color: #444; }
   /* The diagram is a flow: boxes stacked top to bottom with a labelled arrow between
@@ -32,7 +35,7 @@
   @media (min-width: 720px) {
     body { padding: 28px 32px; }
     .dg { flex-direction: row; align-items: center; }
-    .box { flex: 1 1 0; }
+    .box { flex: 1 1 0; min-width: 0; }   /* a flex item is no narrower than its longest word unless this says so */
     .link { padding: 0 10px; }
     .link::after { content: "\2192"; }
   }

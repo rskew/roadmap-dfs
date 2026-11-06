@@ -22,6 +22,9 @@
 <style>
   body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
          font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  /* A long name or path wraps, not off a phone's edge. Prose only: on a table cell or grid column `anywhere`
+     would shrink the column to one letter and split ordinary words (113 on the 175 pages made before). */
+  p, li, h1, h2, h3, .box, .legend, .lede { overflow-wrap: break-word; }
   @media (min-width: 720px) { body { padding: 28px 32px; } }
   h1 { font-size: 20px; margin: 0 0 4px; }
   h2 { font-size: 16px; margin: 22px 0 6px; }
@@ -39,7 +42,9 @@
   .dfs-answer p { margin: 8px 0 0; }
   .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
   .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
-  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  /* An option's text is a flex item, which `overflow-wrap: break-word` cannot narrow: `anywhere` can, and a label is one
+     line of text in its own row, so it cannot squeeze a column of other words. */
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
   .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
   .dfs-answer .note { display: block; margin: 8px 0 2px; }
   .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
@@ -47,7 +52,7 @@
   .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
                        border-radius: 6px; background: #fff; cursor: pointer; }
   .dfs-answer button:disabled { opacity: .5; cursor: default; }
-  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
   .dfs-answer #dfs-parkbox[hidden] { display: none; }
   .dfs-answer .where { color: #555; font-size: 14px; }
 </style>

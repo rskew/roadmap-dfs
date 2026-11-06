@@ -1,0 +1,9 @@
+W75, 8 assumptions (H leaves the prompt):
+A  then H              pane=assumptions focus=tree  logged=[]  footer: accept W75? 8 assumptions on H, 35 notes in the tree [y/N]:  msg: H: the assumptions; Esc goes back, A accepts
+Esc                    pane=item        focus=tree  logged=[]
+A  then y, Enter       pane=item        focus=tree  logged=[('W75', 'accept')]  footer: accept W75? 8 assumptions on H, 35 notes in the tree [y/N]:  msg: accepted W75's tree
+keys from the first A to the accept: A, H, Esc, A, y, Enter = 6 (3 without reading the evidence: A, y, Enter)
+
+W75, 8 assumptions (H typed as text (old)):
+A  then H, Enter       pane=item        focus=tree  logged=[]  footer: accept W75? 8 assumptions on H, 35 notes in the tree [y/N]:  msg: not accepted
+(old: the H was text on the line, the prompt kept waiting for Enter, and 'H' was read as 'not accepted')

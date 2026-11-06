@@ -1,0 +1,23 @@
+docs/ux-templates-longword.py: an 85-character word in the place a session would put a test name; scrollWidth against the screen.
+
+Before (templates at the W131.50 commit):
+_TEMPLATE_ANSWER.html  option 1   320:WIDE(750>320)  390:WIDE(750>390)  720:WIDE(766>720)  1280:ok
+_TEMPLATE_ANSWER.html  option 2   320:WIDE(750>320)  390:WIDE(750>390)  720:WIDE(766>720)  1280:ok
+_TEMPLATE_ANSWER.html  park box   320:WIDE(904>320)  390:WIDE(905>390)  720:WIDE(920>720)  1280:ok
+_TEMPLATE_ANSWER.html  paragraph  320:ok  390:ok  720:ok  1280:ok
+_TEMPLATE.html         box span   320:ok  390:ok  720:WIDE(987>720)  1280:ok
+_TEMPLATE.html         box b      320:ok  390:ok  720:WIDE(1032>720)  1280:ok
+_TEMPLATE.html         legend     320:ok  390:ok  720:ok  1280:ok
+wide cells: 11
+
+After (option and park-box labels `overflow-wrap: anywhere`; the row's .box `min-width: 0`):
+_TEMPLATE_ANSWER.html  option 1   320:ok  390:ok  720:ok  1280:ok
+_TEMPLATE_ANSWER.html  option 2   320:ok  390:ok  720:ok  1280:ok
+_TEMPLATE_ANSWER.html  park box   320:ok  390:ok  720:ok  1280:ok
+_TEMPLATE_ANSWER.html  paragraph  320:ok  390:ok  720:ok  1280:ok
+_TEMPLATE.html         box span   320:ok  390:ok  720:ok  1280:ok
+_TEMPLATE.html         box b      320:ok  390:ok  720:ok  1280:ok
+_TEMPLATE.html         legend     320:ok  390:ok  720:ok  1280:ok
+wide cells: 0
+
+The option rule on the 176 existing pages (WRAP=anywhere SELECTOR='.opt, #dfs-parkbox' docs/ux-templates-overflow.py): 527 page-and-width cells, 0 ordinary words split, 0 new sideways scroll.

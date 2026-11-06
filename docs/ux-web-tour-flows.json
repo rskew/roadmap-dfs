@@ -1,0 +1,4 @@
+[
+ {"name":"13-W2-accept","goto":"t/W2","click":["[data-act=accept]"],"wait":1.2},
+ {"name":"14-W7-dark","goto":"t/W7","js":["localStorage.setItem('theme','dark')","location.reload()"],"wait":1.5}
+]
