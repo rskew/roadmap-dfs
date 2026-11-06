@@ -939,7 +939,7 @@ answers.
 |---|---|---|---|---|---|
 | E1 no page for a Hypothesis, `assumed` | accounting; W17 pooled arm | pooled arm inside the controls' range (one page-less Hypothesis) | 131 of 376 pages would not be made; about 8 fewer `Wrong if` words a task (inside 60); the files cannot show the author opened any page (12 of 18 rulings were on a page-bearing node, 6 on none) | about 1.9k to 2.8k output tokens a task, small | inconclusive |
 | E2 gate at determination | judge test; W17 pooled arm | no judging evidence (judges did not separate backtracks from controls) | not measured | not measured | inconclusive |
-| E4 checkpoint shows churn and a default | accounting | not measured | all 36 raises stay; the author answered stop 2, continue 29, steer 5; a default of stop would have been overridden 23 times of 24 where it fires; 15 of the 29 continues ran on to four or more issues reviews, all on five tasks, and neither the no-fall rule nor a caused-by-the-previous-fix reading separated those tasks from the rest | none | inconclusive |
+| E4 checkpoint shows churn and a default | accounting | not measured, and not measurable by replay: the review-count and ten-session checkpoints were removed on 15 and 20 Oct 2026, the worker never read them, and a replay driver answers both arms alike | all 36 raises stay; the author answered stop 2, continue 29, steer 5; a default of stop would have been overridden 23 times of 24 where it fires; 15 of the 29 continues ran on to four or more issues reviews, all on five tasks, and neither the no-fall rule nor a caused-by-the-previous-fix reading separated those tasks from the rest | none | inconclusive |
 | E5 tooling fault filed as a draft | accounting | not measured | removes 17 of 26 tooling raises if "blocks the Goal" means a fix was needed to finish (A), 8 if it means the commit was refused (B); 9 of the 17 need a new permission to go around a refusing hook; pool-wide 0.07 raises a task (A) or 0.03 (B), inside one, but 1.55 and 1.6 in the 11 and 5 tasks that held one | none | inconclusive |
 | E6 word budget on a Determination | accounting; W17 pooled arm | none of the pooled arm's Determinations was over 80 words, so the budget never bit | 80 words refuses 365 of 1,483 and cuts 52 words a task (inside 60); of 36 long ones read in full 1 has its verdict first past word 80 and 13 a hand-off (revert, keep, who does what) | none | inconclusive |
 | E7 minor findings in the review's `ok` | accounting; W17 pooled arm | no review round was owed to a minor node (169 reviews); at least 10 of 484 minor lines (2.1%) came back as the same defect and 29 (6.0%) as a related one | adds 42 words a task over all tasks (inside 60), 137 in the 73 tasks that have a minor node | none | inconclusive |
@@ -948,8 +948,8 @@ answers.
 Reading the table. No change was shown to hurt the delivered tree and none was shown to help it:
 every difference is inside the noise of the evidence that exists, so nothing is adopted or dropped
 on this round. What would settle each: E1, E6 and E7 need three or more paired tasks that raise
-hypotheses and minor findings (the W17 spread alone is 3 clauses); E4 and E5 need a replayed task
-that reaches a loop checkpoint or a tooling fault, which W17 did not; E8 needs about 50 targets and
+hypotheses and minor findings (the W17 spread alone is 3 clauses); E5 needs a replayed task
+that meets a tooling fault, which W17 did not, and E4 needs the author's checkpoint back first (parked); E8 needs about 50 targets and
 the blind reviewer run with the git history closed (it ran `git log`, `git show` or `git diff` in
 all 20 first trees, and its output held 12 of 78 Determinations and 4 Summaries in 5 trees); E2
 needs a judge that can run the node's check, since most critic backtracks rested on a rerun.
