@@ -294,6 +294,23 @@ def plain(card):
     return out
 
 
+EVIDENCE_SHOWN, EVIDENCE_CUT = 4, 220     # lines the Accept dialog shows per assumption, and characters per line
+PICTURE = re.compile(r"!\[[^\]]*\]\([^)]*\)\s*")
+
+
+def evidence_lines(nd, held=()):
+    """A node's Evidence for the Accept dialog: its first few lines, each cut at a word, and how many
+    more the node sheet holds. A picture's markdown is dropped (the dialog draws text) and an answer
+    page's path with it. `held` is the evidence the task's archive holds for the node, which is where a
+    shelved node's lives. `{lines: [...], more: N}`."""
+    lines = []
+    for ev in (nd["evidence"] or held):
+        ev = " ".join(PICTURE.sub("", dfs_tree.without_page(ev) or "").split())
+        if ev:
+            lines.append(ev if len(ev) <= EVIDENCE_CUT else ev[:EVIDENCE_CUT].rsplit(" ", 1)[0].rstrip(",;:") + " …")
+    return dict(lines=lines[:EVIDENCE_SHOWN], more=max(0, len(lines) - EVIDENCE_SHOWN))
+
+
 def raise_json(r):
     return dict(ts=r["ts"], age=dfs_tui.age(r["ts"]),
                 on=r["args"][0] if r["args"] else "", body=r["body"].strip())
@@ -445,12 +462,14 @@ def task_json(task, include_archived=False):
                 answered=bool(story["answered"]), overruled=bool(story["overruled"]),
                 card=plain(card[1:])))      # [1:]: the heading is the row
     nodes = dfs_tree.by_id(t)
+    held = dfs_tui.archived_evidence(archive)
     assumed = []
     for nid in ([] if accepted else dfs_tree.assumed(t)):
         f = nodes[nid]["fields"]
         assumption, wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f.get("Hypothesis")))
         assumed.append(dict(task=task, id=nid, title=nodes[nid]["title"],
-                            assumption=assumption, wrong=wrong, ask=f.get("Ask", "")))
+                            assumption=assumption, wrong=wrong, ask=f.get("Ask", ""),
+                            evidence=evidence_lines(nodes[nid], held.get(nid, ()))))
     return dict(id=task, goal=t["name"] or (t["goal"].splitlines() or [""])[0],
                 name=t["name"], goal_text=t["goal"], runs=runs_for(task),
                 artefacts=artefacts_for("\n".join(strings(t))),

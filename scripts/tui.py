@@ -255,8 +255,35 @@ def archived_fields(text, nid):
     A session over the task file's budget moves a determined node's Approach,
     Hypothesis and Determination there (`tree.py shelve`) and leaves `archived.`; the review should
     read the words the work was judged against, not the stub. `dfs_tree.load` already
-    puts them back, so this is for a node parsed from the file alone."""
-    return dfs_tree.archived_fields(text).get(nid, {})
+    puts them back, so this is for a node parsed from the file alone. A node whose Evidence was
+    moved there has it under "Evidence" as a list of lines: `dfs_tree.load` leaves those in the archive,
+    so without them an old node reads as having no evidence at all."""
+    out = dict(dfs_tree.archived_fields(text).get(nid, {}))
+    held = archived_evidence(text).get(nid)
+    if held:
+        out["Evidence"] = held
+    return out
+
+
+EVIDENCE_HEAD = re.compile(r"^\*\*(%s) Evidence\*\*:\s*$" % dfs_tree.NODE_RE)
+
+
+def archived_evidence(text):
+    """{node id: [evidence line, ...]} for every `**<id> Evidence**:` block an archive holds, a
+    block being the `- ` lines under it (a wrapped line joins the one before). The latest block
+    for a node wins, since the archive only grows."""
+    out, cur = {}, None
+    for line in (text or "").splitlines():
+        m = EVIDENCE_HEAD.match(line.rstrip())
+        if m:
+            cur = out[m.group(1)] = []
+        elif cur is not None and line.startswith("- "):
+            cur.append(line[2:].strip())
+        elif cur is not None and line.strip() and cur and not line.startswith("**"):
+            cur[-1] += " " + line.strip()
+        else:
+            cur = None
+    return out
 
 
 def node_detail(nd, archived=None, commits=()):
@@ -272,7 +299,7 @@ def node_detail(nd, archived=None, commits=()):
             out.append((k, nd["approach_text"]))      # with its line breaks: a label and its bullets
         elif k in f:
             out.append((k, f[k]))
-    out += [("Evidence", ev) for ev in nd["evidence"]]
+    out += [("Evidence", ev) for ev in (nd["evidence"] or archived.get("Evidence", ()))]
     if "Determination" in f:
         out.append(("Determination", f["Determination"]))
     skip = ("Status", "Parent", "Approach", "Hypothesis", "Determination", "Ask", "Corrects")

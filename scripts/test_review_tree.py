@@ -282,6 +282,20 @@ class Detail(unittest.TestCase):
                          "the latest archived wording, not the stub")
         self.assertNotIn("Approach", got)
 
+    def test_evidence_moved_to_the_archive_is_read_back_and_the_latest_block_wins(self):
+        arc = ("**W1.1 Evidence**:\n- for: an older line.\n\n"
+               "**W1.1 Evidence**:\n- for: first line, which wraps\n  onto a second.\n- against: a counter.\n\n"
+               "**W1.1 Approach**: x\n- not evidence.\n")
+        self.assertEqual(TUI.archived_evidence(arc),
+                         {"W1.1": ["for: first line, which wraps onto a second.", "against: a counter."]})
+        nd = dfs_tree.by_id(tree())["W1.1"]
+        nd = dict(nd, evidence=[])        # the file says `Evidence: archived.`
+        got = [t for l, t in TUI.node_detail(nd, TUI.archived_fields(arc, "W1.1")) if l == "Evidence"]
+        self.assertEqual(got, ["for: first line, which wraps onto a second.", "against: a counter."])
+        own = dict(nd, evidence=["for: its own."])
+        self.assertEqual([t for l, t in TUI.node_detail(own, TUI.archived_fields(arc, "W1.1")) if l == "Evidence"],
+                         ["for: its own."], "evidence still in the file is not replaced")
+
     def test_a_plan_load_put_back_is_labelled_as_the_archives(self):
         nd = dfs_tree.by_id(tree())["W1.1"]
         nd = dict(nd, fields=dict(nd["fields"], Approach="the whole of it"),

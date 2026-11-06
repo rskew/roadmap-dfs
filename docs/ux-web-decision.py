@@ -10,10 +10,11 @@ width, it drives the real page and records:
  - the task page: whether each assumption's closed row shows its "Wrong if", whether the notes appear;
  - the node sheet reached by the "Flagged" button (one tap per assumption, starting from the task page):
    whether it shows "Wrong if" and Evidence, its words, and how many screens it scrolls;
- - the Accept dialog: whether it shows "Wrong if", Evidence and the notes, its words and screens;
+ - the Accept dialog (W131.41 adds, per assumption, its evidence lines and a scrolling list): how many assumptions show a
+   "Wrong if" and evidence lines, the list's words and screens, whether Cancel and Accept stay in view, and the notes;
  - whether an open raise removes the Accept button (a copy of the task with one raise appended).
 
-Output: `decision.json` in OUT_DIR and a short table on stdout.
+Output: `decision.json` in OUT_DIR and a short table on stdout; with SHOTS=<path prefix> a picture of each open dialog.
 """
 import json, os, shutil, socket, subprocess, sys, time, urllib.request
 
@@ -62,10 +63,17 @@ SHEET = """() => {
 }"""
 DIALOG = """() => {
   const d = document.querySelector('#form'); if (!d || !d.open) return null;
-  const q = d.querySelector('.quote'), text = d.innerText;
+  const q = d.querySelector('.quote'), list = d.querySelector('ul.assume'), text = d.innerText;
+  const inView = el => { if (!el) return null; const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; };
+  const btn = v => [...d.querySelectorAll('button')].find(b => b.value === v || b.textContent.trim().toLowerCase() === v);
+  // each assumption's own text: its evidence lines are the <li>s of its inner list
+  const items = list ? [...list.children].map(li => ({ id: (li.querySelector('b') || {}).textContent, lines: li.querySelectorAll('ul.ev > li').length,
+      none: !!li.querySelector('.ev.none'), more: (li.querySelector('.ev.more') || {}).textContent || '' })) : [];
   return { text, words: text.split(/\\s+/).filter(Boolean).length, scrollH: d.scrollHeight, clientH: d.clientHeight,
-           quoteScrollH: q ? q.scrollHeight : 0, quoteClientH: q ? q.clientHeight : 0, items: d.querySelectorAll('li').length,
-           items_text: [...d.querySelectorAll('li')].map(l => l.innerText).join(' '), vh: innerHeight };
+           quoteScrollH: q ? q.scrollHeight : 0, quoteClientH: q ? q.clientHeight : 0,
+           listScrollH: list ? list.scrollHeight : 0, listClientH: list ? list.clientHeight : 0, items,
+           listWords: list ? list.innerText.split(/\\s+/).filter(Boolean).length : 0,
+           cancelInView: inView(btn('cancel')), acceptInView: inView(btn('ok')), vh: innerHeight };
 }"""
 
 
@@ -130,10 +138,16 @@ def drive(pg, base, task, size, info):
         d = pg.evaluate(DIALOG)
         if d:
             low = d["text"].lower()
-            res["dialog"] = {"words": d["words"], "items": d["items"], "wrong_if_items": low.count("wrong if"),
-                             "evidence": any(k in d["items_text"].lower() for k in ("evidence", "for:", "against:")),
+            res["dialog"] = {"words": d["words"], "assumptions": len(d["items"]), "wrong_if_items": low.count("wrong if"),
+                             "with_evidence": sum(1 for i in d["items"] if i["lines"]), "evidence_lines": sum(i["lines"] for i in d["items"]),
+                             "no_evidence": sum(1 for i in d["items"] if i["none"]), "more_lines": sum(int((i["more"].split() or ["0"])[0]) for i in d["items"]),
+                             "list_words": d["listWords"], "list_box_px": d["listClientH"], "list_text_px": d["listScrollH"],
+                             "list_screens": round(d["listScrollH"] / d["listClientH"], 1) if d["listClientH"] else 0,
+                             "dialog_scrolls": d["scrollH"] > d["clientH"] + 1, "cancel_in_view": d["cancelInView"], "accept_in_view": d["acceptInView"],
                              "notes_shown": sum(1 for n in info["notes"] if n["heading"] and n["heading"] in d["text"]),
-                                                         "note_box_px": d["quoteClientH"], "note_box_text_px": d["quoteScrollH"], "viewport_px": d["vh"]}
+                             "note_box_px": d["quoteClientH"], "note_box_text_px": d["quoteScrollH"], "viewport_px": d["vh"]}
+        if os.environ.get("SHOTS"):      # SHOTS=<prefix>: a picture of the open dialog, <prefix>-<task>-<size>.png
+            pg.screenshot(path="%s-%s-%s.png" % (os.environ["SHOTS"], task, size))
         pg.keyboard.press("Escape")
     return res
 
@@ -162,11 +176,10 @@ def main():
         json.dump(allres, open(os.path.join(out, "decision.json"), "w"), indent=1)
     for r in allres:
         d = r.get("dialog", {})
-        print("%-4s %-5s assumed %d | closed rows with Wrong if %d, evidence %d | Flagged taps %d reach all: %s | sheets %d words %.1f screens"
-              " | dialog: %d items, %d words, evidence %s, notes %d of %d (note box %s of %s px) | decision words (Hypothesis, Wrong if, Evidence) %d | notes on task page %d"
-              % (r["task"], r["size"], len(r["assumed"]), r["closed_rows_with_wrong_if"], r["closed_rows_with_evidence"], r["flag_taps"],
-                 r["reached_all_assumed"], r["sheet_words_total"], r["sheet_screens_total"], d.get("items", 0), d.get("words", 0),
-                 d.get("evidence"), d.get("notes_shown", 0), r["notes"], d.get("note_box_px"), d.get("note_box_text_px"), r["decision_words"], r["notes_on_task_page"]))
-
+        print("%-4s %-5s assumed %d | Flagged taps %d | dialog: %d Wrong if, %d with evidence (%d lines, %d more on sheets, %d say none), list %d words in %s of %s px (%s screens), "
+              "dialog scrolls %s, Cancel in view %s, Accept in view %s | notes %d of %d (note box %s px) | vh %s"
+              % (r["task"], r["size"], len(r["assumed"]), r["flag_taps"], d.get("wrong_if_items", 0), d.get("with_evidence", 0), d.get("evidence_lines", 0),
+                 d.get("more_lines", 0), d.get("no_evidence", 0), d.get("list_words", 0), d.get("list_box_px"), d.get("list_text_px"), d.get("list_screens"),
+                 d.get("dialog_scrolls"), d.get("cancel_in_view"), d.get("accept_in_view"), d.get("notes_shown", 0), r["notes"], d.get("note_box_px"), d.get("viewport_px")))
 
 main()

@@ -2043,11 +2043,18 @@ function addForm(parent) {
     <div><label for="a">Approach, optional: what to do, where, and the check</label><textarea id="a" name="approach"></textarea></div>${buttons("Add")}`,
     async fd => { const res = await api("/api/add", { task: S.task.id, parent: parent || null, title: fd.get("title"), approach: fd.get("approach") }); await wrote(res, "Added " + res.added + "."); });
 }
+/* An assumption's evidence in the Accept dialog: its first lines as the node holds them ("for: ..." / "against: ...") and
+   what is left on the node sheet, so the author weighs the test against what was seen without opening each node. */
+function evidenceHtml(x) {
+  const e = x.evidence || { lines: [], more: 0 };
+  if (!e.lines.length) return `<div class="ev none">No evidence written.</div>`;
+  return `<ul class="ev">${e.lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul>${e.more ? `<div class="ev more">${e.more} more on ${esc(x.id)}'s sheet.</div>` : ""}`;
+}
 function acceptForm() {
   const a = S.task.assumed;
   form(`<h3>Accept ${esc(S.task.id)}'s tree as finished?</h3>
     ${a.length ? `<p class="muted" style="margin:0">It rests on ${a.length} assumption${a.length === 1 ? "" : "s"} you have not accepted:</p>
-      <ul>${a.map(x => `<li><b>${esc(x.id)}</b> ${x.wrong ? "wrong if " + esc(x.wrong) : esc(x.ask || x.assumption)}</li>`).join("")}</ul>` : `<p class="muted" style="margin:0">Nothing in it states an assumption.</p>`}
+      <ul class="assume" tabindex="0" aria-label="Assumptions and their evidence">${a.map(x => `<li><b>${esc(x.id)}</b> ${x.wrong ? "wrong if " + esc(x.wrong) : esc(x.ask || x.assumption)}${evidenceHtml(x)}</li>`).join("")}</ul>` : `<p class="muted" style="margin:0">Nothing in it states an assumption.</p>`}
     ${S.task.notes.length ? `<p class="warn">What the ${S.task.notes.every(n => n.kind === "review") ? "reviewer said" : "reviewer and critic said"}, the newest first:</p>
       <div class="quote" tabindex="0">${S.task.notes.map(n => `<b>${esc(n.heading)}</b>\n${esc(n.body)}`).join("\n\n")}</div>` : ""}
     ${buttons("Accept")}`,

@@ -1509,6 +1509,43 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         status, data, _ = self.call("GET", "/api/assumptions")
         self.assertEqual(data["assumed"][0]["wrong"], "a client returns inside one window.")
 
+    def test_the_accept_dialogs_assumption_carries_its_first_evidence_lines(self):
+        """The dialog's assumptions list shows each one's Evidence: four lines at most, each cut at a word, a picture's
+        markdown dropped, and how many more the node sheet holds. A shelved node's lives in the archive."""
+        path = self.root / ".dfs" / "items" / "W1.md"
+        long = "for: " + "word " * 80
+        lines = ["for: a line ![shot](.dfs/artefacts/aa.png) with a picture", long, "against: b", "for: c", "for: d", "for: e"]
+        text = path.read_text().replace("Determination: Confirmed: memory is flat over 10k ids.",
+                                        "Evidence:\n" + "".join("- %s\n" % l for l in lines) +
+                                        "Determination: Confirmed: memory is flat over 10k ids.", 1)
+        path.write_text(text)
+        os.utime(path, (time.time() + 10, time.time() + 10))     # the page reads a task again when its file's time moves
+        ev = self.task()["assumed"][0]["evidence"]
+        self.assertEqual(len(ev["lines"]), 4)
+        self.assertEqual(ev["more"], 2)
+        self.assertEqual(ev["lines"][0], "for: a line with a picture")
+        self.assertTrue(ev["lines"][1].endswith(" …") and len(ev["lines"][1]) <= 222, ev["lines"][1][-30:])
+        # Evidence shelved to the archive is read from there.
+        path.write_text(text.replace("Evidence:\n" + "".join("- %s\n" % l for l in lines), "Evidence: archived.\n"))
+        arc = self.root / ".dfs" / "archive" / "items" / "W1.md"
+        arc.parent.mkdir(parents=True, exist_ok=True)
+        arc.write_text("**W1.2 Evidence**:\n- for: shelved.\n- against: and this.\n")
+        for f in (path, arc):
+            os.utime(f, (time.time() + 20, time.time() + 20))
+        ev = self.task()["assumed"][0]["evidence"]
+        self.assertEqual((ev["lines"], ev["more"]), (["for: shelved.", "against: and this."], 0))
+
+    def test_the_accept_dialog_lists_assumptions_in_a_box_that_scrolls_and_keeps_its_buttons(self):
+        src = (HERE / "web" / "index.html").read_text()
+        css = (HERE / "web" / "design.css").read_text()
+        self.assertIn("evidenceHtml(x)", src)
+        self.assertIn('<ul class="assume"', src)
+        box = css[css.index("dialog ul.assume {"):]
+        box = box[:box.index("}")]
+        self.assertIn("flex: none", box)         # a flex column shrinks a box without it to its padding
+        self.assertIn("max-height", box)         # so Cancel and Accept stay on screen
+        self.assertIn("overflow: auto", box)
+
     def test_the_assumptions_across_tasks(self):
         status, data, _ = self.call("GET", "/api/assumptions")
         self.assertEqual([a["id"] for a in data["assumed"]], ["W1.2"])
