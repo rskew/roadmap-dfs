@@ -1,0 +1,7 @@
+[
+ {"name":"01-tasks","goto":"","wait":1.5},
+ {"name":"02-task-W9","goto":"t/W9","wait":1.5},
+ {"name":"03-node-W131.30","goto":"t/W131/W131.30","wait":1.5},
+ {"name":"04-chats","goto":"chats","wait":1.5},
+ {"name":"05-artefact","goto":"a/W131/aa9bf10a-c1ee-42ec-ad5e-d01652104282.html","wait":2}
+]

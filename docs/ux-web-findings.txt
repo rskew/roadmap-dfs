@@ -1,0 +1,13 @@
+Web UI review with playwright + chromium (W131.34). Run:
+  nix build --impure --expr 'let pkgs = (builtins.getFlake "nixpkgs").legacyPackages.x86_64-linux; in pkgs.python3.withPackages (ps: [ps.playwright])'
+  FONTCONFIG_FILE=<a fonts.conf naming a font dir> TOUR=docs/ux-web-tour.json [WALK=1] python3 docs/ux-web-playwright.py SITE OUT
+Without a fontconfig file chromium draws a blank page (innerText is there, no glyphs); with one, text is drawn.
+
+Measured at 390x844 and 1280x800 on the repo's 153 tasks and on the old review's fixture:
+- sideways scroll: none. unlabelled controls: none. text under WCAG AA contrast: none. console errors: none (except 403 on /api/chats under --no-walk).
+- opened node Approach: one run-on paragraph (fixed in W131.35).
+- --no-walk: Chats leaves the previous screen up (W131.36).
+- "Add a task" button covers the last row's badges on the phone list (W131.36).
+- fold buttons 40 px wide (W131.36).
+- Accept dialog: reviewer-note box is cut mid-line with no scroll cue (W131.36).
+- Not covered: answering a raise, the refute/confirm and add-node forms, reorder, walk controls, run log, 320 px width, keyboard use.
