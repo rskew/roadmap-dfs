@@ -1,0 +1,32 @@
+n	project	task	node	raise ts	wait h	class	answered	answer
+1	roadmap-dfs	W60	W60.4	2026-10-10T10:22:42Z	0.9	blocks	bypass	Ignore tooling issues, continue with implementation
+2	roadmap-dfs	W75	W75.44	2026-10-19T04:58:41Z	0.7	blocks	bypass	work around this (--no-verify) for this item, and make sure the issue is captured in anoth
+3	roadmap-dfs	W75	W75.56	2026-10-21T23:43:26Z	12.7	blocks	continue	Continue (option 1: this moves the compact cutoff; compact what it can). The size-rule tas
+4	roadmap-dfs	W75	W75.60	2026-10-25T12:33:12Z	74.8	blocks	bypass	If this isn't fixed already then add a task, then work around this for now with --no-verif
+5	roadmap-dfs	W109	W109.5	2026-10-24T13:57:19Z	15.1	free	draft	A
+6	roadmap-dfs	W111	W111.11	2026-10-28T05:47:02Z	0.5	blocks	bypass	3
+7	roadmap-dfs	W111	W111.13	2026-10-28T06:59:17Z	5.2	blocks	bypass	Work around this for now, manually complete the task
+8	roadmap-dfs	W113	W113.1	2026-10-28T01:17:41Z	3.8	other	fix-first	Fix all of these, then dig into the directives themselves and how they might be refined or
+9	roadmap-dfs	W113	W113.6	2026-10-28T06:28:56Z	5.7	other	other	A
+10	roadmap-dfs	W113	W113.9	2026-10-28T12:54:28Z	1.4	free	other	B
+11	roadmap-dfs	W116	W116.33	2026-10-28T06:25:17Z	5.7	blocks	bypass	Check we have another task to address this, then complete this task manually, also fix W12
+12	roadmap-dfs	W122	W122.5	2026-10-28T01:55:02Z	3.2	blocks	bypass	2, I'll fix this bug separately
+13	roadmap-dfs	W123	W123.20	2026-10-28T13:12:23Z	1.1	blocks	bypass	Check we've fixed this in the code (not necessarily the running instance) and create a tas
+14	roadmap-dfs	W130	W130.4	2026-10-29T01:18:18Z	1.8	free	other	A
+15	roadmap-dfs	W130	W130.12	2026-10-29T08:24:36Z	1.2	free	fix-first	A. This task is meant to be half optimisation and half development of the optimisation and
+16	shop-app	W8	W8.2	2026-09-25T14:18:35Z	0.1	free	fix-first	fix it
+17	shop-app	W13	W13.1	2026-09-25T18:04:16Z	8.9	other	continue	ok
+18	shop-app	W13	W13.32	2026-09-27T13:33:51Z	0.2	other	other	compact the log
+19	shop-app	W14	W14.25	2026-09-29T04:24:29Z	0.1	blocks	fix-first	a
+20	shop-app	W19	W19.34	2026-09-29T04:20:57Z	0.2	blocks	fix-first	fix it
+21	shop-app	W20		2026-09-30T15:49:29Z	0.1	alarm	other	Close. The tree is complete and the last review found nothing; the walker is fixed to clos
+22	shop-app	W35	W35.7	2026-10-02T11:45:04Z	0.1	other	other	3
+23	shop-app	W39	W39.22	2026-10-08T05:15:23Z	19.4	blocks	fix-first	fix W14
+24	farm-app	W92	W92.13	2026-10-18T12:39:41Z	1.7	blocks	bypass	The tooling is being addressed separately, go around the issue for now
+25	farm-app	W92		2026-10-18T14:31:33Z	11.7	alarm	continue	Continue
+26	farm-app	W92	W92.22	2026-10-19T02:44:06Z	0.2	blocks	bypass	Bypass for now
+
+blocks: 14 raises, median wait 1.4 h, answered {'bypass': 10, 'continue': 1, 'fix-first': 3}
+free: 5 raises, median wait 1.4 h, answered {'draft': 1, 'other': 2, 'fix-first': 2}
+alarm: 2 raises, median wait 5.9 h, answered {'other': 1, 'continue': 1}
+other: 5 raises, median wait 3.8 h, answered {'fix-first': 1, 'other': 3, 'continue': 1}
