@@ -1,0 +1,140 @@
+diff --git a/SKILL.md b/SKILL.md
+index 95c600a8..0fb4e7a7 100644
+--- a/SKILL.md
++++ b/SKILL.md
+@@ -40,7 +40,7 @@ session carries it out.
+ Parent: W13.3
+ Status: open | parked | confirmed | refuted
+ Approach: <what the node does and how: the files, the change, the check>
+-Hypothesis: <only if the work rests on an assumption: "<it>. Wrong if <what would show it wrong>. .dfs/artefacts/<uuid>.html">
++Hypothesis: <only if the work rests on an assumption: "<it>. Wrong if <what would show it wrong>. (a page .dfs/artefacts/<uuid>.html only to ask the author)">
+ Evidence:
+ - for: <only with a Hypothesis: an observation that bears on it, and what it shows>
+ - against: <the same>
+@@ -68,9 +68,11 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
+   `Wrong if` and shows the second half on its own, since it is the part the author
+   answers. Not a second description of the work. The Evidence is the
+   observations that bear on it, one line each: what was run or read, what it showed,
+-  and which way it cuts. **A Hypothesis names an answer page**, as
+-  `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself (see Raising); `check.py`
+-  refuses a commit that adds one without it. A node with no assumption needs none. Write
++  and which way it cuts. **A Hypothesis is a plain line** (the assumption,
++  then `Wrong if`) and needs no answer page. Make a page, as
++  `.dfs/artefacts/<uuid>.html` inside the Hypothesis itself (see Raising), only when you
++  would otherwise raise and want the author to rule on it. A node with no assumption
++  needs neither. Write
+   it when you start the node, before the work. The screen marks a node with a
+   Hypothesis (⚑) and names those nodes when the author accepts the tree, so keep it for
+   what is both important and open to question: an ordinary choice the check settles is
+@@ -81,7 +83,11 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
+   What you built, the steps you took and every test you ran belong in the Approach
+   and the commit, not here.
+ - **The Determination is the verdict and nothing else**: what you found, in one
+-  sentence, which is what the author reads under the node. The hand-off ("Next, check
++  sentence of at most 80 words (`check.py` refuses a longer one), which is what the author
++  reads under the node. Before you confirm a node, the Determination names what was
++  observed of the thing the claim is about, and whether that observation would have come
++  out differently had the claim been false. If it would have come out the same, the node
++  is not confirmed. The hand-off ("Next, check
+   that …") belongs in the next node's Approach, and caveats in a Hypothesis,
+   not in prose here or in the Summary where nothing looks for them. Which tests ran
+   and how many passed belong in the commit message: "passed" is enough here.
+diff --git a/scripts/check.py b/scripts/check.py
+index 05461ed1..0297aa56 100755
+--- a/scripts/check.py
++++ b/scripts/check.py
+@@ -39,11 +39,14 @@ edited log line or a rewritten determination erases what the author reviews. So:
+     - a node, new in this commit or with its Ask changed, that states an `Ask:`
+       (`check_no_new_ask`): a choice the author may want the other way is a Hypothesis.
+       An Ask already at HEAD stays as committed
+-    - a live node, new in this commit or with its Hypothesis changed, that states a
+-      Hypothesis naming no interactive artefact: a `.dfs/artefacts/<name>.html` that
++    - a live node, new in this commit or with its Hypothesis changed, whose Hypothesis
++      NAMES an artefact (a Hypothesis with none passes, W153 pooled variant) that is not
++      an interactive one: a `.dfs/artefacts/<name>.html` that
+       exists and has an input, button, select, textarea or details with a handler
+       (addEventListener or onclick and the like) answering it and posts a verdict to
+       `/artefact-state/` (`check_assumptions`).
++    - a node, new or with its Determination changed, whose Determination is over 80 words
++      (`check_determination_budget`, W153 pooled variant).
+       A node already at HEAD is judged as committed, and a merge commit judges none
+       (the other branch's commits were judged there)
+     - a task file or an archive HEAD holds, deleted (the limit case of the two
+@@ -518,11 +521,7 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
+             continue
+         names = ARTEFACT_REF.findall(h)
+         if not names:
+-            bad.append("%s states a Hypothesis and names no artefact. Draw an interactive "
+-                       "page that explains the assumption and lets the author decide it, "
+-                       "and name it in the Hypothesis as `.dfs/artefacts/<uuid>.html` "
+-                       "(templates/_TEMPLATE_ANSWER.html)" % nd["id"])
+-            continue
++            continue   # W153 pooled variant (E1): a plain assumption line needs no page
+         why = []
+         for name in names:
+             page = read(dfs_paths.artefacts() / name)
+@@ -548,6 +547,34 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
+     return bad
+ 
+ 
++DETERMINATION_WORDS = 80   # W153 pooled variant (E6): the budget on a Determination
++
++
++def check_determination_budget(task, text, head, archive="", head_archive=""):
++    """A Determination over DETERMINATION_WORDS words is refused (W153 pooled variant, E6).
++
++    Judged on a node that is new in this commit or whose Determination changed since HEAD;
++    a Determination already at HEAD is history. A shelved Determination keeps its first
++    clause and `(archived.)`, so the stub is short and passes."""
++    bad = []
++    t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
++    was = ({nd["id"]: nd for nd in
++            dfs_tree.with_archive(dfs_tree.parse(head, task), head_archive)["nodes"]}
++           if head else {})
++    for nd in t["nodes"]:
++        d = (nd["fields"].get("Determination") or "").strip()
++        n = len(d.split())
++        if n <= DETERMINATION_WORDS:
++            continue
++        old = was.get(nd["id"])
++        if old and (old["fields"].get("Determination") or "").strip() == d:
++            continue
++        bad.append("%s's Determination is %d words; the budget is %d. Keep the verdict, and "
++                   "move the evidence to the Evidence lines and the hand-off to the next "
++                   "node's Approach" % (nd["id"], n, DETERMINATION_WORDS))
++    return bad
++
++
+ def coordinates(text):
+     """Each coordinate (`file.js:123`) in the task file's prose, as (line number, hit):
+     not in the log, nor on a comment or heading line."""
+@@ -779,6 +806,9 @@ def main() -> int:
+                           for b in check_assumptions(task, text, wbase, read, arc, head_arc)]
+             if judge_writer:
+                 fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, wbase)]
++            if judge_writer:
++                fatal += ["%s: %s" % (rel, b)
++                          for b in check_determination_budget(task, text, wbase, arc, head_arc)]
+             if judge_writer and (here is not None or dfs_paths.branch() is None):
+                 fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase)]
+             now_tok = len(text) // 4
+diff --git a/scripts/state.py b/scripts/state.py
+index d029a47b..2d8852e1 100755
+--- a/scripts/state.py
++++ b/scripts/state.py
+@@ -821,11 +821,10 @@ def _record_block(task, kind):
+                 "by a hung call, when the Goal is not exhausting it). Those are nodes. A node "
+                 "reopens the task and earns another review, and a review always finds "
+                 "something smaller, so these must not be what keeps a task open. If you "
+-                "added a node above, add ONE more for all of them together (`<id> · "
+-                "Minor findings from the review`, its Approach one line per finding), since "
+-                "the task is reopened anyway. If you added none, give the verdict `ok` "
+-                "and list them in its body, one per line: the author reads them when "
+-                "they accept the task.", ""]
++                "added a node above, do NOT add a node for them: list them in the body of "
++                "your verdict, one per line, where the author reads them. If you added none, "
++                "give the verdict `ok` and list them in its body, one per line: the author "
++                "reads them when they accept the task.", ""]
+     out += ["  Keep the Approach concise, clear and standalone, in plain, simple English "
+             "(short sentences, everyday words): name the file, "
+             "function, fault and check themselves, so a session that reads only this "
