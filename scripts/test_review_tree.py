@@ -434,7 +434,7 @@ class Pane(unittest.TestCase):
         ui.typed = ""
         ui.compose = lambda frame: (ui.composed.append(frame) or ui.typed)
         ui.prompted = ""
-        ui.prompt = lambda label, default="": ui.prompted or default
+        ui.prompt = lambda label, default="", leave="": ui.prompted or default
         ui.choose = lambda label, keys: ui.prompted[:1] if ui.prompted[:1] in keys else ""
         ui.live = lambda mode="work": []
         self.ui = ui
@@ -514,7 +514,7 @@ class Pane(unittest.TestCase):
         ui.current = lambda: ui.data["items"][0]
         ui.tree_acceptable = lambda it: True
         asked = []
-        ui.prompt = lambda label, default="": asked.append(label) or "n"
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or "n"
         ui.tree_accept("W1")
         self.assertEqual(len(asked), 1)
         self.assertNotIn("\n", asked[0])
@@ -526,6 +526,52 @@ class Pane(unittest.TestCase):
         ui.tree_accept("W1")
         self.assertEqual(asked, ["accept W1's tree as finished? [y/N]:"])
 
+    def drive_accept(self, keys, assumptions=True):
+        """Press `A` on W1's tree with the REAL `prompt`/`read_line` fed `keys` one at a time (a fake screen),
+        and return the keys the screen was not asked for."""
+        ui = self.ui
+        t = self.flagged_tree() if assumptions else dfs_tree.parse(TREE, "W1")
+        ui.tree_of = lambda task: (t, ARCHIVE, {})
+        ui.data["items"][0].update(assumptions=dfs_tree.assumed(t), status="done")
+        ui.current = lambda: ui.data["items"][0]
+        ui.tree_acceptable = lambda it: True
+        ui.prompt = TUI.UI.prompt.__get__(ui)
+        ui.answers, ui.pane, ui.focus, ui.input = [], "item", "tree", None
+        ui.draw = lambda: None
+        pending = list(keys)
+
+        class Scr:
+            def timeout(self, n): pass
+            def get_wch(self):
+                return pending.pop(0)
+        ui.scr = Scr()
+        real = TUI.curses.curs_set
+        TUI.curses.curs_set = lambda n: None
+        self.addCleanup(setattr, TUI.curses, "curs_set", real)
+        ui.act(ord("A"))
+        return pending
+
+    def test_H_at_the_accept_prompt_opens_the_evidence_and_Esc_A_asks_again(self):
+        """The prompt says the assumptions are 'on H'; `read_line` types every printable key, so an `H` at the
+        prompt used to be the answer 'H', read as 'not accepted'. Now `H` first on the line opens the list
+        (one Esc back, `A` for the prompt again), and the accept is only logged by a `y`."""
+        ui = self.ui
+        self.assertEqual(self.drive_accept(["H"]), [])
+        self.assertEqual(ui.pane, "assumptions")
+        self.assertEqual(self.logged, [])
+        self.assertIn("Esc", ui.msg)
+        ui.act(27)                                  # one Esc: back to the tree, still focused
+        self.assertEqual((ui.pane, ui.focus), ("item", "tree"))
+        ui.scr.get_wch = lambda keys=list("y\n"): keys.pop(0)
+        ui.act(ord("A"))
+        self.assertEqual([(task, kind) for task, kind, *_ in self.logged], [("W1", "accept")])
+
+    def test_H_typed_after_other_text_or_with_nothing_to_list_is_just_an_answer(self):
+        self.assertEqual(self.drive_accept(["x", "H", "\n"]), [])
+        self.assertEqual((self.ui.pane, self.ui.msg, self.logged), ("item", "not accepted", []))
+        self.assertEqual(self.drive_accept(["H", "\n"], assumptions=False), [])
+        self.assertEqual((self.ui.pane, self.ui.msg, self.logged), ("item", "not accepted", []))
+
     def test_the_accept_prompt_says_where_each_thing_it_counts_is(self):
         """The reviewer's notes are in the tree's notes section and `H` lists assumptions only, so the prompt must not
         send the reader to `H` for notes (it did: 'N notes: H shows them'), nor to nowhere when there is no assumption."""
@@ -535,7 +581,7 @@ class Pane(unittest.TestCase):
         ui.current = lambda: ui.data["items"][0]
         ui.tree_acceptable = lambda it: True
         asked = []
-        ui.prompt = lambda label, default="": asked.append(label) or "n"
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or "n"
         ui.tree_of = lambda task: (dfs_tree.parse(noted, "W1"), ARCHIVE, {})
         ui.tree_accept("W1")
         self.assertEqual(asked.pop(), "accept W1? 1 note in the tree [y/N]:")
@@ -616,7 +662,7 @@ class Pane(unittest.TestCase):
         TUI.dfs_tree.add_node = lambda *a: added.append(a) or "W1.5"
         self.addCleanup(setattr, TUI.dfs_tree, "add_node", saved)
         answers = iter(["", "a title"])
-        ui.prompt = lambda label, default="": next(answers)
+        ui.prompt = lambda label, default="", leave="": next(answers)
         ui.tree_add("W1")
         self.assertEqual(added, [], "an empty answer to the warning adds nothing")
         self.assertEqual(ui.msg, "no node added")
@@ -630,7 +676,7 @@ class Pane(unittest.TestCase):
         TUI.dfs_tree.add_node = lambda *a: added.append(a) or "W1.5"
         self.addCleanup(setattr, TUI.dfs_tree, "add_node", saved)
         answers = iter(["a title", ""])
-        ui.prompt = lambda label, default="": next(answers)
+        ui.prompt = lambda label, default="", leave="": next(answers)
         ui.tree_add("W1")
         self.assertEqual(added, [("W1", "a title", "W1.3", "")])
 
@@ -647,12 +693,12 @@ class Pane(unittest.TestCase):
         self.to("W1.1")
         calls = self.stub_delete("delete_node", ["W1.1", "W1.2", "W1.3"])
         asked = []
-        ui.prompt = lambda label, default="": asked.append(label) or ""
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or ""
         ui.act(ord("D"))
         self.assertEqual(calls, [], "an empty answer deletes nothing")
         self.assertIn("W1.2, W1.3", asked[0])
         self.assertEqual(ui.msg, "W1.1 kept")
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertEqual(calls, [("W1", "W1.1")])
         self.assertEqual(ui.msg, "deleted W1.1, W1.2, W1.3")
@@ -662,7 +708,7 @@ class Pane(unittest.TestCase):
         ui.open_tree()
         self.to("section:W1:Goal")
         calls = self.stub_delete("delete_node", [])
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertEqual(calls, [])
         self.assertEqual(ui.msg, "the cursor is not on a node")
@@ -676,7 +722,7 @@ class Pane(unittest.TestCase):
             raise ValueError("the raise at T names W1.4; answer it first")
         TUI.dfs_tree.delete_node = refuse
         self.addCleanup(setattr, TUI.dfs_tree, "delete_node", saved)
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertEqual(ui.msg, "not deleted: the raise at T names W1.4; answer it first")
 
@@ -684,12 +730,12 @@ class Pane(unittest.TestCase):
         ui = self.ui
         calls = self.stub_delete("delete_task", ["items/W1.md"])
         asked = []
-        ui.prompt = lambda label, default="": asked.append(label) or ""
+        ui.prompt = lambda label, default="", leave="": asked.append(label) or ""
         ui.act(ord("D"))
         self.assertEqual(calls, [])
         self.assertIn("delete W1?", asked[0])
         self.assertEqual(ui.msg, "W1 kept")
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.focus = "list"
         ui.act(ord("D"))
         self.assertEqual(calls, [("W1",)])
@@ -702,7 +748,7 @@ class Pane(unittest.TestCase):
             raise ValueError("%s is being worked on by a running session; stop it first" % task)
         TUI.dfs_tree.delete_task = refuse
         self.addCleanup(setattr, TUI.dfs_tree, "delete_task", saved)
-        ui.prompt = lambda label, default="": "y"
+        ui.prompt = lambda label, default="", leave="": "y"
         ui.act(ord("D"))
         self.assertTrue(ui.msg.startswith("not deleted: W1 is being worked on"), ui.msg)
 

@@ -30,7 +30,7 @@ ui.sel, ui.asm_sel, ui.msg, ui.answers = 0, 0, "", []
 ui.current = lambda: items[0]
 ui.tree_acceptable = lambda it: True
 asked = []
-ui.prompt = lambda label, default="": asked.append(label) or "n"
+ui.prompt = lambda label, default="", leave="": asked.append(label) or "n"
 ui.tree_accept(task)
 print("TERMINAL accept prompt (%d characters; the footer clips a longer one at the screen edge):\n  %s\n" % (len(asked[0]), asked[0]))
 

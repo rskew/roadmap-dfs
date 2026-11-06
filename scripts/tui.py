@@ -1934,6 +1934,7 @@ class UI(WalkMixin):
         self.keys_from = ("item", "list")   # (pane, focus) `?` was pressed from
         self.last_search = ""       # `/`, repeated by an empty one
         self.input = None           # what is being typed, while it is — `read_line`
+        self.left_with = None       # the `leave` key that ended the last `read_line`, if one did
         self.order_undo = []        # `z`: (order.md before, order.md we wrote)
         self.answers = []           # `:`'s arguments, handed to the prompts it meets
         # The activity log: what this screen and its walk DID, newest last. Read back
@@ -4875,26 +4876,42 @@ class UI(WalkMixin):
             bits.append("%d note%s in the tree" % (kept, "" if kept == 1 else "s"))
         ask = "accept %s? %s [y/N]:" % (item, ", ".join(bits)) if bits \
             else "accept %s's tree as finished? [y/N]:" % item
-        if self.prompt(ask)[:1].lower() != "y":
+        self.left_with = None
+        got = self.prompt(ask, leave="H" if n else "")
+        if self.left_with == "H":
+            # `H` at the prompt: show the evidence now. Esc closes the list; `A` asks again.
+            self.left_with = None
+            self.open_assumptions()
+            self.msg = "H: the assumptions; Esc goes back, A accepts"
+            return
+        if got[:1].lower() != "y":
             self.msg = "not accepted"
             return
         dfs_tree.append_log(item, "accept")
         self.reload()
         self.msg = self.event("review", "accepted %s's tree" % item)
 
-    def prompt(self, label, default=""):
+    def open_assumptions(self):
+        """The `H` pane, opened on the current task's first assumption (the one being accepted), not the
+        first of all tasks."""
+        self.pane = "assumptions"
+        self.asm_sel = next((i for i, (idx, _nd) in enumerate(self.asm_rows()) if idx == self.sel), 0)
+        self.scroll = 0
+
+    def prompt(self, label, default="", leave=""):
         """A line typed on the footer: what was typed, `default` for an empty ⏎, and
         "" for Esc — which cancels past the default, since Esc then ⏎ at `cap [5]:`
         used to start a chain. A `:` command's arguments answer these first
-        (`answers`), so `:walk 20` is `w` and 20 without the question."""
+        (`answers`), so `:walk 20` is `w` and 20 without the question.
+        `leave` is keys that end the line at once when typed first (see `read_line`)."""
         if self.answers:
             return self.answers.pop(0)
-        got = self.read_line(label)
+        got = self.read_line(label, leave=leave)
         if got is None:
             return ""
         return got or default
 
-    def read_line(self, label, on_change=None, menu=None, hint=None, complete=None):
+    def read_line(self, label, on_change=None, menu=None, hint=None, complete=None, leave=""):
         """Read a line where the footer is, a key at a time. None means Esc.
 
         ⚠️ `getstr` IS GONE, for the three things it could not do: Esc was typed as a
@@ -4906,9 +4923,14 @@ class UI(WalkMixin):
         `on_change(text)` runs after each edit; `menu(text)` gives the rows to show
         above the line and their title; `complete(text, row)` is what Tab makes of
         the text given the picked row.
+
+        `leave` is keys that end the read like Esc (None) when typed on an empty line,
+        and are left in `self.left_with` for the caller: `tree_accept` offers `H`, since
+        a letter typed into a y/N line would otherwise be an answer of "no".
         """
         inp = self.input = dict(label=label, text="", pos=0, hint=hint, menu=[],
                                 pick=0)
+        self.left_with = None
         self.scr.timeout(-1)
         try:
             curses.curs_set(1)
@@ -4933,6 +4955,9 @@ class UI(WalkMixin):
                 if ch in ("\n", "\r", curses.KEY_ENTER):
                     return text.strip()
                 if ch == "\x1b":
+                    return None
+                if leave and not text and isinstance(ch, str) and ch in leave:
+                    self.left_with = ch
                     return None
                 if ch == curses.KEY_RESIZE:
                     continue
@@ -5046,9 +5071,10 @@ class UI(WalkMixin):
         elif ch == ord(":"):
             return self.command()
         elif ch == ord("H"):
-            self.pane = "item" if self.pane == "assumptions" else "assumptions"
-            # Opens on the current task's first assumption (the one being accepted), not the first of all tasks.
-            self.asm_sel = next((i for i, (idx, _nd) in enumerate(self.asm_rows()) if idx == self.sel), 0)
+            if self.pane == "assumptions":
+                self.pane = "item"
+            else:
+                self.open_assumptions()
             self.scroll = 0
         elif ch == ord("h"):
             self.pane = "item" if self.pane == "activity" else "activity"
