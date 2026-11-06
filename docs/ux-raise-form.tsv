@@ -14,7 +14,7 @@ W123	W123.12	2026-10-28T07:39:55Z	362	0	1	1	1	0	1	1	1	Scope drift:
 W123	W123.20	2026-10-28T13:12:23Z	379	0	1	1	1	0	1	26	0	Tooling issue, not the task's:
 W130	W130.4	2026-10-29T01:18:18Z	229	0	1	1	1	0	1	1	1	Two faults in the replay tooling (scripts/replay.py), found while running the control arm.
 W130	W130.12	2026-10-29T08:24:36Z	312	0	0	1	1	0	1	31	0	A third fault in the replay tooling, found while checking the control arm against the replays' own task files.
-W131	W131.8	2026-11-05T22:57:28Z	246	1	1	1	1	1	1	10	0	Found:
+W131	W131.8	2026-11-05T22:57:28Z	246	0	1	1	1	1	1	10	0	Found:
 W43	W43	2026-10-09T10:56:30Z	313	1	1	1	1	0	1	26	0	What does "expanding the screen" look like on your phone?
 W48	W48.3	2026-10-09T18:26:54Z	201	0	0	1	1	0	1	1	1	Scope drift, first at W48.3.
 W60	W60.4	2026-10-10T10:22:42Z	437	0	0	1	1	0	1	6	0	Tooling issue (roadmap-dfs `tree.py effective()`), blocking what the author asked for:

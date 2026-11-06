@@ -1,0 +1,35 @@
+opens with the ask: n=4, hours to answer median 1.8 (min 0.2, max 43.1), answer words median 6.5, raise words median 280.5
+all others: n=25, hours to answer median 3.2 (min 0.5, max 160.0), answer words median 6.0, raise words median 342.0
+others that are not tooling: n=10, hours to answer median 3.4 (min 0.7, max 160.0), answer words median 2.5, raise words median 344.0
+tooling: n=15, hours to answer median 3.2 (min 0.5, max 74.8), answer words median 8.0, raise words median 342.0
+
+node	class	ask	hours	answer words	raise words
+W43	author-fact	1	0.4	26	313
+W86.1	author-fact	1	43.1	1	338
+W123.4	author-preference	1	3.1	12	203
+W123.5	author-preference	1	0.2	1	248
+W131.8	?	0	0.9	10	246
+W97.8	access	0	2.8	9	190
+W70.2	author-fact	0	0.8	41	326
+W86.4	author-fact	0	160.0	2	235
+W113.1	author-preference	0	3.8	30	689
+W113.6	author-preference	0	5.7	1	533
+W116.27	scope-drift	0	0.7	1	465
+W123.12	scope-drift	0	4.6	1	362
+W48.3	scope-drift	0	8.8	1	201
+W93.9	scope-drift	0	3.0	3	408
+W109.5	tooling	0	15.1	1	166
+W111.11	tooling	0	0.5	1	436
+W111.13	tooling	0	5.2	9	372
+W113.9	tooling	0	1.4	1	448
+W116.33	tooling	0	5.7	21	315
+W122.5	tooling	0	3.2	6	447
+W123.20	tooling	0	1.1	26	379
+W130.12	tooling	0	1.2	31	312
+W130.4	tooling	0	1.8	1	229
+W60.4	tooling	0	0.9	6	437
+W75.44	tooling	0	0.7	17	422
+W75.53	tooling	0	29.2	1	342
+W75.56	tooling	0	12.7	72	299
+W75.59	tooling	0	21.1	8	276
+W75.60	tooling	0	74.8	17	247
