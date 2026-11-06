@@ -35,7 +35,7 @@
   @media (min-width: 720px) {
     body { padding: 28px 32px; }
     .dg { flex-direction: row; align-items: center; }
-    .box { flex: 1 1 0; }
+    .box { flex: 1 1 0; min-width: 0; }   /* a flex item is no narrower than its longest word unless this says so */
     .link { padding: 0 10px; }
     .link::after { content: "\2192"; }
   }

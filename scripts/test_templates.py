@@ -37,8 +37,19 @@ class MobileFirst(unittest.TestCase):
             css = (TEMPLATES / name).read_text()
             body = css[css.index("  body {"):]
             self.assertNotIn("overflow-wrap", body[:body.index("}")], name + ": the body rule reaches tables and grids")
-            self.assertNotIn("overflow-wrap: anywhere", css, name)
+            self.assertNotRegex(css, r"(?m)^\s*(body|p|table|td|th|\*)[^{\n]*\{[^}]*overflow-wrap: anywhere", name)
             self.assertRegex(css, r"(?m)^\s*p, li, h1, h2, h3, \.box, \.legend, \.lede \{ overflow-wrap: break-word; \}", name)
+
+    def test_a_flex_item_of_the_templates_can_be_narrower_than_its_longest_word(self):
+        """`break-word` cannot narrow a flex item below its longest word, so an option label with a test name widened
+        the answer page to 750 px on a phone, and the diagram's `.box` to 987 px at 720 (docs/ux-templates-longword.py)."""
+        answer = (TEMPLATES / "_TEMPLATE_ANSWER.html").read_text()
+        for sel in (r"\.dfs-answer \.opt", r"\.dfs-answer #dfs-parkbox"):
+            rule = re.search(sel + r" \{([^}]*)\}", answer)
+            self.assertIsNotNone(rule, sel)
+            self.assertIn("overflow-wrap: anywhere", rule.group(1), sel + ": its text is a flex item")
+        diagram = (TEMPLATES / "_TEMPLATE.html").read_text()
+        self.assertRegex(diagram, r"\.box \{ flex: 1 1 0; min-width: 0;", "the row of boxes from 720 px")
 
     def test_the_answer_template_has_no_slider_to_leave_pointless_in_a_copy(self):
         page = (TEMPLATES / "_TEMPLATE_ANSWER.html").read_text()
