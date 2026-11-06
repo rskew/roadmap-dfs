@@ -1,0 +1,135 @@
+Minor findings nodes: 170   lines: 484   (a line = one '- ' bullet; a node with none is one line)
+  roadmap-dfs: 111 nodes, 351 lines, tasks 52
+  shop-app: 41 nodes, 63 lines, tasks 12
+  farm-app: 18 nodes, 70 lines, tasks 9
+  status: {'confirmed': 167, 'started': 1, 'open': 2}
+  lines a node: median 3.0 mean 2.8 max 11
+  words in the lines (read in `ok` under E7): total 21684, median a node 124.0
+  words in the Determination (read today, saved under E7): total 11670, median 65.0
+  nodes whose review entry was not found in the log: 1
+  those tasks hold 984 nodes; 170 of them minor (17%)
+  common tokens dropped (> 3% of lines): 2
+  reviews that named the minor node: 169; by the regex (a line led by a node id) the minor node was their only new node in 5 and they named another in 164. Read by hand, 4 of the 5 also added a fix node in prose (W10.7, W36.6, W67.12, W37.6; `--only` prints them) and the fifth (W60.15) was an `ok` review, so none made a review round of its own.
+  author's words, per task with a minor node (73 tasks): today the minor nodes' Determinations 160; under E7 the same lines in `ok` 297 (the lines are 45 words each against a Determination's 69)
+  minor nodes whose Determination says some line was left as it was: 40
+  candidate come-backs, a shared name (function, flag, test, key): 158 (line, later review) pairs on 56 lines of 37 nodes
+  candidate come-backs, a shared file name only: 17 (line, later review) pairs on 8 lines of 8 nodes
+  roadmap-dfs minor-node commits found: 105 of 111; lines changed outside .dfs: median 27, mean 64, max 805, none-outside-.dfs 3
+
+lines with no shared name and a later issues review: 224; sample of 20 (seed 153)
+
+## farm-app W142.6 line 0: `README.md` "Charts." paragraph (line ~625) was not updated: it doesn't say the panel folds to a bar (pull up past its least, ArrowUp) and unfolds (pull down, tap, Enter)
+   later: W142.7 · Fix: on a wide screen, a sheet opened with charts plotted shifts the map up under the docked panel (p
+   later: Checked and sound: W142.5's parkPlot refit (box/viewBox agree after close on phone and wide), W142.6's cap (39
+   later: Tests: full suite 800 passed, 1 failed (test_the_menu_downloads_the_satellite_image, a W140 test), which passe
+
+## farm-app W122.11 line 3: `tests/test_daemon.py` `test_32_bit_counter_is_used_up_not_wrapped`: its first `c = daemon.FrameCounter(tmp_path)` is dead.
+   later: W122.12 · Fix: enabling the module with the cable already plugged in does not start the reader until a reboot 
+   later: Unmarked assumption, for the author: W122.10 chose to stop the unit while the USB cable is out of the host, so
+
+## roadmap-dfs W116.17 line 0: scripts/test_chain.py `second_pull_request_squashed(gh, bare, view, app=None)`: `app` is never used and the docstring says it finishes the fix, opens a second pull reques
+   later: W116.19: `github.land` puts the task's paths back to HEAD in the main checkout before the fast-forward, so an 
+   later: Assumption with no Hypothesis, for the author: W116.18 leaves a landed task's log (`pr <url> merged` and the e
+   later: Suites run here (TMPDIR beside the worktree): test_github 9, test_chain 130, test_order + test_walker 128, all
+   later: W116.21: a raise from `github.land` (or `closed`) stays open after its cause is put right and the watch lands 
+   later: Assumption with no Hypothesis, for the author: W116.19 makes any uncommitted edit to the task's files in the m
+   later: Checked this round: W116.19's dirty check and W116.20's headRefOid judgement and free-name loop read correct; 
+   later: W116.23: a PR comment node the author deletes is added again by the next watch (probed: delete W1.2, watch add
+   later: Checked this round: test_chain (133), test_github (11), test_order (98), test_walker (30), test_walk (81) and 
+
+## roadmap-dfs W130.50 line 2: The last paragraph of the "Next" part of `docs/dfs-optimization.md` still says the remaining candidates "(2, 4, 5)" are to be run as pairs, though 4 was bounded below 3% 
+   later: W130.51 · Fix: history.verdicts counts refused or failed verdict commands, so replay.py score and history over
+
+## farm-app W142.6 line 3: var(--plot-room))` overrides `sheetMax`'s floor. Probe at 390×844: panel pulled to 738px, then a zone's sheet opened at 106px tall (its bar and a strip of card). Either c
+   later: W142.7 · Fix: on a wide screen, a sheet opened with charts plotted shifts the map up under the docked panel (p
+   later: Checked and sound: W142.5's parkPlot refit (box/viewBox agree after close on phone and wide), W142.6's cap (39
+   later: Tests: full suite 800 passed, 1 failed (test_the_menu_downloads_the_satellite_image, a W140 test), which passe
+
+## roadmap-dfs W17.8 line 2: ptyrelay.py `reap_idle` selects idle chats under the lock but closes them after releasing it: a message the page queues in that window goes to a relay about to be closed 
+   later: W17.9 added: web.py killed by SIGTERM or SIGHUP skips handle.stop(), so the page's turns (own session since W1
+
+## farm-app W127.15 line 1: `status_verdict` in `farm-operator/app.py`: the comment "A timer renewed within TIMER_SLACK of the old one's end reads as not heard" should say the old one's start. A ren
+   later: W127.16 · Fix: a water the node heard reads as not applied and is sent again when an earlier held water was lo
+   later: Unmarked assumptions still standing from earlier reviews, no Hypothesis on the nodes: W127.4 (the app override
+   later: Checked: the full farm-operator suite passes (723 passed, 7 skipped); the firmware is unchanged since the last
+   later: W127.18 · Fix: a water the node did not hear reads as acknowledged when an earlier held water is before it and
+   later: Unmarked assumption, no Hypothesis on the node: W127.16 assumes the app cannot know a channel's longest on (72
+   later: Checked: the full farm-operator suite passes (724 passed, 7 skipped); the firmware is unchanged since the last
+
+## roadmap-dfs W130.25 line 0: docs/dfs-optimization.md, candidates table row 1 (about line 396) still says "Of the 23 defects ... 7 are in the cases this node names ... 13 on the widest reading", whil
+   later: W130.31 · Fix: the two-tier measure and candidate 1's verdict sit only under pruned nodes (W130.26 to W130.30 
+   later: W130.33 · Hypothesis: replays cover roadmap-dfs only on an unchecked "shop-app and farm-app cannot be replayed
+   later: W130.42 · Fix: farm-app is called unreplayable because its sessions were looked up under the wrong path (they 
+   later: W130.43 · Fix: no optimisation-data task (shop-app W32/W14) was replayed or judged, though the box was built f
+   later: W130.44 · Hypothesis: replay round counts (1 of 16) stand for the loop's, behind the dropped thorough-review a
+
+## roadmap-dfs W97.7 line 0: `docs/dfs-optimization.md` gives the same figures two ways: 41.5% vs 41.7% spend after issues, review 22.5% vs 22.6%, 2,964 vs 2,971 Read calls; make each one number from
+   later: W97.12 added under W97.4: the "12% of tasks hold 42% of spend" figure and the rest of section 4's measure come
+   later: W97.15 added under W97.8: the four W55 replays could read the live repo's runs, items and scripts (replay b gl
+   later: W97.17 added under W97.15: replay.reached cuts the whole tool directory, which is the live checkout when repla
+   later: W97.18 added under W97.15: the keep rule's second test (margin of four on only unexposed replays) cannot be me
+
+## roadmap-dfs W87.9 line 1: `_carry_branch_edits` compared `was`, `git show` output read with `text=True` (universal newlines, so CRLF became LF), against raw bytes, so a CRLF task file the main che
+   later: W87.10 · Fix: a merge that fails loses the raise or node it writes into a set-aside task file (`_unmerged` wri
+   later: W87.12 · Fix: an interrupted merge loses the shared task-file edits it set aside (held only in memory between 
+   later: W87.16 · Fix: main's `catch_up` fast-forward replaces the worktree's shared `.dfs/items` link with a stale rea
+   later: Checked: `test_chain`, `test_walk` and `test_ignored` pass with ResourceWarning as an error, both on dfs/W87 (
+
+## farm-app W142.6 line 2: A tall docked panel squeezes the sheet below `SHEET_MIN` (160px): the `#sheet` CSS `max-height: calc(100vh
+   later: W142.7 · Fix: on a wide screen, a sheet opened with charts plotted shifts the map up under the docked panel (p
+   later: Checked and sound: W142.5's parkPlot refit (box/viewBox agree after close on phone and wide), W142.6's cap (39
+   later: Tests: full suite 800 passed, 1 failed (test_the_menu_downloads_the_satellite_image, a W140 test), which passe
+
+## shop-app W39.29 line 0: docs/views/orders.md and docs/sync-implementation.md line 331 still call the item change create-new plus delete-old.
+   later: W39.30 · Fix: an owed authoritative read is not retried when the week changes, so a refusal for another week s
+   later: W39.33: a later settled batch entry advances the high-water mark past an earlier transient error, so its retry
+   later: W39.34: an atomic item change replayed after a customer move pulls the line back onto the stale customer order
+   later: W39.35: a refused item change initiated from Invoicing hides its held choice until Orders is opened.
+   later: W39.36: the W39 documentation adds a prohibited omission made from three full stops.
+
+## roadmap-dfs W114.6 line 5: `walk.WALK_STOP["lost"]` is reached only when another screen closes one of this walk's own chains. A walk judges only chains it started, and `close_lost` runs at startup,
+   later: W114.7 · Fix: close a record whose chain died with a restarted container: the pidns guard skips every record f
+   later: W114.5 made a design choice without a Hypothesis: records without `pidns` are judged as before, and a record f
+
+## shop-app W32.28 line 0: W32.10 and W32.25 assume the Goal's "sale item changes" excludes new sale-item creation without recording a Hypothesis; offline creation immediately appends a `registers_
+   later: W32.30 added: serialize cross-tab coalescing through the durable put so reversed put completion cannot lose th
+   later: W32.31 added: make the rebuilt off-view regression authoritative and remove its duplicate fixture key.
+   later: W32.32 added: serialize same-key queued sale-item creation so reversed cross-tab puts cannot strand the later 
+   later: W32.33 added: close stale version-2 IndexedDB connections so a deployed old tab cannot block a new tab's versi
+   later: W32.35 added: let a surviving coalesced base-edge pricing save reach its own answer after the earlier tab clos
+   later: W32.36 added: W32.32 made the unmarked assumption that same-name creation payloads are one act; the later payl
+   later: W32.37 added: handle a blocked outbox upgrade before a pricing save is reported saved or queued.
+   later: W32.38 added: close the stale atomicity comment and dead forced-put test scaffolding.
+
+## roadmap-dfs W123.16 line 1: The `ResizeObserver` on `document.documentElement` fires on every page height change and reads `clientWidth` (forces layout) each time; the author accepted this too, and 
+
+## roadmap-dfs W75.15 line 3: `test_chain.py` `test_a_merge_that_conflicts_…`: its `.git/rebase-merge` assertion cannot fail, because a rebase in a worktree keeps its state under `.git/worktrees/<name
+   later: W75.16: an attachment named through add_node, edit_node or edit_task (the Goal and Approach boxes, which have 
+   later: W75.17: deleting a task that has a worktree moves only main's stale copy, or nothing if the task was never com
+   later: Unmarked assumption, still open: W75.6 decided, with no Hypothesis, that the author's accept merges the branch
+   later: Tests run (TMPDIR on an exec mount): test_chain 53 OK (none skipped), test_tree 112 OK, test_live 17 OK, test_
+   later: W75.19: an attachment named in a task before its first run (create_task, edit_task, add_node with no worktree 
+   later: W75.20: delete_task on a worked task runs `git worktree remove --force`, erasing the attachments carry_attachm
+   later: Unmarked assumption, still open: W75.6 decided, with no Hypothesis, that the author's accept merges the branch
+   later: Tests run (TMPDIR on an exec mount inside the repo, removed after): test_chain 54 OK (none skipped), test_tree
+   later: W75.23 (Fix, under W75.7): branch.py merge, run while the author's own checkout is mid-merge, takes the author
+   later: W75.24 (Fix, under W75.5): in a repo with no commit yet, branch.py enter fails on "invalid reference: HEAD" an
+   later: Tests: test_chain 56, test_tree 118, test_live 17, test_walk 52, test_screen 85, test_web 88 (6 skipped) pass 
+   later: Unmarked assumption, for the author: W75.5 (and `branch.enter`) works an item in place, with no branch and no 
+
+## shop-app W29.14 line 0: `docs/sync-status.md`, `docs/sync-implementation.md`, `docs/views/cash.md`, `shop-app/sheets-client/apply.mjs`, `shop-app/sheets-client/apply.test.mjs` and `shop-app/shee
+   later: W29.15 · Preserve an applied restoration for a legacy page across deploy
+   later: Raise at this review · choose whether to resume W29.15 or accept the narrowed deploy-window Goal
+
+## roadmap-dfs W17.8 line 0: tui.py `main`'s `finally`: if `ui.web.stop()` raises, `close_all()` is skipped, and a second SIGTERM/SIGHUP during `close_all()` raises SystemExit again and abandons it; 
+   later: W17.9 added: web.py killed by SIGTERM or SIGHUP skips handle.stop(), so the page's turns (own session since W1
+
+## roadmap-dfs W67.12 line 1: The only evidence the page chat works with the real claude is a stub claude (the Summary says so); a one-off real `claude -p ... --dangerously-skip-permissions --output-f
+
+## roadmap-dfs W111.10 line 0: Search state survives leaving a task for a non-list view and coming back: `findEnter` clears `S.q` only when `FIND.scope` changes in `drawTasks`/`drawTask`, so task A, th
+   later: none: no node added, no raise
+   later: none: no node added, no raise
+
+Reading of the 484 lines (state at the --at revision): {'no match': 417, 'related': 12, 'no': 49, 'same': 6}
+  of the lines read as 'related', 4 came from the 20-line sample of unmatched lines (0 'same' there)
+  wrote dfs-w153-e7.tsv: one line a node
