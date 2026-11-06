@@ -1,10 +1,11 @@
-TERMINAL accept prompt (56 characters; the footer clips a longer one at the screen edge):
-  accept W75? 8 assumptions, 35 notes: H shows them [y/N]:
+TERMINAL accept prompt (59 characters; the footer clips a longer one at the screen edge):
+  accept W75? 8 assumptions on H, 35 notes in the tree [y/N]:
 
 TERMINAL `H` view at 80 columns:
   assumptions and asks · what rests on a decision of yours, in every task you have not accepted
     ⏎ goes to it in its tree · ↑↓/jk moves · esc back
   
+  W75 · Items should be completed in git branches, passing review merges the branch into main/master
   > W75.1  Work each item's branch in its own git worktree, leaving the author's checkout on main
       The author keeps the screen and web page open on the main checkout while a
       walk runs, so an item's branch `dfs/<task>` is worked in a worktree per item
@@ -104,7 +105,7 @@ TERMINAL `H` view at 80 columns:
       · no evidence yet
   
 
-(101 lines, 17 of them evidence)
+(102 lines, 17 of them evidence)
 
 WEB Accept dialog, per assumption (evidence lines shown / more on the node):
   W75.1: 4 / 1

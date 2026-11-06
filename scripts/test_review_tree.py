@@ -518,13 +518,52 @@ class Pane(unittest.TestCase):
         ui.tree_accept("W1")
         self.assertEqual(len(asked), 1)
         self.assertNotIn("\n", asked[0])
-        self.assertEqual(asked[0], "accept W1? 1 assumption: H shows them [y/N]:")
+        self.assertEqual(asked[0], "accept W1? 1 assumption on H [y/N]:")
         self.assertLess(len(asked[0]), 60, "the footer clips a longer one before its [y/N]:")
         # a tree with no assumption or note keeps the plain question
         ui.tree_of = lambda task: (dfs_tree.parse(TREE, "W1"), ARCHIVE, {})
         asked.clear()
         ui.tree_accept("W1")
         self.assertEqual(asked, ["accept W1's tree as finished? [y/N]:"])
+
+    def test_the_accept_prompt_says_where_each_thing_it_counts_is(self):
+        """The reviewer's notes are in the tree's notes section and `H` lists assumptions only, so the prompt must not
+        send the reader to `H` for notes (it did: 'N notes: H shows them'), nor to nowhere when there is no assumption."""
+        noted = TREE.replace("## Log\n", "## Log\n\n- 2026-09-27T02:00:00Z · review · ok\n  A minor wording to read.\n", 1)
+        ui = self.ui
+        ui.data["items"][0]["status"] = "done"
+        ui.current = lambda: ui.data["items"][0]
+        ui.tree_acceptable = lambda it: True
+        asked = []
+        ui.prompt = lambda label, default="": asked.append(label) or "n"
+        ui.tree_of = lambda task: (dfs_tree.parse(noted, "W1"), ARCHIVE, {})
+        ui.tree_accept("W1")
+        self.assertEqual(asked.pop(), "accept W1? 1 note in the tree [y/N]:")
+        t = dfs_tree.parse(noted.replace("Status: confirmed\nApproach: go deeper.",
+                                         "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if it leaks.\n"
+                                         "Determination: Confirmed: it holds."), "W1")
+        ui.tree_of = lambda task: (t, ARCHIVE, {})
+        ui.tree_accept("W1")
+        self.assertEqual(asked.pop(), "accept W1? 1 assumption on H, 1 note in the tree [y/N]:")
+
+    def test_H_has_a_heading_per_task_and_opens_on_the_current_task(self):
+        """`H` lists every unaccepted task's assumptions; the accept prompt's 'on H' means the task being accepted, so each
+        task's block has a heading and the cursor starts on the current task's first assumption, not the first task's."""
+        ui = self.ui
+        t = self.flagged_tree()
+        other = dict(id="W2", goal="Another task.", status="done", assumptions=dfs_tree.assumed(t))
+        mine = dict(id="W1", goal="Make the thing.", status="done", assumptions=dfs_tree.assumed(t))
+        ui.data["items"] = [other, mine]
+        ui.sel = 1
+        ui.act(ord("H"))
+        self.assertEqual(ui.asm_rows()[ui.asm_sel][0], 1, "the cursor starts on the current task")
+        lines = [l for l, *_ in ui.lines_assumptions(100)]
+        heads = [l for l in lines if l.startswith("W")]
+        self.assertEqual(heads, ["W2 · Another task.", "W1 · Make the thing."])
+        ui.sel = 0
+        ui.act(ord("H"))   # closes the pane
+        ui.act(ord("H"))
+        self.assertEqual(ui.asm_rows()[ui.asm_sel][0], 0)
 
     def test_n_walks_the_raises_and_assumptions_and_wraps(self):
         ui = self.ui

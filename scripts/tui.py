@@ -2935,8 +2935,16 @@ class UI(WalkMixin):
             out.append(("  none: every task is accepted, or none states a hypothesis",
                         look("chrome")))
             return out
+        task_idx = None
         for i, (idx, nd) in enumerate(rows):
             sel = i == self.asm_sel
+            if idx != task_idx:
+                # A heading per task: the accept prompt's "on H" means this task's block, and rows of
+                # several tasks otherwise run together.
+                task_idx = idx
+                it = self.items[idx]
+                out.append(("%s · %s" % (it["id"], it["goal"]),
+                            look("chrome") | curses.A_BOLD))
             if sel:
                 self._sel_row = len(out)
             f = nd["fields"]
@@ -4856,15 +4864,16 @@ class UI(WalkMixin):
         t, _, _ = self.tree_of(item)
         # ⚠️ ONE SHORT LINE. The footer draws this label from column 1 and clips it at the screen's
         # edge, so a prompt that named every assumption and its test (W75: 472 characters) showed the
-        # reader the first one and never its `[y/N]:`. It counts what rests on the author and points at
-        # `H`, which lists each assumption with its test and first evidence lines, and the reviewer's notes.
+        # reader the first one and never its `[y/N]:`. It counts what rests on the author and says where
+        # each is: the assumptions on `H` (each with its test and first evidence lines), the reviewer's
+        # notes in the tree's "Reviewer and critic notes" section, which `H` does not list.
         n, kept = len(assumed_nodes(t)), len(dfs_tree.notes(t))
         bits = []
         if n:
-            bits.append("%d assumption%s" % (n, "" if n == 1 else "s"))
+            bits.append("%d assumption%s on H" % (n, "" if n == 1 else "s"))
         if kept:
-            bits.append("%d note%s" % (kept, "" if kept == 1 else "s"))
-        ask = "accept %s? %s%s [y/N]:" % (item, ", ".join(bits), ": H shows them" if n else "") if bits \
+            bits.append("%d note%s in the tree" % (kept, "" if kept == 1 else "s"))
+        ask = "accept %s? %s [y/N]:" % (item, ", ".join(bits)) if bits \
             else "accept %s's tree as finished? [y/N]:" % item
         if self.prompt(ask)[:1].lower() != "y":
             self.msg = "not accepted"
@@ -5038,7 +5047,8 @@ class UI(WalkMixin):
             return self.command()
         elif ch == ord("H"):
             self.pane = "item" if self.pane == "assumptions" else "assumptions"
-            self.asm_sel = 0
+            # Opens on the current task's first assumption (the one being accepted), not the first of all tasks.
+            self.asm_sel = next((i for i, (idx, _nd) in enumerate(self.asm_rows()) if idx == self.sel), 0)
             self.scroll = 0
         elif ch == ord("h"):
             self.pane = "item" if self.pane == "activity" else "activity"
