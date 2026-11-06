@@ -51,7 +51,7 @@ try:
         print("-- %d lines, %d wider than %d columns" % (len(lines), len(over), width))
 
     for width in (80, 120):
-        for task in ("W2", "W3", "W7", "W9"):
+        for task in ("W2", "W3", "W7", "W9", "W10"):
             show("%s as the tree draws it, no side panel" % task, screen(task, width), width)
         show("W9.2 opened", screen("W9", width, open_node="W9.2"), width)
         show("W9 with the node panel at the right (card_panel)", screen("W9", width, card_panel=True), width)

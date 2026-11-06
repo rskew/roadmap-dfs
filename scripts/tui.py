@@ -2846,7 +2846,7 @@ class UI(WalkMixin):
             out.append(("%s %s  %s" % (">" if sel else " ", nd["id"], nd["title"]),
                         look("amber") | curses.A_BOLD | (curses.A_REVERSE if sel else 0)))
             if f.get("Hypothesis"):
-                assumption, wrong = dfs_tree.split_falsifier(f["Hypothesis"])
+                assumption, wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f["Hypothesis"]))
                 para(assumption, look("amber"), indent="    ")
                 if wrong:
                     para("wrong if " + wrong, look("amber"), indent="    ")
@@ -3909,7 +3909,8 @@ class UI(WalkMixin):
                     # one the assumption and what would show it wrong are kept under the
                     # row, each on a line of its own and clipped with a visible mark.
                     if assumes:
-                        assumption, wrong = dfs_tree.split_falsifier(nd["fields"]["Hypothesis"])
+                        assumption, wrong = dfs_tree.split_falsifier(
+                            dfs_tree.without_page(nd["fields"]["Hypothesis"]))
                         out.append((inner + clip_marked(assumption, room), look("amber")))
                         if wrong:
                             # Wrapped, not clipped: the test is the part the author answers,
@@ -4757,7 +4758,7 @@ class UI(WalkMixin):
         nodes = dfs_tree.by_id(t)
         for nid in assumed:
             f = nodes[nid]["fields"]
-            wrong = dfs_tree.split_falsifier(f.get("Hypothesis") or "")[1] or f.get("Ask", "")
+            wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f.get("Hypothesis")))[1] or f.get("Ask", "")
             bits.append("%s (%s)" % (nid, clip(wrong, 36)) if wrong else nid)
         note = (" Assumptions: %s." % "; ".join(bits)) if bits else ""
         kept = len(dfs_tree.notes(t))

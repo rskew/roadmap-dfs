@@ -124,6 +124,38 @@
  63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
  77|           Not first: W9.6's export covers rollback and a fallback read path…
 -- 50 lines, 0 wider than 80 columns
+======== W10 as the tree draws it, no side panel (width 80)
+  9|W10 — W10
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+ 11|> ▾ Summary
+ 68|    Loading a config file now reports every key the gateway does not
+ 59|    recognise, naming the closest known key, so a typo like
+ 68|    rate_limit_per_sce is visible at startup. By default it prints a
+ 67|    warning and carries on, because the shipped example and the 1.x
+ 72|    customer configs contain keys such as legacy_mode and cache_ttl that
+ 59|    would otherwise stop their gateways on upgrade; setting
+ 72|    GATEWAY_STRICT_CONFIG=1 makes it refuse to start instead. The Goal's
+ 73|    "fail loudly" is therefore met as a loud warning with opt-in failure,
+ 36|    not a hard failure for everyone.
+  0|
+  8|  ▾ Goal
+ 73|    Config loading silently ignores keys it does not know, so a typo like
+ 71|    rate_limit_per_sce runs on the default and nobody notices until the
+ 69|    incident. Fail loudly at startup instead. Customers have existing
+ 73|    config files, so this must not take anyone's gateway down on upgrade.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 38|  ▾ W10.1 ✓ Detect unknown config keys
+ 78|      Works as a pure function; load() still ignores them until W10.2 wires r…
+ 50|   ▾ ↳W10.2 ✓ Report them at startup  ⚑ assumption
+ 50|       Warn by default, strict opt-in via env var.
+ 78|       Warning, not refusing, is the right default: gateway.example.json itse…
+ 59|       wrong if the author wants hard failure for everyone.
+ 31|      ↳W10.3 ✓ Cover with tests
+ 78|        Full suite passes; the Goal is met: typos are reported loudly at star…
+-- 30 lines, 0 wider than 80 columns
 ======== W9.2 opened (width 80)
   7|W9 — W9
   0|
@@ -369,6 +401,34 @@
  63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
 118|           Not first: W9.6's export covers rollback and a fallback read path costs a stat per miss; reopen if the exp…
 -- 44 lines, 0 wider than 120 columns
+======== W10 as the tree draws it, no side panel (width 120)
+  9|W10 — W10
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+ 11|> ▾ Summary
+114|    Loading a config file now reports every key the gateway does not recognise, naming the closest known key, so a
+114|    typo like rate_limit_per_sce is visible at startup. By default it prints a warning and carries on, because the
+106|    shipped example and the 1.x customer configs contain keys such as legacy_mode and cache_ttl that would
+111|    otherwise stop their gateways on upgrade; setting GATEWAY_STRICT_CONFIG=1 makes it refuse to start instead.
+107|    The Goal's "fail loudly" is therefore met as a loud warning with opt-in failure, not a hard failure for
+ 13|    everyone.
+  0|
+  8|  ▾ Goal
+112|    Config loading silently ignores keys it does not know, so a typo like rate_limit_per_sce runs on the default
+112|    and nobody notices until the incident. Fail loudly at startup instead. Customers have existing config files,
+ 59|    so this must not take anyone's gateway down on upgrade.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 38|  ▾ W10.1 ✓ Detect unknown config keys
+ 86|      Works as a pure function; load() still ignores them until W10.2 wires reporting.
+ 50|   ▾ ↳W10.2 ✓ Report them at startup  ⚑ assumption
+ 50|       Warn by default, strict opt-in via env var.
+118|       Warning, not refusing, is the right default: gateway.example.json itself carries legacy_mode and cache_ttl (no…
+ 59|       wrong if the author wants hard failure for everyone.
+ 31|      ↳W10.3 ✓ Cover with tests
+118|        Full suite passes; the Goal is met: typos are reported loudly at startup (strictly on request) and existing c…
+-- 26 lines, 0 wider than 120 columns
 ======== W9.2 opened (width 120)
   7|W9 — W9
   0|

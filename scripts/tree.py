@@ -1687,6 +1687,13 @@ def split_falsifier(text):
     return text[:m.start()].strip(" .;—-") + ".", text[m.end():].strip()
 
 
+def without_page(text):
+    """`text` with the answer-page path a Hypothesis ends with taken out. The path is the
+    guard's pointer to the page, not part of what would show the node wrong, so a line that
+    wraps or a row that shows the falsifier drops it (the web row keeps the page as a link)."""
+    return re.sub(r"\s{2,}", " ", ARTEFACT_REF.sub("", text or "")).strip()
+
+
 def story(t, nid):
     """What the author has SAID about one node, so the screen can keep it with the
     node instead of in the log pane: the raises on it and their answers, the

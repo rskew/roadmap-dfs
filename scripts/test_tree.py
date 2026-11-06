@@ -1554,6 +1554,10 @@ class Check(InARepo):
         self.assertEqual(dfs_tree.assumed(t), [], "refuted by the author, so moot")
         self.assertEqual(dfs_tree.split_falsifier("It holds. Wrong if it leaks."),
                          ("It holds.", "it leaks."))
+        self.assertEqual(dfs_tree.split_falsifier(dfs_tree.without_page(
+            "It holds. Wrong if it leaks. .dfs/artefacts/e1ab3804-4db6-4358-a8dc-45beed23a27c.html")),
+            ("It holds.", "it leaks."))
+        self.assertEqual(dfs_tree.without_page(None), "")
 
     def test_notes_are_the_remarks_that_came_with_a_verdict(self):
         log = self.LOG + "- 2026-09-25T09:13:00Z · review · ok\n  `_locks` grows.\n- 2026-09-25T09:14:00Z · critic · ok\n"

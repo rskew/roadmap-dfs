@@ -162,7 +162,7 @@ try:
     def api(task):
         return json.loads(urllib.request.urlopen("%s/api/task/%s" % (base, task), timeout=5).read())
 
-    for task in ("W2", "W3", "W7", "W9"):
+    for task in ("W2", "W3", "W7", "W9", "W10"):
         d, dialog, width = dom(task)
         t = text_of(d.split("<!--SHEET-->")[0])
         j = api(task)
@@ -177,6 +177,8 @@ try:
         print("flagged (assumes) rows in DOM:", len(re.findall(r'class="row [^"]*assumes', d)), "(JSON: %d)" % sum(
             1 for r in nodes if r["assumes"] or r["ask"]))
         print("'Wrong if' words in the DOM text:", len(re.findall(r"wrong if", t, re.I)))
+        print("answer-page paths in the task page text (the closed rows; 0 means the 'Wrong if' ends at the test):",
+              len(re.findall(r"\.dfs/artefacts/", t)))
         for a in j["assumed"]:
             dn, _, _ = dom(task, a["id"])
             tn = re.sub(r"\s+", " ", dn.split("<!--SHEET-->")[1])      # the node sheet (#sheet), opened by the URL

@@ -366,6 +366,25 @@ class Pane(unittest.TestCase):
             text = " ".join(" ".join(lines).split())
             self.assertIn("wrong if " + wrong, text, "whole, not ended with an ellipsis")
 
+    def test_a_closed_nodes_wrong_if_leaves_out_the_answer_page_path(self):
+        t = dfs_tree.parse(TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if it leaks. "
+            ".dfs/artefacts/e1ab3804-4db6-4358-a8dc-45beed23a27c.html\n"
+            "Determination: Confirmed: it holds."), "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        self.ui.open_tree()
+        for width in (40, 80):
+            text = " ".join(" ".join(l for l, *_ in self.ui.lines_tree(width)).split())
+            self.assertIn("wrong if it leaks.", text)
+            self.assertNotIn(".dfs/artefacts", text)
+            self.assertNotIn("e1ab3804", text)
+        self.ui.data["items"][0]["assumptions"] = dfs_tree.assumed(t)
+        self.ui.act(ord("H"))
+        text = "\n".join(l for l, *_ in self.ui.lines_assumptions(100))
+        self.assertIn("wrong if it leaks.", text)
+        self.assertNotIn("e1ab3804", text)
+
     def test_n_walks_the_raises_and_assumptions_and_wraps(self):
         ui = self.ui
         self.flagged_tree()
