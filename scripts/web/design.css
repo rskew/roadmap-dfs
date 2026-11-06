@@ -174,7 +174,12 @@ dialog { width: min(calc(560px * var(--z)), calc(100vw - 2 * var(--s4))); max-he
 dialog::backdrop { background: var(--scrim); }
 dialog form { display: flex; flex-direction: column; gap: var(--s3); padding: 20px; }
 dialog h3 { margin: 0; font-size: var(--fs-title); font-weight: 500; line-height: 1.25; }
-dialog .quote { max-height: 40dvh; overflow: auto; padding: 10px var(--s3); border: var(--rule) solid var(--line); background: var(--paper); white-space: pre-wrap; font-size: var(--fs-small); }
+/* A box that scrolls says so: a shadow at the edge with more text behind it. The cover scrolls with the text and hides the shadow at the end. */
+dialog .quote { max-height: 40dvh; overflow: auto; padding: 10px var(--s3); border: var(--rule) solid var(--line); white-space: pre-wrap; font-size: var(--fs-small);
+  background:
+    linear-gradient(var(--paper), var(--paper)) 0 100% / 100% 28px no-repeat local,
+    linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .22)) 0 100% / 100% 28px no-repeat scroll,
+    linear-gradient(var(--paper), var(--paper)) 0 0 / 100% 100% no-repeat; }
 dialog .answerpage { width: 100%; height: 40dvh; border: var(--rule) solid var(--line); background: #fff; }
 dialog .row-btns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr); gap: 10px; }
 dialog .row-btns .btn { white-space: nowrap; padding-left: var(--s2); padding-right: var(--s2); }

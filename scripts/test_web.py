@@ -603,6 +603,18 @@ class Web(unittest.TestCase):
         # a link in prose opens the viewer in the page: none opens a window of its own
         self.assertNotIn("target", "".join(out))
 
+    def test_the_phone_page_keeps_its_small_faults_fixed(self):
+        """Read from the page's source: a --no-walk server's Chats route says chat is off, the fold button is 44px, the phone
+        adds a task from a tab and not from a button over the rows, and a scrolling note box shows a shadow."""
+        src = (HERE / "web" / "index.html").read_text()
+        css = (HERE / "web" / "design.css").read_text()
+        self.assertIn("drawChatsOff(list.off)", src)
+        self.assertRegex(src, r"\.row \.fold \{ flex: 0 0 calc\(44px")
+        self.assertIn('class="tab-add" data-act="newtask"', src)
+        self.assertRegex(src, r"max-width: 899\.98px\) \{ \.fab, \.fab-gap \{ display: none")
+        quote = css[css.index("dialog .quote {"):]
+        self.assertIn("no-repeat local", quote[:quote.index("}")])
+
     def test_the_viewer_route_and_its_frame_are_keyed_on_task_and_name(self):
         """route() and drawArtefact() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
