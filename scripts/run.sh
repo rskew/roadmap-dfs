@@ -1216,7 +1216,6 @@ else
 fi
 total_turns=0
 total_cost=0
-server_errors=0              # 5xx answers from the model service in a row; a session that ends clean resets it
 
 for i in $(seq 1 "$CAP"); do
   lowered_cap
@@ -1299,7 +1298,7 @@ for i in $(seq 1 "$CAP"); do
   # ⚠️ A usage limit is ASKED OF THE RESULT'S OWN STATUS, not of a sentence — one
   # definition, in limit.py. Defaulted before the eval so a classifier that did
   # not run is never read as "not a limit".
-  limit_hit=0; resets=""; http=0; http_words=""
+  limit_hit=0; resets=""
   if limit_out="$(python3 "$HERE/limit.py" "$log" "$AGENT")"; then
     eval "$limit_out"; limit_hit="$limit"
   else
@@ -1315,24 +1314,11 @@ for i in $(seq 1 "$CAP"); do
   fi
   if [ "$rc" -ne 0 ]; then
     tree_log end "$kind" failed
-    # ⚠ A 5xx is the model service's fault and passes: the session is run again, up to
-    # DFS_RETRY_5XX times in a row (2), after DFS_RETRY_WAIT seconds (20). Anything else that exits
-    # non-zero still stops the walk at once, since the next item would fare no better.
-    if [ "$http" -ge 500 ] 2>/dev/null && [ "$http" -le 599 ]; then
-      server_errors=$((server_errors + 1))
-      if [ "$server_errors" -le "${DFS_RETRY_5XX:-2}" ]; then
-        echo "dfs_run: the model service answered $http (${http_words:-no text}); run $i is run again after ${DFS_RETRY_WAIT:-20}s ($server_errors of ${DFS_RETRY_5XX:-2} tries)."
-        sleep "${DFS_RETRY_WAIT:-20}"
-        continue
-      fi
-      meta_set cause="the model service answered $http: ${http_words:-no text}"
-    fi
     stop_is failed
     echo "dfs_run: the run failed (exit $rc). Output in $log."
     sed -n '1,20p' "$log"
     exit 1
   fi
-  server_errors=0
 
   if [ "$kind" != work ]; then
     # ⚠️ A critic or a reviewer judges; it does not work, and it must give a verdict.

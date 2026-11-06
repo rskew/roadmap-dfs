@@ -188,29 +188,5 @@ class ResetAt(unittest.TestCase):
         for s in ("try again later", "try again at Foo 9th, 2026 4:01 AM"):
             self.assertIsNone(LIM.reset_at(s, self.NOW), s)
 
-class ServerError(unittest.TestCase):
-    """A 5xx from the model service is told apart from a limit and from every other failure."""
-
-    def test_claudes_5xx_status_is_read_and_a_429_or_a_clean_run_is_not(self):
-        err = claude(is_error=True, api_error_status=502, result="API Error: 502 Bad Gateway")
-        self.assertEqual(LIM.server_error(err, "claude"), (502, "API Error: 502 Bad Gateway"))
-        self.assertEqual(LIM.classify(err, "claude"), (False, ""))
-        self.assertEqual(LIM.server_error(claude(is_error=True, api_error_status=429, result="limit"), "claude")[0], 0)
-        self.assertEqual(LIM.server_error(claude(is_error=False, api_error_status=502), "claude")[0], 0)
-        self.assertEqual(LIM.server_error(claude(is_error=True, result="502 in the text"), "claude")[0], 0)
-        self.assertEqual(LIM.server_error("not json 502", "claude")[0], 0)
-
-    def test_opencodes_error_event_status_is_read_and_its_own_text_is_not(self):
-        err = json.dumps(dict(type="error", error=dict(data=dict(statusCode=503, message="overloaded"))))
-        self.assertEqual(LIM.server_error(err, "opencode"), (503, "overloaded"))
-        text = json.dumps(dict(type="text", part=dict(text="HTTP 502"), statusCode=502))
-        self.assertEqual(LIM.server_error(text, "opencode")[0], 0)
-
-    def test_kiro_and_codex_are_never_read_as_one(self):
-        raw = claude(is_error=True, api_error_status=502, result="x")
-        self.assertEqual(LIM.server_error(raw, "kiro")[0], 0)
-        self.assertEqual(LIM.server_error(raw, "codex")[0], 0)
-
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)

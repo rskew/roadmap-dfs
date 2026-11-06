@@ -69,7 +69,6 @@ Evidence:
 #   silent     a critic that changes nothing and gives no verdict
 #   noverdict  a critic that raises on W1.1 but gives no verdict
 #   limit      die on a 429
-#   err502     die on a 502 from the model API (claude's result carries api_error_status 502)
 #   lower      `work`, then lower the chain's cap to this run, as the TUI's `w` does
 #   resolvemain confirm the open node, committing it, after rebasing the branch onto main
 #              the way the node asks (keeping the branch's side of a conflict)
@@ -129,7 +128,6 @@ case "$recipe" in
   stash)   case "$prompt" in *"NOT this task's"*"app.txt"*) ;; *) echo "not told to clear app.txt" >&2; exit 3 ;; esac
            git stash push -q --include-untracked -m "dfs: set aside" -- app.txt ;;
   limit)   echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":429,"result":"You have hit your session limit · resets 8pm (UTC)"}'; exit 1 ;;
-  err502)  echo '{"type":"result","subtype":"error","is_error":true,"api_error_status":502,"result":"API Error: 502 Bad Gateway"}'; exit 1 ;;
 esac
 echo '{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_turn","total_cost_usd":0.01,"num_turns":3}'
 """
@@ -2660,27 +2658,6 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (1, "limit"), out)
         self.assertEqual(meta.get("resets"), "resets 8pm (UTC)")
         self.assertEqual(self.log("end")[-1]["args"][:2], ["work", "limit"])
-
-    def test_a_502_from_the_model_api_is_run_again_and_the_walk_goes_on(self):
-        rc, meta, out = self.run_chain("work,err502,work", cap=3, DFS_RETRY_WAIT="0")
-        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
-        self.assertIn("the model service answered 502 (API Error: 502 Bad Gateway)", out)
-        self.assertEqual(self.kinds_run(), ["work", "work", "work"], out)
-
-    def test_a_502_that_keeps_coming_stops_the_walk_as_failed_and_names_the_status(self):
-        rc, meta, out = self.run_chain("work,err502,err502,err502,work", cap=5, DFS_RETRY_WAIT="0")
-        self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
-        self.assertEqual(meta.get("cause"), "the model service answered 502: API Error: 502 Bad Gateway")
-        self.assertEqual(self.kinds_run(), ["work"] * 4, out)
-
-    def test_a_502_between_clean_sessions_does_not_add_up(self):
-        rc, meta, out = self.run_chain("work,err502,work,err502,work,err502,work", cap=7, DFS_RETRY_WAIT="0")
-        self.assertEqual((rc, meta.get("stop")), (0, "cap"), out)
-
-    def test_a_failure_that_is_not_a_5xx_still_stops_at_once(self):
-        rc, meta, out = self.run_chain("work,racceptfail,work", DFS_RETRY_WAIT="0")
-        self.assertEqual((rc, meta.get("stop")), (1, "failed"), out)
-        self.assertEqual(self.kinds_run(), ["work", "work"], out)
 
     def lowered(self, recipe, cap, before=None):
         rundir = self.root / ".dfs" / "runs" / "dfs_run_lowered"
