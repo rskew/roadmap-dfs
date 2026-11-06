@@ -301,6 +301,40 @@ class Detail(unittest.TestCase):
             nd, {}, [("abcdef1234", "W1.1: the slice", "2026-09-27T01:00:00Z")])]
         self.assertEqual(labels, ["Approach", "Evidence", "Determination", "Commit"])
 
+    def test_a_node_lists_the_code_files_its_commits_changed(self):
+        """A reviewer sees which files a node touched, not only the commit's subject; the
+        planning files are left out and a sha git cannot show adds nothing."""
+        import os, subprocess, tempfile
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        with tempfile.TemporaryDirectory() as d:
+            def git(*a):
+                return subprocess.run(["git", *a], cwd=d, env=env, capture_output=True,
+                                      text=True, check=True).stdout.strip()
+            git("init", "-q")
+            os.makedirs(os.path.join(d, ".dfs", "items"))
+            for p in ("scripts/a.py", "b.py", ".dfs/items/W1.md"):
+                os.makedirs(os.path.dirname(os.path.join(d, p)) or d, exist_ok=True)
+                open(os.path.join(d, p), "w").write("x")
+            git("add", "-A")
+            git("commit", "-q", "-m", "W1.1: change")
+            sha = git("rev-parse", "HEAD")
+            was, TUI.ROOT = TUI.ROOT, d
+            try:
+                nd = dfs_tree.by_id(tree())["W1.1"]
+                got = dict(TUI.node_detail(nd, {}, [(sha, "W1.1: change", "2026-09-27T01:00:00Z")]))
+                self.assertEqual(got["Files"], "b.py, scripts/a.py")
+                self.assertEqual(TUI.commit_files([sha, "0" * 40]), "b.py, scripts/a.py")
+                self.assertEqual(TUI.commit_files(["0" * 40]), "")
+            finally:
+                TUI.ROOT = was
+
+    def test_the_tree_rule_names_the_sessions_it_counts(self):
+        cur = {"id": "W9", "status": "open", "sessions": 12}
+        self.assertEqual(TUI.tree_rule_name(cur), "tree · W9 · open · 12 sessions since you spoke")
+        self.assertEqual(TUI.tree_rule_name(dict(cur, sessions=1)), "tree · W9 · open · 1 session since you spoke")
+        self.assertEqual(TUI.tree_rule_name(cur, short=True), "tree · W9 · open · 12 sess")
+
     def test_the_editor_frame_is_dropped_and_the_words_kept(self):
         self.assertEqual(TUI.strip_comments("yes, go left\n\n# the raise\n#  said"),
                          "yes, go left")

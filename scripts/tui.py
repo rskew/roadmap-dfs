@@ -279,7 +279,38 @@ def node_detail(nd, archived=None, commits=()):
     off = (dfs_tree.unpushed() or (set(), {}))[0]
     out += [("Commit", "%s %s%s" % (sha[:7], subj, " · not on %s" % dfs_tree.default_ref(ttl=5.0) if sha in off else ""))
             for sha, subj, _at in commits]
+    files = commit_files([sha for sha, _s, _a in commits])
+    if files:
+        out.append(("Files", files))
     return out
+
+
+def tree_rule_name(cur, short=False):
+    """The tree pane's rule: `tree · W9 · open · 2 sessions since you spoke`, or `... 2 sess`
+    when the node panel leaves too little width for the long form."""
+    n = cur.get("sessions", 0)
+    if short:
+        return "tree · %s · %s · %d sess" % (cur["id"], cur["status"], n)
+    return "tree · %s · %s · %d session%s since you spoke" % (
+        cur["id"], cur["status"], n, "" if n == 1 else "s")
+
+
+def commit_files(shas, limit=12):
+    """The code files a node's commits changed, as one line: `a.py, b.py` and `+3 more`.
+    The planning files (`.dfs/`) are left out, since the node's own text is what changed there.
+    A commit git cannot show (a test's made-up sha) adds nothing."""
+    seen = []
+    for sha in shas[:8]:
+        try:
+            r = subprocess.run(["git", "show", "--name-only", "--format=", sha],
+                               capture_output=True, text=True, cwd=ROOT, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if r.returncode == 0:
+            seen += [p for p in r.stdout.splitlines()
+                     if p and not p.startswith(".dfs/") and p not in seen]
+    shown = ", ".join(seen[:limit])
+    return shown + (" · +%d more" % (len(seen) - limit) if len(seen) > limit else "")
 
 
 def age(ts, now=None):
@@ -4046,12 +4077,9 @@ class UI(WalkMixin):
             # ⚠ The rule is the one row of the pane that never scrolls, so it carries
             # the task's id, status and sessions: an opened node fills the pane and
             # scrolls the lines that said them out of view.
-            name = ("tree · %s · %s · %d since you spoke" % (
-                        cur["id"], cur["status"], cur.get("sessions", 0))
-                    if self.tree_focused() and cur else
+            name = (tree_rule_name(cur) if self.tree_focused() and cur else
                     "tree" if self.tree_focused() else "item")
-            short = ("tree · %s · %s · %d sess" % (
-                        cur["id"], cur["status"], cur.get("sessions", 0))
+            short = (tree_rule_name(cur, short=True)
                      if self.tree_focused() and cur else name)
 
         body_top = sep + 1

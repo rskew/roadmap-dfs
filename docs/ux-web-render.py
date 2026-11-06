@@ -10,9 +10,9 @@ W3, W7 and W9 does two things:
 1. `chromium --headless --dump-dom` of `#/t/<task>` at a phone window (390x844): what the
    page's script builds, as text. A finding is "carried" when its words are in that DOM.
 2. `GET /api/task/<task>`: the JSON the page draws from, to read `assumed` and `notes`,
-   which the accept form lists. The accept form itself opens on a click, which a DOM dump
-   cannot make (no playwright here), so those are read from the JSON and the form's template
-   in `scripts/web/index.html` (`acceptForm`), not from a rendered dialog.
+   which the accept form lists. The script also clicks the Accept button over the browser's
+   devtools protocol and reads the dialog's text, so the accept form is read as rendered
+   (the "accept dialog after a click" line of the output), not only from its template in `scripts/web/index.html`.
 
 It cannot show layout, colour or whether a line is clipped: the browser here draws no text.
 """

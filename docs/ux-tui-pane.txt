@@ -1,15 +1,15 @@
-== 80x24 W9 closed, cursor on first row: rule 'tree · W9 · open · 0 since you spoke  1–18 of 50'; 18 tree rows drawn (rows 4-21); cursor row on screen: True
+== 80x24 W9 closed, cursor on first row: rule 'tree · W9 · open · 0 sessions since you spoke  1–18 of 50'; 18 tree rows drawn (rows 4-21); cursor row on screen: True
      first row: 'W9 — W9' | last row: '▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assump' | cursor row: ['> ▾ Goal']
-== 80x24 W9.2 opened: rule 'tree · W9 · open · 0 since you spoke  18–35 of 83'; 18 tree rows drawn (rows 4-21); cursor row on screen: True
+== 80x24 W9.2 opened: rule 'tree · W9 · open · 0 sessions since you spoke  18–35 of 83'; 18 tree rows drawn (rows 4-21); cursor row on screen: True
      first row: '>  ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ ass' | last row: 'p99 exceeds 5 ms, or if the Goal\'s "without losing' | cursor row: ['>  ▾ ↳W9.2 ✓ Choose the SQLite journal m']
-== 80x24 W9 cursor sent to the last row (G): rule 'tree · W9 · open · 0 since you spoke  33–50 of 50'; 18 tree rows drawn (rows 4-21); cursor row on screen: True
+== 80x24 W9 cursor sent to the last row (G): rule 'tree · W9 · open · 0 sessions since you spoke  33–50 of 50'; 18 tree rows drawn (rows 4-21); cursor row on screen: True
      first row: 'case against: if fsync is slow, WAL checkpoints ma' | last row: "Not first: W9.6's export covers rollback and a fal" | cursor row: ['>        W9.7 ‖ Keep the JSON store behi']
-== 120x50 W9 closed, cursor on first row: rule 'tree · W9 · open · 0 since you spoke'; 44 tree rows drawn (rows 4-47); cursor row on screen: True
+== 120x50 W9 closed, cursor on first row: rule 'tree · W9 · open · 0 sessions since you spoke'; 44 tree rows drawn (rows 4-47); cursor row on screen: True
      first row: 'W9 — W9' | last row: "Not first: W9.6's export covers rollback and a fal" | cursor row: ['> ▾ Goal']
-== 120x50 W9.2 opened: rule 'tree · W9 · open · 0 since you spoke  1–44 of 68'; 44 tree rows drawn (rows 4-47); cursor row on screen: True
+== 120x50 W9.2 opened: rule 'tree · W9 · open · 0 sessions since you spoke  1–44 of 68'; 44 tree rows drawn (rows 4-47); cursor row on screen: True
      first row: 'W9 — W9' | last row: '' | cursor row: ['>  ▾ ↳W9.2 ✓ Choose the SQLite journal m']
-== 120x50 W9 cursor sent to the last row (G): rule 'tree · W9 · open · 0 since you spoke'; 44 tree rows drawn (rows 4-47); cursor row on screen: True
+== 120x50 W9 cursor sent to the last row (G): rule 'tree · W9 · open · 0 sessions since you spoke'; 44 tree rows drawn (rows 4-47); cursor row on screen: True
      first row: 'W9 — W9' | last row: "Not first: W9.6's export covers rollback and a fal" | cursor row: ['>        W9.7 ‖ Keep the JSON store behi']
 == 110x24 W1310 (210 nodes) cursor on the last row, real side_w, blocked, 12 sessions: rule row (as drawn, columns kept) 'tree · W1310 · blocked · 12 sess 415–432 of 432 │ W1310.210 · Node 210'
 == 112x24 W1310 (210 nodes) cursor on the last row, real side_w, blocked, 12 sessions: rule row (as drawn, columns kept) 'tree · W1310 · blocked · 12 sess 415–432 of 432 │ W1310.210 · Node 210'
-== 140x24 W1310 (210 nodes) cursor on the last row, real side_w, blocked, 12 sessions: rule row (as drawn, columns kept) 'tree · W1310 · blocked · 12 since you spoke 414–431 of 431 │ W1310.210 · Node 210'
+== 140x24 W1310 (210 nodes) cursor on the last row, real side_w, blocked, 12 sessions: rule row (as drawn, columns kept) 'tree · W1310 · blocked · 12 sessions since you spoke 414–431 of 431 │ W1310.210 · Node 210'
