@@ -1584,7 +1584,13 @@ const line = (id, name, value, attrs = "") => `<textarea class="line" id="${id}"
 function form(html, onsubmit) {
   const d = $("#form"); d.innerHTML = `<form method="dialog">${html}</form>`;
   d.showModal();
-  const f = $("form", d), first = $("textarea, input[type=text]", d); if (first) first.focus({ preventScroll: true });   // the dialog opens at its heading, not scrolled down to the box
+  const f = $("form", d), first = $("textarea, input[type=text]", d); if (first) first.focus({ preventScroll: true });
+  // The dialog opens at its heading. preventScroll does not hold: chromium scrolls the focused box into view a moment
+  // after showModal, so until the reader touches the dialog a scroll of the form is put back (docs/ux-web-dialogs.py draws it).
+  let touched = false; const ac = new AbortController();
+  for (const ev of ["pointerdown", "touchstart", "wheel", "keydown"]) d.addEventListener(ev, () => { touched = true; }, { capture: true, once: true, signal: ac.signal });
+  d.addEventListener("close", () => ac.abort(), { once: true });
+  f.addEventListener("scroll", () => { if (!touched) f.scrollTop = 0; });
   for (const el of f.querySelectorAll("textarea.line")) {
     const grow = () => { el.style.height = "auto"; el.style.height = el.scrollHeight + el.offsetHeight - el.clientHeight + "px"; };
     el.addEventListener("input", grow);

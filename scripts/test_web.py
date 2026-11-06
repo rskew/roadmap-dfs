@@ -1536,8 +1536,14 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual((ev["lines"], ev["more"]), (["for: shelved.", "against: and this."], 0))
 
     def test_a_dialog_opens_at_its_heading_not_scrolled_to_its_first_box(self):
+        # A source check: plain unittest has no browser. `docs/ux-web-dialogs.py` draws it. It found chromium scrolling
+        # the focused box into view after showModal even with preventScroll, so the form is put back until touched.
         src = (HERE / "web" / "index.html").read_text()
-        self.assertIn("first.focus({ preventScroll: true })", src)
+        body = src[src.index("function form(html, onsubmit)"):]
+        body = body[:body.index("f.addEventListener(\"submit\"")]
+        self.assertIn("if (!touched) f.scrollTop = 0", body)
+        for ev in ("pointerdown", "touchstart", "wheel", "keydown"):
+            self.assertIn(ev, body)              # the reader's own scroll is never undone
 
     def test_the_accept_dialog_lists_assumptions_in_a_box_that_scrolls_and_keeps_its_buttons(self):
         src = (HERE / "web" / "index.html").read_text()
