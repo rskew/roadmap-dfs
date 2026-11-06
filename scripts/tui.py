@@ -4007,7 +4007,13 @@ class UI(WalkMixin):
     def rule(self, y, x0, x1, title="", tag=""):
         """A section's rule: grey line, its name in it, a position tag at the right."""
         self.put(y, x0, "─" * max(0, x1 - x0), look("chrome"))
+        # ⚠ The name never runs into the tag: it is clipped (with …) to the columns
+        # left of it, so a narrowed tree (the node panel beside it) cannot overwrite
+        # the task, status or sessions the name carries.
         if title:
+            room = (x1 - len(tag) - 2 if tag else x1) - (x0 + 2) - 3
+            if len(title) > room:
+                title = title[:max(0, room - 1)] + "…"
             self.put(y, x0 + 2, " %s " % title, look("chrome"))
         if tag:
             self.put(y, max(x0, x1 - len(tag) - 2), tag, look("chrome"))
@@ -4043,6 +4049,9 @@ class UI(WalkMixin):
                         cur["id"], cur["status"], cur.get("sessions", 0))
                     if self.tree_focused() and cur else
                     "tree" if self.tree_focused() else "item")
+            short = ("tree · %s · %s · %d sess" % (
+                        cur["id"], cur["status"], cur.get("sessions", 0))
+                     if self.tree_focused() and cur else name)
 
         body_top = sep + 1
         body_h = max(1, h - body_top - 2)
@@ -4070,6 +4079,8 @@ class UI(WalkMixin):
         if len(lines) > body_h:
             tag = "%d–%d of %d" % (self.scroll + 1,
                                    min(self.scroll + body_h, len(lines)), len(lines))
+        if self.pane == "item" and len(name) + len(tag) + 7 > main - 1:
+            name = short           # narrow: keep id and status, shorten the count
         self.rule(sep, 0, main - 1, name, tag)
         for i, line in enumerate(lines[self.scroll:self.scroll + body_h]):
             text, attr = line[0], line[1]

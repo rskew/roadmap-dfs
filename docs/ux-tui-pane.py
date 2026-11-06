@@ -18,6 +18,12 @@ work = tempfile.mkdtemp(prefix="tui-pane-")
 try:
     os.makedirs(os.path.join(work, ".dfs"))
     shutil.copytree(fixture, os.path.join(work, ".dfs", "items"))
+    # A 210-node task (a flat list of closed nodes), so the rule has a long "n-m of N" tag (W131.23).
+    with open(os.path.join(work, ".dfs", "items", "W1310.md"), "w") as f:
+        f.write("# W1310 · A long tree\n\n## Goal\n\nA tree long enough to scroll.\n\n## Tree\n\n")
+        for n in range(1, 211):
+            f.write("### W1310.%d · Node %d\nStatus: confirmed\nApproach: Do step %d.\nDetermination: Done %d.\n\n" % (n, n, n, n))
+        f.write("## Log\n\n")
     subprocess.run(["git", "init", "-q", work], check=True)
     os.chdir(work)
     sys.path.insert(0, scripts)
@@ -32,16 +38,24 @@ try:
         def addstr(self, y, x, s, *a): self.cells[(y, x)] = s
         def move(self, *a): pass
         def refresh(self): pass
+        def grid_row(self, y):
+            """Row y as the terminal shows it: each cell written at its column, a later one over an earlier."""
+            line = [" "] * self.w
+            for (yy, x), t in self.cells.items():       # insertion order is draw order
+                if yy == y:
+                    for i, ch in enumerate(t):
+                        if x + i < self.w: line[x + i] = ch
+            return "".join(line)
         def rows(self):
             out = {}
             for (y, x), s in sorted(self.cells.items()):
                 out[y] = out.get(y, "") + (" " + s if x else s)     # a row's cells in column order
             return out
 
-    def case(task, width, height, open_node=None, key=None):
+    def case(task, width, height, open_node=None, key=None, side=0, status="open", sessions=0):
         ui = object.__new__(tui.UI)
         ui.scr = Scr(height, width)
-        ui.data = {"items": [{"id": task, "goal": task, "why": "", "status": "open"}]}
+        ui.data = {"items": [{"id": task, "goal": task, "why": "", "status": status, "sessions": sessions}]}
         ui.sel, ui.tree_item, ui.tree_sel, ui.scroll = 0, task, 0, 0   # tree_item set, or lines_tree resets the cursor to row 0
         ui.tree_folded, ui.tree_open, ui.tree_flagged = set(), set(), False
         ui._tree_cache, ui.card_panel, ui.pane, ui.msg, ui.input = {}, False, "item", "", None
@@ -50,7 +64,7 @@ try:
         ui.header = lambda: None
         ui.draw_list = lambda top, h: None
         ui.draw_footer = lambda y, w: None
-        ui.side_w = lambda w: 0
+        ui.side_w = (lambda w: side) if side is not None else tui.UI.side_w.__get__(ui)   # None: the real side_w
         ui.list_rows = lambda: [0]
         ui.current = lambda: ui.data["items"][0]
         ui.cursor_y = lambda top, h: None
@@ -63,6 +77,7 @@ try:
             ui.tree_sel = len(ui.tree_rows()) - 1
         ui.draw()
         rows = ui.scr.rows()
+        rows["grid3"] = ui.scr.grid_row(3)
         return rows
 
     for width, height in ((80, 24), (120, 50)):
@@ -74,7 +89,7 @@ try:
             except Exception as e:                      # a stub that is not enough: say so, do not guess
                 print("== %dx%d %s: could not draw: %s: %s" % (width, height, label, type(e).__name__, e))
                 continue
-            ys = sorted(rows)
+            ys = sorted(k for k in rows if k != "grid3")
             rule = [rows[3]] if 3 in rows else []
             body = [(y, rows[y]) for y in ys if y >= 4 and y < height - 2]
             cur = [y for y, s in body if s.lstrip().startswith((">", tui.BAR))]
@@ -83,6 +98,16 @@ try:
                 body[0][0] if body else None, body[-1][0] if body else None, bool(cur)))
             print("     first row: %r | last row: %r | cursor row: %r" % (
                 body[0][1].strip()[:50], body[-1][1].strip()[:50], [s.strip()[:40] for y, s in body if y in cur][:1]))
+    # W131.23: the node panel narrows the tree (the real `side_w`: 50 columns from 110), so the
+    # rule's name and its "n-m of N" tag must not meet. A blocked task with 12 sessions is the long case.
+    for width, height in ((110, 24), (112, 24), (140, 24)):
+        try:
+            rows = case("W1310", width, height, None, "G", None, "blocked", 12)
+        except Exception as e:
+            print("== %dx%d W1310 (210 nodes) cursor on the last row, real side_w: could not draw: %s: %s" % (width, height, type(e).__name__, e))
+            continue
+        print("== %dx%d W1310 (210 nodes) cursor on the last row, real side_w, blocked, 12 sessions: rule row (as drawn, columns kept) %r" % (
+            width, height, rows["grid3"].replace('─', '').strip()))
 finally:
     os.chdir("/")
     shutil.rmtree(work, ignore_errors=True)
