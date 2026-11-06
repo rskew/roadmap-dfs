@@ -1584,7 +1584,7 @@ const line = (id, name, value, attrs = "") => `<textarea class="line" id="${id}"
 function form(html, onsubmit) {
   const d = $("#form"); d.innerHTML = `<form method="dialog">${html}</form>`;
   d.showModal();
-  const f = $("form", d), first = $("textarea, input[type=text]", d); if (first) first.focus();
+  const f = $("form", d), first = $("textarea, input[type=text]", d); if (first) first.focus({ preventScroll: true });   // the dialog opens at its heading, not scrolled down to the box
   for (const el of f.querySelectorAll("textarea.line")) {
     const grow = () => { el.style.height = "auto"; el.style.height = el.scrollHeight + el.offsetHeight - el.clientHeight + "px"; };
     el.addEventListener("input", grow);

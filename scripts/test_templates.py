@@ -30,6 +30,13 @@ class MobileFirst(unittest.TestCase):
         self.assertNotRegex(css, r"(?<!-)width: *\d{3,}px", "a box wider than a phone")
         self.assertNotIn("position: absolute", css)
 
+    def test_both_templates_wrap_a_word_too_long_for_a_phone(self):
+        """Four W75 pages drew wider than a phone because one test name would not wrap."""
+        for name in ("_TEMPLATE.html", "_TEMPLATE_ANSWER.html"):
+            css = (TEMPLATES / name).read_text()
+            body = css[css.index("  body {"):]
+            self.assertIn("overflow-wrap: anywhere", body[:body.index("}")], name)
+
     def test_the_answer_template_has_no_slider_to_leave_pointless_in_a_copy(self):
         page = (TEMPLATES / "_TEMPLATE_ANSWER.html").read_text()
         self.assertNotRegex(page, r"type=[\"']?range", "a stock slider is copied into every page")

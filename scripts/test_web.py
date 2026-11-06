@@ -1535,6 +1535,10 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         ev = self.task()["assumed"][0]["evidence"]
         self.assertEqual((ev["lines"], ev["more"]), (["for: shelved.", "against: and this."], 0))
 
+    def test_a_dialog_opens_at_its_heading_not_scrolled_to_its_first_box(self):
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertIn("first.focus({ preventScroll: true })", src)
+
     def test_the_accept_dialog_lists_assumptions_in_a_box_that_scrolls_and_keeps_its_buttons(self):
         src = (HERE / "web" / "index.html").read_text()
         css = (HERE / "web" / "design.css").read_text()
