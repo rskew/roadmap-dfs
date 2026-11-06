@@ -55,6 +55,8 @@ edited log line or a rewritten determination erases what the author reviews. So:
       file or a push, a clone or `git clean` loses it (`check_attachments`)
     - a task file over the size budget that this commit grew
   warned:
+    - a live node, new or with its Hypothesis changed, whose answer page never says what
+      would show the assumption wrong (`falsifier_notes`; printed as a note, never refused)
     - a coordinate (`file.js:123`) in a task file this commit changes: it rots with no sign
 
 A commit is judged on what it CHANGES. A shape fault in the first group that HEAD's
@@ -630,6 +632,37 @@ def standalone_notes(task, text, head=None, archive=""):
     return out
 
 
+FALSIFIER_ON_PAGE = re.compile(r"wrong if|would show[^.<]{0,30}wrong|would prove[^.<]{0,30}wrong", re.I)
+
+
+def falsifier_notes(task, text, head, read, archive="", head_archive=""):
+    """Notes (not violations) on a live Hypothesis, new or changed in `text`, whose named
+    answer page never says what would show the assumption wrong. The confirm/refute form
+    shows only the page, so a page without it asks the author to rule without the test.
+    Judged on the same nodes as `check_assumptions`. Advice only: the guard does not
+    refuse a commit for it, and a page that does not exist is that check's to refuse."""
+    t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
+    was = ({nd["id"]: nd for nd in
+            dfs_tree.with_archive(dfs_tree.parse(head, task), head_archive)["nodes"]}
+           if head else {})
+    out = []
+    for nd in t["nodes"]:
+        h = (nd["fields"].get("Hypothesis") or "").strip()
+        if not h or h == dfs_tree.SHELF_STUB or nd["status"] in ("parked", "refuted"):
+            continue
+        old = was.get(nd["id"])
+        if old and (old["fields"].get("Hypothesis") or "").strip() == h \
+                and old["status"] not in ("parked", "refuted"):
+            continue
+        pages = [read(dfs_paths.artefacts() / n) for n in ARTEFACT_REF.findall(h)]
+        pages = [p for p in pages if p is not None]
+        if pages and not any(FALSIFIER_ON_PAGE.search(p) for p in pages):
+            out.append("%s's answer page never says what would show the assumption wrong. "
+                       "The confirm/refute form shows only the page: put the `Wrong if` "
+                       "test on it, in words the author can check." % nd["id"])
+    return out
+
+
 def main() -> int:
     warn_only = "--warn" in sys.argv
     # Silent when this directory has no roadmap: the guard runs from a repo's
@@ -761,6 +794,9 @@ def main() -> int:
                       f"{budget:,} budget. Not grown here.")
             for note in standalone_notes(task, text, head, arc):
                 print(f"dfs_check: note — {rel}: {note}")
+            if judge_writer:
+                for note in falsifier_notes(task, text, wbase, read, arc, head_arc):
+                    print(f"dfs_check: note — {rel}: {note}")
             held_hits = old_coordinates(head, text) if head is not None else {}
             for n, hit in coordinates(text) if text != head else ():
                 if hit in held_hits.get(n, ()):   # on a line HEAD's copy held, or an edit of one

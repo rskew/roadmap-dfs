@@ -577,6 +577,22 @@ class Check(InARepo):
         return " | ".join(dfs_check.check_assumptions("W1", text, head, read, archive,
                                                       head_archive))
 
+    def test_a_page_with_no_falsifier_gets_a_note_not_a_refusal(self):
+        art = ".dfs/artefacts/a1.html"
+        text = task(node(1, extra="Hypothesis: It holds. Wrong if it breaks. %s\n" % art))
+        bare = {"a1.html": self.PAGE}
+        said = {"a1.html": "<p>Wrong if a second writer exists.</p>" + self.PAGE}
+        read = lambda pages: (lambda path: pages.get(path.name))   # noqa: E731
+        self.assertEqual(self.assumed(text, pages=bare), "", "the guard still passes it")
+        notes = dfs_check.falsifier_notes("W1", text, None, read(bare))
+        self.assertEqual(len(notes), 1)
+        self.assertIn("W1.1", notes[0])
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read(said)), [])
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, text, read(bare)), [],
+                         "a node already at HEAD with its Hypothesis unchanged is history")
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read({})), [],
+                         "a missing page is check_assumptions's to refuse")
+
     RULES = "<script>fetch('/artefact-state/a1.html', {body: JSON.stringify({verdict: 'refuted', answer: 'x'})})</script>"
     PAGE = "<button>decide</button><script>b.addEventListener('click', f)</script>" + RULES
 
