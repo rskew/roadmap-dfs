@@ -677,6 +677,15 @@ class ARuleKeepsItsNameAndItsTag(unittest.TestCase):
         self.assertTrue(cells[2].endswith("… "), "and says it was cut")
         self.assertEqual(cells[tag_at], tag)
 
+    def test_a_rule_with_no_tag_keeps_its_title_inside_its_width(self):
+        # The input prompt's, `live ·` and `activity` rules pass no tag.
+        for width in (20, 30):
+            title = "live · W1310 · work session 12 of 15"
+            cells = self.drawn(width, title, "")
+            self.assertLessEqual(2 + len(cells[2]), width, "the title stays inside the rule")
+            self.assertTrue(cells[2].endswith("… "), "and says it was cut")
+        self.assertEqual(self.drawn(30, "activity", "")[2], " activity ")
+
 
 class TheCapIsANumber(unittest.TestCase):
     def test_enter_starts_a_chain_only_on_a_whole_number_of_sessions(self):
