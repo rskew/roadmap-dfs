@@ -960,8 +960,11 @@ class WalkMixin:
         if self.agent == "kiro" and name in MODEL_CHOICES["claude"] and name != "default":
             have = kiro_models()             # a name claude has and kiro does not list fails when the chain starts
             if name not in have:
-                raise ValueError("kiro has no model %r (that is a claude name); its models are: %s"
-                                 % (name, ", ".join(have)))
+                with _kiro_models_lock:
+                    read = bool(_kiro_models["ids"])
+                raise ValueError("kiro has no model %r (that is a claude name); its models %sare: %s"
+                                 % (name, "" if read else "(a fixed list, kiro-cli has not answered yet) ",
+                                    ", ".join(have)))
         path = os.path.join(dfs_runs.ensure_run_root(), "models")
         try:
             with open(path, errors="replace") as fh:

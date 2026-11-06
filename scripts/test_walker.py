@@ -10,6 +10,7 @@ Run:  python3 roadmap-dfs/scripts/test_walker.py
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -496,6 +497,24 @@ class Models(unittest.TestCase):
         self.w.set_model("plan", "default")                         # run.sh passes no --model for this
         self.w.agent = "claude"
         self.w.set_model("implement", "opus")                       # claude still takes its alias
+
+    def test_the_refusal_says_when_the_list_is_the_fixed_one_and_never_waits_for_kiro_cli(self):
+        self.w.agent = "kiro"
+        release = threading.Event()
+        self.fetch.side_effect = lambda: (release.wait(10), ["auto", "claude-opus-5.5"])[1]
+        try:
+            started = time.time()
+            with self.assertRaises(ValueError) as e:
+                self.w.set_model("implement", "opus")        # the read is now in flight and blocked
+            self.assertLess(time.time() - started, 2)
+            self.assertIn("fixed list", str(e.exception))
+            self.assertTrue(dfs_walk._kiro_models["busy"])
+        finally:
+            release.set()
+        self.wait_for_kiro_list()
+        with self.assertRaises(ValueError) as e:
+            self.w.set_model("implement", "opus")
+        self.assertNotIn("fixed list", str(e.exception))     # kiro answered: its own list
 
     def test_a_kiro_walk_takes_a_claude_looking_name_that_kiro_itself_lists(self):
         self.w.agent = "kiro"
