@@ -327,6 +327,8 @@ def parse_nodes(body, task, pre=None):
             cur["last"] = field_name(fm.group(1))
             if cur["last"] != "Evidence":
                 cur["fields"][cur["last"]] = fm.group(2).strip()
+            if cur["last"] == "Approach":
+                cur["approach_lines"] = [fm.group(2).strip()]
             continue
         if cur.get("last") == "Evidence" and re.match(r"^\s*- ", line):
             cur["evidence"].append(line.strip()[2:].strip())
@@ -334,12 +336,19 @@ def parse_nodes(body, task, pre=None):
             # A wrapped field value: joined to the field it continues.
             k = cur["last"]
             cur["fields"][k] = (cur["fields"].get(k, "") + " " + line.strip()).strip()
+            if k == "Approach":
+                cur["approach_lines"].append(line.rstrip())
         elif line.strip() and cur.get("last") == "Evidence" and cur["evidence"]:
             cur["evidence"][-1] += " " + line.strip()
         elif line.strip():
             cur["extra"].append(line)
     for nd in nodes:
         nd.pop("last", None)
+        # The Approach keeps its line breaks for display (a bold label and its bullets), while
+        # `fields["Approach"]` stays the one joined line every check reads.
+        lines = nd.pop("approach_lines", None)
+        if lines and len(lines) > 1 and nd["fields"].get("Approach"):
+            nd["approach_text"] = "\n".join(l for l in lines if l.strip()).strip()
         while nd["raw"] and not nd["raw"][-1].strip():
             nd["raw"].pop()
         f = nd["fields"]

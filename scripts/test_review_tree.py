@@ -301,6 +301,20 @@ class Detail(unittest.TestCase):
             nd, {}, [("abcdef1234", "W1.1: the slice", "2026-09-27T01:00:00Z")])]
         self.assertEqual(labels, ["Approach", "Evidence", "Determination", "Commit"])
 
+    def test_an_approach_keeps_its_bold_labels_and_bullets_on_their_own_lines(self):
+        """The parser joined a wrapped field into one line, so the web sheet drew an Approach's
+        `**The question**` and its bullets as one run-on paragraph; the opened node keeps the
+        line breaks and the joined `fields["Approach"]` stays one line for the checks."""
+        text = ("# W1 · A task\n\n## Goal\nx\n\n## Tree\n\n### W1.1 · A node\nStatus: open\n"
+                "Approach: **The question**\n- Is it so?\n**What this node does**\n- Reads it.\n- Tests it.\n")
+        nd = dfs_tree.parse_nodes(text.split("## Tree", 1)[1], "W1")[0]
+        self.assertNotIn("\n", nd["fields"]["Approach"])
+        shown = dict(TUI.node_detail(nd))["Approach"]
+        self.assertEqual(shown.splitlines(), ["**The question**", "- Is it so?",
+                                              "**What this node does**", "- Reads it.", "- Tests it."])
+        one = dfs_tree.parse_nodes("### W1.1 · A\nStatus: open\nApproach: one line\n", "W1")[0]
+        self.assertEqual(dict(TUI.node_detail(one))["Approach"], "one line")
+
     def test_a_node_lists_the_code_files_its_commits_changed(self):
         """A reviewer sees which files a node touched, not only the commit's subject; the
         planning files are left out and a sha git cannot show adds nothing."""

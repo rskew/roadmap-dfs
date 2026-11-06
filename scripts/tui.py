@@ -268,6 +268,8 @@ def node_detail(nd, archived=None, commits=()):
             out.append(("%s (archive)" % k, f[k]))
         elif k in archived and ("archive" in f.get(k, "") or k not in f):
             out.append(("%s (archive)" % k, archived[k]))
+        elif k == "Approach" and nd.get("approach_text"):
+            out.append((k, nd["approach_text"]))      # with its line breaks: a label and its bullets
         elif k in f:
             out.append((k, f[k]))
     out += [("Evidence", ev) for ev in nd["evidence"]]
