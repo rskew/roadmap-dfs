@@ -296,16 +296,17 @@ def plain(card):
 
 EVIDENCE_SHOWN, EVIDENCE_CUT = 4, 220     # lines the Accept dialog shows per assumption, and characters per line
 PICTURE = re.compile(r"!\[[^\]]*\]\([^)]*\)\s*")
+LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")      # [label](path): the dialog shows the label, not the markup
 
 
 def evidence_lines(nd, held=()):
     """A node's Evidence for the Accept dialog: its first few lines, each cut at a word, and how many
-    more the node sheet holds. A picture's markdown is dropped (the dialog draws text) and an answer
-    page's path with it. `held` is the evidence the task's archive holds for the node, which is where a
+    more the node sheet holds. A picture's markdown is dropped (the dialog draws text), a link is cut to its label and an answer
+    page's path is dropped. `held` is the evidence the task's archive holds for the node, which is where a
     shelved node's lives. `{lines: [...], more: N}`."""
     lines = []
     for ev in (nd["evidence"] or held):
-        ev = " ".join(PICTURE.sub("", dfs_tree.without_page(ev) or "").split())
+        ev = " ".join(LINK.sub(r"\1", PICTURE.sub("", dfs_tree.without_page(ev) or "")).split())
         if ev:
             lines.append(ev if len(ev) <= EVIDENCE_CUT else ev[:EVIDENCE_CUT].rsplit(" ", 1)[0].rstrip(",;:") + " …")
     return dict(lines=lines[:EVIDENCE_SHOWN], more=max(0, len(lines) - EVIDENCE_SHOWN))

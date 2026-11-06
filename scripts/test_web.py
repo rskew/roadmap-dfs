@@ -1514,7 +1514,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         markdown dropped, and how many more the node sheet holds. A shelved node's lives in the archive."""
         path = self.root / ".dfs" / "items" / "W1.md"
         long = "for: " + "word " * 80
-        lines = ["for: a line ![shot](.dfs/artefacts/aa.png) with a picture", long, "against: b", "for: c", "for: d", "for: e"]
+        lines = ["for: a line ![shot](.dfs/artefacts/aa.png) with a picture and [a page](.dfs/artefacts/bb.html) link", long, "against: b", "for: c", "for: d", "for: e"]
         text = path.read_text().replace("Determination: Confirmed: memory is flat over 10k ids.",
                                         "Evidence:\n" + "".join("- %s\n" % l for l in lines) +
                                         "Determination: Confirmed: memory is flat over 10k ids.", 1)
@@ -1523,7 +1523,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         ev = self.task()["assumed"][0]["evidence"]
         self.assertEqual(len(ev["lines"]), 4)
         self.assertEqual(ev["more"], 2)
-        self.assertEqual(ev["lines"][0], "for: a line with a picture")
+        self.assertEqual(ev["lines"][0], "for: a line with a picture and a page link")
         self.assertTrue(ev["lines"][1].endswith(" …") and len(ev["lines"][1]) <= 222, ev["lines"][1][-30:])
         # Evidence shelved to the archive is read from there.
         path.write_text(text.replace("Evidence:\n" + "".join("- %s\n" % l for l in lines), "Evidence: archived.\n"))
@@ -1549,6 +1549,8 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         src = (HERE / "web" / "index.html").read_text()
         css = (HERE / "web" / "design.css").read_text()
         self.assertIn("evidenceHtml(x)", src)
+        self.assertIn('<span class="way ${m[1]}">', src)   # "for:" and "against:" are drawn apart from the line
+        self.assertIn("dialog ul.ev .way.against", css)
         self.assertIn('<ul class="assume"', src)
         box = css[css.index("dialog ul.assume {"):]
         box = box[:box.index("}")]

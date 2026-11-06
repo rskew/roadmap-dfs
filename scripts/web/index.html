@@ -2051,10 +2051,12 @@ function addForm(parent) {
 }
 /* An assumption's evidence in the Accept dialog: its first lines as the node holds them ("for: ..." / "against: ...") and
    what is left on the node sheet, so the author weighs the test against what was seen without opening each node. */
+// "for:" and "against:" open each line; they get a word of their own colour so the skim shows which way it points.
+const evidenceLine = l => { const m = /^(for|against):\s*(.*)$/s.exec(l); return m ? `<li><span class="way ${m[1]}">${m[1]}</span> ${esc(m[2])}</li>` : `<li>${esc(l)}</li>`; };
 function evidenceHtml(x) {
   const e = x.evidence || { lines: [], more: 0 };
   if (!e.lines.length) return `<div class="ev none">No evidence written.</div>`;
-  return `<ul class="ev">${e.lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul>${e.more ? `<div class="ev more">${e.more} more on ${esc(x.id)}'s sheet.</div>` : ""}`;
+  return `<ul class="ev">${e.lines.map(evidenceLine).join("")}</ul>${e.more ? `<div class="ev more">${e.more} more on ${esc(x.id)}'s sheet.</div>` : ""}`;
 }
 function acceptForm() {
   const a = S.task.assumed;
