@@ -1686,7 +1686,7 @@ addEventListener("message", ev => {
 function answerForm(ts) {
   const r = S.task.rows.flatMap(x => x.kind === "raise" ? [x] : x.kind === "node" ? x.raises : []).find(x => x.ts === ts);
   const page = answerPage(r);
-  form(`<h3>Answer the raise</h3><div class="quote">${esc(r ? r.body : "")}</div>
+  form(`<h3>Answer the raise</h3><div class="quote">${esc(r ? (page ? r.body.replace(/^[ \t]*Answer with:.*\n?/gim, "").trim() : r.body) : "")}</div>
     ${page ? `<iframe id="answerpage" class="answerpage" src="artefacts/${esc(page.file)}" title="${esc(page.title)}" sandbox="allow-scripts"></iframe>` : ""}
     <div><label for="b">${page ? "Or in your own words, instead of the page" : "Your answer, in your own words"}</label><textarea id="b" name="body" required></textarea></div>${buttons("Record answer")}`,
     async fd => wrote(await api("/api/answer", { task: S.task.id, ts, body: fd.get("body") }), "Answered."));

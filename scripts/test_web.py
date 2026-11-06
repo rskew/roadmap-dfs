@@ -617,6 +617,12 @@ class Web(unittest.TestCase):
         # The form is a flex column that scrolls: without `flex: none` the box shrank to its padding (20px) in the
         # Accept dialog of a task with several assumptions, and its notes could not be read.
         self.assertIn("flex: none", quote[:quote.index("}")])
+        # The answer page's frame is in the same column: without `flex: none` it shrank to ~150px of its 40dvh, so the
+        # options and the Send button inside it could be reached through a slot three lines high.
+        frame = css[css.index("dialog .answerpage {"):]
+        self.assertIn("flex: none", frame[:frame.index("}")])
+        # The raw `Answer with: .dfs/artefacts/<uuid>.html` line is not shown above the frame that is that page.
+        self.assertIn("r.body.replace(/^[ \\t]*Answer with:", src)
 
     def test_the_viewer_route_and_its_frame_are_keyed_on_task_and_name(self):
         """route() and drawArtefact() in index.html, run under node (skipped when there is none)."""
