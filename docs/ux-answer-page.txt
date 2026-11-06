@@ -1,0 +1,40 @@
+session-written, answered raises: 29; classed: 28; with a page: 6; first page raise 2026-10-19
+
+all classes
+  with page      n=6  hours median   2.2 min   0.2 max   43.1   answer words median 6   [W86.1, W113.1, W123.4, W123.5, W113.9, W131.8]
+  without page   n=23 hours median   3.2 min   0.4 max  160.0   answer words median 6   [W43, W48.3, W60.4, W70.2, W75.44, W75.53, W75.56, W86.4, W93.9, W109.5, W75.59, W75.60, W122.5, W97.8, W116.27, W111.11, W116.33, W113.6, W111.13, W123.12, W123.20, W130.4, W130.12]
+
+since the first page raise
+  with page      n=6  hours median   2.2 min   0.2 max   43.1   answer words median 6   [W86.1, W113.1, W123.4, W123.5, W113.9, W131.8]
+  without page   n=18 hours median   4.9 min   0.5 max  160.0   answer words median 4   [W75.53, W75.56, W86.4, W93.9, W109.5, W75.59, W75.60, W122.5, W97.8, W116.27, W111.11, W116.33, W113.6, W111.13, W123.12, W123.20, W130.4, W130.12]
+
+class ?
+  with page      n=1  hours median   0.9 min   0.9 max    0.9   answer words median 10   [W131.8]
+  without page   n=0
+    since first  n=0
+
+class author-fact
+  with page      n=1  hours median  43.1 min  43.1 max   43.1   answer words median 1   [W86.1]
+  without page   n=3  hours median   0.8 min   0.4 max  160.0   answer words median 26   [W43, W70.2, W86.4]
+    since first  n=1  hours median 160.0 min 160.0 max  160.0   answer words median 2   [W86.4]
+
+class author-preference
+  with page      n=3  hours median   3.1 min   0.2 max    3.8   answer words median 12   [W113.1, W123.4, W123.5]
+  without page   n=1  hours median   5.7 min   5.7 max    5.7   answer words median 1   [W113.6]
+    since first  n=1  hours median   5.7 min   5.7 max    5.7   answer words median 1   [W113.6]
+
+class tooling
+  with page      n=1  hours median   1.4 min   1.4 max    1.4   answer words median 1   [W113.9]
+  without page   n=14 hours median   4.2 min   0.5 max   96.7   answer words median 8   [W60.4, W75.44, W75.53, W75.56, W109.5, W75.59, W75.60, W122.5, W111.11, W116.33, W111.13, W123.20, W130.4, W130.12]
+    since first  n=12 hours median   5.5 min   0.5 max   96.7   answer words median 8   [W75.53, W75.56, W109.5, W75.59, W75.60, W122.5, W111.11, W116.33, W111.13, W123.20, W130.4, W130.12]
+
+nearest-in-time same-class raise without a page, for each page raise
+  W86.1    author-fact          43.1 h vs W86.4     160.0 h   page - other -116.9
+  W113.1   author-preference     3.8 h vs W113.6      5.7 h   page - other   -1.9
+  W123.4   author-preference     3.1 h vs W113.6      5.7 h   page - other   -2.6
+  W123.5   author-preference     0.2 h vs W113.6      5.7 h   page - other   -5.5
+  W113.9   tooling               1.4 h vs W123.20     1.1 h   page - other   +0.3
+  W131.8   ?                     0.9 h   (no raise of the class without a page)
+pairs 5; page raise faster in 4; median difference -2.6 h
+
+since the first page raise: median hours without a page minus with one = 2.7; in 13401 of 134596 ways to pick 6 of 24 raises as the page ones it is at least that large (p = 0.10)

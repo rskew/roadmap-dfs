@@ -245,6 +245,10 @@ raise (often several hundred words) hides what is being asked. A Hypothesis page
 the page what would show the assumption wrong: the confirm/refute form shows only the page,
 and `check.py` prints a note when it does not.
 
+A raise that asks the author to choose between options names an answer page. The raises
+that did were answered somewhat faster than the others (a lean, not a proof; the answers were
+no more detailed), and a bare question or a tooling fault with nothing to choose can do without.
+
 **A Hypothesis always has an interactive artefact; a raise reaches for one whenever a
 picture would let the author decide, or check, faster than prose can.** Wiring and data
 flow before and after, options set side by side on the same axes, a sequence of what
