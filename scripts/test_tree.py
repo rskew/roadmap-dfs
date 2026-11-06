@@ -577,6 +577,32 @@ class Check(InARepo):
         return " | ".join(dfs_check.check_assumptions("W1", text, head, read, archive,
                                                       head_archive))
 
+    def test_a_page_with_no_falsifier_gets_a_note_not_a_refusal(self):
+        art = ".dfs/artefacts/a1.html"
+        text = task(node(1, extra="Hypothesis: It holds. Wrong if it breaks. %s\n" % art))
+        bare = {"a1.html": self.PAGE}
+        said = {"a1.html": "<p>Wrong if a second writer exists.</p>" + self.PAGE}
+        read = lambda pages: (lambda path: pages.get(path.name))   # noqa: E731
+        self.assertEqual(self.assumed(text, pages=bare), "", "the guard still passes it")
+        notes = dfs_check.falsifier_notes("W1", text, None, read(bare))
+        self.assertEqual(len(notes), 1)
+        self.assertIn("W1.1", notes[0])
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read(said)), [])
+        ruled = {"a1.html": "<p>Refute this if you meant the terminal screen.</p>" + self.PAGE}
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read(ruled)), [],
+                         "the test said as a ruling counts")
+        hidden = {"a1.html": "<script>// Wrong if it breaks</script><style>/* wrong if */</style>"
+                              "<!-- Refute this if --><p>Refuted, then built.</p>" + self.PAGE}
+        self.assertEqual(len(dfs_check.falsifier_notes("W1", text, None, read(hidden))), 1,
+                         "a phrase only in a script, style or comment is not on the page")
+        prose = {"a1.html": "<p>The option was refuted and built later if at all.</p>" + self.PAGE}
+        self.assertEqual(len(dfs_check.falsifier_notes("W1", text, None, read(prose))), 1,
+                         "'refuted ... if' in running prose is not a test")
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, text, read(bare)), [],
+                         "a node already at HEAD with its Hypothesis unchanged is history")
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read({})), [],
+                         "a missing page is check_assumptions's to refuse")
+
     RULES = "<script>fetch('/artefact-state/a1.html', {body: JSON.stringify({verdict: 'refuted', answer: 'x'})})</script>"
     PAGE = "<button>decide</button><script>b.addEventListener('click', f)</script>" + RULES
 
@@ -1528,6 +1554,10 @@ class Check(InARepo):
         self.assertEqual(dfs_tree.assumed(t), [], "refuted by the author, so moot")
         self.assertEqual(dfs_tree.split_falsifier("It holds. Wrong if it leaks."),
                          ("It holds.", "it leaks."))
+        self.assertEqual(dfs_tree.split_falsifier(dfs_tree.without_page(
+            "It holds. Wrong if it leaks. .dfs/artefacts/e1ab3804-4db6-4358-a8dc-45beed23a27c.html")),
+            ("It holds.", "it leaks."))
+        self.assertEqual(dfs_tree.without_page(None), "")
 
     def test_notes_are_the_remarks_that_came_with_a_verdict(self):
         log = self.LOG + "- 2026-09-25T09:13:00Z · review · ok\n  `_locks` grows.\n- 2026-09-25T09:14:00Z · critic · ok\n"

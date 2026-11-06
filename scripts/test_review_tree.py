@@ -301,6 +301,76 @@ class Detail(unittest.TestCase):
             nd, {}, [("abcdef1234", "W1.1: the slice", "2026-09-27T01:00:00Z")])]
         self.assertEqual(labels, ["Approach", "Evidence", "Determination", "Commit"])
 
+    def test_a_node_lists_the_code_files_its_commits_changed(self):
+        """A reviewer sees which files a node touched, not only the commit's subject; the
+        planning files are left out and a sha git cannot show adds nothing."""
+        import os, subprocess, tempfile
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        with tempfile.TemporaryDirectory() as d:
+            def git(*a):
+                return subprocess.run(["git", *a], cwd=d, env=env, capture_output=True,
+                                      text=True, check=True).stdout.strip()
+            git("init", "-q")
+            os.makedirs(os.path.join(d, ".dfs", "items"))
+            for p in ("scripts/a.py", "b.py", ".dfs/items/W1.md"):
+                os.makedirs(os.path.dirname(os.path.join(d, p)) or d, exist_ok=True)
+                open(os.path.join(d, p), "w").write("x")
+            git("add", "-A")
+            git("commit", "-q", "-m", "W1.1: change")
+            sha = git("rev-parse", "HEAD")
+            was, TUI.ROOT = TUI.ROOT, d
+            try:
+                nd = dfs_tree.by_id(tree())["W1.1"]
+                got = dict(TUI.node_detail(nd, {}, [(sha, "W1.1: change", "2026-09-27T01:00:00Z")]))
+                self.assertEqual(got["Code files"], "b.py, scripts/a.py")
+                self.assertEqual(TUI.commit_files([sha, "0" * 40]), "b.py, scripts/a.py")
+                self.assertEqual(TUI.commit_files(["0" * 40]), "")
+            finally:
+                TUI.ROOT = was
+
+    def test_a_commit_is_shown_to_git_once(self):
+        """The web page draws every node of a task on each request, so the Files line must not
+        run `git show` again for a commit it has read; a commit git cannot show is tried again."""
+        import os, subprocess, tempfile
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        with tempfile.TemporaryDirectory() as d:
+            def git(*a):
+                return subprocess.run(["git", *a], cwd=d, env=env, capture_output=True,
+                                      text=True, check=True).stdout.strip()
+            git("init", "-q")
+            open(os.path.join(d, "b.py"), "w").write("x")
+            git("add", "-A")
+            git("commit", "-q", "-m", "W1.1: change")
+            sha = git("rev-parse", "HEAD")
+            calls, real_run = [], subprocess.run
+            def counting(cmd, *a, **k):
+                calls.append(cmd)
+                return real_run(cmd, *a, **k)
+            was = TUI.ROOT
+            TUI.ROOT = d
+            TUI.subprocess.run = counting
+            try:
+                self.assertEqual(TUI.commit_files([sha]), "b.py")
+                self.assertEqual(TUI.commit_files([sha]), "b.py")
+                self.assertEqual(len(calls), 1)
+                TUI.commit_files(["0" * 40])
+                TUI.commit_files(["0" * 40])
+                self.assertEqual(len(calls), 3)
+                # A node with more commits than are read says how many were left out.
+                self.assertEqual(TUI.commit_files([sha] * 10), "b.py · 2 commits not read")
+                self.assertEqual(TUI.commit_files(["0" * 40] * 10), "")
+            finally:
+                TUI.subprocess.run = real_run
+                TUI.ROOT = was
+
+    def test_the_tree_rule_names_the_sessions_it_counts(self):
+        cur = {"id": "W9", "status": "open", "sessions": 12}
+        self.assertEqual(TUI.tree_rule_name(cur), "tree · W9 · open · 12 sessions since you spoke")
+        self.assertEqual(TUI.tree_rule_name(dict(cur, sessions=1)), "tree · W9 · open · 1 session since you spoke")
+        self.assertEqual(TUI.tree_rule_name(cur, short=True), "tree · W9 · open · 12 sess")
+
     def test_the_editor_frame_is_dropped_and_the_words_kept(self):
         self.assertEqual(TUI.strip_comments("yes, go left\n\n# the raise\n#  said"),
                          "yes, go left")
@@ -352,6 +422,38 @@ class Pane(unittest.TestCase):
             "Ask: warn or fail?\nDetermination: Confirmed: it holds. Next, more."), "W1")
         self.ui.tree_of = lambda task: (t, ARCHIVE, {})
         return t
+
+    def test_a_closed_nodes_wrong_if_wraps_whole_at_a_narrow_width(self):
+        wrong = "a second writer of the cursor exists somewhere in the sync path"
+        t = dfs_tree.parse(TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if %s.\n"
+            "Determination: Confirmed: it holds." % wrong), "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        self.ui.open_tree()
+        for width in (40, 80):
+            lines = [l for l, *_ in self.ui.lines_tree(width)]
+            text = " ".join(" ".join(lines).split())
+            self.assertIn("wrong if " + wrong, text, "whole, not ended with an ellipsis")
+
+    def test_a_closed_nodes_wrong_if_leaves_out_the_answer_page_path(self):
+        t = dfs_tree.parse(TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if it leaks. "
+            ".dfs/artefacts/e1ab3804-4db6-4358-a8dc-45beed23a27c.html\n"
+            "Determination: Confirmed: it holds."), "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        self.ui.open_tree()
+        for width in (40, 80):
+            text = " ".join(" ".join(l for l, *_ in self.ui.lines_tree(width)).split())
+            self.assertIn("wrong if it leaks.", text)
+            self.assertNotIn(".dfs/artefacts", text)
+            self.assertNotIn("e1ab3804", text)
+        self.ui.data["items"][0]["assumptions"] = dfs_tree.assumed(t)
+        self.ui.act(ord("H"))
+        text = "\n".join(l for l, *_ in self.ui.lines_assumptions(100))
+        self.assertIn("wrong if it leaks.", text)
+        self.assertNotIn("e1ab3804", text)
 
     def test_n_walks_the_raises_and_assumptions_and_wraps(self):
         ui = self.ui

@@ -1,0 +1,4 @@
+hypotheses 157; archived text left unread: 0
+W0-W59: n=44 with `Wrong if` 44 with an artefact path 21; median words 56; words before `Wrong if` median 32, over 40: 6
+W60-W99: n=41 with `Wrong if` 41 with an artefact path 41; median words 67; words before `Wrong if` median 36, over 40: 18
+W100-W999: n=72 with `Wrong if` 72 with an artefact path 72; median words 64; words before `Wrong if` median 38, over 40: 32

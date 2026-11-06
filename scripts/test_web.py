@@ -1463,6 +1463,8 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         n = rows["W1.2"]
         self.assertEqual(n["skim"], "memory is flat over 10k ids.")
         self.assertTrue(n["assumes"] and n["ask"])
+        self.assertEqual(n["wrong"], "a client returns inside one window.")
+        self.assertEqual(rows["W1.1"]["wrong"], "", "a node with no Hypothesis has none")
         roles = [r for r, _ in n["card"]]
         self.assertNotIn("head", roles, "the heading is the row")
         self.assertIn(["amber", "Idle buckets are safe to drop."], n["card"])
@@ -1471,6 +1473,18 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(len(raised["raises"]), 1)
         self.assertEqual(raised["raises"][0]["body"], "Is churn from one client or many?")
         self.assertNotIn("Raise", [t for _, t in raised["card"]], "the page draws raises itself")
+
+    def test_a_rows_wrong_if_leaves_out_the_answer_page_path_and_keeps_the_page(self):
+        path = self.root / ".dfs" / "items" / "W1.md"
+        page = ".dfs/artefacts/e1ab3804-4db6-4358-a8dc-45beed23a27c.html"
+        path.write_text(path.read_text().replace(
+            "Wrong if a client returns inside one window.",
+            "Wrong if a client returns inside one window. " + page))
+        n = {r["key"]: r for r in self.task()["rows"]}["W1.2"]
+        self.assertEqual(n["wrong"], "a client returns inside one window.")
+        self.assertEqual(n["page"], "e1ab3804-4db6-4358-a8dc-45beed23a27c.html")
+        status, data, _ = self.call("GET", "/api/assumptions")
+        self.assertEqual(data["assumed"][0]["wrong"], "a client returns inside one window.")
 
     def test_the_assumptions_across_tasks(self):
         status, data, _ = self.call("GET", "/api/assumptions")

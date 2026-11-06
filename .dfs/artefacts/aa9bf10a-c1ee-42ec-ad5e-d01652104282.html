@@ -1,0 +1,204 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The explainer link has little to link to; a files line would help</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  .tabs button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .card { margin: 8px 0; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; font-size: 14px; overflow-wrap: anywhere; }
+  .card b { font-size: 15px; }
+  .sub { color: #555; font-size: 13px; }
+  .file { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; border: 1px solid #999; border-radius: 4px; font: 12px ui-monospace, monospace; background: #f3f1ea; }
+  .file.note { border-color: #1f6f4a; background: #dff0e6; }
+  .grid { display: grid; grid-template-columns: 1fr 52px 52px 52px; gap: 4px 6px; align-items: center; font-size: 14px; margin: 8px 0; }
+  .grid .h { font-weight: 600; font-size: 12px; text-align: center; }
+  .grid .y, .grid .n { text-align: center; border-radius: 4px; min-height: 26px; line-height: 26px; }
+  .grid .y { background: #cfe8d9; } .grid .n { background: #eee; color: #888; }
+  .grid .off { opacity: .25; }
+  .sum { margin: 12px 0; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; font-size: 15px; }
+</style>
+<h1>What a node view tells a reviewer about the code</h1>
+<p><b>Assumption:</b> linking the code explainer from a node would show something on about one node in twelve, because notes exist for three files; what every code node lacks is the list of files its commits changed. <b>Refute this if</b> you want the explainer's call tree for code that has no note, or the commit subject alone is enough for you to see what a node touched.</p>
+<div class="tabs" role="group" aria-label="View">
+  <button type="button" data-v="today" aria-pressed="true">Node view today</button>
+  <button type="button" data-v="files" aria-pressed="false">With a Files line</button>
+</div>
+<div id="cards"></div>
+<div class="sum" id="sum" aria-live="polite"></div>
+<h2>What was counted</h2>
+<p>Notes (<code>docs/explain/*.json</code>) exist for <code>inbox.py</code>, <code>ptyrelay.py</code> and <code>walk.py</code>; those are the green boxes. Of 953 node commits in this repository, 74 (8%) touched one of them. None of the four nodes drawn did. The Files line is built (<code>commit_files</code> in <code>scripts/tui.py</code>, shown in the terminal node view and the web sheet): it costs one <code>git show</code> per commit when a node is opened, and it shows nothing when git cannot show the commit.</p>
+<p>If you refute this, the Files line is taken out and the explainer link is built instead.</p>
+<script>
+  var N = [
+    ["W131.21", "pin task, status and sessions in the tree rule, wrap wrong-if", ["docs/ux-tui-pane.py","docs/ux-tui-pane.txt","docs/ux-tui-render.txt","docs/ux-web-render.txt","scripts/tui.py","scripts/web.py","scripts/web/index.html"]],
+    ["W131.26", "the closed node's wrong-if leaves out the answer-page path", ["docs/tui-ux-review/items/W10.md","docs/ux-tui-render.py","docs/ux-tui-render.txt","docs/ux-web-render.py","docs/ux-web-render.txt","scripts/test_review_tree.py","scripts/test_tree.py","scripts/test_web.py","scripts/tree.py","scripts/tui.py","scripts/web.py"]],
+    ["W131.14", "SKILL.md raise template line; check.py falsifier note", ["SKILL.md","scripts/check.py","scripts/test_tree.py"]],
+    ["W100.1", "a thin line under the phone's bottom bars", ["scripts/ui_flows.mjs","scripts/web/index.html"]]
+  ];
+  var NOTED = ["scripts/inbox.py", "scripts/ptyrelay.py", "scripts/walk.py"], view = "today";
+  function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  function show() {
+    var h = "", hit = 0;
+    N.forEach(function (n) {
+      h += '<div class="card"><b>' + n[0] + '</b> ' + esc(n[1]) + '<div class="sub">commit line: sha, subject' + (view === "files" ? "" : " (that is all it shows)") + '</div>';
+      if (view === "files") {
+        h += '<div class="sub">Files (' + n[2].length + '):</div>';
+        n[2].forEach(function (f) { var on = NOTED.indexOf(f) >= 0; if (on) hit++; h += '<span class="file' + (on ? ' note' : '') + '">' + esc(f) + '</span>'; });
+      }
+      h += '</div>';
+    });
+    document.getElementById("cards").innerHTML = h;
+    document.getElementById("sum").innerHTML = view === "today"
+      ? 'The reader learns what a node did from its subject line only. To learn which files it touched they run <code>git show</code>.'
+      : 'Four nodes, ' + N.reduce(function (a, n) { return a + n[2].length; }, 0) + ' files, <b>' + hit + '</b> with an explainer note. A link to the explainer would have had nothing to show here; the file list shows where the change was.';
+  }
+  Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
+    b.addEventListener("click", function () {
+      view = b.getAttribute("data-v");
+      Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      show();
+    });
+  });
+  show();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+    <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

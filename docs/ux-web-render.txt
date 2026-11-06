@@ -1,0 +1,79 @@
+======== W2 status=done, accepted=False, #view 4427 chars, 330 visible words
+rows (JSON) / node rows in DOM: 3 / 3
+skim lines in DOM: 3 of 3 nodes with a skim
+answered tags in DOM: 0 ; overruled rows: 0 (JSON: 0, 0)
+flagged (assumes) rows in DOM: 1 (JSON: 1)
+'Wrong if' words in the DOM text: 1
+answer-page paths in the task page text (the closed rows; 0 means the 'Wrong if' ends at the test): 0
+   opened W2.2: 'Wrong if' in the opened node sheet: True -> Wrong ifthe author wants hard failure for everyone.Evidencegateway.example.json holds lega
+   note 'Review · Tue 06 Oct 04:50 · ok' on the task page: True
+'Next flagged' and 'Flagged nodes only' buttons on the page: True True
+page scrollWidth / viewport width: [390, 390]
+accept dialog after a click on Accept (text): 'Accept W2\'s tree as finished? It rests on 1 assumption you have not accepted: W2.2 wrong if the author wants hard failure for everyone. What the reviewer said, the newest first: Review · Tue 06 Oct 04:50 · ok GATEWAY_STRICT_CONFIG only accepts exactly "1"; "true"/"yes" silently leave strict mode off. README does not mention GATEWAY_STRICT_CONFIG or the new warnings. Unknown keys are never reported for env vars (only file keys), and shipped example still warns on legacy_mode/cache_ttl on every start (cache_ttl looks like a 1.x name of cache_ttl_sec, not suggested/mapped). W2.2 Hypothesis (warn by default, not fail) is a real author decision: the Goal says "fail loudly", met only as a stderr warning; author should confirm. CancelAccept'
+assumed[] (the accept form's list):
+   W2.2 | wrong='the author wants hard failure for everyone.'
+notes[] (the accept form's reviewer notes): [('review', 'Review · Tue 06 Oct 04:50 · ok', 521)]
+======== W3 status=open, accepted=False, #view 5554 chars, 368 visible words
+rows (JSON) / node rows in DOM: 6 / 6
+skim lines in DOM: 6 of 6 nodes with a skim
+answered tags in DOM: 0 ; overruled rows: 1 (JSON: 0, 1)
+flagged (assumes) rows in DOM: 0 (JSON: 0)
+'Wrong if' words in the DOM text: 0
+answer-page paths in the task page text (the closed rows; 0 means the 'Wrong if' ends at the test): 0
+   W3.2 sheet carries the answer's words ('Go with (a)', 'Sales will give'): False, the raise's ('three customers still run'): False, 'overruled'/'you said': True
+   opened W3.2 (answered=False, overruled=True): sheet says: 2 of 6W3.2 Share one computation per key refuted · under W3.1you overruled this: the agent said confirmed, you said refutedApproachIn src/cache.py get_or_set, take a per-key threading.Lock (created under a short global guard lock) on a miss, re-check the cache inside it, and compute only if still missing.DeterminationConfirmed: test_stampede_one_upstream_call now passes with one upstream call, and test_ttl still passes. Next, check that a slow key does not block others.You corrected this to refutedRefuted: the per-
+   note 'Review · Tue 06 Oct 04:50 · ok' on the task page: True
+'Next flagged' and 'Flagged nodes only' buttons on the page: False True
+page scrollWidth / viewport width: [390, 390]
+accept dialog after a click on Accept (text): '(no Accept button on this page)'
+assumed[] (the accept form's list):
+notes[] (the accept form's reviewer notes): [('review', 'Review · Tue 06 Oct 04:50 · ok', 489)]
+======== W7 status=open, accepted=False, #view 3022 chars, 134 visible words
+rows (JSON) / node rows in DOM: 3 / 3
+skim lines in DOM: 3 of 3 nodes with a skim
+answered tags in DOM: 1 ; overruled rows: 0 (JSON: 1, 0)
+flagged (assumes) rows in DOM: 0 (JSON: 0)
+'Wrong if' words in the DOM text: 0
+answer-page paths in the task page text (the closed rows; 0 means the 'Wrong if' ends at the test): 0
+   W7.2 sheet carries the answer's words ('Go with (a)', 'Sales will give'): True, the raise's ('three customers still run'): True, 'overruled'/'you said': False
+   opened W7.2 (answered=True, overruled=False): sheet says: 2 of 3W7.2 Add per-tier limits to config confirmed · under W7.1ApproachIn src/config.py add optional enterprise_users (list), enterprise_rate_limit_per_sec and enterprise_rate_limit_burst to DEFAULTS, per the author's answer (a). When a limit is not set by file or env, load makes it 2x the effective standard limit; GATEWAY_ENTERPRISE_USERS is comma-separated. Tests in tests/test_config.py cover defaults, that gateway.example.json (a 1.x-style config) loads with no warning and no enterprise users, and file and env o
+'Next flagged' and 'Flagged nodes only' buttons on the page: False True
+page scrollWidth / viewport width: [390, 390]
+accept dialog after a click on Accept (text): '(no Accept button on this page)'
+assumed[] (the accept form's list):
+notes[] (the accept form's reviewer notes): []
+======== W9 status=blocked, accepted=False, #view 8385 chars, 471 visible words
+rows (JSON) / node rows in DOM: 11 / 11
+skim lines in DOM: 8 of 8 nodes with a skim
+answered tags in DOM: 0 ; overruled rows: 0 (JSON: 0, 0)
+flagged (assumes) rows in DOM: 3 (JSON: 3)
+'Wrong if' words in the DOM text: 3
+answer-page paths in the task page text (the closed rows; 0 means the 'Wrong if' ends at the test): 0
+   opened W9.2: 'Wrong if' in the opened node sheet: True -> Wrong ifp99 exceeds 5 ms, or if the Goal's "without losing any live session" is read as su
+   opened W9.3: 'Wrong if' in the opened node sheet: True -> Wrong ifp99 over 5 ms.Evidencep99 3.1 ms, 18k writes/s on ext4 SSD.CI host is a VM; the pr
+   opened W9.6: 'Wrong if' in the opened node sheet: True -> Wrong ifthe author needs rollback within seconds.Evidenceexport of 200k sessions took 52 s
+   note 'Critic · Fri 02 Oct 08:00 · issues' on the task page: True
+'Next flagged' and 'Flagged nodes only' buttons on the page: True True
+page scrollWidth / viewport width: [390, 390]
+accept dialog after a click on Accept (text): '(no Accept button on this page)'
+assumed[] (the accept form's list):
+   W9.2 | wrong='p99 exceeds 5 ms, or if the Goal\'s "without losing any live session" is read as surviving power loss.'
+   W9.3 | wrong='p99 over 5 ms.'
+   W9.6 | wrong='the author needs rollback within seconds.'
+notes[] (the accept form's reviewer notes): [('critic', 'Critic · Fri 02 Oct 08:00 · issues', 126)]
+   W9.3 has 1 raise(s) in JSON; answered=False
+======== W10 status=done, accepted=False, #view 4461 chars, 333 visible words
+rows (JSON) / node rows in DOM: 3 / 3
+skim lines in DOM: 3 of 3 nodes with a skim
+answered tags in DOM: 0 ; overruled rows: 0 (JSON: 0, 0)
+flagged (assumes) rows in DOM: 1 (JSON: 1)
+'Wrong if' words in the DOM text: 1
+answer-page paths in the task page text (the closed rows; 0 means the 'Wrong if' ends at the test): 0
+   opened W10.2: 'Wrong if' in the opened node sheet: True -> Wrong ifthe author wants hard failure for everyone. .dfs/artefacts/e1ab3804-4db6-4358-a8dc
+   note 'Review · Tue 06 Oct 04:50 · ok' on the task page: True
+'Next flagged' and 'Flagged nodes only' buttons on the page: True True
+page scrollWidth / viewport width: [390, 390]
+accept dialog after a click on Accept (text): 'Accept W10\'s tree as finished? It rests on 1 assumption you have not accepted: W10.2 wrong if the author wants hard failure for everyone. What the reviewer said, the newest first: Review · Tue 06 Oct 04:50 · ok GATEWAY_STRICT_CONFIG only accepts exactly "1"; "true"/"yes" silently leave strict mode off. README does not mention GATEWAY_STRICT_CONFIG or the new warnings. Unknown keys are never reported for env vars (only file keys), and shipped example still warns on legacy_mode/cache_ttl on every start (cache_ttl looks like a 1.x name of cache_ttl_sec, not suggested/mapped). W10.2 Hypothesis (warn by default, not fail) is a real author decision: the Goal says "fail loudly", met only as a stderr warning; author should confirm. CancelAccept'
+assumed[] (the accept form's list):
+   W10.2 | wrong='the author wants hard failure for everyone.'
+notes[] (the accept form's reviewer notes): [('review', 'Review · Tue 06 Oct 04:50 · ok', 522)]

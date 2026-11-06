@@ -650,6 +650,43 @@ class TheCursorIsParked(unittest.TestCase):
         self.assertIsNone(ui.cursor_y(body_top=10, body_h=8))
 
 
+class ARuleKeepsItsNameAndItsTag(unittest.TestCase):
+    """The pinned rule's name (task, status, sessions) must not run into the "n-m of N" tag."""
+
+    def drawn(self, width, title, tag):
+        ui = a_screen([item("W1")])
+        cells = {}
+        ui.put = lambda y, x, text, attr=0: cells.update({x: text})
+        real = TUI.look
+        TUI.look = lambda name: 0
+        try:
+            ui.rule(3, 0, width, title, tag)
+        finally:
+            TUI.look = real
+        return cells
+
+    def test_a_name_that_fits_is_drawn_whole(self):
+        cells = self.drawn(60, "tree · W1 · open · 0 since you spoke", "1–18 of 50")
+        self.assertEqual(cells[2], " tree · W1 · open · 0 since you spoke ")
+
+    def test_a_name_that_would_meet_the_tag_is_clipped_before_it(self):
+        title, tag = "tree · W1310 · blocked · 12 since you spoke", "415–432 of 432"
+        cells = self.drawn(58, title, tag)
+        tag_at = 58 - len(tag) - 2
+        self.assertLessEqual(2 + len(cells[2]), tag_at, "the name ends before the tag starts")
+        self.assertTrue(cells[2].endswith("… "), "and says it was cut")
+        self.assertEqual(cells[tag_at], tag)
+
+    def test_a_rule_with_no_tag_keeps_its_title_inside_its_width(self):
+        # The input prompt's, `live ·` and `activity` rules pass no tag.
+        for width in (20, 30):
+            title = "live · W1310 · work session 12 of 15"
+            cells = self.drawn(width, title, "")
+            self.assertLessEqual(2 + len(cells[2]), width, "the title stays inside the rule")
+            self.assertTrue(cells[2].endswith("… "), "and says it was cut")
+        self.assertEqual(self.drawn(30, "activity", "")[2], " activity ")
+
+
 class TheCapIsANumber(unittest.TestCase):
     def test_enter_starts_a_chain_only_on_a_whole_number_of_sessions(self):
         # "" is what an Esc'd prompt returns; "\x1b" is what it used to hand over.

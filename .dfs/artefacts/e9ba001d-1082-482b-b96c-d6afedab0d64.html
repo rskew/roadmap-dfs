@@ -1,0 +1,230 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Does a "What I need from you" line help? The four raises that already open with the ask</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .lede { margin: 0 0 12px; color: #333; }
+  .ctl { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .ctl button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .ctl button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .sum { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+  .sum .box { border: 1.5px solid #333; border-radius: 6px; padding: 8px 10px; background: #fff; }
+  .sum .box.ask { border-color: #b45309; background: #fff7ed; }
+  .sum b { font-size: 20px; }
+  .chart { margin: 10px 0; }
+  .r { display: grid; grid-template-columns: 74px 1fr 52px; gap: 6px; align-items: center; min-height: 22px; font-size: 14px; }
+  .r .id { font-variant-numeric: tabular-nums; }
+  .r .bar { height: 12px; background: #9ca3af; border-radius: 2px; min-width: 2px; }
+  .r.ask .bar { background: #b45309; }
+  .r.ask .id { font-weight: 700; color: #b45309; }
+  .r .v { text-align: right; font-variant-numeric: tabular-nums; }
+  .cap { font-size: 14px; color: #555; margin: 4px 0; }
+  .wrong { border-left: 4px solid #b45309; padding: 4px 10px; margin: 12px 0; background: #fff7ed; }
+  .tag { font-size: 12px; color: #555; }
+  ul { margin: 6px 0; padding-left: 20px; }
+</style>
+
+<h1>Does a "What I need from you" line help?</h1>
+<p class="lede"><b>Assumption:</b> a one-line ask at the top of a raise lets you answer faster or with less reading.
+  The line is now in the <code>SKILL.md</code> raise template. Only 4 of the 29 raises sessions wrote already opened with the ask, so the logs hold a small test.</p>
+
+<div class="wrong"><b>Wrong if</b> the four raises that open with the ask were not answered faster or in fewer words than the rest,
+  or if you read raises in the web page or terminal, where the options already stand out.</div>
+
+<h2>The 29 raises, one bar each</h2>
+<div class="ctl" role="group" aria-label="What the bars show">
+  <button type="button" id="m-hrs" aria-pressed="true">Hours to your answer</button>
+  <button type="button" id="m-words" aria-pressed="false">Words in your answer</button>
+</div>
+<div class="ctl" role="group" aria-label="Which raises">
+  <button type="button" id="f-all" aria-pressed="true">All 29</button>
+  <button type="button" id="f-non" aria-pressed="false">Not tooling (14)</button>
+</div>
+
+<div class="sum" aria-live="polite">
+  <div class="box ask">Opens with the ask (n=4): median <b id="s-ask">-</b> <span id="u-ask"></span></div>
+  <div class="box">The rest (n=<span id="n-rest">-</span>): median <b id="s-rest">-</b> <span id="u-rest"></span></div>
+</div>
+
+<div class="chart" id="chart" role="img" aria-label="One bar per raise, orange for the four that open with the ask"></div>
+<p class="cap">Orange rows open with the ask. Sorted by the bar. Hours are capped at 50 (W86.4 took 160, W75.60 took 75). Class is the cause of the raise from <code>docs/ux-raises-classes.tsv</code>.</p>
+
+<h2>What the data says so far</h2>
+<ul>
+  <li><b>Faster?</b> Median 1.8 hours against 3.2, but the four run from 0.2 to 43.1 hours, and the other 25 from 0.5 to 160. Three of the four are under 3.2 hours; so are 12 of the other 25.</li>
+  <li><b>Fewer words?</b> No: your answers to the four have a median of 6.5 words, to the rest 6.</li>
+  <li><b>Same kind of raise?</b> No. All four are questions about your phone or your taste. Tooling raises (15 of the 29) never open with a question. Against the non-tooling rest the median is 3.4 hours.</li>
+  <li><b>Does the web page already show the ask?</b> No. <code>raiseCard</code> in <code>index.html</code> draws the whole raise as plain markdown, one block.</li>
+</ul>
+<p class="cap">So the logs cannot show the line helps. They do not show it does not either. The line costs one sentence and no guard refuses on it.
+  Confirm keeps it; Refute takes it out of the template.</p>
+
+<script>
+  var D = [["W43","author-fact",1,0.4,26,313],["W86.1","author-fact",1,43.1,1,338],["W123.4","author-preference",1,3.1,12,203],["W123.5","author-preference",1,0.2,1,248],
+    ["W131.8","?",0,0.9,10,246],["W97.8","access",0,2.8,9,190],["W70.2","author-fact",0,0.8,41,326],["W86.4","author-fact",0,160.0,2,235],
+    ["W113.1","author-preference",0,3.8,30,689],["W113.6","author-preference",0,5.7,1,533],["W116.27","scope-drift",0,0.7,1,465],["W123.12","scope-drift",0,4.6,1,362],
+    ["W48.3","scope-drift",0,8.8,1,201],["W93.9","scope-drift",0,3.0,3,408],["W109.5","tooling",0,15.1,1,166],["W111.11","tooling",0,0.5,1,436],
+    ["W111.13","tooling",0,5.2,9,372],["W113.9","tooling",0,1.4,1,448],["W116.33","tooling",0,5.7,21,315],["W122.5","tooling",0,3.2,6,447],
+    ["W123.20","tooling",0,1.1,26,379],["W130.12","tooling",0,1.2,31,312],["W130.4","tooling",0,1.8,1,229],["W60.4","tooling",0,0.9,6,437],
+    ["W75.44","tooling",0,0.7,17,422],["W75.53","tooling",0,29.2,1,342],["W75.56","tooling",0,12.7,72,299],["W75.59","tooling",0,21.1,8,276],["W75.60","tooling",0,74.8,17,247]];
+  var metric = "hrs", filt = "all";
+  function med(a) { if (!a.length) return NaN; a = a.slice().sort(function (x, y) { return x - y; }); var m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; }
+  function val(r) { return metric === "hrs" ? r[3] : r[4]; }
+  function fmt(x) { return (Math.round(x * 10) / 10).toString(); }
+  function draw() {
+    var rows = D.filter(function (r) { return filt === "all" || r[1] !== "tooling"; });
+    rows.sort(function (a, b) { return val(a) - val(b); });
+    var cap = metric === "hrs" ? 50 : 45;
+    document.getElementById("chart").innerHTML = rows.map(function (r) {
+      var w = Math.max(1, Math.min(val(r), cap) / cap * 100);
+      return '<div class="r' + (r[2] ? ' ask' : '') + '"><span class="id">' + r[0] + '</span><span><div class="bar" style="width:' + w + '%"></div><span class="tag">' + r[1] + '</span></span><span class="v">' + fmt(val(r)) + '</span></div>';
+    }).join("");
+    var ask = rows.filter(function (r) { return r[2]; }).map(val), rest = rows.filter(function (r) { return !r[2]; }).map(val);
+    var u = metric === "hrs" ? "hours" : "words";
+    document.getElementById("s-ask").textContent = fmt(med(ask));
+    document.getElementById("s-rest").textContent = fmt(med(rest));
+    document.getElementById("u-ask").textContent = u; document.getElementById("u-rest").textContent = u;
+    document.getElementById("n-rest").textContent = rest.length;
+    document.getElementById("m-hrs").setAttribute("aria-pressed", metric === "hrs");
+    document.getElementById("m-words").setAttribute("aria-pressed", metric === "words");
+    document.getElementById("f-all").setAttribute("aria-pressed", filt === "all");
+    document.getElementById("f-non").setAttribute("aria-pressed", filt === "non");
+  }
+  document.getElementById("m-hrs").addEventListener("click", function () { metric = "hrs"; draw(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  document.getElementById("m-words").addEventListener("click", function () { metric = "words"; draw(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  document.getElementById("f-all").addEventListener("click", function () { filt = "all"; draw(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  document.getElementById("f-non").addEventListener("click", function () { filt = "non"; draw(); if (window.dfsAnswer) dfsAnswer.keep(); });
+  window.dfsPageState = function () { return { metric: metric, filt: filt }; };
+  document.addEventListener("dfs-state", function (e) { if (e.detail) { metric = e.detail.metric || metric; filt = e.detail.filt || filt; draw(); } });
+  draw();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep the line: it costs a sentence, and the logs neither show it helps nor that it does not."> Keep the line</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Take the line out of the SKILL.md raise template: four raises are too few to show it helps."> Take it out of the template</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

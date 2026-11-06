@@ -234,10 +234,20 @@ blocks your task, is raised and not fixed in the task.
 
 ```
 python3 <scripts>/tree.py log <task> raise <node> <<'EOF'
+What I need from you: <one line: the question, and the words that answer it ("a, b or c")>
 <the decision, answerable without opening the code: the options, what each commits
 the work to, what you would do, and the strongest case against it>
 EOF
 ```
+
+The first line comes first because the author often answers in a word or two, and a long
+raise (often several hundred words) hides what is being asked. A Hypothesis page likewise says on
+the page what would show the assumption wrong: the confirm/refute form shows only the page,
+and `check.py` prints a note when it does not.
+
+A raise that asks the author to choose between options names an answer page. The raises
+that did were answered somewhat faster than the others (a lean, not a proof; the answers were
+no more detailed), and a bare question or a tooling fault with nothing to choose can do without.
 
 **A Hypothesis always has an interactive artefact; a raise reaches for one whenever a
 picture would let the author decide, or check, faster than prose can.** Wiring and data

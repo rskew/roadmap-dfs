@@ -1,0 +1,540 @@
+======== W2 as the tree draws it, no side panel (width 80)
+  7|W2 — W2
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+ 11|> ▾ Summary
+ 68|    Loading a config file now reports every key the gateway does not
+ 59|    recognise, naming the closest known key, so a typo like
+ 68|    rate_limit_per_sce is visible at startup. By default it prints a
+ 67|    warning and carries on, because the shipped example and the 1.x
+ 72|    customer configs contain keys such as legacy_mode and cache_ttl that
+ 59|    would otherwise stop their gateways on upgrade; setting
+ 72|    GATEWAY_STRICT_CONFIG=1 makes it refuse to start instead. The Goal's
+ 73|    "fail loudly" is therefore met as a loud warning with opt-in failure,
+ 36|    not a hard failure for everyone.
+  0|
+  8|  ▾ Goal
+ 73|    Config loading silently ignores keys it does not know, so a typo like
+ 71|    rate_limit_per_sce runs on the default and nobody notices until the
+ 69|    incident. Fail loudly at startup instead. Customers have existing
+ 73|    config files, so this must not take anyone's gateway down on upgrade.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 37|  ▾ W2.1 ✓ Detect unknown config keys
+ 78|      Works as a pure function; load() still ignores them until W2.2 wires re…
+ 49|   ▾ ↳W2.2 ✓ Report them at startup  ⚑ assumption
+ 50|       Warn by default, strict opt-in via env var.
+ 78|       Warning, not refusing, is the right default: gateway.example.json itse…
+ 59|       wrong if the author wants hard failure for everyone.
+ 30|      ↳W2.3 ✓ Cover with tests
+ 78|        Full suite passes; the Goal is met: typos are reported loudly at star…
+-- 30 lines, 0 wider than 80 columns
+======== W3 as the tree draws it, no side panel (width 80)
+  7|W3 — W3
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+ 71|    When a hot key expires in cache.get_or_set, every in-flight request
+ 74|    for it recomputes against the upstream at once (the upstream fell over
+ 73|    twice last month). Make concurrent callers for one key share a single
+ 70|    computation. Done = N threads asking for one expired key cause one
+ 62|    upstream call, and a slow key does not hold up other keys.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 46|  ▾ W3.1 ✓ Reproduce the stampede with threads
+ 78|      the test fails on the current code (8 upstream calls, not 1), so the st…
+ 42|    ▾ W3.2 ✗ Share one computation per key
+ 78|        overruled by you: Refuted: the per-key locks are never released, so _…
+ 51|       ↳W3.3 · Check unrelated keys are not blocked
+ 78|         the test passes and the full suite is green (8 passed), so one upstr…
+ 41|    ▾ W3.4 ✓ Revert the per-key-lock code
+ 78|        both commits reverted, src/cache.py is the original again; test_stamp…
+ 67|     ▾ ↳W3.5 ✓ One computation per key, record dropped when it ends
+ 78|         tests/test_cache.py passes (4 passed), including the stampede test w…
+ 50|        ↳W3.6 ✓ Waiters share a failed computation
+ 75|          the new test passes and the full suite is green; the Goal is met.
+-- 24 lines, 0 wider than 80 columns
+======== W7 as the tree draws it, no side panel (width 80)
+  7|W7 — W7
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+ 74|    Enterprise customers should get higher rate limits than everyone else.
+ 61|    Wire it into the limiter so the numbers come from config.
+  0|
+ 55|  ▾ W7.1 ✓ Find where the tier of a client can be known
+ 35|      Nothing carries a tier today.
+ 54|   ▾ ↳W7.2 ✓ Add per-tier limits to config  ✎ answered
+ 78|       Passed: tests/test_config.py 9 passed, including the 1.x example loadi…
+ 34|      ↳W7.3 ✓ Apply them in handle
+ 78|        Passed: the enterprise user got 6 allowed requests against 3 for a st…
+-- 14 lines, 0 wider than 80 columns
+======== W9 as the tree draws it, no side panel (width 80)
+  7|W9 — W9
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+ 58|    Sessions are stored as one JSON file per session under
+ 70|    /var/lib/gateway/sessions, and the directory now holds 2.1M files:
+ 73|    listing it takes minutes and the nightly expiry job takes 40 minutes.
+ 72|    Move storage to SQLite without losing any live session and without a
+ 74|    gateway restart being needed for rollback. Done = lookups stay under 5
+ 74|    ms p99 at 8 concurrent writers, expiry is a single delete, and the old
+ 43|    files can be imported and then ignored.
+  0|
+ 14|  ▸ Background
+ 29|  ▸ Reviewer and critic notes
+ 53|  ▾ W9.1 ✓ Measure the current lookup and expiry cost
+ 78|      Lookup p99 is 0.9 ms (page cache warm) but expiry sweep takes 71 s at 2…
+ 57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
+ 39|       Use WAL with synchronous=NORMAL.
+ 78|       WAL with synchronous=NORMAL keeps p99 lookup under 5 ms at 8 concurren…
+ 70|       wrong if p99 exceeds 5 ms, or if the Goal's "without losing any
+ 53|       live session" is read as surviving power loss.
+ 72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
+ 50|        Holds on SSD; spinning disk is unverified.
+ 78|        fsync on ext4 does not push p99 over 5 ms in WAL/NORMAL because NORMA…
+ 31|        wrong if p99 over 5 ms.
+ 35|        raise · 34d ago — needs you
+ 66|          Do the production hosts have spinning disks or SSDs? The
+ 67|            README of the infra repo suggests spinning disks, which
+ 67|            would change the journal-mode choice. Options: (a) keep
+ 68|            WAL/NORMAL and test on a spinning host; (b) fall back to
+ 64|            DELETE mode with batching. I would do (a). Strongest
+ 63|            case against: if fsync is slow, WAL checkpoints may
+ 33|            stall readers anyway.
+ 53|     ▾ ↳W9.4 ✓ Write the import of the old JSON files
+ 78|         Imported 200k files in 38 s; re-running is a no-op, so it can be run…
+ 67|         W9.5 ✗ Dual-write during rollout (SQLite first, then JSON)
+ 67|           the stores can disagree and the import cannot repair it.
+ 77|       ▾ W9.6 ✓ Roll back by exporting SQLite to JSON instead of dual writing
+ 23|           ⚑ assumption
+ 37|           Single writer plus export.
+ 78|           Rollback is rare and can tolerate a minutes-long export, so one st…
+ 61|           wrong if the author needs rollback within seconds.
+ 43|        ▾ ↳W9.8 ✓ Expiry as a single DELETE
+ 78|            Deleting 1M expired rows took 9 s in batches without stalling rea…
+ 47|            W9.9 ○ Check the spinning-disk case
+ 39|            W9.10 ○ Fix what W9.6 found
+ 34|            W9.11 ○ The other case
+ 63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
+ 77|           Not first: W9.6's export covers rollback and a fallback read path…
+-- 50 lines, 0 wider than 80 columns
+======== W10 as the tree draws it, no side panel (width 80)
+  9|W10 — W10
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+ 11|> ▾ Summary
+ 68|    Loading a config file now reports every key the gateway does not
+ 59|    recognise, naming the closest known key, so a typo like
+ 68|    rate_limit_per_sce is visible at startup. By default it prints a
+ 67|    warning and carries on, because the shipped example and the 1.x
+ 72|    customer configs contain keys such as legacy_mode and cache_ttl that
+ 59|    would otherwise stop their gateways on upgrade; setting
+ 72|    GATEWAY_STRICT_CONFIG=1 makes it refuse to start instead. The Goal's
+ 73|    "fail loudly" is therefore met as a loud warning with opt-in failure,
+ 36|    not a hard failure for everyone.
+  0|
+  8|  ▾ Goal
+ 73|    Config loading silently ignores keys it does not know, so a typo like
+ 71|    rate_limit_per_sce runs on the default and nobody notices until the
+ 69|    incident. Fail loudly at startup instead. Customers have existing
+ 73|    config files, so this must not take anyone's gateway down on upgrade.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 38|  ▾ W10.1 ✓ Detect unknown config keys
+ 78|      Works as a pure function; load() still ignores them until W10.2 wires r…
+ 50|   ▾ ↳W10.2 ✓ Report them at startup  ⚑ assumption
+ 50|       Warn by default, strict opt-in via env var.
+ 78|       Warning, not refusing, is the right default: gateway.example.json itse…
+ 59|       wrong if the author wants hard failure for everyone.
+ 31|      ↳W10.3 ✓ Cover with tests
+ 78|        Full suite passes; the Goal is met: typos are reported loudly at star…
+-- 30 lines, 0 wider than 80 columns
+======== W9.2 opened (width 80)
+  7|W9 — W9
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+ 58|    Sessions are stored as one JSON file per session under
+ 70|    /var/lib/gateway/sessions, and the directory now holds 2.1M files:
+ 73|    listing it takes minutes and the nightly expiry job takes 40 minutes.
+ 72|    Move storage to SQLite without losing any live session and without a
+ 74|    gateway restart being needed for rollback. Done = lookups stay under 5
+ 74|    ms p99 at 8 concurrent writers, expiry is a single delete, and the old
+ 43|    files can be imported and then ignored.
+  0|
+ 14|  ▸ Background
+ 29|  ▸ Reviewer and critic notes
+ 53|  ▾ W9.1 ✓ Measure the current lookup and expiry cost
+ 78|      Lookup p99 is 0.9 ms (page cache warm) but expiry sweep takes 71 s at 2…
+ 57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
+ 31|       ✓ confirmed · under W9.1
+  0|
+ 15|       Approach
+ 59|         Create a sessions table (id TEXT PRIMARY KEY, data
+ 59|         BLOB, expires_at INTEGER, index on expires_at) and
+ 58|         compare journal_mode=DELETE and WAL with 8 writer
+ 54|         threads and 8 reader threads for 30 s each on
+ 42|         tools/bench_sessions.py --sqlite.
+  0|
+ 19|       ⚑ Hypothesis
+ 61|         WAL with synchronous=NORMAL keeps p99 lookup under 5
+ 62|         ms at 8 concurrent writers and loses at most the last
+ 59|         few commits on power loss, which is acceptable for
+ 39|         sessions (users log in again).
+  0|
+ 15|       Wrong if
+ 59|         p99 exceeds 5 ms, or if the Goal's "without losing
+ 59|         any live session" is read as surviving power loss.
+  0|
+ 15|       Evidence
+ 62|         + WAL, 8 writers, 8 readers, 30 s: lookup p99 1.8 ms,
+ 24|           41k writes/s.
+ 61|         + DELETE mode, same load: p99 22 ms, readers blocked
+ 26|           behind writers.
+ 58|         + sqlite docs state synchronous=NORMAL in WAL can
+ 54|           lose recent commits on power loss but never
+ 33|           corrupts the database.
+ 61|         − the Goal says "without losing any live session"; I
+ 57|           read that as process crashes and restarts, not
+ 53|           power loss, which the author may not mean.
+ 51|         − bench ran on tmpfs, so fsync cost is not
+ 23|           represented.
+  0|
+ 20|       Determination
+ 61|         Use WAL with synchronous=NORMAL. The tmpfs caveat is
+ 25|         checked in W9.3.
+  0|
+ 72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
+ 50|        Holds on SSD; spinning disk is unverified.
+ 78|        fsync on ext4 does not push p99 over 5 ms in WAL/NORMAL because NORMA…
+ 31|        wrong if p99 over 5 ms.
+ 35|        raise · 34d ago — needs you
+ 66|          Do the production hosts have spinning disks or SSDs? The
+ 67|            README of the infra repo suggests spinning disks, which
+ 67|            would change the journal-mode choice. Options: (a) keep
+ 68|            WAL/NORMAL and test on a spinning host; (b) fall back to
+ 64|            DELETE mode with batching. I would do (a). Strongest
+ 63|            case against: if fsync is slow, WAL checkpoints may
+ 33|            stall readers anyway.
+ 53|     ▾ ↳W9.4 ✓ Write the import of the old JSON files
+ 78|         Imported 200k files in 38 s; re-running is a no-op, so it can be run…
+ 67|         W9.5 ✗ Dual-write during rollout (SQLite first, then JSON)
+ 67|           the stores can disagree and the import cannot repair it.
+ 77|       ▾ W9.6 ✓ Roll back by exporting SQLite to JSON instead of dual writing
+ 23|           ⚑ assumption
+ 37|           Single writer plus export.
+ 78|           Rollback is rare and can tolerate a minutes-long export, so one st…
+ 61|           wrong if the author needs rollback within seconds.
+ 43|        ▾ ↳W9.8 ✓ Expiry as a single DELETE
+ 78|            Deleting 1M expired rows took 9 s in batches without stalling rea…
+ 47|            W9.9 ○ Check the spinning-disk case
+ 39|            W9.10 ○ Fix what W9.6 found
+ 34|            W9.11 ○ The other case
+ 63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
+ 77|           Not first: W9.6's export covers rollback and a fallback read path…
+-- 83 lines, 0 wider than 80 columns
+======== W9 with the node panel at the right (card_panel) (width 80)
+  7|W9 — W9
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+ 58|    Sessions are stored as one JSON file per session under
+ 70|    /var/lib/gateway/sessions, and the directory now holds 2.1M files:
+ 73|    listing it takes minutes and the nightly expiry job takes 40 minutes.
+ 72|    Move storage to SQLite without losing any live session and without a
+ 74|    gateway restart being needed for rollback. Done = lookups stay under 5
+ 74|    ms p99 at 8 concurrent writers, expiry is a single delete, and the old
+ 43|    files can be imported and then ignored.
+  0|
+ 14|  ▸ Background
+ 29|  ▸ Reviewer and critic notes
+ 53|  ▾ W9.1 ✓ Measure the current lookup and expiry cost
+ 78|      Lookup p99 is 0.9 ms (page cache warm) but expiry sweep takes 71 s at 2…
+ 57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
+ 39|       Use WAL with synchronous=NORMAL.
+ 72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
+ 50|        Holds on SSD; spinning disk is unverified.
+ 35|        raise · 34d ago — needs you
+ 66|          Do the production hosts have spinning disks or SSDs? The
+ 67|            README of the infra repo suggests spinning disks, which
+ 67|            would change the journal-mode choice. Options: (a) keep
+ 68|            WAL/NORMAL and test on a spinning host; (b) fall back to
+ 64|            DELETE mode with batching. I would do (a). Strongest
+ 63|            case against: if fsync is slow, WAL checkpoints may
+ 33|            stall readers anyway.
+ 53|     ▾ ↳W9.4 ✓ Write the import of the old JSON files
+ 78|         Imported 200k files in 38 s; re-running is a no-op, so it can be run…
+ 67|         W9.5 ✗ Dual-write during rollout (SQLite first, then JSON)
+ 67|           the stores can disagree and the import cannot repair it.
+ 77|       ▾ W9.6 ✓ Roll back by exporting SQLite to JSON instead of dual writing
+ 23|           ⚑ assumption
+ 37|           Single writer plus export.
+ 43|        ▾ ↳W9.8 ✓ Expiry as a single DELETE
+ 78|            Deleting 1M expired rows took 9 s in batches without stalling rea…
+ 47|            W9.9 ○ Check the spinning-disk case
+ 39|            W9.10 ○ Fix what W9.6 found
+ 34|            W9.11 ○ The other case
+ 63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
+ 77|           Not first: W9.6's export covers rollback and a fallback read path…
+-- 43 lines, 0 wider than 80 columns
+======== W2 as the tree draws it, no side panel (width 120)
+  7|W2 — W2
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+ 11|> ▾ Summary
+114|    Loading a config file now reports every key the gateway does not recognise, naming the closest known key, so a
+114|    typo like rate_limit_per_sce is visible at startup. By default it prints a warning and carries on, because the
+106|    shipped example and the 1.x customer configs contain keys such as legacy_mode and cache_ttl that would
+111|    otherwise stop their gateways on upgrade; setting GATEWAY_STRICT_CONFIG=1 makes it refuse to start instead.
+107|    The Goal's "fail loudly" is therefore met as a loud warning with opt-in failure, not a hard failure for
+ 13|    everyone.
+  0|
+  8|  ▾ Goal
+112|    Config loading silently ignores keys it does not know, so a typo like rate_limit_per_sce runs on the default
+112|    and nobody notices until the incident. Fail loudly at startup instead. Customers have existing config files,
+ 59|    so this must not take anyone's gateway down on upgrade.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 37|  ▾ W2.1 ✓ Detect unknown config keys
+ 85|      Works as a pure function; load() still ignores them until W2.2 wires reporting.
+ 49|   ▾ ↳W2.2 ✓ Report them at startup  ⚑ assumption
+ 50|       Warn by default, strict opt-in via env var.
+118|       Warning, not refusing, is the right default: gateway.example.json itself carries legacy_mode and cache_ttl (no…
+ 59|       wrong if the author wants hard failure for everyone.
+ 30|      ↳W2.3 ✓ Cover with tests
+118|        Full suite passes; the Goal is met: typos are reported loudly at startup (strictly on request) and existing c…
+-- 26 lines, 0 wider than 120 columns
+======== W3 as the tree draws it, no side panel (width 120)
+  7|W3 — W3
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+113|    When a hot key expires in cache.get_or_set, every in-flight request for it recomputes against the upstream at
+102|    once (the upstream fell over twice last month). Make concurrent callers for one key share a single
+114|    computation. Done = N threads asking for one expired key cause one upstream call, and a slow key does not hold
+ 18|    up other keys.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 46|  ▾ W3.1 ✓ Reproduce the stampede with threads
+118|      the test fails on the current code (8 upstream calls, not 1), so the stampede is reproduced; the next node make…
+ 42|    ▾ W3.2 ✗ Share one computation per key
+118|        overruled by you: Refuted: the per-key locks are never released, so _locks keeps one Lock per distinct key fo…
+ 51|       ↳W3.3 · Check unrelated keys are not blocked
+118|         the test passes and the full suite is green (8 passed), so one upstream call per expired key holds and a slo…
+ 41|    ▾ W3.4 ✓ Revert the per-key-lock code
+118|        both commits reverted, src/cache.py is the original again; test_stampede_one_upstream_call fails again (expec…
+ 67|     ▾ ↳W3.5 ✓ One computation per key, record dropped when it ends
+118|         tests/test_cache.py passes (4 passed), including the stampede test with one upstream call and the check that…
+ 50|        ↳W3.6 ✓ Waiters share a failed computation
+ 75|          the new test passes and the full suite is green; the Goal is met.
+-- 23 lines, 0 wider than 120 columns
+======== W7 as the tree draws it, no side panel (width 120)
+  7|W7 — W7
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+114|    Enterprise customers should get higher rate limits than everyone else. Wire it into the limiter so the numbers
+ 21|    come from config.
+  0|
+ 55|  ▾ W7.1 ✓ Find where the tier of a client can be known
+ 35|      Nothing carries a tier today.
+ 54|   ▾ ↳W7.2 ✓ Add per-tier limits to config  ✎ answered
+112|       Passed: tests/test_config.py 9 passed, including the 1.x example loading silently with nobody enterprise.
+ 34|      ↳W7.3 ✓ Apply them in handle
+118|        Passed: the enterprise user got 6 allowed requests against 3 for a standard user, and with no enterprise user…
+-- 14 lines, 0 wider than 120 columns
+======== W9 as the tree draws it, no side panel (width 120)
+  7|W9 — W9
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+113|    Sessions are stored as one JSON file per session under /var/lib/gateway/sessions, and the directory now holds
+108|    2.1M files: listing it takes minutes and the nightly expiry job takes 40 minutes. Move storage to SQLite
+112|    without losing any live session and without a gateway restart being needed for rollback. Done = lookups stay
+113|    under 5 ms p99 at 8 concurrent writers, expiry is a single delete, and the old files can be imported and then
+ 12|    ignored.
+  0|
+ 14|  ▸ Background
+ 29|  ▸ Reviewer and critic notes
+ 53|  ▾ W9.1 ✓ Measure the current lookup and expiry cost
+117|      Lookup p99 is 0.9 ms (page cache warm) but expiry sweep takes 71 s at 200k files, linear, so 2.1M extrapolates…
+ 57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
+ 39|       Use WAL with synchronous=NORMAL.
+118|       WAL with synchronous=NORMAL keeps p99 lookup under 5 ms at 8 concurrent writers and loses at most the last few…
+111|       wrong if p99 exceeds 5 ms, or if the Goal's "without losing any live session" is read as surviving power
+ 12|       loss.
+ 72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
+ 50|        Holds on SSD; spinning disk is unverified.
+104|        fsync on ext4 does not push p99 over 5 ms in WAL/NORMAL because NORMAL only syncs at checkpoint.
+ 31|        wrong if p99 over 5 ms.
+ 35|        raise · 34d ago — needs you
+100|          Do the production hosts have spinning disks or SSDs? The README of the infra repo suggests
+104|            spinning disks, which would change the journal-mode choice. Options: (a) keep WAL/NORMAL and
+106|            test on a spinning host; (b) fall back to DELETE mode with batching. I would do (a). Strongest
+ 85|            case against: if fsync is slow, WAL checkpoints may stall readers anyway.
+ 53|     ▾ ↳W9.4 ✓ Write the import of the old JSON files
+118|         Imported 200k files in 38 s; re-running is a no-op, so it can be run live while the old store is still being…
+ 67|         W9.5 ✗ Dual-write during rollout (SQLite first, then JSON)
+ 67|           the stores can disagree and the import cannot repair it.
+ 91|       ▾ W9.6 ✓ Roll back by exporting SQLite to JSON instead of dual writing  ⚑ assumption
+ 37|           Single writer plus export.
+ 99|           Rollback is rare and can tolerate a minutes-long export, so one store at a time is safe.
+ 61|           wrong if the author needs rollback within seconds.
+ 43|        ▾ ↳W9.8 ✓ Expiry as a single DELETE
+ 82|            Deleting 1M expired rows took 9 s in batches without stalling readers.
+ 47|            W9.9 ○ Check the spinning-disk case
+ 39|            W9.10 ○ Fix what W9.6 found
+ 34|            W9.11 ○ The other case
+ 63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
+118|           Not first: W9.6's export covers rollback and a fallback read path costs a stat per miss; reopen if the exp…
+-- 44 lines, 0 wider than 120 columns
+======== W10 as the tree draws it, no side panel (width 120)
+  9|W10 — W10
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+ 11|> ▾ Summary
+114|    Loading a config file now reports every key the gateway does not recognise, naming the closest known key, so a
+114|    typo like rate_limit_per_sce is visible at startup. By default it prints a warning and carries on, because the
+106|    shipped example and the 1.x customer configs contain keys such as legacy_mode and cache_ttl that would
+111|    otherwise stop their gateways on upgrade; setting GATEWAY_STRICT_CONFIG=1 makes it refuse to start instead.
+107|    The Goal's "fail loudly" is therefore met as a loud warning with opt-in failure, not a hard failure for
+ 13|    everyone.
+  0|
+  8|  ▾ Goal
+112|    Config loading silently ignores keys it does not know, so a typo like rate_limit_per_sce runs on the default
+112|    and nobody notices until the incident. Fail loudly at startup instead. Customers have existing config files,
+ 59|    so this must not take anyone's gateway down on upgrade.
+  0|
+ 29|  ▸ Reviewer and critic notes
+ 38|  ▾ W10.1 ✓ Detect unknown config keys
+ 86|      Works as a pure function; load() still ignores them until W10.2 wires reporting.
+ 50|   ▾ ↳W10.2 ✓ Report them at startup  ⚑ assumption
+ 50|       Warn by default, strict opt-in via env var.
+118|       Warning, not refusing, is the right default: gateway.example.json itself carries legacy_mode and cache_ttl (no…
+ 59|       wrong if the author wants hard failure for everyone.
+ 31|      ↳W10.3 ✓ Cover with tests
+118|        Full suite passes; the Goal is met: typos are reported loudly at startup (strictly on request) and existing c…
+-- 26 lines, 0 wider than 120 columns
+======== W9.2 opened (width 120)
+  7|W9 — W9
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+113|    Sessions are stored as one JSON file per session under /var/lib/gateway/sessions, and the directory now holds
+108|    2.1M files: listing it takes minutes and the nightly expiry job takes 40 minutes. Move storage to SQLite
+112|    without losing any live session and without a gateway restart being needed for rollback. Done = lookups stay
+113|    under 5 ms p99 at 8 concurrent writers, expiry is a single delete, and the old files can be imported and then
+ 12|    ignored.
+  0|
+ 14|  ▸ Background
+ 29|  ▸ Reviewer and critic notes
+ 53|  ▾ W9.1 ✓ Measure the current lookup and expiry cost
+117|      Lookup p99 is 0.9 ms (page cache warm) but expiry sweep takes 71 s at 200k files, linear, so 2.1M extrapolates…
+ 57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
+ 31|       ✓ confirmed · under W9.1
+  0|
+ 15|       Approach
+ 94|         Create a sessions table (id TEXT PRIMARY KEY, data BLOB, expires_at INTEGER, index on
+ 95|         expires_at) and compare journal_mode=DELETE and WAL with 8 writer threads and 8 reader
+ 67|         threads for 30 s each on tools/bench_sessions.py --sqlite.
+  0|
+ 19|       ⚑ Hypothesis
+101|         WAL with synchronous=NORMAL keeps p99 lookup under 5 ms at 8 concurrent writers and loses at
+ 96|         most the last few commits on power loss, which is acceptable for sessions (users log in
+ 16|         again).
+  0|
+ 15|       Wrong if
+ 98|         p99 exceeds 5 ms, or if the Goal's "without losing any live session" is read as surviving
+ 20|         power loss.
+  0|
+ 15|       Evidence
+ 76|         + WAL, 8 writers, 8 readers, 30 s: lookup p99 1.8 ms, 41k writes/s.
+ 77|         + DELETE mode, same load: p99 22 ms, readers blocked behind writers.
+102|         + sqlite docs state synchronous=NORMAL in WAL can lose recent commits on power loss but never
+ 33|           corrupts the database.
+ 94|         − the Goal says "without losing any live session"; I read that as process crashes and
+ 67|           restarts, not power loss, which the author may not mean.
+ 64|         − bench ran on tmpfs, so fsync cost is not represented.
+  0|
+ 20|       Determination
+ 78|         Use WAL with synchronous=NORMAL. The tmpfs caveat is checked in W9.3.
+  0|
+ 72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
+ 50|        Holds on SSD; spinning disk is unverified.
+104|        fsync on ext4 does not push p99 over 5 ms in WAL/NORMAL because NORMAL only syncs at checkpoint.
+ 31|        wrong if p99 over 5 ms.
+ 35|        raise · 34d ago — needs you
+100|          Do the production hosts have spinning disks or SSDs? The README of the infra repo suggests
+104|            spinning disks, which would change the journal-mode choice. Options: (a) keep WAL/NORMAL and
+106|            test on a spinning host; (b) fall back to DELETE mode with batching. I would do (a). Strongest
+ 85|            case against: if fsync is slow, WAL checkpoints may stall readers anyway.
+ 53|     ▾ ↳W9.4 ✓ Write the import of the old JSON files
+118|         Imported 200k files in 38 s; re-running is a no-op, so it can be run live while the old store is still being…
+ 67|         W9.5 ✗ Dual-write during rollout (SQLite first, then JSON)
+ 67|           the stores can disagree and the import cannot repair it.
+ 91|       ▾ W9.6 ✓ Roll back by exporting SQLite to JSON instead of dual writing  ⚑ assumption
+ 37|           Single writer plus export.
+ 99|           Rollback is rare and can tolerate a minutes-long export, so one store at a time is safe.
+ 61|           wrong if the author needs rollback within seconds.
+ 43|        ▾ ↳W9.8 ✓ Expiry as a single DELETE
+ 82|            Deleting 1M expired rows took 9 s in batches without stalling readers.
+ 47|            W9.9 ○ Check the spinning-disk case
+ 39|            W9.10 ○ Fix what W9.6 found
+ 34|            W9.11 ○ The other case
+ 63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
+118|           Not first: W9.6's export covers rollback and a fallback read path costs a stat per miss; reopen if the exp…
+-- 68 lines, 0 wider than 120 columns
+======== W9 with the node panel at the right (card_panel) (width 120)
+  7|W9 — W9
+  0|
+ 47|sessions 0 since the author spoke · critic in 5
+  0|
+  8|> ▾ Goal
+113|    Sessions are stored as one JSON file per session under /var/lib/gateway/sessions, and the directory now holds
+108|    2.1M files: listing it takes minutes and the nightly expiry job takes 40 minutes. Move storage to SQLite
+112|    without losing any live session and without a gateway restart being needed for rollback. Done = lookups stay
+113|    under 5 ms p99 at 8 concurrent writers, expiry is a single delete, and the old files can be imported and then
+ 12|    ignored.
+  0|
+ 14|  ▸ Background
+ 29|  ▸ Reviewer and critic notes
+ 53|  ▾ W9.1 ✓ Measure the current lookup and expiry cost
+117|      Lookup p99 is 0.9 ms (page cache warm) but expiry sweep takes 71 s at 200k files, linear, so 2.1M extrapolates…
+ 57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
+ 39|       Use WAL with synchronous=NORMAL.
+ 72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
+ 50|        Holds on SSD; spinning disk is unverified.
+ 35|        raise · 34d ago — needs you
+100|          Do the production hosts have spinning disks or SSDs? The README of the infra repo suggests
+104|            spinning disks, which would change the journal-mode choice. Options: (a) keep WAL/NORMAL and
+106|            test on a spinning host; (b) fall back to DELETE mode with batching. I would do (a). Strongest
+ 85|            case against: if fsync is slow, WAL checkpoints may stall readers anyway.
+ 53|     ▾ ↳W9.4 ✓ Write the import of the old JSON files
+118|         Imported 200k files in 38 s; re-running is a no-op, so it can be run live while the old store is still being…
+ 67|         W9.5 ✗ Dual-write during rollout (SQLite first, then JSON)
+ 67|           the stores can disagree and the import cannot repair it.
+ 91|       ▾ W9.6 ✓ Roll back by exporting SQLite to JSON instead of dual writing  ⚑ assumption
+ 37|           Single writer plus export.
+ 43|        ▾ ↳W9.8 ✓ Expiry as a single DELETE
+ 82|            Deleting 1M expired rows took 9 s in batches without stalling readers.
+ 47|            W9.9 ○ Check the spinning-disk case
+ 39|            W9.10 ○ Fix what W9.6 found
+ 34|            W9.11 ○ The other case
+ 63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
+118|           Not first: W9.6's export covers rollback and a fallback read path costs a stat per miss; reopen if the exp…
+-- 37 lines, 0 wider than 120 columns

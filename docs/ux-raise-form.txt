@@ -1,0 +1,8 @@
+session-written raises 29; words median 326, over 200: 27, over 400: 9
+first sentence asks or states the need 4/29; options lettered or numbered 23/29; recommendation 27/29; case against 29/29; names an answer page 6/29
+answered 29; answer words median 6; bare letter or digit 10; answers of 3 words or fewer 13
+  raise 100-199: n=2, answers median 5 words, bare 1, with a lettered option list 1
+  raise 200+: n=27, answers median 6 words, bare 9, with a lettered option list 22
+raises over 200 words answered in 3 words or fewer: 12: W111.11 (436w), W113.6 (533w), W113.9 (448w), W116.27 (465w), W123.5 (248w), W123.12 (362w), W130.4 (229w), W48.3 (201w), W75.53 (342w), W86.1 (338w), W86.4 (235w), W93.9 (408w)
+without a recommendation (2): W113.1, W113.9
+without a case against (0): 

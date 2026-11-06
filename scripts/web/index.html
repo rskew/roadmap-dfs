@@ -306,6 +306,9 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .row .nid { font-weight: 600; margin-right: var(--s2); letter-spacing: .03em; }
 .row .chips { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
 .row .skim { margin-top: var(--s1); font-size: var(--fs-small); color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* The test that would refute the assumption, whole under the skim: the tag alone does not say it. */
+.row .wrongif { margin-top: var(--s1); font-size: var(--fs-small); color: var(--assumption); }
+.row .wrongif b { font-weight: 600; }
 .row.quiet .line { color: var(--muted); }
 .row.assumes .main { background: var(--assumption-wash); }
 .row.assumes .nid { color: var(--assumption); }
@@ -1424,7 +1427,8 @@ function drawTask() {
         <button class="main" data-act="node" data-id="${esc(r.id)}">
           <div class="line">${PROGRESS_LABEL[r.progress] ? `<span class="mk ${r.progress}" role="img" aria-label="${PROGRESS_LABEL[r.progress][1]}">${PROGRESS_LABEL[r.progress][0]}</span>` : ""}<span class="nid">${r.chain ? "↳ " : ""}${esc(r.id)}</span>${inline(r.title)}</div>
           ${chips ? `<div class="chips">${chips}</div>` : ""}
-          ${r.skim ? `<div class="skim">${inline(r.skim)}</div>` : ""}</button></div>`;
+          ${r.skim ? `<div class="skim">${inline(r.skim)}</div>` : ""}
+          ${r.assumes && r.wrong ? `<div class="wrongif"><b>Wrong if</b> ${inline(r.wrong)}</div>` : ""}</button></div>`;
     }
   }
   $("#view").className = ""; $("#view").innerHTML = html + `</div>`;

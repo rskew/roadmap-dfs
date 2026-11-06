@@ -279,7 +279,57 @@ def node_detail(nd, archived=None, commits=()):
     off = (dfs_tree.unpushed() or (set(), {}))[0]
     out += [("Commit", "%s %s%s" % (sha[:7], subj, " · not on %s" % dfs_tree.default_ref(ttl=5.0) if sha in off else ""))
             for sha, subj, _at in commits]
+    files = commit_files([sha for sha, _s, _a in commits])
+    if files:
+        out.append(("Code files", files))
     return out
+
+
+def tree_rule_name(cur, short=False):
+    """The tree pane's rule: `tree · W9 · open · 2 sessions since you spoke`, or `... 2 sess`
+    when the node panel leaves too little width for the long form."""
+    n = cur.get("sessions", 0)
+    if short:
+        return "tree · %s · %s · %d sess" % (cur["id"], cur["status"], n)
+    return "tree · %s · %s · %d session%s since you spoke" % (
+        cur["id"], cur["status"], n, "" if n == 1 else "s")
+
+
+READ_COMMITS = 8     # a node's commits whose files are listed
+_COMMIT_PATHS = {}   # (repo root, sha) -> the paths that commit changed
+
+
+def commit_paths(sha):
+    """The paths one commit changed, or `None` when git cannot show it. A commit's file list
+    never changes, so a good answer is kept for the life of the process: the web page draws
+    every node of a task on each request, and one `git show` a node each time is too slow.
+    A failure is not kept, since the commit may arrive later."""
+    key = (ROOT, sha)
+    if key not in _COMMIT_PATHS:
+        try:
+            r = subprocess.run(["git", "show", "--name-only", "--format=", sha],
+                               capture_output=True, text=True, cwd=ROOT, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if r.returncode != 0:
+            return None
+        _COMMIT_PATHS[key] = [p for p in r.stdout.splitlines() if p]
+    return _COMMIT_PATHS[key]
+
+
+def commit_files(shas, limit=12):
+    """The code files a node's commits changed, as one line: `a.py, b.py` and `+3 more`.
+    The planning files (`.dfs/`) are left out, since the node's own text is what changed there.
+    A commit git cannot show (a test's made-up sha) adds nothing. Only the first `READ_COMMITS` commits
+    are read, and a node with more says how many were not."""
+    seen = []
+    for sha in shas[:READ_COMMITS]:
+        seen += [p for p in commit_paths(sha) or ()
+                 if not p.startswith(".dfs/") and p not in seen]
+    shown = ", ".join(seen[:limit])
+    shown += " · +%d more" % (len(seen) - limit) if len(seen) > limit else ""
+    cut = len(shas) - READ_COMMITS
+    return shown + (" · %d commits not read" % cut if shown and cut > 0 else "")
 
 
 def age(ts, now=None):
@@ -2846,7 +2896,7 @@ class UI(WalkMixin):
             out.append(("%s %s  %s" % (">" if sel else " ", nd["id"], nd["title"]),
                         look("amber") | curses.A_BOLD | (curses.A_REVERSE if sel else 0)))
             if f.get("Hypothesis"):
-                assumption, wrong = dfs_tree.split_falsifier(f["Hypothesis"])
+                assumption, wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f["Hypothesis"]))
                 para(assumption, look("amber"), indent="    ")
                 if wrong:
                     para("wrong if " + wrong, look("amber"), indent="    ")
@@ -3909,10 +3959,13 @@ class UI(WalkMixin):
                     # one the assumption and what would show it wrong are kept under the
                     # row, each on a line of its own and clipped with a visible mark.
                     if assumes:
-                        assumption, wrong = dfs_tree.split_falsifier(nd["fields"]["Hypothesis"])
+                        assumption, wrong = dfs_tree.split_falsifier(
+                            dfs_tree.without_page(nd["fields"]["Hypothesis"]))
                         out.append((inner + clip_marked(assumption, room), look("amber")))
                         if wrong:
-                            out.append((inner + clip_marked("wrong if " + wrong, room), look("amber")))
+                            # Wrapped, not clipped: the test is the part the author answers,
+                            # and at 80 columns "... any live s…" left it unreadable.
+                            para("wrong if " + wrong, look("amber"), indent=inner, rich=True)
                     if asks:
                         out.append((inner + clip_marked("ask: " + nd["fields"]["Ask"], room), red))
             if row["key"] not in self.tree_open and not row["raises"]:
@@ -4005,7 +4058,13 @@ class UI(WalkMixin):
     def rule(self, y, x0, x1, title="", tag=""):
         """A section's rule: grey line, its name in it, a position tag at the right."""
         self.put(y, x0, "─" * max(0, x1 - x0), look("chrome"))
+        # ⚠ The name never runs into the tag: it is clipped (with …) to the columns
+        # left of it, so a narrowed tree (the node panel beside it) cannot overwrite
+        # the task, status or sessions the name carries.
         if title:
+            room = (x1 - len(tag) - 2 if tag else x1) - (x0 + 2) - 3
+            if len(title) > room:
+                title = title[:max(0, room - 1)] + "…"
             self.put(y, x0 + 2, " %s " % title, look("chrome"))
         if tag:
             self.put(y, max(x0, x1 - len(tag) - 2), tag, look("chrome"))
@@ -4033,9 +4092,14 @@ class UI(WalkMixin):
                 "artefact": "artefacts", "keys": "keys", "activity": "activity",
                 "plan": "walk plan", "assumptions": "assumptions"}[self.pane]
         if self.pane == "item":
-            name = ("tree · %s" % self.current()["id"]
-                    if self.tree_focused() and self.current() else
+            cur = self.current()
+            # ⚠ The rule is the one row of the pane that never scrolls, so it carries
+            # the task's id, status and sessions: an opened node fills the pane and
+            # scrolls the lines that said them out of view.
+            name = (tree_rule_name(cur) if self.tree_focused() and cur else
                     "tree" if self.tree_focused() else "item")
+            short = (tree_rule_name(cur, short=True)
+                     if self.tree_focused() and cur else name)
 
         body_top = sep + 1
         body_h = max(1, h - body_top - 2)
@@ -4063,6 +4127,8 @@ class UI(WalkMixin):
         if len(lines) > body_h:
             tag = "%d–%d of %d" % (self.scroll + 1,
                                    min(self.scroll + body_h, len(lines)), len(lines))
+        if self.pane == "item" and len(name) + len(tag) + 7 > main - 1:
+            name = short           # narrow: keep id and status, shorten the count
         self.rule(sep, 0, main - 1, name, tag)
         for i, line in enumerate(lines[self.scroll:self.scroll + body_h]):
             text, attr = line[0], line[1]
@@ -4739,7 +4805,7 @@ class UI(WalkMixin):
         nodes = dfs_tree.by_id(t)
         for nid in assumed:
             f = nodes[nid]["fields"]
-            wrong = dfs_tree.split_falsifier(f.get("Hypothesis") or "")[1] or f.get("Ask", "")
+            wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f.get("Hypothesis")))[1] or f.get("Ask", "")
             bits.append("%s (%s)" % (nid, clip(wrong, 36)) if wrong else nid)
         note = (" Assumptions: %s." % "; ".join(bits)) if bits else ""
         kept = len(dfs_tree.notes(t))

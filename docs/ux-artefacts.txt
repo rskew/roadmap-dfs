@@ -1,0 +1,31 @@
+pages 165 (every .dfs/artefacts/*.html; the two templates are not in this folder)
+  named as hypothesis: 135
+  named as raise-answer: 1
+  named as other-named: 28
+  named as unnamed: 1
+
+             n    form  handler   draws  svg/cv  boxes  bars  table  WrongIf  noview  words~
+W0-W59      23       0       21      15       1      7    10      2       20       7     182
+W60-W99     42      19       42      36       2     12    25      6       36       0     226
+W100+       99      74       74      83       4     71    14     17       32       0     236
+no task      1       0        1       1       0      1     1      0        1       0     308
+all        165      93      138     135       7     91    50     25       89       7     224
+
+hypothesis: n=135 form 92/135 (68%); draws 105/135 (78%); text only (no svg/boxes/bars) 30/135 (22%); Wrong if on page 87/135 (64%)
+raise-answer: n=1 form 1/1 (100%); draws 1/1 (100%); text only (no svg/boxes/bars) 0/1 (0%); Wrong if on page 0/1 (0%)
+other-named: n=28 form 0/28 (0%); draws 28/28 (100%); text only (no svg/boxes/bars) 0/28 (0%); Wrong if on page 1/28 (4%)
+unnamed: n=1 form 0/1 (0%); draws 1/1 (100%); text only (no svg/boxes/bars) 0/1 (0%); Wrong if on page 1/1 (100%)
+
+hypothesis pages with no `Wrong if` text: 48; with no controls beyond the form: 6
+pages without the answer form 72: named as hypothesis 43, raise-answer 0, other-named 28, unnamed 1
+posts to /artefact-state/ 127; of those with the shared form 93, with their own earlier form 34
+Hypothesis pages that cannot post a ruling (no /artefact-state/): 10, tasks W30, W21, W34, W40, W36, W17, W17, W46, W42, W21
+template residue ('Your page goes here' or the stock heading): 0
+in the browser's DOM, after the script ran: median words outside the form 229; pages that post but have under 30 words outside the form and no box, svg, bar or table: 0 (from the HTML alone 0: script-drawn pages are missed there)
+
+Hypothesis pages by era, from the DOM: (a) no box/svg/bar/table at all, (b) boxes or bars but no arrow or line between them, (c) boxes with arrows or an svg; and the count with no falsifier text on the page
+  W0-W59   n= 21  (a)  11  (b)   9  (c)   1  no falsifier text   1
+  W60-W99  n= 41  (a)  18  (b)  14  (c)   9  no falsifier text   6
+  W100+    n= 73  (a)   8  (b)  33  (c)  32  no falsifier text  41
+DOM has no box, svg, bar, table or canvas: 37 pages (37 named by a Hypothesis); HTML-only 'draws' false: 30
+mechanical faults: placeholder options 0; no viewport 7; fetched URL 1; fixed width >=1000px 0
