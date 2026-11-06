@@ -32,7 +32,7 @@ for f in sorted(glob.glob(".dfs/items/W*.md")):
             "task": task, "node": e["args"][0], "ts": e["ts"], "words": len(body.split()),
             "first": first[:110],
             "asks_first": bool(re.match(r"(?i)(should|do|does|is|are|can|which|what|how|may|want|choose|pick|decide|please|need|ask|the author)", first.strip())
-                               or "?" in first or re.match(r"(?i)(found|decision|question)\b", first.strip())),
+                               or "?" in first or re.match(r"(?i)(decision|question)\b", first.strip())),
             "lettered": bool(re.search(r"(?m)^\s*(\(?[a-dA-D1-4][).:]|[-*] ?\(?[a-dA-D1-4][).])\s", body)),
             "recommend": bool(re.search(r"(?i)\b(I would|I'd|I recommend|my recommendation|recommend|I suggest|I lean|I take|take \(?[a-d]\)?|default)\b", body)),
             "against": bool(re.search(r"(?i)strongest case|case against|against (it|this|that|taking)|downside|what could go wrong|the risk is|counter", body)),

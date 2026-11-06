@@ -40,7 +40,7 @@ for (t, r), e in raises.items():
     body = " ".join(e[3]); a = answers.get((t, r))
     abody = " ".join(a[3]) if a else None
     hrs = (ts(a[0]) - ts(r)).total_seconds() / 3600 if a else None
-    rows.append(dict(t=t, node=e[2], rl=len(body.split()), page="artefacts/" in body,
+    rows.append(dict(t=t, node=e[2], rl=len(body.split()), page="Answer with:" in body,
                      al=len(abody.split()) if abody is not None else None, hrs=hrs, ans=abody))
 med = lambda xs: st.median(xs) if xs else float("nan")
 print(f"raises {len(rows)}; answered {sum(r['al'] is not None for r in rows)}; "

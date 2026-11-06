@@ -10,7 +10,8 @@ fixture in `docs/tui-ux-review/items/` (the one the old review used) at width 80
 and prints the text, with each line's width, so a clipped or missing line shows up.
 It does NOT draw the item list, the footer, the side panel or scrolling: those are
 curses calls. SCRIPTS_DIR is the roadmap-dfs `scripts` directory to test (default: this
-repository's; the one the author runs is the installed copy).
+repository's). The installed copy and this repository's give identical output (checked
+with `diff`); which of them the author runs was not checked.
 """
 import curses, os, shutil, subprocess, sys, tempfile
 
