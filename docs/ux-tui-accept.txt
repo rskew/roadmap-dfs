@@ -1,0 +1,117 @@
+TERMINAL accept prompt (56 characters; the footer clips a longer one at the screen edge):
+  accept W75? 8 assumptions, 35 notes: H shows them [y/N]:
+
+TERMINAL `H` view at 80 columns:
+  assumptions and asks · what rests on a decision of yours, in every task you have not accepted
+    ⏎ goes to it in its tree · ↑↓/jk moves · esc back
+  
+  > W75.1  Work each item's branch in its own git worktree, leaving the author's checkout on main
+      The author keeps the screen and web page open on the main checkout while a
+      walk runs, so an item's branch `dfs/<task>` is worked in a worktree per item
+      (`.dfs/worktrees/<task>`, gitignored), and the walk never switches the
+      author's checkout.
+      wrong if the author is fine with a walk switching their own checkout between
+      item branches; then switching in place (W75.2) is simpler.
+      · for: inside the scratch worktree, `tree.py start W1 W1.1` edited the
+      worktree's task file and left main's untouched, since `work_root()` is the
+      cwd; a session run in the worktree needs no change to write the right file.
+      · for: `git merge --no-ff -m … dfs/W1` from the main checkout merged (rc 0)
+      with the pre-merge-commit guard clean, while an unrelated file on main had
+      uncommitted edits.
+      · for: this checkout held 49 uncommitted `.dfs` paths at the session's start
+      (tasks made and edited from the screen); a checkout switched to an item
+      branch carries them onto it, where that item's first session commits …
+      · against: main's checkout reads main's copy of the task file, so the screen
+      shows none of the branch's progress until the merge unless reads of that
+      task go to the worktree.
+      · 1 more on the node (⏎)
+  
+    W75.22  The author's accept merges the item branch: put the choice to the author
+      An accept by the author (screen, web page or `--review`) merges the item
+      branch into main/master as a passing review does, so an accepted task is
+      never left with a live unmerged branch.
+      wrong if the author wants accept to leave the branch for a later passing
+      review, or to review it first.
+      · for: an accept that did not merge leaves a done task with `dfs/<task>` and
+      its worktree live; the first review's finding (a merge that failed
+      unnoticed, W75.11 and W75.14) was that same state.
+      · for: the merge is local, `--no-ff` and never pushed, so a plain reset of
+      main undoes it.
+      · for: `test_chain` and `test_tree` (174 tests, TMPDIR inside the repo) pass
+      again this session, including the accept-merges test and the accept-off-the-
+      default-branch raise.
+  
+    W75.33  An item is worked in place, with no branch, when the checkout is off main/master or no commit exists
+      When the checkout is off main/master or the repo has no commit yet, an item
+      is worked in place with no branch and no merge, as every item was before
+      branches (nothing to rebase onto or merge into, nothing to cut a branch
+      from).
+      wrong if the author would rather the runner refused to work an item off
+      main/master, or made an initial commit so a branch can be cut, than let its
+      code land unmerged on whatever is checked out.
+      · for:
+      `test_an_item_is_worked_in_place_when_the_checkout_is_off_main_and_master`
+      and `test_a_chain_in_a_repo_with_no_commit_yet_works_in_place` both pass
+      (exec TMPDIR inside the repo): the sessions run in place and …
+      · against: in place the code lands on the checked-out branch with no merge
+      as the review's gate; nothing observed says which the author prefers.
+  
+    W75.47  A merge refused over the author's uncommitted edits sets them aside, merges and puts them back
+      The author's "work around this for now" means the runner may set their
+      overlapping edits aside for the length of one merge and restore them, rather
+      than raise for them to commit or stash.
+      wrong if they want their working tree never touched by the runner (then the
+      raise stays) or if applying the stash back can lose an edit.
+      · for: the two files are unrelated work in progress (a `catch_up` fast-
+      forward, +43 lines), uncommitted for hours; a raise on each pass would stop
+      W75 for that alone.
+      · for: the overlap test ends `done` with the author's line back on top of
+      the merged one, still uncommitted (`M app.txt`) and `git stash list` empty;
+      the staged-only test keeps `A other.txt`.
+      · against: the conflicting-edit test shows the stash is kept (`dfs-
+      merge-W1`) and the paths left as the merge made them, so the edit survives
+      only as the stash, with a raise naming it.
+  
+    W75.64  An accept made while a chain runs is recorded and the merge is left to the chain's own stop
+      An accept made while a chain still runs a session on the task should wait
+      for the chain's own stop to merge, so the running session keeps its
+      worktree.
+      wrong if the author wants an accept to stop the chain and merge at once,
+      cutting off its current session.
+      · no evidence yet
+  
+    W75.65  Sessions in a worktree are briefed with the main checkout's current ROADMAP.md
+      Sessions in an item worktree should follow the law as the author has it in
+      the main checkout now, committed or not, not the copy the branch was cut
+      with.
+      wrong if the author leaves a half-written ROADMAP.md edit uncommitted that
+      sessions should not follow, or wants the law frozen at the branch's cut.
+      · no evidence yet
+  
+    W75.66  The exit trap merges an accepted task however its chain stops
+      An accept held back for a chain should be merged whenever that chain stops,
+      interrupts included, so an accept is never lost.
+      wrong if a Ctrl-C or Stop the author gives is meant to stop everything,
+      including the merge of what they accepted.
+      · no evidence yet
+  
+    W75.67  A chain killed outright needs a second accept
+      A chain killed with no exit trap leaves the first accept unmerged, and a
+      second accept merges it, rather than something merging on its own after the
+      kill.
+      wrong if the author expects the first accept to merge even after the chain
+      is killed, without pressing it again.
+      · no evidence yet
+  
+
+(101 lines, 17 of them evidence)
+
+WEB Accept dialog, per assumption (evidence lines shown / more on the node):
+  W75.1: 4 / 1
+  W75.22: 3 / 0
+  W75.33: 2 / 0
+  W75.47: 3 / 0
+  W75.64: 0 / 0
+  W75.65: 0 / 0
+  W75.66: 0 / 0
+  W75.67: 0 / 0

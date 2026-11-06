@@ -286,6 +286,24 @@ def archived_evidence(text):
     return out
 
 
+EVIDENCE_SHOWN, EVIDENCE_CUT = 4, 220     # lines the Accept dialog shows per assumption, and characters per line
+PICTURE = re.compile(r"!\[[^\]]*\]\([^)]*\)\s*")
+LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")      # [label](path): the dialog shows the label, not the markup
+
+
+def evidence_lines(nd, held=()):
+    """A node's Evidence for the Accept dialog: its first few lines, each cut at a word, and how many
+    more the node sheet holds. A picture's markdown is dropped (the dialog draws text), a link is cut to its label and an answer
+    page's path is dropped. `held` is the evidence the task's archive holds for the node, which is where a
+    shelved node's lives. `{lines: [...], more: N}`."""
+    lines = []
+    for ev in (nd["evidence"] or held):
+        ev = " ".join(LINK.sub(r"\1", PICTURE.sub("", dfs_tree.without_page(ev) or "")).split())
+        if ev:
+            lines.append(ev if len(ev) <= EVIDENCE_CUT else ev[:EVIDENCE_CUT].rsplit(" ", 1)[0].rstrip(",;:") + " …")
+    return dict(lines=lines[:EVIDENCE_SHOWN], more=max(0, len(lines) - EVIDENCE_SHOWN))
+
+
 def node_detail(nd, archived=None, commits=()):
     """A node opened: `(label, text)` pairs in the order a reviewer reads them."""
     f, archived = nd["fields"], archived or {}
@@ -2931,6 +2949,15 @@ class UI(WalkMixin):
                     para("wrong if " + wrong, look("amber"), indent="    ")
             if f.get("Ask"):
                 para("ask: " + f["Ask"], curses.color_pair(1), indent="    ")
+            # The same first lines the web Accept dialog shows, so the terminal's one-line accept
+            # prompt can stay one line: the evidence is here, not one ⏎ per assumption away.
+            ev = evidence_lines(nd, archived_evidence(self.tree_of(self.items[idx]["id"])[1]).get(nd["id"], ()))
+            for line in ev["lines"]:
+                para("· " + line, look("chrome"), indent="    ")
+            if ev["more"]:
+                para("· %d more on the node (⏎)" % ev["more"], look("chrome"), indent="    ")
+            elif not ev["lines"] and f.get("Hypothesis"):
+                para("· no evidence yet", look("chrome"), indent="    ")
             out.append(("", 0))
         return out
 
@@ -4827,20 +4854,19 @@ class UI(WalkMixin):
             self.msg = "%s is not a finished tree waiting to be accepted" % item
             return
         t, _, _ = self.tree_of(item)
-        assumed = assumed_nodes(t)
-        # ⚠️ NAMED IN THE QUESTION, with what would show each one wrong, because accepting
-        # is the moment they stop being looked at; and the reviewer's notes are counted.
+        # ⚠️ ONE SHORT LINE. The footer draws this label from column 1 and clips it at the screen's
+        # edge, so a prompt that named every assumption and its test (W75: 472 characters) showed the
+        # reader the first one and never its `[y/N]:`. It counts what rests on the author and points at
+        # `H`, which lists each assumption with its test and first evidence lines, and the reviewer's notes.
+        n, kept = len(assumed_nodes(t)), len(dfs_tree.notes(t))
         bits = []
-        nodes = dfs_tree.by_id(t)
-        for nid in assumed:
-            f = nodes[nid]["fields"]
-            wrong = dfs_tree.split_falsifier(dfs_tree.without_page(f.get("Hypothesis")))[1] or f.get("Ask", "")
-            bits.append("%s (%s)" % (nid, clip(wrong, 36)) if wrong else nid)
-        note = (" Assumptions: %s." % "; ".join(bits)) if bits else ""
-        kept = len(dfs_tree.notes(t))
+        if n:
+            bits.append("%d assumption%s" % (n, "" if n == 1 else "s"))
         if kept:
-            note += " %d reviewer note%s above." % (kept, "" if kept == 1 else "s")
-        if self.prompt("accept %s's tree as finished?%s [y/N]:" % (item, note))[:1].lower() != "y":
+            bits.append("%d note%s" % (kept, "" if kept == 1 else "s"))
+        ask = "accept %s? %s%s [y/N]:" % (item, ", ".join(bits), ": H shows them" if n else "") if bits \
+            else "accept %s's tree as finished? [y/N]:" % item
+        if self.prompt(ask)[:1].lower() != "y":
             self.msg = "not accepted"
             return
         dfs_tree.append_log(item, "accept")

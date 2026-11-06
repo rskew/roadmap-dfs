@@ -483,6 +483,49 @@ class Pane(unittest.TestCase):
         self.assertIn("wrong if it leaks.", text)
         self.assertNotIn("e1ab3804", text)
 
+    def test_H_shows_each_assumptions_first_evidence_lines_as_the_web_accept_dialog_does(self):
+        """The terminal's accept prompt is one line, so `H` carries the evidence: four lines at most, a
+        picture and a page path dropped, how many more are on the node, and 'no evidence yet' for none."""
+        ev = "".join("- %s\n" % l for l in ["for: a ![shot](.dfs/artefacts/aa.png) line", "against: b",
+                                           "for: c", "for: d", "for: e", "for: f"])
+        text = TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if it leaks.\n"
+            "Evidence:\n" + ev + "Determination: Confirmed: it holds. Next, more.")
+        t = dfs_tree.parse(text, "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        self.ui.data["items"][0]["assumptions"] = dfs_tree.assumed(t)
+        self.ui.act(ord("H"))
+        out = "\n".join(l for l, *_ in self.ui.lines_assumptions(100))
+        self.assertIn("· for: a line", out)
+        self.assertNotIn("aa.png", out)
+        self.assertIn("· for: d", out)
+        self.assertNotIn("for: e", out)
+        self.assertIn("· 2 more on the node", out)
+        t2 = self.flagged_tree()
+        self.ui.data["items"][0]["assumptions"] = dfs_tree.assumed(t2)
+        out = "\n".join(l for l, *_ in self.ui.lines_assumptions(100))
+        self.assertIn("· no evidence yet", out)
+
+    def test_the_accept_prompt_is_one_short_line_that_points_at_H(self):
+        t = self.flagged_tree()
+        ui = self.ui
+        ui.data["items"][0].update(assumptions=dfs_tree.assumed(t), status="done")
+        ui.current = lambda: ui.data["items"][0]
+        ui.tree_acceptable = lambda it: True
+        asked = []
+        ui.prompt = lambda label, default="": asked.append(label) or "n"
+        ui.tree_accept("W1")
+        self.assertEqual(len(asked), 1)
+        self.assertNotIn("\n", asked[0])
+        self.assertEqual(asked[0], "accept W1? 1 assumption: H shows them [y/N]:")
+        self.assertLess(len(asked[0]), 60, "the footer clips a longer one before its [y/N]:")
+        # a tree with no assumption or note keeps the plain question
+        ui.tree_of = lambda task: (dfs_tree.parse(TREE, "W1"), ARCHIVE, {})
+        asked.clear()
+        ui.tree_accept("W1")
+        self.assertEqual(asked, ["accept W1's tree as finished? [y/N]:"])
+
     def test_n_walks_the_raises_and_assumptions_and_wraps(self):
         ui = self.ui
         self.flagged_tree()
