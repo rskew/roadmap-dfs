@@ -1,0 +1,17 @@
+
+== targets: clauses unmet in BOTH judgings: 32 over 16 of 23 trees
+caught by both 4, informed only 5, blind only 5, neither 18
+informed caught 9 of 32 (28%; 95% interval 14% to 47%)
+blind caught 9 of 32 (28%; 95% interval 14% to 47%)
+sign test on 10 discordant targets: informed-only 5, p = 1.000
+per target: W11-c1c/C4 --; W11-c2a/C1 I-; W17-k1c/C1 -B; W17-k1c/C10 -B; W17-k1c/C2 -B; W17-k1c/C4 IB; W17-k1c/C6 --; W17-k2c/C4 -B; W17-k2c/C6 IB; W17-k2c/C7 --; W17-k2c/C8 I-; W22-b1a/C6 --; W22-c1a/C6 --; W22-c1b/C6 I-; W22-c1c/C6 -B; W22-c2a/C6 --; W32-c9a/C4 --; W36-c1c/C4 IB; W5-b1a/C7 --; W5-c1a/C10 --; W5-c1a/C3 I-; W5-c1a/C4 --; W5-c1a/C7 IB; W5-c1b/C10 I-; W5-c1b/C3 --; W5-c1b/C7 --; W5-c1c/C3 --; W5-c1c/C4 --; W5-c1c/C7 --; W5-c2a/C4 --; W5-c2a/C5 --; W5-c2a/C7 --
+power at catch 60% informed vs 30% blind: 59% on 32 targets; 80% needs 50 targets
+power at catch 50% informed vs 25% blind: 44% on 32 targets; 80% needs 67 targets
+power at catch 80% informed vs 40% blind: 87% on 32 targets; 80% needs 28 targets
+smallest sign-test win: 6 targets caught by one reviewer only and none by the other (p 0.031)
+
+== targets: clauses unmet in EITHER judging: 43 over 19 of 23 trees
+caught by both 5, informed only 9, blind only 6, neither 23
+informed caught 14 of 43 (33%; 95% interval 19% to 49%)
+blind caught 11 of 43 (26%; 95% interval 14% to 41%)
+sign test on 15 discordant targets: informed-only 9, p = 0.607

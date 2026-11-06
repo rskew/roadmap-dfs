@@ -15,6 +15,8 @@ import json, re, subprocess, sys
 from pathlib import Path
 
 DOCS = Path(__file__).resolve().parent
+SCORES = ["dfs-quality-scores.jsonl", "dfs-w17-scores.jsonl", "dfs-w132-scores.jsonl", "dfs-w32-scores.jsonl",
+          "dfs-w153-e8-newscores.jsonl"]      # the quality judge's judgings; a tree has two
 ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 PROMPT = """You match review findings to rubric clauses. Below is a rubric (clauses C1, C2, ...) and a list of findings F1, F2, ...
 a code reviewer wrote about work on that task. For each finding say which clauses of the rubric it says are
@@ -56,7 +58,7 @@ def judge(rubric, nodes):
 
 
 def truth(replay):
-    runs = [json.loads(l) for l in open(DOCS / "dfs-quality-scores.jsonl") if json.loads(l)["replay"] == replay]
+    runs = [r for f in SCORES for r in map(json.loads, open(DOCS / f)) if r["replay"] == replay]
     unmet = [{c for c, v in r["clauses"].items() if not v["met"]} for r in runs]
     return set.intersection(*unmet), set.union(*unmet)
 

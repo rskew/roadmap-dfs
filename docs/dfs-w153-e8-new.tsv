@@ -1,0 +1,11 @@
+replay	arm	verdict	findings	missing_judge_lines	both_total	both_named	either_total	either_named	names_a_met_clause	no_clause
+W132-k1	blind	none	0	0	12	0	12	0	-	0
+W132-k1	informed	none	0	0	12	0	12	0	-	0
+W17-k1c	blind	issues	4	0	5	4	5	4	C5,C7,C8	0
+W17-k1c	informed	issues	2	0	5	1	5	1	C7,C8	0
+W17-k1w	blind	none	0	0	10	0	10	0	-	0
+W17-k1w	informed	none	0	0	10	0	10	0	-	0
+W17-k2c	blind	issues	2	0	4	2	4	2	C2	0
+W17-k2c	informed	issues	2	0	4	2	4	2	C10	1
+W32-c9a	blind	ok	0	0	1	0	2	0	-	0
+W32-c9a	informed	ok	0	0	1	0	2	0	-	0

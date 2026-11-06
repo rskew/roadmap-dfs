@@ -1,0 +1,207 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E8: can this pool show the blind reviewer is worse?</title>
+<!--
+  An answer page: the page a raise names on its "Answer with:" line, or a node's
+  Hypothesis names. Copy this file to .dfs/artefacts/<uuid>.html. Everything above the
+  answer form is yours and has no layout to fill in: draw the issue the way it is best
+  seen, which is usually how the relevant part of the system works now and what each
+  option changes in it (docs/artefacts.md, "What an answer page shows"). Show, then
+  caption: a drawing the reader switches between options beats paragraphs.
+  The answer form at the end is the one shared part. Keep it as it is and edit only its
+  options (replace the two placeholder ones: a page that keeps them is refused); it is
+  what posts the author's answer or ruling. The drawing rules (.dg, .box, .link) are in
+  _TEMPLATE.html: copy them if the page draws boxes and arrows.
+  SELF-CONTAINED: no CDN, no fonts, no fetch but the form's own to /artefact-state (the
+  web page serves the page sandboxed, scripts allowed, the network off).
+  MOBILE FIRST: the author reads on a phone. Write the rules for a 360px screen, widen
+  them under @media (min-width: ...), and check the page with
+      <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
+-->
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+</style>
+
+<h1>Is the blind reviewer worse at finding unmet clauses?</h1>
+<p>Each cell is one <b>target</b>: a rubric clause the quality judge scored unmet in both of its judgings of a tree. A reviewer <b>catches</b> a target when a finding names that clause. The working assumption is that the two reviewers catch the same share.</p>
+<div id="grid" role="img" aria-label="The 22 targets of the first 20 trees, coloured by who caught them"></div>
+<p id="cap"></p>
+<h2>Could this pool show a gap?</h2>
+<label>Targets in the pool: <output id="nOut">22</output><br><input id="n" type="range" min="10" max="80" value="22"></label>
+<label>Informed catch rate: <output id="piOut">60%</output><br><input id="pi" type="range" min="10" max="100" value="60"></label>
+<label>Blind catch rate: <output id="pbOut">30%</output><br><input id="pb" type="range" min="0" max="100" value="30"></label>
+<p id="pw"></p>
+<style>
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; }
+  #grid div { min-height: 44px; border: 1.5px solid #333; border-radius: 4px; font-size: 13px; padding: 2px; background: #fff; }
+  #grid .I { background: #cfe3ff; } #grid .B { background: #ffe0b8; } #grid .IB { background: #cfeccf; }
+  label { display: block; margin: 10px 0; font-size: 15px; letter-spacing: -0.2px; }
+  input[type=range] { min-height: 40px; padding: 8px 0; box-sizing: border-box; display: block; width: 100%; margin: 0; }
+</style>
+<script>
+  // The 22 targets of docs/dfs-w153-e8-test.py: tree/clause and who caught it (I informed, B blind).
+  var T = [["W11-c1c/C4",""],["W11-c2a/C1","I"],["W22-b1a/C6",""],["W22-c1a/C6",""],["W22-c1b/C6","I"],["W22-c1c/C6","B"],["W22-c2a/C6",""],["W36-c1c/C4","IB"],["W5-b1a/C7",""],["W5-c1a/C10",""],["W5-c1a/C3","I"],["W5-c1a/C4",""],["W5-c1a/C7","IB"],["W5-c1b/C10","I"],["W5-c1b/C3",""],["W5-c1b/C7",""],["W5-c1c/C3",""],["W5-c1c/C4",""],["W5-c1c/C7",""],["W5-c2a/C4",""],["W5-c2a/C5",""],["W5-c2a/C7",""]];
+  var g = document.getElementById('grid');
+  T.forEach(function (t) { var d = document.createElement('div'); d.className = t[1]; d.textContent = t[0].replace('/', ' '); d.title = t[0] + ' caught by: ' + (t[1] || 'neither'); g.appendChild(d); });
+  document.getElementById('cap').textContent = 'Blue: informed only (4). Orange: blind only (1). Green: both (2). White: neither (15). Informed caught 6 of 22, blind 3 of 22; the exact sign test on the 5 targets only one caught gives p 0.375.';
+  function C(n, k) { var r = 1; for (var i = 1; i <= k; i++) r = r * (n - k + i) / i; return r; }
+  function p2(k, n) { var m = Math.min(k, n - k), s = 0; for (var i = 0; i <= m; i++) s += C(n, i); return Math.min(1, 2 * s / Math.pow(2, n)); }
+  function power(n, pi, pb) {
+    var dp = pi * (1 - pb) + pb * (1 - pi), q = dp ? pi * (1 - pb) / dp : .5, tot = 0;
+    for (var d = 0; d <= n; d++) {
+      var pd = C(n, d) * Math.pow(dp, d) * Math.pow(1 - dp, n - d), rej = 0;
+      for (var k = 0; k <= d; k++) if (p2(k, d) < .05) rej += C(d, k) * Math.pow(q, k) * Math.pow(1 - q, d - k);
+      tot += pd * rej;
+    }
+    return tot;
+  }
+  function upd() {
+    var n = +document.getElementById('n').value, pi = +document.getElementById('pi').value / 100, pb = +document.getElementById('pb').value / 100;
+    document.getElementById('nOut').textContent = n; document.getElementById('piOut').textContent = Math.round(pi * 100) + '%'; document.getElementById('pbOut').textContent = Math.round(pb * 100) + '%';
+    document.getElementById('pw').textContent = 'If the reviewers really catch these shares, a pool of ' + n + ' targets shows the gap (p under 0.05) in ' + Math.round(power(n, pi, pb) * 100) + '% of runs. Below about 80% the pool cannot settle it either way.';
+    if (window.dfsAnswer) window.dfsAnswer.keep();
+  }
+  ['n', 'pi', 'pb'].forEach(function (i) { document.getElementById(i).addEventListener('input', upd); });
+  window.dfsPageState = function () { return { n: +document.getElementById('n').value, pi: +document.getElementById('pi').value, pb: +document.getElementById('pb').value }; };
+  upd();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

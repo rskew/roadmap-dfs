@@ -56,7 +56,7 @@ def review(root, tool, replay_mod, name, suffix, blind=False):
         taskfile.write_text(strip_text(original))
         subprocess.run(["git", "-C", str(dst), "add", str(taskfile)], check=True)
         subprocess.run(["git", "-C", str(dst), "-c", "core.hooksPath=/dev/null", "-c", "user.name=dfs", "-c", "user.email=dfs@dfs.invalid",
-                        "commit", "-q", "-m", f"{task}: task file as the reviewer is given it"], check=True)
+                        "commit", "-q", "--allow-empty", "-m", f"{task}: task file as the reviewer is given it"], check=True)
     replay_mod.make_box(dst, "kiro")
     bins = replay_mod.tool_bins(replay_mod.main_checkout(), "kiro")
     env = replay_mod.sandbox_env(tool, bins, replay_mod.BASH_MINUTES, "kiro")

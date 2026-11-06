@@ -67,7 +67,7 @@ def main(argv):
     runs, jobs = int(opt("--runs", 2)), int(opt("--jobs", 4))
     only = set(opt("--only", "").split(",")) - {""}
     todo = []
-    for clone in sorted(root.glob("dfs-replay-W*-[bc][0-9][a-c]")):
+    for clone in sorted(root.glob("dfs-replay-W*-[bck][0-9]*")):
         task, tag = clone.name[len("dfs-replay-"):].rsplit("-", 1)
         if only and f"{task}-{tag}" not in only:
             continue
