@@ -25,6 +25,8 @@ mine = importlib.util.module_from_spec(spec); spec.loader.exec_module(mine)
 argv = sys.argv[1:]
 cands = "--cands" in argv
 miss = 0
+misstop = "--miss-top" in argv
+argv = [x for x in argv if x != "--miss-top"]
 if "--miss-sample" in argv:
     i = argv.index("--miss-sample"); miss = int(argv[i + 1]); del argv[i:i + 2]
 argv = [x for x in argv if x not in ("--cands", "--only")]
@@ -167,6 +169,32 @@ for r in rows:
     r["commit"] = c
 if sizes:
     print(f"  roadmap-dfs minor-node commits found: {len(sizes)} of {sum(r['proj'] == 'roadmap-dfs' for r in rows)}; lines changed outside .dfs: median {statistics.median(sizes)}, mean {statistics.mean(sizes):.0f}, max {max(sizes)}, none-outside-.dfs {sum(s == 0 for s in sizes)}")
+
+if misstop:
+    # every line with no shared name and a later issues review, in fixed order, each with the two later defect lines
+    # that share most content words (5+ letters) with it; none shown when no word is shared (read from the line alone)
+    hitkeys = {(r["proj"], r["id"], li) for r, li, *_ in hits}
+    STOP = set("which their there would should about these those because after before where while other with that this from into than then have been being does only also when what them they will must".split())
+    cw = lambda x: {w for w in re.findall(r"[a-z]{5,}", x.lower()) if w not in STOP}
+    n = 0
+    for r in rows:
+        if r["review_i"] is None:
+            continue
+        later = [e for e in r["reviews"][r["review_i"] + 1:] if e["head"].split("·")[-1].strip().startswith("issues")]
+        if not later:
+            continue
+        dl_all = [dl.strip() for e in later for dl in e["body"].split("\n") if dl.strip() and not MINOR.search(dl)]
+        for li, l in enumerate(r["lines"]):
+            if (r["proj"], r["id"], li) in hitkeys:
+                continue
+            n += 1
+            a_ = cw(l)
+            sc = sorted(((len(a_ & cw(d)), d) for d in dl_all), key=lambda x: -x[0])[:2]
+            print(f"\n#{n} {r['proj'][:4]} {r['id']}.{li}: {l[:150]}")
+            for k, d in sc:
+                if k:
+                    print(f"   [{k}] {d[:120]}")
+    print(f"\nlines: {n}")
 
 if miss:
     # lines with no shared name, in nodes that have a later issues-review: a fixed-seed sample, with the later defect lines, to read for come-backs the token test missed

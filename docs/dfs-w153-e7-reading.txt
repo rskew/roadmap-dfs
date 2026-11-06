@@ -1,0 +1,29 @@
+W153.18 reading of the 224 unmatched lines (python3 docs/dfs-w153-e7.py --at d595c44a --miss-top lists them: each line
+with the two later-review defect lines that share most words of 5+ letters; 66 lines share no such word with any later
+defect line, 42 share only one, 40 share two, 76 share three or more).
+Reading order = the listing's order. Notes so far (listing items #1 to #122, lines sharing >= 2 words read with their best match):
+- same defect, left as a minor line again (the finding came back in a later review's minor node because it was not fixed):
+  #26/#31/#32 (tree.py uncommitted()/unpushed() read the main checkout, W75.12.2 -> W75.15.6 -> W75.18.1),
+  #29/#33/#37 (test_chain hook-refusal test skips under noexec TMPDIR, W75.15.4 -> W75.18.2 -> W75.25.5).
+  These are not in the 6 'same' of the token test because that test excludes minor lines as the later side.
+- related (a later fix or defect in the same code, not the same sentence): #3 (W17.8.0 / W17.9), #14 (W30.3.1 / W30.4),
+  #108/#109 (W109.8 / W109.9 carry_uncommitted), #66/#67 (W87.9 / W87.16), #107 (W108.5.0 / W108.6), #63 (W81.16.3 / W81.17).
+- no match: the rest of 1 to 122; most shared words are generic (a review's 'Tests run', 'assumptions without a Hypothesis').
+Second half (listing items #123 to #224, same rule):
+- same defect: #130 (W116.24.4 gh() has no timeout under the chains' lock -> W116.25), #186 (W39.29.2 a refusal arriving
+  elsewhere stays hidden -> W39.35, read from its title).
+- related: #150, #153, #160, #163, #164, #166, #168, #191, #193, #195, #198, #223, #224.
+- no match: the rest; again most shared words were generic.
+
+TALLY of the 224 unmatched lines that have a later issues review (reader's, one reader; not independent of the listing):
+- 116 lines share two or more 5-letter words with some later defect line: read as a pair (the best two matches shown).
+  Same defect as a later one: 4 (#26, #29 came back as the same minor line unfixed, and #31/#32/#33/#37 are those come-backs;
+  #130; #186). Related, same code or same cause, not the same sentence: 21 (first half 8: #3, #14, #63, #66, #67, #107,
+  #108, #109; second half 13).
+- 108 lines share at most one such word with every later defect line (66 none, 42 one): read from the line and the single
+  word, none taken as a come-back. They are the unread part of the ceiling.
+Rate over the 484 lines: same = 6 (token test) + 4 = 10 (2.1%); related = 8 (token test, matched lines) + 21 = 29 (6.0%).
+Ceiling: if the 108 lines read by one word had the 116 read lines' rates (3.4% same, 18% related), add about 4 same and
+19 related: same 14 (2.9%), related 48 (9.9%).
+Words, per tree: lines in `ok` 21,684 words and Determinations 11,670 over the 3 projects. Over all 238 tasks: 91 against 49
+a task, +42 under E7. Over the 73 tasks that have a minor node: 297 against 160, +137.
