@@ -438,6 +438,7 @@ def task_json(task, include_archived=False):
                 raises=[raise_json(r) for r in row["raises"]],
                 raises_below=row["raises_below"],
                 assumes=row["assumes"], ask=row["asks"],
+                wrong=dfs_tree.split_falsifier(f.get("Hypothesis") or "")[1],
                 parks=dfs_tree.actioned_siblings(t, nd["id"]),
                 page=next(iter(dfs_tree.ARTEFACT_REF.findall(f.get("Hypothesis") or "")), ""),
                 answered=bool(story["answered"]), overruled=bool(story["overruled"]),

@@ -1,9 +1,9 @@
-======== W2 status=done, accepted=False, #view 4308 chars, 321 visible words
+======== W2 status=done, accepted=False, #view 4427 chars, 330 visible words
 rows (JSON) / node rows in DOM: 3 / 3
 skim lines in DOM: 3 of 3 nodes with a skim
 answered tags in DOM: 0 ; overruled rows: 0 (JSON: 0, 0)
 flagged (assumes) rows in DOM: 1 (JSON: 1)
-'Wrong if' words in the DOM text: 0
+'Wrong if' words in the DOM text: 1
    opened W2.2: 'Wrong if' in the opened node sheet: True -> Wrong ifthe author wants hard failure for everyone.Evidencegateway.example.json holds lega
    note 'Review · Tue 06 Oct 04:50 · ok' on the task page: True
 'Next flagged' and 'Flagged nodes only' buttons on the page: True True
@@ -12,7 +12,7 @@ accept dialog after a click on Accept (text): 'Accept W2\'s tree as finished? It
 assumed[] (the accept form's list):
    W2.2 | wrong='the author wants hard failure for everyone.'
 notes[] (the accept form's reviewer notes): [('review', 'Review · Tue 06 Oct 04:50 · ok', 521)]
-======== W3 status=open, accepted=False, #view 5488 chars, 368 visible words
+======== W3 status=open, accepted=False, #view 5554 chars, 368 visible words
 rows (JSON) / node rows in DOM: 6 / 6
 skim lines in DOM: 6 of 6 nodes with a skim
 answered tags in DOM: 0 ; overruled rows: 1 (JSON: 0, 1)
@@ -26,7 +26,7 @@ page scrollWidth / viewport width: [390, 390]
 accept dialog after a click on Accept (text): '(no Accept button on this page)'
 assumed[] (the accept form's list):
 notes[] (the accept form's reviewer notes): [('review', 'Review · Tue 06 Oct 04:50 · ok', 489)]
-======== W7 status=open, accepted=False, #view 2989 chars, 134 visible words
+======== W7 status=open, accepted=False, #view 3022 chars, 134 visible words
 rows (JSON) / node rows in DOM: 3 / 3
 skim lines in DOM: 3 of 3 nodes with a skim
 answered tags in DOM: 1 ; overruled rows: 0 (JSON: 1, 0)
@@ -39,12 +39,12 @@ page scrollWidth / viewport width: [390, 390]
 accept dialog after a click on Accept (text): '(no Accept button on this page)'
 assumed[] (the accept form's list):
 notes[] (the accept form's reviewer notes): []
-======== W9 status=blocked, accepted=False, #view 7979 chars, 436 visible words
+======== W9 status=blocked, accepted=False, #view 8385 chars, 471 visible words
 rows (JSON) / node rows in DOM: 11 / 11
 skim lines in DOM: 8 of 8 nodes with a skim
 answered tags in DOM: 0 ; overruled rows: 0 (JSON: 0, 0)
 flagged (assumes) rows in DOM: 3 (JSON: 3)
-'Wrong if' words in the DOM text: 0
+'Wrong if' words in the DOM text: 3
    opened W9.2: 'Wrong if' in the opened node sheet: True -> Wrong ifp99 exceeds 5 ms, or if the Goal's "without losing any live session" is read as su
    opened W9.3: 'Wrong if' in the opened node sheet: True -> Wrong ifp99 over 5 ms.Evidencep99 3.1 ms, 18k writes/s on ext4 SSD.CI host is a VM; the pr
    opened W9.6: 'Wrong if' in the opened node sheet: True -> Wrong ifthe author needs rollback within seconds.Evidenceexport of 200k sessions took 52 s

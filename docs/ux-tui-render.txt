@@ -93,7 +93,8 @@
  57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
  39|       Use WAL with synchronous=NORMAL.
  78|       WAL with synchronous=NORMAL keeps p99 lookup under 5 ms at 8 concurren…
- 78|       wrong if p99 exceeds 5 ms, or if the Goal's "without losing any live s…
+ 70|       wrong if p99 exceeds 5 ms, or if the Goal's "without losing any
+ 53|       live session" is read as surviving power loss.
  72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
  50|        Holds on SSD; spinning disk is unverified.
  78|        fsync on ext4 does not push p99 over 5 ms in WAL/NORMAL because NORMA…
@@ -122,7 +123,7 @@
  34|            W9.11 ○ The other case
  63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
  77|           Not first: W9.6's export covers rollback and a fallback read path…
--- 49 lines, 0 wider than 80 columns
+-- 50 lines, 0 wider than 80 columns
 ======== W9.2 opened (width 80)
   7|W9 — W9
   0|
@@ -341,7 +342,8 @@
  57|   ▾ ↳W9.2 ✓ Choose the SQLite journal mode  ⚑ assumption
  39|       Use WAL with synchronous=NORMAL.
 118|       WAL with synchronous=NORMAL keeps p99 lookup under 5 ms at 8 concurrent writers and loses at most the last few…
-117|       wrong if p99 exceeds 5 ms, or if the Goal's "without losing any live session" is read as surviving power loss.
+111|       wrong if p99 exceeds 5 ms, or if the Goal's "without losing any live session" is read as surviving power
+ 12|       loss.
  72|    ▾ ↳W9.3 ✓ Re-run the benchmark on a real disk  ● raise  ⚑ assumption
  50|        Holds on SSD; spinning disk is unverified.
 104|        fsync on ext4 does not push p99 over 5 ms in WAL/NORMAL because NORMAL only syncs at checkpoint.
@@ -366,7 +368,7 @@
  34|            W9.11 ○ The other case
  63|         W9.7 ‖ Keep the JSON store behind a read-only fallback
 118|           Not first: W9.6's export covers rollback and a fallback read path costs a stat per miss; reopen if the exp…
--- 43 lines, 0 wider than 120 columns
+-- 44 lines, 0 wider than 120 columns
 ======== W9.2 opened (width 120)
   7|W9 — W9
   0|

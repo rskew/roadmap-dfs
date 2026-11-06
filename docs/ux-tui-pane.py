@@ -7,7 +7,7 @@
 `UI.draw` paints into a fake curses window that records each `addstr(y, x, text)`. The header, the
 item list, the footer and the side panel are stubbed out (they need a live curses); the pane's
 own geometry, its rule (title and "n-m of N" tag), the scroll and the cursor row are the real code.
-Prints, per case: the rule row, the rows the tree shows, and whether the cursor row (the `>`) is in them.
+Prints, per case: the rule row (its name and "n-m of N" tag; W131.21 puts the task's status and sessions in the name), the rows the tree shows, and whether the cursor row (the `>`) is in them.
 """
 import curses, os, shutil, subprocess, sys, tempfile
 
@@ -79,7 +79,7 @@ try:
             body = [(y, rows[y]) for y in ys if y >= 4 and y < height - 2]
             cur = [y for y, s in body if s.lstrip().startswith((">", tui.BAR))]
             print("== %dx%d %s: rule %r; %d tree rows drawn (rows %s-%s); cursor row on screen: %s" % (
-                width, height, label, rule[0].strip()[:70] if rule else None, len(body),
+                width, height, label, rule[0].replace('─', '').strip() if rule else None, len(body),
                 body[0][0] if body else None, body[-1][0] if body else None, bool(cur)))
             print("     first row: %r | last row: %r | cursor row: %r" % (
                 body[0][1].strip()[:50], body[-1][1].strip()[:50], [s.strip()[:40] for y, s in body if y in cur][:1]))

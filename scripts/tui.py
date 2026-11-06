@@ -3912,7 +3912,9 @@ class UI(WalkMixin):
                         assumption, wrong = dfs_tree.split_falsifier(nd["fields"]["Hypothesis"])
                         out.append((inner + clip_marked(assumption, room), look("amber")))
                         if wrong:
-                            out.append((inner + clip_marked("wrong if " + wrong, room), look("amber")))
+                            # Wrapped, not clipped: the test is the part the author answers,
+                            # and at 80 columns "... any live s…" left it unreadable.
+                            para("wrong if " + wrong, look("amber"), indent=inner, rich=True)
                     if asks:
                         out.append((inner + clip_marked("ask: " + nd["fields"]["Ask"], room), red))
             if row["key"] not in self.tree_open and not row["raises"]:
@@ -4033,8 +4035,13 @@ class UI(WalkMixin):
                 "artefact": "artefacts", "keys": "keys", "activity": "activity",
                 "plan": "walk plan", "assumptions": "assumptions"}[self.pane]
         if self.pane == "item":
-            name = ("tree · %s" % self.current()["id"]
-                    if self.tree_focused() and self.current() else
+            cur = self.current()
+            # ⚠ The rule is the one row of the pane that never scrolls, so it carries
+            # the task's id, status and sessions: an opened node fills the pane and
+            # scrolls the lines that said them out of view.
+            name = ("tree · %s · %s · %d since you spoke" % (
+                        cur["id"], cur["status"], cur.get("sessions", 0))
+                    if self.tree_focused() and cur else
                     "tree" if self.tree_focused() else "item")
 
         body_top = sep + 1
