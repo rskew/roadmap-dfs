@@ -1,0 +1,15 @@
+judgings 48, unparsed 0, cases 24, credits 0.0
+UNSHOWN judgings (counted as not flagged): 14 of 48
+by case kind (flagged = at least half of its judgings said FLAG):
+  backtrack (should FLAG)            n= 12 flagged=  2 (17%)  runs agree 10/12
+  control (should PASS)              n= 12 flagged=  0 (0%)  runs agree 12/12
+  control with a Hypothesis          n=  2 flagged=  0 (0%)  runs agree 2/2
+  control without one                n= 10 flagged=  0 (0%)  runs agree 10/10
+  backtrack with a Hypothesis        n=  2 flagged=  1 (50%)  runs agree 1/2
+  backtrack without one              n= 10 flagged=  1 (10%)  runs agree 9/10
+misses of the backtracks: 10 of 12  (E2 judging is parked if over half)
+errors written to /workspace/roadmap-dfs/.dfs/worktrees/W153/docs/dfs-w153-judge-repo-errors.tsv
+flagged in at least 1 of 2 judgings: backtracks 2/12, controls 0/12, one-sided Fisher p=0.239
+flagged in both judgings: backtracks 0/12, controls 0/12, one-sided Fisher p=1.000
+per judging: backtracks 2/24 (8%), controls 0/24 (0%)
+matched pairs (backtrack vs its control): backtrack flagged more 2, less 0, equal 10
