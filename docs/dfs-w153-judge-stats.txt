@@ -1,0 +1,10 @@
+# v1 prompt
+flagged in at least 1 of 2 judgings: backtracks 19/25, controls 29/41, one-sided Fisher p=0.432
+flagged in both judgings: backtracks 17/25, controls 24/41, one-sided Fisher p=0.308
+per judging: backtracks 36/50 (72%), controls 53/82 (65%)
+matched pairs (backtrack vs its control): backtrack flagged more 7, less 5, equal 13
+# v2 prompt
+flagged in at least 1 of 2 judgings: backtracks 3/25, controls 2/41, one-sided Fisher p=0.275
+flagged in both judgings: backtracks 0/25, controls 0/41, one-sided Fisher p=1.000
+per judging: backtracks 3/50 (6%), controls 2/82 (2%)
+matched pairs (backtrack vs its control): backtrack flagged more 3, less 2, equal 20

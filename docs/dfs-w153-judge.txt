@@ -1,0 +1,12 @@
+judgings 164, unparsed 0, cases 82, credits 0.0
+by case kind (flagged = at least half of its judgings said FLAG):
+  backtrack (should FLAG)            n= 25 flagged= 19 (76%)  runs agree 23/25
+  ruling refuted (label FLAG)        n= 12 flagged=  8 (67%)  runs agree 10/12
+  ruling confirmed (label PASS)      n=  4 flagged=  3 (75%)  runs agree 4/4
+  control (should PASS)              n= 41 flagged= 29 (71%)  runs agree 36/41
+  control with a Hypothesis          n= 23 flagged= 15 (65%)  runs agree 20/23
+  control without one                n= 18 flagged= 14 (78%)  runs agree 16/18
+  backtrack with a Hypothesis        n=  7 flagged=  6 (86%)  runs agree 6/7
+  backtrack without one              n= 18 flagged= 13 (72%)  runs agree 17/18
+misses of the backtracks: 6 of 25  (E2 judging is parked if over half)
+errors written to /workspace/roadmap-dfs/.dfs/worktrees/W153/docs/dfs-w153-judge-errors.tsv
