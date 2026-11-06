@@ -1,37 +1,37 @@
-raises 49; answered 49; with an answer page 3
-raise words: median 57, max 465
-answer words: median 3; one-word answers 24; >20 words 13
-hours to answer: median 3.2, p90 29.2
-  with page: n=3 median answer words 12, median hours 0.8
-  without page: n=46 median answer words 2, median hours 3.7
+raises 50; answered 50; with an answer page 7
+raise words: median 216, max 689
+answer words: median 4; one-word answers 24; >20 words 13
+hours to answer: median 3.1, p90 29.2
+  with page: n=7 median answer words 10, median hours 1.4
+  without page: n=43 median answer words 3, median hours 3.6
 corrections 27; median words 11
 runner-written raises: 21; median raise words 46; median answer words 2; one-or-two-word answers 12; median hours 3.6; with a page 0
-session-written raises: 28; median raise words 69; median answer words 6; one-or-two-word answers 12; median hours 3.1; with a page 3
+session-written raises: 29; median raise words 326; median answer words 6; one-or-two-word answers 12; median hours 3.1; with a page 7
 
 task node raise-words page answer-words hours answer
 W3  46 0 1 1.9 Continue
 W17  46 0 1 1.7 Continue
 W30  46 0 1 0.8 Continue
-W43 W43 93 0 26 0.4 Zooms out on mobile, so that you can pan horizontally wider 
+W43 W43 313 0 26 0.4 Zooms out on mobile, so that you can pan horizontally wider 
 W48 W48.3 201 0 1 8.8 1
 W60 W60.4 437 0 6 0.9 Ignore tooling issues, continue with implementation
 W61  46 0 1 0.6 Continue
 W68  46 0 1 3.6 Continue
-W70 W70.2 100 1 41 0.8 I'm running the tui inside herdr, try with that. If you stil
+W70 W70.2 326 1 41 0.8 I'm running the tui inside herdr, try with that. If you stil
 W74  46 0 1 2.2 Continue
 W75  32 0 1 0.3 Continue
 W75  46 0 2 0.6 Continue m
-W75 W75.44 30 0 17 0.7 work around this (--no-verify) for this item, and make sure 
+W75 W75.44 422 0 17 0.7 work around this (--no-verify) for this item, and make sure 
 W75  46 0 1 2.4 Continue
 W75  46 0 1 2.7 Continue
 W75  89 0 5 5.1 Work around this for now
 W75 W75.56 299 0 72 12.7 Continue (option 1: this moves the compact cutoff; compact w
-W75 W75.53 175 0 1 29.2 1
-W75 W75.60 118 0 17 74.8 If this isn't fixed already then add a task, then work aroun
-W75 W75.59 46 0 8 96.7 Use --no-verify to work around this for now
+W75 W75.53 342 0 1 29.2 1
+W75 W75.60 247 0 17 74.8 If this isn't fixed already then add a task, then work aroun
+W75 W75.59 276 0 8 96.7 Use --no-verify to work around this for now
 W81  32 0 1 9.5 Continue
-W86 W86.1 34 0 1 43.1 ![Screenshot_20261021-114924.png](.dfs/artefacts/7e9dd912-58
-W86 W86.4 46 0 2 160.0 Same softness
+W86 W86.1 338 1 1 43.1 ![Screenshot_20261021-114924.png](.dfs/artefacts/7e9dd912-58
+W86 W86.4 235 0 2 160.0 Same softness
 W87  89 0 15 0.1 Work around this for now, but check that this issue is conce
 W87  89 0 50 18.2 Committed: the edits to scripts/branch.py and scripts/test_c
 W89  89 0 50 11.0 Committed: the edits to scripts/branch.py and scripts/test_c
@@ -43,18 +43,19 @@ W95  87 0 40 8.6 Continue. The edits that blocked the merge are gone from the
 W96  87 0 40 8.3 Continue. The edits that blocked the merge are gone from the
 W97 W97.8 190 0 9 2.8 Use nix for deps, run from inside the repo
 W109  89 0 4 5.6 Commit and move on
-W109 W109.5 33 0 1 15.1 A
-W111 W111.11 38 0 1 0.5 3
-W111 W111.13 41 0 9 5.2 Work around this for now, manually complete the task
-W113 W113.9 81 0 1 1.4 B
-W113 W113.1 53 0 30 3.8 Fix all of these, then dig into the directives themselves an
-W113 W113.6 57 0 1 5.7 A
+W109 W109.5 166 0 1 15.1 A
+W111 W111.11 436 0 1 0.5 3
+W111 W111.13 372 0 9 5.2 Work around this for now, manually complete the task
+W113 W113.9 448 1 1 1.4 B
+W113 W113.1 689 1 30 3.8 Fix all of these, then dig into the directives themselves an
+W113 W113.6 533 0 1 5.7 A
 W116 W116.27 465 0 1 0.7 A
-W116 W116.33 35 0 21 5.7 Check we have another task to address this, then complete th
-W122 W122.5 32 0 6 3.2 2, I'll fix this bug separately
+W116 W116.33 315 0 21 5.7 Check we have another task to address this, then complete th
+W122 W122.5 447 0 6 3.2 2, I'll fix this bug separately
 W123 W123.5 248 1 1 0.2 d
-W123 W123.20 28 0 26 1.1 Check we've fixed this in the code (not necessarily the runn
+W123 W123.20 379 0 26 1.1 Check we've fixed this in the code (not necessarily the runn
 W123 W123.4 203 1 12 3.1 The tui is ok, I meant to focus on the web app
 W123 W123.12 362 0 1 4.6 A
-W130 W130.12 31 0 31 1.2 A. This task is meant to be half optimisation and half devel
-W130 W130.4 31 0 1 1.8 A
+W130 W130.12 312 0 31 1.2 A. This task is meant to be half optimisation and half devel
+W130 W130.4 229 0 1 1.8 A
+W131 W131.8 246 1 10 0.9 keep raising on tooling issues, otherwise they will be ignor

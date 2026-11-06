@@ -1,0 +1,30 @@
+task	node	ts	words	asks_first	lettered	recommend	against	page	answered	answer_words	bare	first
+W109	W109.5	2026-10-24T13:57:19Z	166	0	1	1	1	0	1	1	1	Two roadmap-tooling issues turned up while working W109.
+W111	W111.11	2026-10-28T05:47:02Z	436	0	1	1	1	0	1	1	1	Tooling issue, so raised and not fixed in the task:
+W111	W111.13	2026-10-28T06:59:17Z	372	0	1	1	1	0	1	9	0	Tooling issue, so raised and not fixed in the task:
+W113	W113.1	2026-10-28T01:17:41Z	689	0	1	0	1	1	1	30	0	Review of the project's own .dfs logs (119 task files, 634 nodes, 1725 log entries, 261 run records; counted w
+W113	W113.6	2026-10-28T06:28:56Z	533	0	1	1	1	0	1	1	1	I read SKILL.md and the law against the review and critic verdicts, raises and answers in all task files.
+W113	W113.9	2026-10-28T12:54:28Z	448	0	1	0	1	1	1	1	1	The critic's backtrack of the cadence node leaves a difference between the law and the code that is roadmap to
+W116	W116.27	2026-10-28T04:16:34Z	465	0	1	1	1	0	1	1	1	Scope drift:
+W116	W116.33	2026-10-28T06:25:17Z	315	0	1	1	1	0	1	21	0	Tooling issue, not a task defect:
+W122	W122.5	2026-10-28T01:55:02Z	447	0	1	1	1	0	1	6	0	Tooling issue, so raised and not fixed in the task:
+W123	W123.4	2026-10-28T02:01:16Z	203	1	0	1	1	1	1	12	0	Which item-list style should be built, if any?
+W123	W123.5	2026-10-28T06:01:27Z	248	1	0	1	1	1	1	1	1	Which web list style should be built, if any?
+W123	W123.12	2026-10-28T07:39:55Z	362	0	1	1	1	0	1	1	1	Scope drift:
+W123	W123.20	2026-10-28T13:12:23Z	379	0	1	1	1	0	1	26	0	Tooling issue, not the task's:
+W130	W130.4	2026-10-29T01:18:18Z	229	0	1	1	1	0	1	1	1	Two faults in the replay tooling (scripts/replay.py), found while running the control arm.
+W130	W130.12	2026-10-29T08:24:36Z	312	0	0	1	1	0	1	31	0	A third fault in the replay tooling, found while checking the control arm against the replays' own task files.
+W131	W131.8	2026-11-05T22:57:28Z	246	1	1	1	1	1	1	10	0	Found:
+W43	W43	2026-10-09T10:56:30Z	313	1	1	1	1	0	1	26	0	What does "expanding the screen" look like on your phone?
+W48	W48.3	2026-10-09T18:26:54Z	201	0	0	1	1	0	1	1	1	Scope drift, first at W48.3.
+W60	W60.4	2026-10-10T10:22:42Z	437	0	0	1	1	0	1	6	0	Tooling issue (roadmap-dfs `tree.py effective()`), blocking what the author asked for:
+W70	W70.2	2026-10-13T11:41:59Z	326	0	1	1	1	0	1	41	0	The broken wrapping does not show here.
+W75	W75.44	2026-10-19T04:58:41Z	422	0	1	1	1	0	1	17	0	Tooling issue (roadmap-dfs size rule), so raised and not fixed here:
+W75	W75.53	2026-10-19T21:33:08Z	342	0	1	1	1	0	1	1	1	W75.md cannot be committed again, and nothing a work session may move is left to move.
+W75	W75.56	2026-10-21T23:43:26Z	299	0	1	1	1	0	1	72	0	check.py's size rule (captured as W108) will refuse the next commit of W75.md, and no session can get under it
+W75	W75.59	2026-10-24T15:04:04Z	276	0	1	1	1	0	1	8	0	Tooling rule blocks W75:
+W75	W75.60	2026-10-25T12:33:12Z	247	0	1	1	1	0	1	17	0	The guard refuses every commit of W75's files:
+W86	W86.1	2026-10-19T05:44:04Z	338	1	1	1	1	1	1	1	0	What looks low resolution on the installed app's loading screen on your phone, and in which screen?
+W86	W86.4	2026-10-21T23:51:07Z	235	0	1	1	1	0	1	2	0	Your screenshot shows Android's own launch screen (the drawing alone in a circle), so the soft picture is not 
+W93	W93.9	2026-10-22T03:17:24Z	408	0	1	1	1	0	1	3	0	Scope drift, starting at W93.9.
+W97	W97.8	2026-10-28T02:20:13Z	190	0	0	1	1	0	1	9	0	W97.8 (guarded W55 replay) and the replay half of W97.10 need access this session lacks:

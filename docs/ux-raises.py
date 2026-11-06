@@ -31,6 +31,8 @@ for f in files:
             elif m[2] == "correct": corrects.append((t, cur))
         elif cur is not None and line.startswith("  "):
             cur[3].append(line.strip())
+        elif cur is not None and not line.strip():
+            pass    # a blank line inside an entry's body (W131.11: it used to end the body there)
         else:
             cur = None
 rows = []
