@@ -281,7 +281,7 @@ def node_detail(nd, archived=None, commits=()):
             for sha, subj, _at in commits]
     files = commit_files([sha for sha, _s, _a in commits])
     if files:
-        out.append(("Files", files))
+        out.append(("Code files", files))
     return out
 
 
@@ -295,6 +295,7 @@ def tree_rule_name(cur, short=False):
         cur["id"], cur["status"], n, "" if n == 1 else "s")
 
 
+READ_COMMITS = 8     # a node's commits whose files are listed
 _COMMIT_PATHS = {}   # (repo root, sha) -> the paths that commit changed
 
 
@@ -319,13 +320,16 @@ def commit_paths(sha):
 def commit_files(shas, limit=12):
     """The code files a node's commits changed, as one line: `a.py, b.py` and `+3 more`.
     The planning files (`.dfs/`) are left out, since the node's own text is what changed there.
-    A commit git cannot show (a test's made-up sha) adds nothing."""
+    A commit git cannot show (a test's made-up sha) adds nothing. Only the first `READ_COMMITS` commits
+    are read, and a node with more says how many were not."""
     seen = []
-    for sha in shas[:8]:
+    for sha in shas[:READ_COMMITS]:
         seen += [p for p in commit_paths(sha) or ()
                  if not p.startswith(".dfs/") and p not in seen]
     shown = ", ".join(seen[:limit])
-    return shown + (" · +%d more" % (len(seen) - limit) if len(seen) > limit else "")
+    shown += " · +%d more" % (len(seen) - limit) if len(seen) > limit else ""
+    cut = len(shas) - READ_COMMITS
+    return shown + (" · %d commits not read" % cut if shown and cut > 0 else "")
 
 
 def age(ts, now=None):

@@ -323,7 +323,7 @@ class Detail(unittest.TestCase):
             try:
                 nd = dfs_tree.by_id(tree())["W1.1"]
                 got = dict(TUI.node_detail(nd, {}, [(sha, "W1.1: change", "2026-09-27T01:00:00Z")]))
-                self.assertEqual(got["Files"], "b.py, scripts/a.py")
+                self.assertEqual(got["Code files"], "b.py, scripts/a.py")
                 self.assertEqual(TUI.commit_files([sha, "0" * 40]), "b.py, scripts/a.py")
                 self.assertEqual(TUI.commit_files(["0" * 40]), "")
             finally:
@@ -358,6 +358,9 @@ class Detail(unittest.TestCase):
                 TUI.commit_files(["0" * 40])
                 TUI.commit_files(["0" * 40])
                 self.assertEqual(len(calls), 3)
+                # A node with more commits than are read says how many were left out.
+                self.assertEqual(TUI.commit_files([sha] * 10), "b.py · 2 commits not read")
+                self.assertEqual(TUI.commit_files(["0" * 40] * 10), "")
             finally:
                 TUI.subprocess.run = real_run
                 TUI.ROOT = was
