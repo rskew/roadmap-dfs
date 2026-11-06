@@ -1,0 +1,19 @@
+the author faces, as at d595c44a over 238 tasks: 124 raises; 120271 words read (94937 in Determinations, 25334 in Hypothesis text; Summaries not counted); margin 15%
+
+row                         saving (-) or cost (+)                      share    ceiling   cell
+E5 raises, A                17 of 124 raises removed                    -13.7%   21.0%     inside (observed)
+E5 raises, B                8 of 124 raises removed                     -6.5%    21.0%     inside (observed)
+E5 A, no new permission     8 of 124 (the 9 that need one stay)         -6.5%    21.0%     inside (observed)
+E4 raises                   0 of 124 removed; all 36 stay               +0.0%    0.0%      inside (by construction)
+E1 pages (answers)          at most 12 of 18 rulings had a page         -9.7%    14.5%     inside (by construction)
+E1 `assumed` words          4665 of 7583 Wrong-if words                 -3.9%    6.3%      inside (by construction)
+E6 words, budget 80         12391 words cut                             -10.3%   100.0%    inside (observed)
+E6 words, budget 60         22782 words cut                             -18.9%   100.0%    over (observed)
+E7 words                    10014 more words read in `ok`               +8.3%    18.0%     inside (observed)
+
+E1 pages not made: 131 of 376 hypotheses (the files do not show a page opened)
+
+E8 power on 32 targets: 60% v 30%: 59%; 50% v 25%: 44%; 80% v 40%: 87%
+E8 power on 35 targets: 60% v 30%: 63%; 50% v 25%: 49%; 80% v 40%: 90%
+E8 targets for 80% power at 60% v 30%: 50
+E8 targets for 80% power at 50% v 25%: 67

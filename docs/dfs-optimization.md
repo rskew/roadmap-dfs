@@ -935,15 +935,29 @@ The driver-answers assumption was not tested: the W109 and W3 pairs (table answe
 (7 of 8 against 4 or 5) came from one flagged raise and a different design choice, not from the
 answers.
 
+The author-time tier for the accounting rows. The 60-word and one-raise margins are the spread between
+two replays of one task. The accounting rows are not noisy: they are totals over 238 tasks, and divided
+by 238 a total that cannot reach the margin never will (E1 can save at most 31.9 Wrong-if words a task,
+E5 remove at most 0.11 raises a task), while divided by the tasks that hold the cost it cannot fall
+below one raise (E5, 1.55 and 1.6). So the first version of this table called E1, E4 and E5 ties by
+construction, and the words "none shown to help past the margins" hid that no accounting result could
+have. These cells use a unit that can fail: the saving as a share of what the author faces in the same
+history (124 raises; 120,271 words read in Determinations and Hypotheses, Summaries not counted), against
+15%, the quality tier's own relative margin (1.5 of 10 clauses). A cell says "observed" when the cap (all
+the tooling raises, all the words) is over 15% and the saving came out under it, and "by construction"
+when the cap is under it or the arm removes nothing. The unit and the 15% are my choice, in the W153.35
+Hypothesis; `docs/dfs-w153-author-unit.py` prints every share. The 60 words and one raise stay for the
+replay arms, where the controls' noise sets them.
+
 | change | evidence | quality | author time | credits | verdict |
 |---|---|---|---|---|---|
-| E1 no page for a Hypothesis, `assumed` | accounting; W17 pooled arm | pooled arm inside the controls' range (one page-less Hypothesis) | 131 of 376 pages would not be made; about 8 fewer `Wrong if` words a task (inside 60); the files cannot show the author opened any page (12 of 18 rulings were on a page-bearing node, 6 on none) | about 1.9k to 2.8k output tokens a task, small | inconclusive |
+| E1 no page for a Hypothesis, `assumed` | accounting; W17 pooled arm | pooled arm inside the controls' range (one page-less Hypothesis) | 131 of 376 pages would not be made, but the files cannot show the author opened any page (12 of 18 rulings were on a page-bearing node, 6 on none): at most 9.7% of the raises, cap 14.5%, so inside by construction; an `assumed` status would cut 4,665 of 7,583 `Wrong if` words (3.9% of the words read, cap 6.3%), inside by construction (about 20 words a task over all projects; the earlier 8 was roadmap-dfs alone) | about 1.9k to 2.8k output tokens a task, small | inconclusive |
 | E2 gate at determination | judge test; W17 pooled arm | no judging evidence (judges did not separate backtracks from controls) | not measured | not measured | inconclusive |
-| E4 checkpoint shows churn and a default | accounting | not measured, and not measurable by replay: the review-count and ten-session checkpoints were removed on 15 and 20 Oct 2026, the worker never read them, and a replay driver answers both arms alike | all 36 raises stay; the author answered stop 2, continue 29, steer 5; a default of stop would have been overridden 23 times of 24 where it fires; 15 of the 29 continues ran on to four or more issues reviews, all on five tasks, and neither the no-fall rule nor a caused-by-the-previous-fix reading separated those tasks from the rest | none | inconclusive |
-| E5 tooling fault filed as a draft | accounting | not measured | removes 17 of 26 tooling raises if "blocks the Goal" means a fix was needed to finish (A), 8 if it means the commit was refused (B); 9 of the 17 need a new permission to go around a refusing hook; pool-wide 0.07 raises a task (A) or 0.03 (B), inside one, but 1.55 and 1.6 in the 11 and 5 tasks that held one | none | inconclusive |
-| E6 word budget on a Determination | accounting; W17 pooled arm | none of the pooled arm's Determinations was over 80 words, so the budget never bit | 80 words refuses 365 of 1,483 and cuts 52 words a task (inside 60); of 36 long ones read in full 1 has its verdict first past word 80 and 13 a hand-off (revert, keep, who does what) | none | inconclusive |
-| E7 minor findings in the review's `ok` | accounting; W17 pooled arm | no review round was owed to a minor node (169 reviews); at least 10 of 484 minor lines (2.1%) came back as the same defect and 29 (6.0%) as a related one | adds 42 words a task over all tasks (inside 60), 137 in the 73 tasks that have a minor node | none | inconclusive |
-| E8 blind reviewer | review-only run on 23 trees, hand-matched | headline: 2 unmet clauses caught by the informed reviewer, 4 by the blind one (p 0.625); headline or minor line 5 against 4 (p 1.000); the pool is 35 targets with power 59% at 60% against 30% catch rates | not measured | not measured | inconclusive |
+| E4 checkpoint shows churn and a default | accounting | not measured, and not measurable by replay: the review-count and ten-session checkpoints were removed on 15 and 20 Oct 2026, the worker never read them, and a replay driver answers both arms alike | no raise removed, so no saving, by construction (36 of 124 raises are loop checkpoints, which no longer exist); the author answered stop 2, continue 29, steer 5; a default of stop would have been overridden 23 times of 24 where it fires; 15 of the 29 continues ran on to four or more issues reviews, all on five tasks, and neither the no-fall rule nor a caused-by-the-previous-fix reading separated those tasks from the rest | none | inconclusive |
+| E5 tooling fault filed as a draft | accounting | not measured | removes 17 of 26 tooling raises if "blocks the Goal" means a fix was needed to finish (A), 8 if it means the commit was refused (B): 13.7% (A) or 6.5% (B) of the 124 raises, cap 21%, so inside 15% as observed (A by 1.3 points); 9 of the 17 need a new permission to go around a refusing hook, leaving 6.5% that need none; each removed raise had blocked its task a median 1.7 h (A) or 1.6 h (B), a wait of the task and not the author's attention | none | inconclusive |
+| E6 word budget on a Determination | accounting; W17 pooled arm | none of the pooled arm's Determinations was over 80 words, so the budget never bit | 80 words refuses 365 of 1,483 and cuts 12,391 words, 10.3% of the words read, inside 15% as observed (a budget of 60 cuts 18.9%, over it); of 36 long ones read in full 1 has its verdict first past word 80 and 13 a hand-off (revert, keep, who does what) | none | inconclusive |
+| E7 minor findings in the review's `ok` | accounting; W17 pooled arm | no review round was owed to a minor node (169 reviews); at least 10 of 484 minor lines (2.1%) came back as the same defect and 29 (6.0%) as a related one | adds 10,014 words read, 8.3% of the words read, inside 15% as observed (cap 18.0%; 42 words a task over all tasks, 137 in the 73 tasks that have a minor node) | none | inconclusive |
+| E8 blind reviewer | review-only run on 23 trees, hand-matched | headline: 2 unmet clauses caught by the informed reviewer, 4 by the blind one (p 0.625); headline or minor line 5 against 4 (p 1.000); the pool is 35 targets with power 63% at 60% against 30% catch rates (59% on the 32 first counted; 49% at 50% against 25%; 80% needs 50 targets) | not measured | not measured | inconclusive |
 
 Reading the table. No change was shown to hurt the delivered tree and none was shown to help it:
 every difference is inside the noise of the evidence that exists, so nothing is adopted or dropped
@@ -966,6 +980,6 @@ killed run's runner alive when a wrapper `timeout` ends the command (W159). W157
 by earlier sessions of W153 and not re-run when filed.
 
 Scripts and outputs: `docs/dfs-w153-mine.py`, `-e1.py`, `-e4.py`, `-e5.py`, `-e6.py`, `-e7.py`,
-`-e8-test.py`, `-e8-hand.py`, `-judge.py`, `-judge-repo.py`, `-build-tool.sh`, with their `.txt` and
+`-e8-test.py`, `-e8-hand.py`, `-author-unit.py`, `-judge.py`, `-judge-repo.py`, `-build-tool.sh`, with their `.txt` and
 `.tsv` beside them, the answer tables in `docs/dfs-w153-answers.md` and the W17 scores in
 `docs/dfs-w153-w17-scores.jsonl`.
