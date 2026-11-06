@@ -910,3 +910,62 @@ A replay needs the configured agent's binary (claude, codex, kiro-cli or opencod
 (both from nixpkgs at the agent pin; `REPLAY_CLAUDE_CODE`, `REPLAY_KIRO_CLI`, `REPLAY_CODEX`,
 `REPLAY_OPENCODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
 (inside the repo's ignored `.dfs/runs` works on the box used here).
+
+### Seven changes weighed by the author's time (W153)
+
+W153 took seven changes to the hypothesis workflow and judged each on three tiers in this order:
+quality of the delivered tree, the author's time, credits. The order, the margins and the verdict
+rule are in `docs/dfs-w153-measures.md`; the order and the tie-break between tiers are my choice and
+were stated there as a Hypothesis, not seen by the author. Margins: quality 1.5 clauses (the judge's
+spread), words 60 a tree, counts one a tree, credits 2 times. A change whose evidence is inside the
+margin is called inconclusive, never adopt or drop. Every count reads roadmap-dfs, shop-app and
+farm-app as at d595c44a (1,519 nodes, 124 raises, 25 backtracks); today's files have grown
+(1,708 nodes), and the scripts in `docs/dfs-w153-*.py` rerun each count.
+
+What each kind of evidence can say here. Accounting (reading task files) shows what a change would
+have removed, not whether the tree got worse without it. The judges did not work: the text-only E2
+judge flagged 36 of 50 judgings of backtracked nodes and 53 of 82 of unchallenged ones (Fisher p
+0.43), and the judge that reads the repository flagged 2 of 12 backtracks and 0 of 12 controls (p
+0.239, 10 missed; 7 of the 12 critics' faults came from re-running something, which a read-only judge
+cannot do). Replay evidence is one task. On W17 the three controls met 5.0, 7.5 and 8.0 of 10
+clauses (a spread of 3, twice the judge's 1.5) and the pooled arm (E1, E2, E6, E7) met 6.5, so a gap
+under about 3 clauses is invisible, and no raise happened in any kept arm, so E4 and E5 had no case.
+The driver-answers assumption was not tested: the W109 and W3 pairs (table answers against a blank
+"proceed") never used a table answer, because the table arm raised nothing. W3's 2.5-clause gap
+(7 of 8 against 4 or 5) came from one flagged raise and a different design choice, not from the
+answers.
+
+| change | evidence | quality | author time | credits | verdict |
+|---|---|---|---|---|---|
+| E1 no page for a Hypothesis, `assumed` | accounting; W17 pooled arm | pooled arm inside the controls' range (one page-less Hypothesis) | 131 of 376 pages would not be made; about 8 fewer `Wrong if` words a task (inside 60); the files cannot show the author opened any page (12 of 18 rulings were on a page-bearing node, 6 on none) | about 1.9k to 2.8k output tokens a task, small | inconclusive |
+| E2 gate at determination | judge test; W17 pooled arm | no judging evidence (judges did not separate backtracks from controls) | not measured | not measured | inconclusive |
+| E4 checkpoint shows churn and a default | accounting | not measured | all 36 raises stay; the author answered stop 2, continue 29, steer 5; a default of stop would have been overridden 23 times of 24 where it fires; 15 of the 29 continues ran on to four or more issues reviews, all on five tasks, and neither the no-fall rule nor a caused-by-the-previous-fix reading separated those tasks from the rest | none | inconclusive |
+| E5 tooling fault filed as a draft | accounting | not measured | removes 17 of 26 tooling raises if "blocks the Goal" means a fix was needed to finish (A), 8 if it means the commit was refused (B); 9 of the 17 need a new permission to go around a refusing hook; pool-wide 0.07 raises a task (A) or 0.03 (B), inside one, but 1.55 and 1.6 in the 11 and 5 tasks that held one | none | inconclusive |
+| E6 word budget on a Determination | accounting; W17 pooled arm | none of the pooled arm's Determinations was over 80 words, so the budget never bit | 80 words refuses 365 of 1,483 and cuts 52 words a task (inside 60); of 36 long ones read in full 1 has its verdict first past word 80 and 13 a hand-off (revert, keep, who does what) | none | inconclusive |
+| E7 minor findings in the review's `ok` | accounting; W17 pooled arm | no review round was owed to a minor node (169 reviews); at least 10 of 484 minor lines (2.1%) came back as the same defect and 29 (6.0%) as a related one | adds 42 words a task over all tasks (inside 60), 137 in the 73 tasks that have a minor node | none | inconclusive |
+| E8 blind reviewer | review-only run on 23 trees, hand-matched | headline: 2 unmet clauses caught by the informed reviewer, 4 by the blind one (p 0.625); headline or minor line 5 against 4 (p 1.000); the pool is 35 targets with power 59% at 60% against 30% catch rates | not measured | not measured | inconclusive |
+
+Reading the table. No change was shown to hurt the delivered tree and none was shown to help it:
+every difference is inside the noise of the evidence that exists, so nothing is adopted or dropped
+on this round. What would settle each: E1, E6 and E7 need three or more paired tasks that raise
+hypotheses and minor findings (the W17 spread alone is 3 clauses); E4 and E5 need a replayed task
+that reaches a loop checkpoint or a tooling fault, which W17 did not; E8 needs about 50 targets and
+the blind reviewer run with the git history closed (it ran `git log`, `git show` or `git diff` in
+all 20 first trees, and its output held 12 of 78 Determinations and 4 Summaries in 5 trees); E2
+needs a judge that can run the node's check, since most critic backtracks rested on a rerun.
+The E6 hand-off finding is the one to watch if a budget is tried: a verdict is rarely lost, a
+hand-off often. The 8 tooling raises E5 can remove without a new permission are the part of E5
+that costs the law nothing.
+
+Tooling faults found on the way were filed as draft tasks and not fixed in W153:
+`artefact_check.sh` reports every page blank when fontconfig has no default config (W156, verified
+again here on the shipped template: `FAIL blank` without a config, `clean` with one),
+`tree.py shelve` leaving the task file over its budget on a commit that grows it (W157),
+`tree.py start` lost when the task file is restored from git (W158), and `replay.py run` leaving the
+killed run's runner alive when a wrapper `timeout` ends the command (W159). W157 to W159 were seen
+by earlier sessions of W153 and not re-run when filed.
+
+Scripts and outputs: `docs/dfs-w153-mine.py`, `-e1.py`, `-e4.py`, `-e5.py`, `-e6.py`, `-e7.py`,
+`-e8-test.py`, `-e8-hand.py`, `-judge.py`, `-judge-repo.py`, `-build-tool.sh`, with their `.txt` and
+`.tsv` beside them, the answer tables in `docs/dfs-w153-answers.md` and the W17 scores in
+`docs/dfs-w153-w17-scores.jsonl`.
