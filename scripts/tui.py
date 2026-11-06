@@ -295,20 +295,35 @@ def tree_rule_name(cur, short=False):
         cur["id"], cur["status"], n, "" if n == 1 else "s")
 
 
+_COMMIT_PATHS = {}   # (repo root, sha) -> the paths that commit changed
+
+
+def commit_paths(sha):
+    """The paths one commit changed, or `None` when git cannot show it. A commit's file list
+    never changes, so a good answer is kept for the life of the process: the web page draws
+    every node of a task on each request, and one `git show` a node each time is too slow.
+    A failure is not kept, since the commit may arrive later."""
+    key = (ROOT, sha)
+    if key not in _COMMIT_PATHS:
+        try:
+            r = subprocess.run(["git", "show", "--name-only", "--format=", sha],
+                               capture_output=True, text=True, cwd=ROOT, timeout=5)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if r.returncode != 0:
+            return None
+        _COMMIT_PATHS[key] = [p for p in r.stdout.splitlines() if p]
+    return _COMMIT_PATHS[key]
+
+
 def commit_files(shas, limit=12):
     """The code files a node's commits changed, as one line: `a.py, b.py` and `+3 more`.
     The planning files (`.dfs/`) are left out, since the node's own text is what changed there.
     A commit git cannot show (a test's made-up sha) adds nothing."""
     seen = []
     for sha in shas[:8]:
-        try:
-            r = subprocess.run(["git", "show", "--name-only", "--format=", sha],
-                               capture_output=True, text=True, cwd=ROOT, timeout=5)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        if r.returncode == 0:
-            seen += [p for p in r.stdout.splitlines()
-                     if p and not p.startswith(".dfs/") and p not in seen]
+        seen += [p for p in commit_paths(sha) or ()
+                 if not p.startswith(".dfs/") and p not in seen]
     shown = ", ".join(seen[:limit])
     return shown + (" · +%d more" % (len(seen) - limit) if len(seen) > limit else "")
 

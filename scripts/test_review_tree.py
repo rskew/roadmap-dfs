@@ -329,6 +329,39 @@ class Detail(unittest.TestCase):
             finally:
                 TUI.ROOT = was
 
+    def test_a_commit_is_shown_to_git_once(self):
+        """The web page draws every node of a task on each request, so the Files line must not
+        run `git show` again for a commit it has read; a commit git cannot show is tried again."""
+        import os, subprocess, tempfile
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        with tempfile.TemporaryDirectory() as d:
+            def git(*a):
+                return subprocess.run(["git", *a], cwd=d, env=env, capture_output=True,
+                                      text=True, check=True).stdout.strip()
+            git("init", "-q")
+            open(os.path.join(d, "b.py"), "w").write("x")
+            git("add", "-A")
+            git("commit", "-q", "-m", "W1.1: change")
+            sha = git("rev-parse", "HEAD")
+            calls, real_run = [], subprocess.run
+            def counting(cmd, *a, **k):
+                calls.append(cmd)
+                return real_run(cmd, *a, **k)
+            was = TUI.ROOT
+            TUI.ROOT = d
+            TUI.subprocess.run = counting
+            try:
+                self.assertEqual(TUI.commit_files([sha]), "b.py")
+                self.assertEqual(TUI.commit_files([sha]), "b.py")
+                self.assertEqual(len(calls), 1)
+                TUI.commit_files(["0" * 40])
+                TUI.commit_files(["0" * 40])
+                self.assertEqual(len(calls), 3)
+            finally:
+                TUI.subprocess.run = real_run
+                TUI.ROOT = was
+
     def test_the_tree_rule_names_the_sessions_it_counts(self):
         cur = {"id": "W9", "status": "open", "sessions": 12}
         self.assertEqual(TUI.tree_rule_name(cur), "tree · W9 · open · 12 sessions since you spoke")
