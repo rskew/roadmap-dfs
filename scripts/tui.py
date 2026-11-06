@@ -5282,6 +5282,9 @@ class UiWalker:
     def set_agent(self, name):
         self.ui.call_soon(lambda: self.ui.set_agent(name))
 
+    def set_model(self, role, name):
+        self.ui.call_soon(lambda: self.ui.set_model(role, name))
+
     def agent(self):
         return self.ui.agent
 

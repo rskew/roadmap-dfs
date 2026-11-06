@@ -19,6 +19,7 @@ import time
 import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -278,6 +279,18 @@ class OverHttp(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/walk/stop", {})[0], 200)
         self.assertFalse(self.ui.walk_on)
         self.assertEqual(self.call("GET", "/api/walk")[1]["note"], "stopped by hand")
+
+    def test_the_page_chooses_the_screens_models_and_never_gets_a_dropped_connection(self):
+        # The terminal-hosted server once had no model action: the request raised AttributeError and the socket
+        # closed with no reply, which a proxy in front shows as 502.
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
+            status, snap = self.call("POST", "/api/walk/model", dict(role="implement", model="opus"))
+            self.assertEqual((status, snap["models"]["implement"]), (200, "opus"))
+            self.assertEqual(self.ui.models()["implement"], "opus")          # the SCREEN's choice moved
+            self.assertEqual(self.call("POST", "/api/walk/model", dict(role="review", model="opus"))[0], 409)
+            with mock.patch.object(TUI.UiWalker, "set_model", side_effect=RuntimeError("boom")):
+                status, body = self.call("POST", "/api/walk/model", dict(role="implement", model="opus"))
+            self.assertEqual((status, "boom" in body["error"]), (500, True))   # any failure is answered, in JSON
 
     def test_the_page_starts_the_screens_walk_with_parallel_chains(self):
         self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=6, parallel=2))[0], 200)
