@@ -2,22 +2,33 @@
 
 Fixed before any W153 count. Nothing below was read off a result.
 
-## What this box can run (checked 2026-11-06)
+## What this box can run (checked 2026-11-06, redone after the critic's backtrack)
+
+The first check here said proot cannot start (seccomp). That was wrong: the cause was `/tmp`, which is
+`tmpfs ... noexec` on this box (`mount`), and proot refuses a temporary directory with no execute
+permission. `replay.py` sets `PROOT_TMP_DIR` to `<DEST>/box/tmp`, so a DEST on an executable mount works.
+The repo's mount (`/workspace/roadmap-dfs`, zfs) is executable; `$HOME` and `/tmp` are not.
 
 | Need | Result | How checked |
 | --- | --- | --- |
-| Agent for judges and review-only runs | `kiro-cli` 2.35.1 only, logged in. No `claude`, no `codex`. | `which`; `kiro-cli whoami`; `kiro-cli chat --no-interactive "Reply with the single word: ok"` printed `ok` |
-| `replay.py` itself | runs: `plan W97` and `candidates` print | ran both |
-| Replay sandbox (`replay.py run`, `docs/dfs-review-only.py`) | **cannot run.** Both put the sessions in proot. proot 5.5.0 is in the nix store, but here it stops with "the loader was not found or doesn't work" and "can't chmod ... proot-...". This process has a seccomp filter (`/proc/self/status`: `Seccomp: 2`); `unshare -r true` is also refused. No `bwrap`. | ran proot on an empty root with `/nix/store` bound |
+| Agent for judges and review-only runs | `kiro-cli` 2.35.1 only, logged in (IAM Identity Center). No `claude`, no `codex`. | `which`; `kiro-cli whoami`; `kiro-cli chat --no-interactive "Reply with the single word: ok"` printed `ok` |
+| `replay.py` itself | runs | `plan W17`, `candidates` print |
+| Replay sandbox | **runs**, with DEST on the repo's mount (here `.dfs/runs/dfs-replay-w153-probe`, gitignored). kiro-cli runs inside proot. The Seccomp: 2 line and the refused `unshare -r` do not stop it. | `replay.py prepare W54 DEST --agent kiro` (0.4 s), then `replay.py run DEST W54 --cap 2 --agent kiro`: 2 sessions, exit 0 both, 23 turns, 6 min wall, W54.1 confirmed; `replay.py score` read 3.8 credits |
+| Replay sandbox with DEST in `/tmp` or under `$HOME` | **does not start** (proot: temporary directory has no execution permission) | the critic's run with the default `/tmp`; `mount` |
+| `docs/dfs-review-only.py` (E8) | Same sandbox call (`sandbox_argv`, `PROOT_TMP_DIR` in `<copy>/box/tmp`), so it runs when REPLAYS_DIR is on the repo's mount (`.dfs/runs/replays` is). Not itself run in this node. | read the script; same `make_box` and `sandbox_argv` as `replay.py run` |
 | Artefact check | runs only with a font config. Without one it reports `blank` even for the unmodified `_TEMPLATE.html` (Fontconfig error: no default config). With `FONTCONFIG_FILE` naming the DejaVu directory it is clean. | ran it on the template and on this task's page |
 | History data | `/workspace/roadmap-dfs/.dfs/{items,runs,archive}` and `optimisation-data/{shop-app,farm-app}` are in the main checkout, read-only for this task. They are not in the W153 worktree (`optimisation-data` is gitignored, `.dfs/runs` is untracked). The old scratch scripts are still in `/tmp/dfsmine`. | `ls` |
 | Replay trees | 20 in `.dfs/runs/replays` (W11, W22, W36, W5, each 5 arms), 4 in `optimisation-data` (W132-k1, W17-k1c, W17-k1w, W17-k2c) | `ls` |
 
+Limits that did show: a replay session is slow (6 minutes for two cheap sessions, so a dear task is
+hours, in the foreground, under one hour a command), and kiro reports credits per session (3.8 for the
+two above; a dear replay is 20 to 95 or more). No sign-in problem inside the box: kiro-cli answered.
+
 What that decides:
 
 - Accounting nodes (E1, E4, E5, E6, E7): can run. They read task files.
-- Judging nodes (E2 judge, E8 reviewer): the judge can run with `kiro-cli chat --no-interactive` over finished trees. E8's review-only run uses `docs/dfs-review-only.py`, which needs proot, so it is **parked** unless the judge is rebuilt to read the finished tree without the sandbox (a plain `kiro-cli` call with the review briefing and the tree text; its working tree is then not isolated, which is a change to the method and must be said when it is used).
-- Replay nodes (answer-table pair, E1/E2/E6/E7 arms, E4/E5 where reached): **parked** for lack of a sandbox. A replay that cannot start is not a replay result, so the per-change verdicts in the last node rest on accounting and judging alone and say so.
+- Judging nodes (E2 judge, E8 reviewer): can run with `kiro-cli chat --no-interactive`; E8's review-only run can run too.
+- Replay nodes (answer-table pair, E1/E2/E6/E7 arms, E4/E5 where reached): can run, bounded by wall time and credits.
 - The count of nodes in the three projects is now 154 + 66 + 31 tasks and 1,064 + 435 + 209 = 1,708 nodes (`audit.load_tasks`), against the 1,519 of the 2026-11-05 pass. The history grew. Counts are reproduced from today's files and the gap is reported, not forced.
 
 ## Order of the tiers
