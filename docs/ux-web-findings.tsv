@@ -1,0 +1,10 @@
+old finding (docs/tui-ux-review.md)	web page: what the DOM carries (docs/ux-web-render.txt, 390px window)	carried?
+no skim view of what each node found	every node row has a skim line: W2 3 of 3, W3 6 of 6, W7 3 of 3, W9 8 of 8 (JSON `skim` and DOM `.skim` agree)	yes
+falsifier cut off in the row	the closed row never shows the "Wrong if" (only the skim and an "assumption" tag, 0 "wrong if" words in the task page text); the opened node sheet (#/t/W9/W9.2) has "Wrong if" as its own block whole, W2.2, W9.2, W9.3, W9.6 each checked	whole when opened, not on the closed row; whether the 2-line skim is clipped (CSS line-clamp) is layout, unseen
+answered raises vanish	W7.2 row has the "answered" tag and its sheet holds the raise text and the answer text ("Sales will give the numbers later")	yes
+a correction leaves a stale "confirmed"	W3.2 row has class overruled; its sheet says "you overruled this: the agent said confirmed, you said refuted" and "You corrected this to refuted"	yes
+accept prompt names ids, not assumptions	clicking Accept on W2 opens a dialog (textContent read) that lists "W2.2 wrong if the author wants hard failure for everyone." and the reviewer's note whole; W9 is not finished, so the form cannot open there (its JSON `assumed` has 3 entries with their falsifiers)	yes, on W2
+reviewer and critic notes hidden	the task page of W2, W3 and W9 carries the note heading in its text (W2, W3 review, W9 critic); the accept dialog quotes the notes	yes
+a flagged node stands out	the DOM has 1 row of class "assumes" for W2 and 3 for W9, the same as the JSON; there is a "Flagged nodes only" and a "Next flagged" button	yes
+fits a phone	scrollWidth equals the 390px viewport on W2, W3, W7 and W9 (no sideways scroll)	yes
+colour, clipping, the row's height, how the sheet covers the page	not readable from a DOM	unseen
