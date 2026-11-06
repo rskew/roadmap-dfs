@@ -632,13 +632,14 @@ def standalone_notes(task, text, head=None, archive=""):
     return out
 
 
-FALSIFIER_ON_PAGE = re.compile(r"wrong if|would show[^.<]{0,30}wrong|would prove[^.<]{0,30}wrong", re.I)
+# "Wrong if ...", or the same said as a ruling: "Refute this if ...", "If you want X, refute the node".
+FALSIFIER_ON_PAGE = re.compile(r"wrong if|would (?:show|prove)[^.<]{0,30}wrong|refute[sd]?\b[^.<]{0,30}\bif\b|\bif you (?:want|meant|mean|need)\b[^.<]{0,80}\brefute", re.I)
 
 
 def falsifier_notes(task, text, head, read, archive="", head_archive=""):
     """Notes (not violations) on a live Hypothesis, new or changed in `text`, whose named
-    answer page never says what would show the assumption wrong. The confirm/refute form
-    shows only the page, so a page without it asks the author to rule without the test.
+    answer page never says what would show the assumption wrong. The web page's confirm/refute
+    form shows only the page, so a page without it asks the author to rule without the test.
     Judged on the same nodes as `check_assumptions`. Advice only: the guard does not
     refuse a commit for it, and a page that does not exist is that check's to refuse."""
     t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
@@ -658,7 +659,7 @@ def falsifier_notes(task, text, head, read, archive="", head_archive=""):
         pages = [p for p in pages if p is not None]
         if pages and not any(FALSIFIER_ON_PAGE.search(p) for p in pages):
             out.append("%s's answer page never says what would show the assumption wrong. "
-                       "The confirm/refute form shows only the page: put the `Wrong if` "
+                       "The web page's confirm/refute form shows only the page: put the `Wrong if` "
                        "test on it, in words the author can check." % nd["id"])
     return out
 

@@ -588,6 +588,9 @@ class Check(InARepo):
         self.assertEqual(len(notes), 1)
         self.assertIn("W1.1", notes[0])
         self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read(said)), [])
+        ruled = {"a1.html": "<p>Refute this if you meant the terminal screen.</p>" + self.PAGE}
+        self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read(ruled)), [],
+                         "the test said as a ruling counts")
         self.assertEqual(dfs_check.falsifier_notes("W1", text, text, read(bare)), [],
                          "a node already at HEAD with its Hypothesis unchanged is history")
         self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read({})), [],
