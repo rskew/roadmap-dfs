@@ -1,0 +1,17 @@
+page	task	named_by	shape	mechanism_drawn	choice_on_page	falsifier_on_page	posts_ruling	note
+80c2cc95	W41	hypothesis	mock-up of the screen's top bar, a length slider, option buttons	yes (the bar itself)	yes	yes	own form	shows the name cut to one line at the chosen length, so the reader sees the consequence
+8fbaeebd	W17	hypothesis	four buttons that swap one paragraph	no (text swap)	yes	yes	no	cannot post a ruling; the author rules in the terminal
+bc930b62	W17	hypothesis	two button rows that swap one paragraph	no (text swap)	yes	yes	no	cannot post a ruling
+7366b183	W73	hypothesis	three buttons that swap one paragraph	no (text swap)	yes	yes	own form	the attachment flow it argues about is not drawn
+1fc45203	W75	hypothesis	two-column flow: boxes joined by arrows, one per option	yes (flow)	yes	yes	shared form	"Today" and "the alternative" captions state what follows from each option
+aa2eb367	W75	hypothesis	same flow shape, kill -9 case	yes (flow)	yes	yes	shared form	
+0516321c	W110	hypothesis	bar chart of server time per request, one scale for three cases	yes (measured chart)	yes	yes	shared form	numbers measured in-process; the bars move with the button
+a5f9d408	W117	hypothesis	phone mock of the list top bar, four readings as buttons	yes (mock)	yes	yes (three readings)	shared form	two radio options on the form match the page's readings
+29494370	W140	hypothesis	mock rows of the Reorder list in three states	yes (mock)	yes	yes	shared form	"What follows" list sits under the mock
+977f9553	W106	hypothesis	three boxes: parse_nodes, check_shape, the screens, for three options	yes (flow of the code)	yes	yes	shared form	names the functions on each box
+100917c6	W130	hypothesis	table of 29 reviews' first lines; tap a row to reclass	partly (table of data)	yes	no	shared form	data the author can change by tapping; the page never says what would show the reading wrong
+3b7e91c4	W111	hypothesis	live pane of 20 rows; Up and Down behave per the chosen mode	yes (working demo)	yes	no	shared form	the author feels the difference; no falsifier on the page
+71d482ab	W123	hypothesis	four row styles drawn as real HTML at chosen width	yes (the real thing)	yes	no	shared form	measured by the browser; no falsifier on the page
+1b9b28c6	W130	hypothesis	pick-a-rule buttons and a results table	partly (table)	yes	no	shared form	numbers move with the rule; no falsifier on the page
+34f70ca4	W141	hypothesis	three buttons, a small sequence diagram per option	yes (sequence)	yes	no	shared form	the "wrong file" step is shown; no falsifier on the page
+c26f1731	W136	explainer	code explainer (2,352 words)	yes (data-flow sections)	n/a	n/a	no	an illustration, not a decision; no form needed
