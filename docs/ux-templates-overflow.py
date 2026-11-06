@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draw every artefact page with and without `overflow-wrap: anywhere` on its body (W131.48).
 
-    FONTCONFIG_FILE=<conf naming a font dir> [WRAP=break-word] python3 docs/ux-templates-overflow.py OUT_DIR [ARTEFACT_DIR]
+    FONTCONFIG_FILE=<conf naming a font dir> [WRAP=break-word] [SELECTOR='p, li'] python3 docs/ux-templates-overflow.py OUT_DIR [ARTEFACT_DIR]
 
 Both artefact templates now carry `overflow-wrap: anywhere` on `body`. Unlike `break-word`, `anywhere` also lowers the
 min-content width of every box, flex item and table cell to one character, so a row that used to widen or wrap
@@ -32,7 +32,8 @@ os.makedirs(out, exist_ok=True)
 from playwright.sync_api import sync_playwright
 
 VALUE = os.environ.get("WRAP", "anywhere")   # WRAP=break-word draws the alternative
-RULE = "body { overflow-wrap: %s; }" % VALUE
+SELECTOR = os.environ.get("SELECTOR", "body")   # SELECTOR="p, li, h1" scopes it
+RULE = "%s { overflow-wrap: %s; }" % (SELECTOR, VALUE)
 
 MEASURE = r"""
 () => {
