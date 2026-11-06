@@ -31,3 +31,6 @@ W5-c1c/C7	-	-	no finding about the terminal screen
 W5-c2a/C4	-	-	no finding about lists
 W5-c2a/C5	-	-	no finding about fences in the clause's sense (informed F2 minor is about chat md only)
 W5-c2a/C7	-	-	no finding about the terminal screen
+W132-k1/C1	-	-	both reviews ok (no findings)
+W17-k1w/C2	-	D	blind F1: without os.waitid (macOS before Python 3.13) the pump dies and the group is never killed; informed review ok
+W17-k1w/C7	-	-	blind findings do not name the idle close (informed ok)

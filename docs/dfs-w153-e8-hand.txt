@@ -1,4 +1,4 @@
-targets: 32
+targets: 35
 headline (P): informed 2, blind 4, both 1, informed only 1, blind only 3, sign test p = 0.625
 strict (P or M): informed 5, blind 4, both 2, informed only 3, blind only 2, sign test p = 1.000
-lenient (P, M or D): informed 7, blind 7, both 3, informed only 4, blind only 4, sign test p = 1.000
+lenient (P, M or D): informed 7, blind 8, both 3, informed only 4, blind only 5, sign test p = 1.000

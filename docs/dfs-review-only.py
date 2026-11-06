@@ -42,6 +42,21 @@ def leaks(original, raw):
     return (sum(1 for d in dets if d[:60] in raw), int(bool(summ and summ.group(1)[:60] in raw)), len(dets))
 
 
+def onto_unmerged(dst, task):
+    """A tree the chain never merged keeps its work and task file in a nested worktree
+    (.dfs/worktrees/<task>, branch dfs/<task>), so the copy's own task file is the starting one and a
+    blind strip of it leaves the nested file whole (W153.20). In the scratch copy only, drop the nested
+    worktree and put the copy on the branch tip, so the task file the reviewer reads is the one stripped."""
+    nested = dst / ".dfs" / "worktrees" / task
+    if not nested.is_dir():
+        return False
+    shutil.rmtree(nested)
+    git = ["git", "-C", str(dst), "-c", "core.hooksPath=/dev/null"]
+    subprocess.run(git + ["worktree", "prune"], check=True)
+    subprocess.run(git + ["reset", "-q", "--hard", f"dfs/{task}"], check=True)
+    return True
+
+
 def review(root, tool, replay_mod, name, suffix, blind=False):
     task, tag = name.rsplit("-", 1)
     src = root / f"dfs-replay-{name}"
@@ -50,6 +65,7 @@ def review(root, tool, replay_mod, name, suffix, blind=False):
         replay_mod.remove_tree(dst)
         replay_mod.remove_tree(replay_mod.box_of(dst))
     shutil.copytree(src, dst, symlinks=True)
+    onto_unmerged(dst, task)
     taskfile = dst / ".dfs" / "items" / f"{task}.md"
     original = taskfile.read_text()
     if blind:

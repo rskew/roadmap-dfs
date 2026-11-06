@@ -17,6 +17,13 @@ LINE = re.compile(r"\b(C\d+)\s*\|\s*(not met|met)\s*\|\s*([^|]*?)\s*\|", re.I)  
 CREDITS = re.compile(r"Credits:\s*([\d.]+)")
 
 
+def tip_of(clone, task):
+    """The repository the delivered tree is read from: a tree the chain never merged has its work in the
+    nested worktree .dfs/worktrees/<task> (branch dfs/<task>); the main copy is the starting tree (W153.20)."""
+    nested = Path(clone) / ".dfs" / "worktrees" / task
+    return nested if (nested / ".git").exists() else Path(clone)
+
+
 def start_of(clone, task):
     out = subprocess.run(["git", "-C", str(clone), "log", "--format=%H", f"--grep=^replay: {task} as the author left it"],
                          capture_output=True, text=True, check=True).stdout.split()
@@ -25,6 +32,7 @@ def start_of(clone, task):
 
 def snapshot(clone, task, dest):
     """Blind copy of the delivered tree: no .dfs, no history, no arm name."""
+    clone = tip_of(clone, task)
     start = start_of(clone, task)
     tree = Path(dest) / "work"
     tree.mkdir(parents=True)
