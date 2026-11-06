@@ -614,6 +614,9 @@ class Web(unittest.TestCase):
         self.assertRegex(src, r"max-width: 899\.98px\) \{ \.fab, \.fab-gap \{ display: none")
         quote = css[css.index("dialog .quote {"):]
         self.assertIn("no-repeat local", quote[:quote.index("}")])
+        # The form is a flex column that scrolls: without `flex: none` the box shrank to its padding (20px) in the
+        # Accept dialog of a task with several assumptions, and its notes could not be read.
+        self.assertIn("flex: none", quote[:quote.index("}")])
 
     def test_the_viewer_route_and_its_frame_are_keyed_on_task_and_name(self):
         """route() and drawArtefact() in index.html, run under node (skipped when there is none)."""
