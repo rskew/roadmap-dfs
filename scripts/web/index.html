@@ -267,12 +267,13 @@ dl.keys kbd { font: inherit; font-weight: 600; white-space: pre; }
 .walk .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
 .walk .chain span:first-child { overflow-wrap: anywhere; }
 .walk details { margin-top: 6px; }
-.walk details > summary { min-height: calc(40px * var(--z)); display: flex; align-items: center; cursor: pointer; list-style: none; }
+.walk details > summary { min-height: var(--hit); display: flex; align-items: center; cursor: pointer; list-style: none; }
 .walk details > summary::after { content: ""; margin-left: 10px; width: 6px; height: 6px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 .walk details[open] > summary::after { transform: rotate(-135deg); }
 .walk details summary::-webkit-details-marker { display: none; }
 .walk .ev { margin: 0; padding: 0 0 10px; list-style: none; font-size: calc(14px * var(--z)); color: var(--muted); }
 .walk .ev li { padding: 2px 0; display: flex; gap: 10px; }
+.walk .ev li span { min-width: 0; overflow-wrap: anywhere; }   /* the runner line is one long path: it wraps and does not push the box sideways */
 .walk .ev time { flex: none; width: 5.5em; font-variant-numeric: tabular-nums; }
 
 /* one task */

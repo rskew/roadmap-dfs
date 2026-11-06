@@ -624,6 +624,13 @@ class Web(unittest.TestCase):
         # The raw `Answer with: .dfs/artefacts/<uuid>.html` line is not shown above the frame that is that page.
         self.assertIn("r.body.replace(/^[ \\t]*Answer with:", src)
 
+    def test_the_walk_boxs_activity_list_wraps_the_runner_line_and_is_a_44px_target(self):
+        """Read from the page's source: the Activity line `$ <path>/run.sh W7 1 (pid N)` is one unbreakable word, which
+        pushed the walk box sideways at 320px (377 of 320 wide), and the Activity summary was 40px high."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertRegex(src, r"\.walk \.ev li span \{[^}]*overflow-wrap: anywhere")
+        self.assertRegex(src, r"\.walk details > summary \{ min-height: var\(--hit\);")
+
     def test_the_viewer_route_and_its_frame_are_keyed_on_task_and_name(self):
         """route() and drawArtefact() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
