@@ -353,6 +353,19 @@ class Pane(unittest.TestCase):
         self.ui.tree_of = lambda task: (t, ARCHIVE, {})
         return t
 
+    def test_a_closed_nodes_wrong_if_wraps_whole_at_a_narrow_width(self):
+        wrong = "a second writer of the cursor exists somewhere in the sync path"
+        t = dfs_tree.parse(TREE.replace(
+            "Status: confirmed\nApproach: go deeper.",
+            "Status: confirmed\nApproach: go deeper.\nHypothesis: it holds. Wrong if %s.\n"
+            "Determination: Confirmed: it holds." % wrong), "W1")
+        self.ui.tree_of = lambda task: (t, ARCHIVE, {})
+        self.ui.open_tree()
+        for width in (40, 80):
+            lines = [l for l, *_ in self.ui.lines_tree(width)]
+            text = " ".join(" ".join(lines).split())
+            self.assertIn("wrong if " + wrong, text, "whole, not ended with an ellipsis")
+
     def test_n_walks_the_raises_and_assumptions_and_wraps(self):
         ui = self.ui
         self.flagged_tree()

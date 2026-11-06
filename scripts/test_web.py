@@ -1463,6 +1463,8 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         n = rows["W1.2"]
         self.assertEqual(n["skim"], "memory is flat over 10k ids.")
         self.assertTrue(n["assumes"] and n["ask"])
+        self.assertEqual(n["wrong"], "a client returns inside one window.")
+        self.assertEqual(rows["W1.1"]["wrong"], "", "a node with no Hypothesis has none")
         roles = [r for r, _ in n["card"]]
         self.assertNotIn("head", roles, "the heading is the row")
         self.assertIn(["amber", "Idle buckets are safe to drop."], n["card"])

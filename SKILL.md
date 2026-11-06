@@ -241,7 +241,7 @@ EOF
 ```
 
 The first line comes first because the author often answers in a word or two, and a long
-raise (often several hundred words; `docs/ux-raises.py` counts them) hides what is being asked. A Hypothesis page likewise says on
+raise (often several hundred words) hides what is being asked. A Hypothesis page likewise says on
 the page what would show the assumption wrong: the confirm/refute form shows only the page,
 and `check.py` prints a note when it does not.
 
