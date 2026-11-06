@@ -632,8 +632,14 @@ def standalone_notes(task, text, head=None, archive=""):
     return out
 
 
-# "Wrong if ...", or the same said as a ruling: "Refute this if ...", "If you want X, refute the node".
-FALSIFIER_ON_PAGE = re.compile(r"wrong if|would (?:show|prove)[^.<]{0,30}wrong|refute[sd]?\b[^.<]{0,30}\bif\b|\bif you (?:want|meant|mean|need)\b[^.<]{0,80}\brefute", re.I)
+# "Wrong if ...", or the same said as a ruling: "Refute this if ...", "Refuted if ...",
+# "If you want X, refute the node". Not any "refuted ... if" in running prose.
+FALSIFIER_ON_PAGE = re.compile(
+    r"wrong if|would (?:show|prove)[^.<]{0,30}wrong"
+    r"|\brefute (?:this|it|the (?:node|assumption|hypothesis))\b[^.<]{0,30}\bif\b|\brefuted if\b"
+    r"|\bif you (?:want|meant|mean|need)\b[^.<]{0,80}\brefute", re.I)
+# What the author sees of a page is its text: a phrase only in a comment, script or style is not on it.
+HIDDEN_IN_PAGE = re.compile(r"<!--.*?-->|<(script|style)\b.*?</\1\s*>", re.S | re.I)
 
 
 def falsifier_notes(task, text, head, read, archive="", head_archive=""):
@@ -657,7 +663,7 @@ def falsifier_notes(task, text, head, read, archive="", head_archive=""):
             continue
         pages = [read(dfs_paths.artefacts() / n) for n in ARTEFACT_REF.findall(h)]
         pages = [p for p in pages if p is not None]
-        if pages and not any(FALSIFIER_ON_PAGE.search(p) for p in pages):
+        if pages and not any(FALSIFIER_ON_PAGE.search(HIDDEN_IN_PAGE.sub('', p)) for p in pages):
             out.append("%s's answer page never says what would show the assumption wrong. "
                        "The web page's confirm/refute form shows only the page: put the `Wrong if` "
                        "test on it, in words the author can check." % nd["id"])

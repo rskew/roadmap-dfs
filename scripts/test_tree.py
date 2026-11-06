@@ -591,6 +591,13 @@ class Check(InARepo):
         ruled = {"a1.html": "<p>Refute this if you meant the terminal screen.</p>" + self.PAGE}
         self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read(ruled)), [],
                          "the test said as a ruling counts")
+        hidden = {"a1.html": "<script>// Wrong if it breaks</script><style>/* wrong if */</style>"
+                              "<!-- Refute this if --><p>Refuted, then built.</p>" + self.PAGE}
+        self.assertEqual(len(dfs_check.falsifier_notes("W1", text, None, read(hidden))), 1,
+                         "a phrase only in a script, style or comment is not on the page")
+        prose = {"a1.html": "<p>The option was refuted and built later if at all.</p>" + self.PAGE}
+        self.assertEqual(len(dfs_check.falsifier_notes("W1", text, None, read(prose))), 1,
+                         "'refuted ... if' in running prose is not a test")
         self.assertEqual(dfs_check.falsifier_notes("W1", text, text, read(bare)), [],
                          "a node already at HEAD with its Hypothesis unchanged is history")
         self.assertEqual(dfs_check.falsifier_notes("W1", text, None, read({})), [],
