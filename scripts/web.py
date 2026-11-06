@@ -91,6 +91,7 @@ import socket
 import sys
 import threading
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
@@ -1426,6 +1427,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(e.status, dict(error=str(e)))
         except (OSError, FileNotFoundError, dfs_paths.NoBranch) as e:
             return self.json(500, dict(error=str(e)))
+        except Exception as e:
+            # Whatever else goes wrong is still answered, in JSON: a request left to die closes the socket with
+            # no reply, which a proxy in front shows as 502 and the page as "error 502".
+            traceback.print_exc()
+            return self.json(500, dict(error="the server failed: %s: %s" % (type(e).__name__, e)))
 
     def flag(self, name):
         """Whether the request's query has `?<name>=1`."""

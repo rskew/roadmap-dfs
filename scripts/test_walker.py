@@ -10,6 +10,7 @@ Run:  python3 roadmap-dfs/scripts/test_walker.py
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest import mock
@@ -483,6 +484,46 @@ class Models(unittest.TestCase):
         self.w.model_choices()
         self.wait_for_kiro_list()
         self.assertIn("gpt-5.6-sol", self.w.model_choices())
+
+    def test_a_kiro_walk_refuses_a_name_only_claude_has_and_says_which_names_kiro_has(self):
+        self.w.agent = "kiro"
+        for name in ("opus", "sonnet", "haiku", "opusplan", "opus[1m]", "sonnet[1m]"):
+            with self.assertRaises(ValueError) as e:
+                self.w.set_model("implement", name)
+            self.assertIn("claude-opus-5.5", str(e.exception))      # it names the ids kiro does have
+        self.assertEqual(self.w.models(), dict(plan="", implement=""))
+        self.w.set_model("implement", "claude-opus-5.5")            # kiro's own id saves
+        self.w.set_model("plan", "my-own-model")                    # so does a name nobody lists
+        self.w.set_model("plan", "default")                         # run.sh passes no --model for this
+        self.w.agent = "claude"
+        self.w.set_model("implement", "opus")                       # claude still takes its alias
+
+    def test_the_refusal_says_when_the_list_is_the_fixed_one_and_never_waits_for_kiro_cli(self):
+        self.w.agent = "kiro"
+        release = threading.Event()
+        self.fetch.side_effect = lambda: (release.wait(10), ["auto", "claude-opus-5.5"])[1]
+        try:
+            started = time.time()
+            with self.assertRaises(ValueError) as e:
+                self.w.set_model("implement", "opus")        # the read is now in flight and blocked
+            self.assertLess(time.time() - started, 2)
+            self.assertIn("fixed list", str(e.exception))
+            self.assertTrue(dfs_walk._kiro_models["busy"])
+        finally:
+            release.set()
+        self.wait_for_kiro_list()
+        with self.assertRaises(ValueError) as e:
+            self.w.set_model("implement", "opus")
+        self.assertNotIn("fixed list", str(e.exception))     # kiro answered: its own list
+
+    def test_a_kiro_walk_takes_a_claude_looking_name_that_kiro_itself_lists(self):
+        self.w.agent = "kiro"
+        self.fetch.return_value = ["auto", "opus"]
+        dfs_walk._kiro_models["at"] = 0.0
+        self.w.model_choices()
+        self.wait_for_kiro_list()
+        self.w.set_model("plan", "opus")
+        self.assertEqual(self.w.models()["plan"], "opus")
 
     def test_fetch_kiro_models_reads_the_ids_from_the_json_kiro_cli_prints(self):
         out = '{"models":[{"model_id":"auto"},{"model_id":"claude-opus-5.5"},{"model_id":"-x"},{"model_name":"n"}],"default_model":"auto"}'
