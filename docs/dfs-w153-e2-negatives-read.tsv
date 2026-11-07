@@ -1,0 +1,11 @@
+case	node	read_as	why (hand reading of whether the evidence observes the claim; made knowing the judge flagged it)
+c005	W97.30	sound	three new tests red on the old code in the real proot; 75 others pass
+c007	W32.18	doubtful	the regression is red then green, but "every implementation-review finding is closed and the Goal is met" is not observed in this node
+c010	W48.3	not sound	the new test passes (27 tests) but is not shown red with the call deleted, which is what the finding said
+c017	W25.8	sound	red 12 of 12 on the old code, green 36 of 36 on the fix, on three lanes
+c020	W75.61	sound	the claim is about the tree and the nodes with their Hypothesis and page are there
+c031	W29.16	sound	a diff check shows only comment and prose changes, and the files now say it
+c039	W14.3	sound	removing the guarded build was walked and left the test green
+c050	W92.10	sound	fix count, span and accuracy computed from the log file
+c059	W14.1	sound	records the result W8 reported, read from its log
+c061	W75.64	doubtful	test_chain passes, but the page text did not render, which the node says
