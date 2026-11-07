@@ -45,7 +45,7 @@ Counted from the task file and log through `dfs_tree.load` (so archived words co
 
 - Raises the author must answer, in two columns: **loop checkpoints** (body matches `since you last spoke|implementation reviews? of|the review loop|walk stopped|runner` in its first 300 characters) and **tooling faults** (body matches `roadmap tooling|tooling|check.py|tree.py|run.sh|state.py|the guard|hook|dfs_run|supervisor`). Anything else is a substantive decision. These are the regexes of `/tmp/dfsmine/author.py`, kept as they were so the Background counts are comparable. A hand reading replaces the regex where a node says so.
 - Pages the author would open: Hypotheses that carry an `.dfs/artefacts/<uuid>.html` page. Those whose `Wrong if` only the author can answer are counted apart.
-- Words the author reads: the Summary, every Determination, and every Hypothesis (whitespace-separated words).
+- Words the author reads: every Determination and every Hypothesis (whitespace-separated words). Summaries are not counted (`docs/dfs-w153-author-unit.py`).
 
 ## Margins (from Background, fixed here)
 
