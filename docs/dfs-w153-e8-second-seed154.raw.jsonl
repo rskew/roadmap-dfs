@@ -1,0 +1,18 @@
+{"tree": "W11-c1c", "x_is": "blind", "targets": ["C4"], "got": {"C4": ["-", "-"]}, "out": "C4 | X=- | Y=-\n"}
+{"tree": "W11-c2a", "x_is": "informed", "targets": ["C1"], "got": {"C1": ["P", "-"]}, "out": "C1 | X=P | Y=-\n"}
+{"tree": "W132-k1", "x_is": "blind", "targets": ["C1"], "got": {"C1": ["-", "-"]}, "out": "C1 | X=- | Y=-\n"}
+{"tree": "W17-k1c", "x_is": "informed", "targets": ["C1", "C10", "C2", "C4", "C6"], "got": {"C1": ["-", "-"], "C2": ["-", "-"], "C4": ["P", "P"], "C6": ["-", "D"], "C10": ["-", "-"]}, "out": "C1 | X=- | Y=-\nC2 | X=- | Y=-\nC4 | X=P | Y=P\nC6 | X=- | Y=D\nC10 | X=- | Y=-\n"}
+{"tree": "W17-k1w", "x_is": "blind", "targets": ["C2", "C7"], "got": {"C2": ["D", "D"], "C7": ["-", "-"]}, "out": "C2 | X=D | Y=D\nC7 | X=- | Y=-\n"}
+{"tree": "W17-k2c", "x_is": "blind", "targets": ["C4", "C6", "C7", "C8"], "got": {"C4": ["P", "-"], "C6": ["D", "D"], "C7": ["-", "-"], "C8": ["-", "D"]}, "out": "C4 | X=P | Y=-\nC6 | X=D | Y=D\nC7 | X=- | Y=-\nC8 | X=- | Y=D\n"}
+{"tree": "W22-b1a", "x_is": "blind", "targets": ["C6"], "got": {"C6": ["-", "-"]}, "out": "C6 | X=- | Y=-\n"}
+{"tree": "W22-c1a", "x_is": "informed", "targets": ["C6"], "got": {"C6": ["-", "-"]}, "out": "C6 | X=- | Y=-\n"}
+{"tree": "W22-c1b", "x_is": "blind", "targets": ["C6"], "got": {"C6": ["-", "P"]}, "out": "C6 | X=- | Y=P\n"}
+{"tree": "W22-c1c", "x_is": "informed", "targets": ["C6"], "got": {"C6": ["-", "P"]}, "out": "C6 | X=- | Y=P\n"}
+{"tree": "W22-c2a", "x_is": "informed", "targets": ["C6"], "got": {"C6": ["-", "-"]}, "out": "C6 | X=- | Y=-\n"}
+{"tree": "W32-c9a", "x_is": "blind", "targets": ["C4"], "got": {"C4": ["-", "-"]}, "out": "C4 | X=- | Y=-\n"}
+{"tree": "W36-c1c", "x_is": "informed", "targets": ["C4"], "got": {"C4": ["D", "D"]}, "out": "C4 | X=D | Y=D\n"}
+{"tree": "W5-b1a", "x_is": "blind", "targets": ["C7"], "got": {"C7": ["-", "-"]}, "out": "C7 | X=- | Y=-\n"}
+{"tree": "W5-c1a", "x_is": "informed", "targets": ["C10", "C3", "C4", "C7"], "got": {"C3": ["-", "D"], "C4": ["-", "-"], "C7": ["-", "-"], "C10": ["M", "-"]}, "out": "C3 | X=- | Y=D\nC4 | X=- | Y=-\nC7 | X=- | Y=-\nC10 | X=M | Y=-\n"}
+{"tree": "W5-c1b", "x_is": "blind", "targets": ["C10", "C3", "C7"], "got": {"C3": ["-", "-"], "C7": ["-", "-"], "C10": ["-", "M"]}, "out": "C3 | X=- | Y=-\nC7 | X=- | Y=-\nC10 | X=- | Y=M\n"}
+{"tree": "W5-c1c", "x_is": "blind", "targets": ["C3", "C4", "C7"], "got": {"C3": ["-", "-"], "C4": ["-", "-"], "C7": ["-", "-"]}, "out": "C3 | X=- | Y=-\nC4 | X=- | Y=-\nC7 | X=- | Y=-\n"}
+{"tree": "W5-c2a", "x_is": "informed", "targets": ["C4", "C5", "C7"], "got": {"C4": ["-", "-"], "C5": ["-", "-"], "C7": ["-", "-"]}, "out": "C4 | X=- | Y=-\nC5 | X=- | Y=-\nC7 | X=- | Y=-\n"}
