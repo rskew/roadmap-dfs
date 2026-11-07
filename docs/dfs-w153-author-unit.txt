@@ -1,17 +1,36 @@
-the author faces, as at d595c44a over 238 tasks: 124 raises; 120271 words read (94937 in Determinations, 25334 in Hypothesis text; Summaries not counted); margin 15%
+the author faces, as at d595c44a over 238 tasks: 124 raises answered, of which 35 were loop checkpoints (21 review-count + 14 ten-session)
+whose code no longer exists, so 89 raises the current tool can still raise; 152 author interventions (answers 123 + corrections 29), 117 now;
+120271 words read (94937 in Determinations, 25334 in Hypothesis text; Summaries not counted).
 
-row                         saving (-) or cost (+)                      share    ceiling   cell
-E5 raises, A                17 of 124 raises removed                    -13.7%   21.0%     inside (observed)
-E5 raises, B                8 of 124 raises removed                     -6.5%    21.0%     inside (observed)
-E5 A, no new permission     8 of 124 (the 9 that need one stay)         -6.5%    21.0%     inside (observed)
-E4 raises                   0 of 124 removed; all 36 stay               +0.0%    0.0%      inside (by construction)
-E1 pages (answers)          at most 12 of 18 rulings had a page         -9.7%    14.5%     inside (by construction)
-E1 `assumed` words          4665 of 7583 Wrong-if words                 -3.9%    6.3%      inside (by construction)
-E6 words, budget 80         12391 words cut                             -10.3%   100.0%    inside (observed)
-E6 words, budget 60         22782 words cut                             -18.9%   100.0%    over (observed)
-E7 words                    10014 more words read in `ok`               +8.3%    18.0%     inside (observed)
+row (saving k over a denominator)       k   share of d595c44a   share of what is still possible
+E5 A: fix needed to finish             17     17/124   13.7%            17/89    19.1%
+    rule on 124-based      at 10%: gain->adopt    at 15%: inconclusive   at 20%: inconclusive 
+    rule on still-possible at 10%: gain->adopt    at 15%: gain->adopt    at 20%: inconclusive 
+E5 B: commit refused                    8      8/124    6.5%             8/89     9.0%
+    rule on 124-based      at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+    rule on still-possible at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+E5 A, no new permission                 8      8/124    6.5%             8/89     9.0%
+    rule on 124-based      at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+    rule on still-possible at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+E4: raises removed                      0      0/124    0.0%             0/89     0.0%
+    rule on 124-based      at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+    rule on still-possible at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
 
-E1 pages not made: 131 of 376 hypotheses (the files do not show a page opened)
+E1 `assumed` words                   4665   4665/120271    3.9%   (words are not changed by the removed checkpoints: one denominator)
+    rule                    at 10%: inconclusive         at 15%: inconclusive         at 20%: inconclusive       
+E6 words, budget 80                 12391  12391/120271   10.3%   (words are not changed by the removed checkpoints: one denominator)
+    rule                    at 10%: gain->adopt          at 15%: inconclusive         at 20%: inconclusive       
+E6 words, budget 60                 22782  22782/120271   18.9%   (words are not changed by the removed checkpoints: one denominator)
+    rule                    at 10%: gain->adopt          at 15%: gain->adopt          at 20%: inconclusive       
+E7 words read in `ok` (a cost)      10014  10014/120271    8.3%   (words are not changed by the removed checkpoints: one denominator)
+    rule                    at 10%: inconclusive         at 15%: inconclusive         at 20%: inconclusive       
+    caps: E1 words 6.3% (all Wrong-if words), E7 18.0%; E6 has none (any word may go)
+
+E1 pages: 18 rulings (author corrections on a hypothesis) in the history, 12 on a node with a page: 7.9% of 152 author interventions, 10.3% of 117 now.
+    Not a saving: the author still rules without a page, and a page opened with no ruling leaves no trace, so this is a floor on pages used
+    and the files cannot give a share of author time; the cell is 'not measurable from the files', not 'inside'.
+E1 pages not made: 131 of 376 hypotheses.
+
 
 E8 power on 32 targets: 60% v 30%: 59%; 50% v 25%: 44%; 80% v 40%: 87%
 E8 power on 35 targets: 60% v 30%: 63%; 50% v 25%: 49%; 80% v 40%: 90%

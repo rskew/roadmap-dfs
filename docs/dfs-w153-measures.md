@@ -55,7 +55,7 @@ Counted from the task file and log through `dfs_tree.load` (so archived words co
 - Credits: controls for one task vary 1.9 to 2.2 times, so a gap under 2 times is a tie.
 - E2 judge: if it misses more than half of the 25 critic backtracks, E2 judging is parked.
 - E8: a gap inside 1.5 clauses is a tie.
-- Accounting rows (added in W153.35): the words and counts above are replay noise. For a total over the history the author-time cell is the saving as a share of what the author faces (124 raises, 120,271 words read), against 15%, and says "observed" or "by construction" (the cap is under 15%, or the arm removes nothing). `docs/dfs-w153-author-unit.py`.
+- Accounting rows (W153.35, redone in the node that corrected it): the words and counts above are replay noise. For a total over the history the author-time cell is the saving as a share of what the author faces, against 15%: raises over the 124 of the history and over the 89 the current tool can still raise (124 less the 35 removed review-count and ten-session checkpoints), words over the 120,271 read. The 15% is the quality tier's relative margin, borrowed from another unit and chosen after the shares were printed; each row is also read at 10% and 20%, and a row whose verdict changes inside that range is written "margin-bound". A cell says "by construction" when its cap is under the margin or the arm removes nothing, and "not measurable" when the files hold no record of the thing (pages opened). `docs/dfs-w153-author-unit.py`.
 
 ## Verdict rule (my choice, stated as a Hypothesis in the node)
 

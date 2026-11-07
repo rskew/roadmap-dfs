@@ -34,29 +34,49 @@ det7 = num(re.search(r"words in the Determination \(read today, saved under E7\)
 words = det_words + hyp_words
 rulings_all, rulings_nopage = int(rulings[0]), int(rulings[1])
 
-M = 0.15
-print(f"the author faces, as at d595c44a over 238 tasks: {raises} raises; {words} words read "
-      f"({det_words} in Determinations, {hyp_words} in Hypothesis text; Summaries not counted); margin {M:.0%}\n")
-print(f"{'row':<28}{'saving (-) or cost (+)':<44}{'share':<9}{'ceiling':<10}{'cell'}")
+# the raises the current tool can still raise. The review-count and ten-session checkpoints were removed
+# (2e0429b8, 20 Oct 2026; e02dfe4e, 15 Oct), the scope-drift checkpoint was not; docs/dfs-w153-e4.tsv has the 36
+# loop checkpoints by kind, and every one was answered. The 26 tooling raises are counted as still possible: they
+# are the raises of the tool as it was in Sep and Oct, and which of them the current tool still raises is not known.
+kinds = [l.split("\t")[4] for l in rd("dfs-w153-e4.tsv").splitlines()[1:] if re.match(r"\d+\t", l)]
+removed = sum(k in ("REVIEW", "SESSIONS") for k in kinds)
+assert len(kinds) == 36 and removed == 35, (len(kinds), removed)
+raises_now = raises - removed
+tot = [l for l in mine.splitlines() if l.startswith("TOTAL:")][0]
+answers, corrections = (int(re.search(rf"'{k}': (\d+)", tot).group(1)) for k in ("answer", "correct"))
+interv, interv_now = answers + corrections, (answers - removed) + corrections  # author answers + corrections at nodes
+print(f"the author faces, as at d595c44a over 238 tasks: {raises} raises answered, of which {removed} were loop checkpoints "
+      f"(21 review-count + 14 ten-session)\nwhose code no longer exists, so {raises_now} raises the current tool can still raise; "
+      f"{interv} author interventions (answers {answers} + corrections {corrections}), {interv_now} now;\n"
+      f"{words} words read ({det_words} in Determinations, {hyp_words} in Hypothesis text; Summaries not counted).\n")
 
-
-def row(name, what, k, total, ceiling):
-    share = k / total
-    cell = "inside (observed)" if abs(share) < M and abs(ceiling) >= M else \
-           "inside (by construction)" if abs(ceiling) < M else "over (observed)"
-    print(f"{name:<28}{what:<44}{share:+.1%}".ljust(81) + f"{ceiling:<10.1%}{cell}")
-
-
-row("E5 raises, A", "17 of 124 raises removed", -17, raises, 26 / raises)
-row("E5 raises, B", "8 of 124 raises removed", -8, raises, 26 / raises)
-row("E5 A, no new permission", "8 of 124 (the 9 that need one stay)", -8, raises, 26 / raises)
-row("E4 raises", "0 of 124 removed; all 36 stay", 0, raises, 0 / raises)
-row("E1 pages (answers)", f"at most {rulings_all - rulings_nopage} of {rulings_all} rulings had a page", -(rulings_all - rulings_nopage), raises, rulings_all / raises)
-row("E1 `assumed` words", f"{wrongif_saved} of {wrongif_all} Wrong-if words", -int(wrongif_saved), words, int(wrongif_all) / words)
-row("E6 words, budget 80", f"{cut80} words cut", -cut80, words, 1.0)  # ceiling: every word
-row("E6 words, budget 60", f"{cut60} words cut", -cut60, words, 1.0)
-row("E7 words", f"{ok_words - det7} more words read in `ok`", ok_words - det7, words, ok_words / words)
-print(f"\nE1 pages not made: {pages[2]} of {pages[1]} hypotheses (the files do not show a page opened)")
+MS = (0.10, 0.15, 0.20)
+RULE = lambda sh, m: "gain->adopt" if sh >= m else "inconclusive"   # saving; quality 'not measured' counts as not worse
+RULEC = lambda sh, m: "worse->inconclusive" if sh >= m else "inconclusive"  # a cost
+print(f"{'row (saving k over a denominator)':<34}{'k':>7}  {'share of d595c44a':>18}  {'share of what is still possible':>32}")
+rows = [  # name, k, then, now, is_cost
+    ("E5 A: fix needed to finish", 17, raises, raises_now, False),
+    ("E5 B: commit refused", 8, raises, raises_now, False),
+    ("E5 A, no new permission", 8, raises, raises_now, False),
+    ("E4: raises removed", 0, raises, raises_now, False),
+]
+for name, k, then, now, cost in rows:
+    print(f"{name:<34}{k:>7}  {k:>5}/{then:<4}{k/then:>7.1%}  {k:>12}/{now:<4}{k/now:>7.1%}")
+    for label, den in (("124-based", then), ("still-possible", now)):
+        print(f"    rule on {label:<15}" + "  ".join(f"at {m:.0%}: {RULE(k/den, m):<13}" for m in MS))
+print()
+for name, k, den, cost in (
+        ("E1 `assumed` words", int(wrongif_saved), words, False), ("E6 words, budget 80", cut80, words, False),
+        ("E6 words, budget 60", cut60, words, False), ("E7 words read in `ok` (a cost)", ok_words - det7, words, True)):
+    print(f"{name:<34}{k:>7}  {k:>5}/{den:<7}{k/den:>7.1%}   (words are not changed by the removed checkpoints: one denominator)")
+    print(f"    rule" + " " * 20 + "  ".join(f"at {m:.0%}: {(RULEC if cost else RULE)(k/den, m):<19}" for m in MS))
+print(f"    caps: E1 words {int(wrongif_all)/words:.1%} (all Wrong-if words), E7 {ok_words/words:.1%}; E6 has none (any word may go)")
+print()
+print(f"E1 pages: {rulings[0]} rulings (author corrections on a hypothesis) in the history, {int(rulings[0]) - int(rulings[1])} on a node with a page: "
+      f"{(int(rulings[0]) - int(rulings[1]))/interv:.1%} of {interv} author interventions, {(int(rulings[0]) - int(rulings[1]))/interv_now:.1%} of {interv_now} now.")
+print("    Not a saving: the author still rules without a page, and a page opened with no ruling leaves no trace, so this is a floor on pages used")
+print("    and the files cannot give a share of author time; the cell is 'not measurable from the files', not 'inside'.")
+print(f"E1 pages not made: {pages[2]} of {pages[1]} hypotheses.\n")
 
 # E8 power on 35 targets (the pool after the two unmerged trees): rerun of dfs-w153-e8-test.py's power()
 s = importlib.util.spec_from_file_location("e8test", D / "dfs-w153-e8-test.py")
