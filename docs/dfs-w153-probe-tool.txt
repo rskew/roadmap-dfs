@@ -1,0 +1,8 @@
+== control
+page-less hypothesis     assumptions refused: True  budget: no such check
+81-word determination    assumptions refused: False budget: no such check
+80-word determination    assumptions refused: False budget: no such check
+== pooled
+page-less hypothesis     assumptions refused: False budget: passes
+81-word determination    assumptions refused: False budget: refused
+80-word determination    assumptions refused: False budget: passes

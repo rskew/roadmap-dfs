@@ -1,0 +1,60 @@
+n	project	task	node	raise ts	wait h	kind	answered	A removable	B removable	reason
+1	roadmap-dfs	W60	W60.4	2026-10-10T10:22:42Z	0.9	fault	bypass	yes	yes	tree.py effective() pruned confirmed nodes; no commit refused; author: ignore tooling issues
+2	roadmap-dfs	W75	W75.44	2026-10-19T04:58:41Z	0.7	fault	bypass	yes	no	size rule refused W75.md commits; author: --no-verify and capture elsewhere (perm)
+3	roadmap-dfs	W75	W75.56	2026-10-21T23:43:26Z	12.7	fault	author-act	no	no	size rule would refuse next commit; author answered option 1, whose answer moves the compact cutoff
+4	roadmap-dfs	W75	W75.60	2026-10-25T12:33:12Z	74.8	fault	bypass	yes	no	guard refused every W75 commit; author: add a task, work around with --no-verify (perm)
+5	roadmap-dfs	W109	W109.5	2026-10-24T13:57:19Z	15.1	fault	draft	yes	yes	two faults not touching the Goal; author: a new task of their own (option a)
+6	roadmap-dfs	W111	W111.11	2026-10-28T05:47:02Z	0.5	fault	bypass	yes	no	check refused commits in a rebase; author took option 3 = --no-verify, which the raise said it would not do unasked (perm)
+7	roadmap-dfs	W111	W111.13	2026-10-28T06:59:17Z	5.2	fault	bypass	yes	no	status stuck open with no node to fix, task cannot finish; author: work around, complete manually (perm)
+8	roadmap-dfs	W113	W113.1	2026-10-28T01:17:41Z	3.8	fault	draft	yes	yes	review of the logs listed tooling suggestions; no refusal; author: fix all of them (as tasks)
+9	roadmap-dfs	W113	W113.6	2026-10-28T06:28:56Z	5.7	fault	draft	yes	yes	review note cannot be answered; no refusal; author took option a, a change to the brief and law
+10	roadmap-dfs	W113	W113.9	2026-10-28T12:54:28Z	1.4	fault	draft	yes	yes	law says fifth session, code counts work sessions; no refusal; author: option b, reword the law
+11	roadmap-dfs	W116	W116.33	2026-10-28T06:25:17Z	5.7	fault	bypass	yes	no	same stuck status as 7; author: check another task exists, complete this manually (perm)
+12	roadmap-dfs	W122	W122.5	2026-10-28T01:55:02Z	3.2	fault	bypass	yes	no	check refused rebase commits; author took option 2, a rebase that skips the hook (perm)
+13	roadmap-dfs	W123	W123.20	2026-10-28T13:12:23Z	1.1	fault	bypass	yes	no	check refused rebase commits; author: create a task if not fixed, work around with no-verify (perm)
+14	roadmap-dfs	W130	W130.4	2026-10-29T01:18:18Z	1.8	fault	draft	yes	yes	two replay.py faults, neither stops the next node; author: option a, fix in a new task
+15	roadmap-dfs	W130	W130.12	2026-10-29T08:24:36Z	1.2	fault	fix-in-task	yes	yes	replay.py score misses a verdict; no refusal; author: fix tooling as it arises in this task (a draft would go against that)
+16	shop-app	W8	W8.2	2026-09-25T14:18:35Z	0.1	fault	fix-in-task	yes	yes	a stale owner name in a note; Goal met, no refusal; author: fix it (a draft would go against that)
+17	shop-app	W13	W13.1	2026-09-25T18:04:16Z	8.9	other	ok	no	no	report that an earlier answer was not yet acted on; not a tooling fault
+18	shop-app	W13	W13.32	2026-09-27T13:33:51Z	0.2	fault	author-act	no	no	log cannot be moved, budget runs out in 3 or 4 sessions; author: compact the log, which an answer enables
+19	shop-app	W14	W14.25	2026-09-29T04:24:29Z	0.1	fault	fix-first	no	no	check_history bug refused every .dfs commit; author: option a, fix check_history first
+20	shop-app	W19	W19.34	2026-09-29T04:20:57Z	0.2	fault	fix-first	no	no	same bug as 19 on W19; author: fix it
+21	shop-app	W20		2026-09-30T15:49:29Z	0.1	alarm	other	no	no	the runner's walk-suspects alarm, not a fault a session found
+22	shop-app	W35	W35.7	2026-10-02T11:45:04Z	0.1	other	scope	no	no	no Android device; not a tooling fault, a missing resource; author: option 3, narrow the scope
+23	shop-app	W39	W39.22	2026-10-08T05:15:23Z	19.4	fault	fix-first	no	no	hook exits nonzero on warnings in W14.md and refused W39's commit; author: fix W14 first
+24	farm-app	W92	W92.13	2026-10-18T12:39:41Z	1.7	fault	bypass	yes	no	check refused W92 commits for faults in other tasks; author: tooling handled elsewhere, go around (perm)
+25	farm-app	W92		2026-10-18T14:31:33Z	11.7	alarm	continue	no	no	the runner's walk-suspects alarm
+26	farm-app	W92	W92.22	2026-10-19T02:44:06Z	0.2	fault	bypass	yes	no	same refusal as 24; author: bypass for now (perm)
+
+reading A (Goal test): removable 17 of 26 [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 24, 26]; keep as raises 5 [3, 18, 19, 20, 23]; not tooling faults 4 [17, 21, 22, 25]
+reading B (commit-refused): removable 8 of 26 [1, 5, 8, 9, 10, 14, 15, 16]; keep as raises 14 [2, 3, 4, 6, 7, 11, 12, 13, 18, 19, 20, 23, 24, 26]; not tooling faults 4 [17, 21, 22, 25]
+A-only (need a permission to bypass a refusing hook, or to complete by hand): 9 [2, 4, 6, 7, 11, 12, 13, 24, 26]
+removable but the author chose a fix inside the task: [15, 16]
+tasks holding a removable raise: A 11, B 5; per task of 238: A 0.07, B 0.03; per task that holds one: A 1.55, B 1.60
+A-removable: median wait 1.7 h over 17
+B-removable: median wait 1.6 h over 8
+kept under A: median wait 0.2 h over 5
+
+on the current tool, reading A, possible: 1 [1]
+on the current tool, reading A, size-guard: 2 [2, 4]
+on the current tool, reading A, fixed: 11 [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+on the current tool, reading A, not-firing: 2 [24, 26]
+on the current tool, reading A, not-tooling: 1 [16]
+  row 1: possible - probe on a scratch tree: after 'correct W60.3 confirmed' then 'correct W60.4 confirmed' W60.4 is pruned (W153.46). A replay logs no corrections, so no replay control meets it; real use does
+  row 2: size-guard - check.py task-file budget still refuses a commit of an over-budget task file (W153.46: raised in this task on 2026-11-07)
+  row 4: size-guard - same guard as 2
+  row 5: fixed - the non-atomic task-file write: tree.py writes through a temp file and os.replace (W113 says fixed in W114; W153.46 read tree.py)
+  row 6: fixed - the rebase-commit refusal, fixed 28 Oct (W127.1, W127.2)
+  row 7: fixed - status stuck open with no node: probe of status_of on a review ok then issues with no node reads the task as done (W153.46)
+  row 8: fixed - its four faults: S1 peak 0 -> `context.py` prints 'context 75,714' in this session (W113.2); S2 compaction offered by the briefing (W113.4, `tree.py compact` ran in W153.48); S3 `tree.py log W9 review issues <<< none` exits 2 'names no node' (probe, 2026-11-08; W113.3); S4 sentence in SKILL.md 'name the version or object' (W113.5). S5 was not a tooling fault
+  row 9: fixed - review note cannot be answered: the skill now sends a determined node's note to a new child (W113.6/W113.7; W153.46)
+  row 10: fixed - law says 'fifth work session', as the code counts (W113.10; W153.46)
+  row 11: fixed - same stuck status as 7
+  row 12: fixed - same rebase refusal as 6
+  row 13: fixed - same rebase refusal as 6
+  row 14: fixed - the two replay.py faults: history.py second verdict pattern, tool_docs clears the folder first (W153.46)
+  row 15: fixed - replay.py score misses a verdict over two lines: history.py second pattern (W153.46)
+  row 16: not-tooling - shop-app W8.2: the model file sync-flow.sysml gives a closed task as owner of an edge, a stale pointer in the project's own model (optimisation-data/shop-app/.dfs/items/W8.md line 166); no roadmap-dfs script is at fault, so E5 (a *tooling* fault is filed as a draft) does not apply, and the author's answer was 'fix it'
+  row 24: not-firing - a hook refusing for faults in other tasks: only staged files are judged, this session's commit printed 'W48.md is over the budget. Not grown here.' and passed (W153.46)
+  row 26: not-firing - same refusal as 24
+E5-NOW: 1 possible; size-guard 2; gone 14 [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 24, 26]

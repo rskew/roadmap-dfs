@@ -1,0 +1,37 @@
+== now (HEAD of the main checkout)
+roadmap-dfs: {'tasks': 154, 'nodes': 1064, 'hyp': 174, 'hyp_wrongif_author': 122, 'minor_nodes': 143, 'correct': 27, 'raise': 51, 'raise_loop': 14, 'answer': 52, 'hyp_page': 151, 'critic_entries': 99, 'raise_other': 20, 'backtrack': 16, 'raise_tooling': 17}
+  Determination words: n=1053 median=60 p90=107
+shop-app: {'tasks': 66, 'nodes': 435, 'hyp': 211, 'minor_nodes': 41, 'hyp_page': 11, 'raise': 59, 'raise_other': 30, 'raise_tooling': 8, 'answer': 59, 'critic_entries': 47, 'raise_loop': 21, 'backtrack': 11, 'hyp_wrongif_author': 3, 'correct': 1}
+  Determination words: n=417 median=47 p90=108
+farm-app: {'tasks': 31, 'nodes': 209, 'hyp': 38, 'raise': 16, 'raise_other': 13, 'answer': 14, 'correct': 2, 'critic_entries': 12, 'hyp_wrongif_author': 21, 'hyp_page': 20, 'minor_nodes': 18, 'raise_tooling': 3, 'backtrack': 2}
+  Determination words: n=199 median=62 p90=110
+TOTAL: {'tasks': 251, 'nodes': 1708, 'hyp': 423, 'hyp_wrongif_author': 146, 'minor_nodes': 202, 'correct': 30, 'raise': 126, 'raise_loop': 35, 'answer': 125, 'hyp_page': 182, 'critic_entries': 158, 'raise_other': 63, 'backtrack': 29, 'raise_tooling': 28}
+  Determination words, all: n=1669 median=58 p90=108
+
+Background figure -> this run
+  nodes 1,519 -> 1708
+  raises 124 (50/59/14 by project) -> 126
+  Minor findings nodes 169 -> 202
+  Determination words median 61, p90 108 (roadmap-dfs alone; all three projects pooled gives the figure here) -> 58, 108
+  roadmap-dfs hypotheses 127, with a page 104, Wrong if naming the author 90 -> see the roadmap-dfs line: hyp, hyp_page, hyp_wrongif_author
+  loop 36, tooling 23 (brief; 26 with the three farm-app ones), by regex, so rough -> 35 / 28; other 63
+  critic backtracks 25 -> 29
+
+== roadmap-dfs as at d595c44a, the state the Background's mining pass read
+roadmap-dfs: {'tasks': 141, 'nodes': 875, 'hyp': 127, 'hyp_wrongif_author': 90, 'minor_nodes': 111, 'correct': 26, 'raise': 49, 'raise_loop': 14, 'answer': 50, 'hyp_page': 104, 'critic_entries': 88, 'raise_other': 20, 'backtrack': 12, 'raise_tooling': 15}
+  Determination words: n=867 median=61 p90=108
+shop-app: {'tasks': 66, 'nodes': 435, 'hyp': 211, 'minor_nodes': 41, 'hyp_page': 11, 'raise': 59, 'raise_other': 30, 'raise_tooling': 8, 'answer': 59, 'critic_entries': 47, 'raise_loop': 21, 'backtrack': 11, 'hyp_wrongif_author': 3, 'correct': 1}
+  Determination words: n=417 median=47 p90=108
+farm-app: {'tasks': 31, 'nodes': 209, 'hyp': 38, 'raise': 16, 'raise_other': 13, 'answer': 14, 'correct': 2, 'critic_entries': 12, 'hyp_wrongif_author': 21, 'hyp_page': 20, 'minor_nodes': 18, 'raise_tooling': 3, 'backtrack': 2}
+  Determination words: n=199 median=62 p90=110
+TOTAL: {'tasks': 238, 'nodes': 1519, 'hyp': 376, 'hyp_wrongif_author': 114, 'minor_nodes': 170, 'correct': 29, 'raise': 124, 'raise_loop': 35, 'answer': 123, 'hyp_page': 135, 'critic_entries': 147, 'raise_other': 63, 'backtrack': 25, 'raise_tooling': 26}
+  Determination words, all: n=1483 median=58 p90=108
+
+Background figure -> this run
+  nodes 1,519 -> 1519
+  raises 124 (50/59/14 by project) -> 124
+  Minor findings nodes 169 -> 170
+  Determination words median 61, p90 108 (roadmap-dfs alone; all three projects pooled gives the figure here) -> 58, 108
+  roadmap-dfs hypotheses 127, with a page 104, Wrong if naming the author 90 -> see the roadmap-dfs line: hyp, hyp_page, hyp_wrongif_author
+  loop 36, tooling 23 (brief; 26 with the three farm-app ones), by regex, so rough -> 35 / 26; other 63
+  critic backtracks 25 -> 25

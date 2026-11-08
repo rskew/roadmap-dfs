@@ -1,0 +1,36 @@
+target	informed	blind	reason (hand reading of the findings against the rubric clause)
+W11-c1c/C4	-	-	no finding about a bad edit being refused
+W11-c2a/C1	P	-	informed F1 (headline): the web page's title, the item's name, still cannot be edited
+W17-k1c/C1	-	D	blind minor line: a pump that loses its terminal keeps an agent that close never signals (rare)
+W17-k1c/C10	-	-	no finding says the new paths lack a test (both only add the test to their fix)
+W17-k1c/C2	-	-	no finding about processes that left the group on a chat close
+W17-k1c/C4	P	P	both headlines: SIGTERM/SIGHUP skip close_all
+W17-k1c/C6	-	-	findings name chats, not a page turn running at server end
+W17-k2c/C4	-	P	blind headline: TERM/HUP skip all closing
+W17-k2c/C6	M	P	informed minor: a send after close_all starts an unkilled turn; blind headline: web turns keep running on TERM/HUP
+W17-k2c/C7	-	-	no finding about the idle reap
+W17-k2c/C8	D	-	informed minor: kill_group after reaping could signal a reused pid (very unlikely)
+W22-b1a/C6	-	-	no findings
+W22-c1a/C6	-	-	no finding about web.py messages
+W22-c1b/C6	M	-	informed minor: web.py start-up banner INSTALL and START AGENTS left in capitals
+W22-c1c/C6	-	P	blind headline: web.py prints INSTALL and START AGENTS in capitals
+W22-c2a/C6	-	-	no findings
+W32-c9a/C4	-	-	no findings
+W36-c1c/C4	-	-	both minor lists say an interrupt can label a good answer Interrupted; neither says the log shows a failure
+W5-b1a/C7	-	-	no finding about the terminal screen
+W5-c1a/C10	-	-	no finding that no test exercises the renderer
+W5-c1a/C3	-	D	blind headline: artefact links inside buttons, not the clause's markdown link or javascript URL
+W5-c1a/C4	-	-	no finding about lists
+W5-c1a/C7	D	D	both minor: first_sentence in tui.py leaves a stray backtick in a skim
+W5-c1b/C10	M	-	informed minor: all W5 rendering tests grep the page source and cannot fail on a wrong rule
+W5-c1b/C3	-	-	no finding about links
+W5-c1b/C7	-	-	no finding about the terminal screen
+W5-c1c/C3	-	-	no finding about links
+W5-c1c/C4	-	-	no finding about lists
+W5-c1c/C7	-	-	no finding about the terminal screen
+W5-c2a/C4	-	-	no finding about lists
+W5-c2a/C5	-	-	no finding about fences in the clause's sense (informed F2 minor is about chat md only)
+W5-c2a/C7	-	-	no finding about the terminal screen
+W132-k1/C1	-	-	both reviews ok (no findings)
+W17-k1w/C2	-	D	blind F1: without os.waitid (macOS before Python 3.13) the pump dies and the group is never killed; informed review ok
+W17-k1w/C7	-	-	blind findings do not name the idle close (informed ok)

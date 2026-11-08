@@ -1,0 +1,5 @@
+arm nodes hypotheses page-less det_words max_det minor_nodes summary_words
+C1 5 1 0 231 66 1 120
+C2 8 1 0 380 67 1 143
+C4 10 2 0 348 48 2 174
+P1 9 1 1 434 62 0 144

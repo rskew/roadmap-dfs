@@ -1,0 +1,171 @@
+project	task	node	status	lines	line_words	det_words	left_as_is_in_det	only_idled_node_regex	commit_lines_outside_dfs	same	related	no	no_match
+roadmap-dfs	W1	W1.8	confirmed	4	141	66	1	0	26	0	0	0	4
+roadmap-dfs	W3	W3.5	confirmed	2	66	31	0	0		0	0	0	2
+roadmap-dfs	W3	W3.7	confirmed	2	78	0	0	0	31	0	0	0	2
+roadmap-dfs	W5	W5.4	confirmed	4	144	62	1	0	5	0	0	0	4
+roadmap-dfs	W7	W7.6	confirmed	4	124	50	1	0	2	0	0	0	4
+roadmap-dfs	W10	W10.7	confirmed	5	152	66	1	1	15	0	0	0	5
+roadmap-dfs	W11	W11.5	confirmed	4	124	49	0	0	24	0	0	0	4
+roadmap-dfs	W13	W13.4	confirmed	1	131	62	0	0	8	0	0	0	1
+roadmap-dfs	W17	W17.8	confirmed	5	180	50	1	0	75	0	1	0	4
+roadmap-dfs	W17	W17.10	confirmed	4	182	84	1	0		0	0	0	4
+roadmap-dfs	W21	W21.5	confirmed	5	141	64	0	0	37	0	0	0	5
+roadmap-dfs	W21	W21.10	confirmed	5	204	99	1	0	13	0	0	0	5
+roadmap-dfs	W22	W22.4	confirmed	1	80	22	0	0	4	0	0	0	1
+roadmap-dfs	W23	W23.9	confirmed	5	133	82	1	0	19	0	0	0	5
+roadmap-dfs	W30	W30.3	confirmed	4	161	60	1	0	20	0	0	0	4
+roadmap-dfs	W30	W30.5	confirmed	2	50	36	0	0	2	0	0	0	2
+roadmap-dfs	W36	W36.6	confirmed	4	152	65	1	1	20	0	0	0	4
+roadmap-dfs	W40	W40.4	confirmed	5	170	91	0	0	47	0	0	0	5
+roadmap-dfs	W48	W48.8	confirmed	4	219	112	0	0	25	0	0	0	4
+roadmap-dfs	W54	W54.5	confirmed	3	142	60	0	0	11	0	0	0	3
+roadmap-dfs	W55	W55.3	confirmed	2	79	39	0	0	2	0	0	0	2
+roadmap-dfs	W59	W59.4	confirmed	1	41	81	0	0	18	0	0	0	1
+roadmap-dfs	W60	W60.14	confirmed	4	181	25	0	0		0	0	0	4
+roadmap-dfs	W60	W60.15	started	1	185	126	1	1	63	0	0	0	1
+roadmap-dfs	W61	W61.4	confirmed	1	73	33	0	0	7	0	0	0	1
+roadmap-dfs	W67	W67.12	confirmed	2	85	82	0	1	4	0	0	0	2
+roadmap-dfs	W68	W68.3	confirmed	4	146	63	0	0	56	0	1	2	1
+roadmap-dfs	W68	W68.9	confirmed	4	309	127	1	0	53	0	0	0	4
+roadmap-dfs	W72	W72.10	confirmed	5	172	71	0	0	14	0	0	0	5
+roadmap-dfs	W73	W73.6	confirmed	4	112	64	0	0	36	0	0	0	4
+roadmap-dfs	W74	W74.4	confirmed	3	149	69	0	0	18	0	0	2	1
+roadmap-dfs	W74	W74.6	confirmed	1	35	70	1	0	0	0	1	0	0
+roadmap-dfs	W74	W74.10	confirmed	2	134	66	0	0	12	0	0	0	2
+roadmap-dfs	W74	W74.11	confirmed	1	126	51	1	0	6	0	0	0	1
+roadmap-dfs	W75	W75.12	confirmed	4	163	69	0	0	19	0	0	2	2
+roadmap-dfs	W75	W75.15	confirmed	7	160	107	1	0	71	0	0	3	4
+roadmap-dfs	W75	W75.18	confirmed	3	123	87	0	0	70	0	0	1	2
+roadmap-dfs	W75	W75.21	confirmed	2	52	56	0	0	35	0	0	1	1
+roadmap-dfs	W75	W75.25	confirmed	6	158	159	1	0	75	0	1	2	3
+roadmap-dfs	W75	W75.28	confirmed	5	179	114	0	0	74	0	1	2	2
+roadmap-dfs	W75	W75.32	confirmed	2	80	57	0	0	49	0	0	0	2
+roadmap-dfs	W75	W75.35	confirmed	1	69	49	1	0	11	0	0	0	1
+roadmap-dfs	W75	W75.39	confirmed	3	148	87	0	0	38	0	1	1	1
+roadmap-dfs	W75	W75.43	confirmed	2	47	57	1	0	32	0	0	0	2
+roadmap-dfs	W75	W75.45	confirmed	4	134	75	0	0	27	0	0	0	4
+roadmap-dfs	W75	W75.49	confirmed	5	159	91	0	0	44	0	0	2	3
+roadmap-dfs	W75	W75.52	confirmed	3	105	20	0	0	805	0	0	0	3
+roadmap-dfs	W75	W75.55	confirmed	2	154	90	0	0	79	0	0	0	2
+roadmap-dfs	W75	W75.57	confirmed	3	107	58	0	0	805	0	0	0	3
+roadmap-dfs	W75	W75.69	confirmed	3	70	50	0	0	805	0	0	0	3
+roadmap-dfs	W76	W76.4	confirmed	2	88	34	0	0		0	0	0	2
+roadmap-dfs	W81	W81.16	confirmed	4	183	64	0	0	46	0	0	1	3
+roadmap-dfs	W81	W81.18	confirmed	4	144	97	1	0	144	0	0	0	4
+roadmap-dfs	W85	W85.7	confirmed	3	165	72	0	0	52	0	0	0	3
+roadmap-dfs	W87	W87.7	confirmed	3	86	65	0	0	49	0	0	1	2
+roadmap-dfs	W87	W87.9	confirmed	3	174	49	0	0	64	0	1	0	2
+roadmap-dfs	W87	W87.11	confirmed	1	33	34	0	0	3	0	0	1	0
+roadmap-dfs	W87	W87.13	confirmed	1	61	91	0	0	30	0	0	0	1
+roadmap-dfs	W87	W87.17	confirmed	3	169	95	0	0	98	0	0	0	3
+roadmap-dfs	W88	W88.7	confirmed	5	247	67	0	0	108	1	0	0	4
+roadmap-dfs	W88	W88.9	confirmed	3	147	61	0	0	60	0	0	0	3
+roadmap-dfs	W89	W89.5	confirmed	3	155	57	0	0	26	0	0	2	1
+roadmap-dfs	W89	W89.7	confirmed	4	140	93	0	0	13	0	0	1	3
+roadmap-dfs	W89	W89.9	confirmed	2	74	48	0	0	9	0	0	0	2
+roadmap-dfs	W89	W89.11	confirmed	2	72	64	0	0		0	0	0	2
+roadmap-dfs	W90	W90.6	confirmed	3	122	61	1	0	0	1	0	1	1
+roadmap-dfs	W90	W90.9	confirmed	3	127	101	0	0	24	0	0	1	2
+roadmap-dfs	W91	W91.11	confirmed	1	168	61	0	0	16	0	0	1	0
+roadmap-dfs	W91	W91.13	confirmed	4	213	100	0	0	116	0	0	0	4
+roadmap-dfs	W91	W91.16	confirmed	4	163	65	0	0	0	0	0	0	4
+roadmap-dfs	W93	W93.20	confirmed	8	211	153	0	0	182	0	0	0	8
+roadmap-dfs	W95	W95.5	confirmed	3	95	68	0	0	17	0	0	0	3
+roadmap-dfs	W97	W97.7	confirmed	4	81	69	0	0	75	0	0	0	4
+roadmap-dfs	W97	W97.13	confirmed	6	325	111	1	0	153	0	0	1	5
+roadmap-dfs	W97	W97.16	confirmed	5	243	104	0	0	71	0	0	0	5
+roadmap-dfs	W97	W97.19	confirmed	3	194	83	0	0	21	0	0	0	3
+roadmap-dfs	W97	W97.29	confirmed	4	193	84	0	0	13	0	0	0	4
+roadmap-dfs	W97	W97.31	confirmed	4	129	111	0	0	27	0	0	0	4
+roadmap-dfs	W103	W103.7	confirmed	1	70	47	0	0	26	0	0	0	1
+roadmap-dfs	W104	W104.16	confirmed	6	243	157	1	0	266	0	0	0	6
+roadmap-dfs	W107	W107.6	confirmed	1	247	98	0	0	27	0	0	0	1
+roadmap-dfs	W108	W108.5	confirmed	1	114	63	0	0	45	0	0	0	1
+roadmap-dfs	W108	W108.7	confirmed	1	25	31	0	0	10	0	0	1	0
+roadmap-dfs	W108	W108.9	confirmed	1	61	44	0	0	9	0	0	0	1
+roadmap-dfs	W109	W109.8	confirmed	2	118	52	1	0	13	0	0	0	2
+roadmap-dfs	W109	W109.10	confirmed	2	98	45	0	0		0	0	0	2
+roadmap-dfs	W111	W111.8	confirmed	3	124	102	0	0	2	0	0	1	2
+roadmap-dfs	W111	W111.10	confirmed	4	236	113	0	0	18	0	0	0	4
+roadmap-dfs	W113	W113.13	confirmed	4	109	75	1	0	15	0	0	0	4
+roadmap-dfs	W114	W114.6	confirmed	6	189	73	0	0	49	0	1	0	5
+roadmap-dfs	W114	W114.8	confirmed	1	38	34	0	0	10	0	0	0	1
+roadmap-dfs	W115	W115.7	confirmed	6	236	81	0	0	35	0	0	0	6
+roadmap-dfs	W116	W116.13	confirmed	7	202	64	0	0	48	0	0	2	5
+roadmap-dfs	W116	W116.17	confirmed	2	96	25	0	0	45	0	0	0	2
+roadmap-dfs	W116	W116.20	confirmed	1	122	67	0	0	58	0	0	1	0
+roadmap-dfs	W116	W116.22	confirmed	1	111	94	0	0	64	0	0	1	0
+roadmap-dfs	W116	W116.24	confirmed	5	231	125	0	0	165	0	0	3	2
+roadmap-dfs	W116	W116.26	confirmed	2	116	91	0	0	54	0	0	0	2
+roadmap-dfs	W116	W116.30	confirmed	3	100	78	1	0	22	0	0	0	3
+roadmap-dfs	W121	W121.5	confirmed	3	132	75	1	0	211	0	0	0	3
+roadmap-dfs	W123	W123.16	open	4	144	0	0	0	147	0	0	0	4
+roadmap-dfs	W124	W124.7	confirmed	6	388	86	0	0	21	0	0	0	6
+roadmap-dfs	W125	W125.7	confirmed	3	85	55	0	0	7	0	0	0	3
+roadmap-dfs	W125	W125.9	confirmed	2	71	66	0	0	11	0	0	0	2
+roadmap-dfs	W130	W130.23	confirmed	4	190	69	0	0	62	1	0	0	3
+roadmap-dfs	W130	W130.25	confirmed	3	146	95	0	0	4	0	0	0	3
+roadmap-dfs	W130	W130.32	confirmed	1	247	118	0	0	46	0	0	1	0
+roadmap-dfs	W130	W130.34	confirmed	1	196	61	0	0	16	0	0	0	1
+roadmap-dfs	W130	W130.45	confirmed	1	133	69	1	0	2	0	0	1	0
+roadmap-dfs	W130	W130.50	confirmed	4	184	95	0	0	36	0	0	0	4
+roadmap-dfs	W130	W130.52	confirmed	1	158	82	0	0	8	0	0	0	1
+shop-app	W4	W4.6	confirmed	3	213	47	0	0		0	0	0	3
+shop-app	W25	W25.6	confirmed	3	216	129	0	0		0	0	0	3
+shop-app	W25	W25.9	confirmed	3	165	106	0	0		0	0	0	3
+shop-app	W26	W26.12	open	1	45	0	0	0		0	0	0	1
+shop-app	W29	W29.7	confirmed	1	33	62	0	0		0	0	0	1
+shop-app	W29	W29.12	confirmed	1	46	44	0	0		0	0	0	1
+shop-app	W29	W29.14	confirmed	1	23	45	0	0		0	0	0	1
+shop-app	W29	W29.16	confirmed	1	55	76	0	0		0	0	0	1
+shop-app	W32	W32.4	confirmed	1	95	28	1	0		0	0	0	1
+shop-app	W32	W32.9	confirmed	1	129	29	0	0		1	0	0	0
+shop-app	W32	W32.11	confirmed	1	41	36	1	0		0	0	0	1
+shop-app	W32	W32.18	confirmed	1	59	37	0	0		1	0	0	0
+shop-app	W32	W32.20	confirmed	1	36	35	0	0		0	0	0	1
+shop-app	W32	W32.24	confirmed	1	45	33	0	0		0	0	0	1
+shop-app	W32	W32.28	confirmed	1	51	27	0	0		0	0	0	1
+shop-app	W32	W32.31	confirmed	1	59	34	0	0		0	0	0	1
+shop-app	W32	W32.38	confirmed	1	50	35	0	0		0	0	0	1
+shop-app	W32	W32.41	confirmed	1	35	27	1	0		0	0	0	1
+shop-app	W32	W32.44	confirmed	1	83	59	0	0		0	0	0	1
+shop-app	W32	W32.46	confirmed	1	83	49	0	0		0	0	0	1
+shop-app	W32	W32.54	confirmed	1	103	47	0	0		0	0	0	1
+shop-app	W35	W35.6	confirmed	2	72	49	0	0		0	0	0	2
+shop-app	W35	W35.9	confirmed	4	106	72	0	0		0	0	0	4
+shop-app	W37	W37.6	confirmed	1	57	45	0	1		0	0	0	1
+shop-app	W38	W38.5	confirmed	1	30	33	0	0		0	0	0	1
+shop-app	W39	W39.7	confirmed	5	304	0	0	0		0	1	2	2
+shop-app	W39	W39.17	confirmed	1	116	197	1	0		0	0	0	1
+shop-app	W39	W39.21	confirmed	1	58	165	1	0		0	0	0	1
+shop-app	W39	W39.27	confirmed	1	29	41	0	0		0	0	0	1
+shop-app	W39	W39.29	confirmed	4	69	103	0	0		0	0	0	4
+shop-app	W39	W39.31	confirmed	3	40	25	0	0		0	0	0	3
+shop-app	W39	W39.36	confirmed	1	31	5	0	0		0	0	0	1
+shop-app	W42	W42.6	confirmed	1	39	27	0	0		0	0	0	1
+shop-app	W42	W42.10	confirmed	2	58	43	0	0		0	0	0	2
+shop-app	W42	W42.12	confirmed	2	53	49	0	0		0	0	0	2
+shop-app	W42	W42.16	confirmed	1	34	37	0	0		0	0	0	1
+shop-app	W42	W42.23	confirmed	2	62	45	0	0		0	0	0	2
+shop-app	W42	W42.25	confirmed	1	42	23	0	0		0	0	0	1
+shop-app	W42	W42.28	confirmed	1	33	53	0	0		0	0	0	1
+shop-app	W43	W43.9	confirmed	1	40	37	0	0		0	0	0	1
+shop-app	W45	W45.5	confirmed	1	28	21	0	0		0	0	0	1
+farm-app	W92	W92.26	confirmed	8	192	137	0	0		0	0	0	8
+farm-app	W118	W118.10	confirmed	6	164	62	0	0		0	0	3	3
+farm-app	W118	W118.16	confirmed	11	357	106	0	0		0	0	0	11
+farm-app	W122	W122.11	confirmed	4	148	78	0	0		0	0	0	4
+farm-app	W122	W122.13	confirmed	2	177	91	0	0		0	0	0	2
+farm-app	W126	W126.7	confirmed	4	126	82	0	0		0	0	0	4
+farm-app	W127	W127.6	confirmed	5	234	95	0	0		0	1	1	3
+farm-app	W127	W127.9	confirmed	5	247	139	0	0		0	0	2	3
+farm-app	W127	W127.13	confirmed	3	150	119	1	0		1	0	1	1
+farm-app	W127	W127.15	confirmed	2	124	83	1	0		0	0	0	2
+farm-app	W127	W127.17	confirmed	1	99	52	1	0		0	0	0	1
+farm-app	W127	W127.19	confirmed	2	113	71	1	0		0	0	0	2
+farm-app	W131	W131.8	confirmed	5	170	76	1	0		0	0	1	4
+farm-app	W131	W131.10	confirmed	3	133	132	1	0		0	0	0	3
+farm-app	W132	W132.9	confirmed	1	225	91	1	0		0	0	0	1
+farm-app	W133	W133.11	confirmed	3	105	70	1	0		0	0	0	3
+farm-app	W142	W142.6	confirmed	4	226	80	0	0		0	2	0	2
+farm-app	W142	W142.8	confirmed	1	57	55	0	0		0	0	0	1

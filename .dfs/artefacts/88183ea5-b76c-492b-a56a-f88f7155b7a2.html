@@ -1,0 +1,227 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Author-time margin for accounting rows</title>
+<!--
+  An answer page: the page a raise names on its "Answer with:" line, or a node's
+  Hypothesis names. Copy this file to .dfs/artefacts/<uuid>.html. Everything above the
+  answer form is yours and has no layout to fill in: draw the issue the way it is best
+  seen, which is usually how the relevant part of the system works now and what each
+  option changes in it (docs/artefacts.md, "What an answer page shows"). Show, then
+  caption: a drawing the reader switches between options beats paragraphs.
+  The answer form at the end is the one shared part. Keep it as it is and edit only its
+  options (replace the two placeholder ones: a page that keeps them is refused); it is
+  what posts the author's answer or ruling. The drawing rules (.dg, .box, .link) are in
+  _TEMPLATE.html: copy them if the page draws boxes and arrows.
+  SELF-CONTAINED: no CDN, no fonts, no fetch but the form's own to /artefact-state (the
+  web page serves the page sandboxed, scripts allowed, the network off).
+  MOBILE FIRST: the author reads on a phone. Write the rules for a 360px screen, widen
+  them under @media (min-width: ...), and check the page with
+      <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
+-->
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; }
+  .tabs button { font: inherit; padding: 8px 12px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .bar { margin: 10px 0; }
+  .bar .lab { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+  .bar .track { position: relative; height: 18px; background: #e8e5dc; border-radius: 3px; }
+  .bar .fill { height: 100%; background: #3b6ea5; border-radius: 3px; min-width: 2px; }
+  .bar .fill.cost { background: #b5532f; }
+  .bar .line { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #1a1a1a; }
+  .why { background: #fff; border: 1px solid #ccc; border-radius: 6px; padding: 8px 12px; font-size: 15px; }
+</style>
+
+<h1>How big must an author-time saving be to count?</h1>
+<p>The accounting rows are totals over 238 tasks. The old margin (60 words, one raise a tree) is the noise between two replays. Pick a unit and see which rows the margin could ever have separated from a tie. The black line is the margin in that unit; the bars are the savings (blue) and the one cost (red).</p>
+<div class="tabs" role="group" aria-label="Unit">
+  <button type="button" data-u="a" aria-pressed="true">A · per task of 238</button>
+  <button type="button" data-u="b" aria-pressed="false">B · per task that holds it</button>
+  <button type="button" data-u="c" aria-pressed="false">C · share of what the author faces</button>
+</div>
+<div id="bars"></div>
+<div class="why" id="why"></div>
+<p>I propose C, with the quality tier's own 15% as the margin. A and B keep the replay margins and cannot fail: A caps E1 and E5 below the line whatever they did, B puts every task that holds a raise at one or more. C compares each saving with the whole of what the author reads or answers in the same history.</p>
+<script>
+  var DATA = {
+    a: { unit: 'words or raises a task, over 238 tasks', rows: [
+      ['E5 raises, A', 0.07, 1, 'raises', 'cap 0.11'], ['E5 raises, B', 0.03, 1, 'raises', 'cap 0.11'], ['E4 raises', 0, 1, 'raises', 'by design'],
+      ['E1 assumed words', 19.6, 60, 'words', 'cap 31.9'], ['E6 words, budget 80', 52, 60, 'words', ''], ['E7 words', -42, 60, 'words', 'a cost']],
+      why: 'E1, E4 and E5 sit under the line whatever they did: the most E5 could remove is every tooling raise (0.11 a task), the most E1 could save is every Wrong-if word (31.9 a task). The tie is by construction for them.' },
+    b: { unit: 'raises a task, over the tasks that hold one', rows: [
+      ['E5 raises, A (11 tasks)', 1.55, 1, 'raises', ''], ['E5 raises, B (5 tasks)', 1.6, 1, 'raises', ''], ['E7 words (73 tasks)', -137, 60, 'words', 'a cost']],
+      why: 'A task that holds a removable raise holds one or more, so E5 is at the line from the start. This view cannot call a tie either: it is over by construction.' },
+    c: { unit: 'percent of the raises (124) or words read (120,271) in the history', rows: [
+      ['E5 raises, A', 13.7, 15, '%', 'cap 21%'], ['E5 raises, B', 6.5, 15, '%', 'cap 21%'], ['E4 raises', 0, 15, '%', 'by design'],
+      ['E1 page rulings', 9.7, 15, '%', 'cap 14.5%'], ['E1 assumed words', 3.9, 15, '%', 'cap 6.3%'],
+      ['E6 words, budget 80', 10.3, 15, '%', ''], ['E6 words, budget 60', 18.9, 15, '%', 'over'], ['E7 words', -8.3, 15, '%', 'a cost']],
+      why: 'E5 (13.7% on the Goal test) is inside, by 1.3 points, and could have been over (cap 21%): observed. E6 at 80 words is inside and at 60 words over. E7 costs 8.3%. E1 and E4 are inside by construction: their cap is under 15%.' }
+  };
+  var cur = 'c';
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+  function draw() {
+    var d = DATA[cur], max = 0;
+    d.rows.forEach(function (r) { max = Math.max(max, Math.abs(r[1]), r[2]); });
+    max *= 1.15;
+    var h = '<p class="why" style="margin:0 0 8px">' + esc(d.unit) + '</p>';
+    d.rows.forEach(function (r) {
+      var w = Math.abs(r[1]) / max * 100, m = r[2] / max * 100;
+      h += '<div class="bar"><div class="lab"><span>' + esc(r[0]) + '</span><span>' + (r[1] < 0 ? '+' + (-r[1]) + (r[3] === '%' ? '%' : ' ' + esc(r[3])) + ' cost' : (r[1] ? '−' : '') + r[1] + (r[3] === '%' ? '%' : ' ' + esc(r[3]))) + (r[4] ? ' · ' + esc(r[4]) : '') + '</span></div>' +
+           '<div class="track"><div class="fill' + (r[1] < 0 ? ' cost' : '') + '" style="width:' + w + '%"></div><div class="line" style="left:' + m + '%"></div></div></div>';
+    });
+    document.getElementById('bars').innerHTML = h;
+    document.getElementById('why').textContent = d.why;
+    document.querySelectorAll('.tabs button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.u === cur); });
+  }
+  document.querySelectorAll('.tabs button').forEach(function (b) {
+    b.addEventListener('click', function () { cur = b.dataset.u; draw(); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return { unit: cur }; };
+  document.addEventListener('dfs-state', function (e) { if (e.detail && DATA[e.detail.unit]) { cur = e.detail.unit; draw(); } });
+  draw();
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which unit decides an accounting row's author-time tie</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Use C: a saving counts when it is 15% or more of the raises answered or words read in the same history."> C · share of what the author faces, 15%</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep the replay margins (60 words, one raise a tree) for the accounting rows too and call E1, E4 and E5 ties by construction."> Keep 60 words and one raise</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

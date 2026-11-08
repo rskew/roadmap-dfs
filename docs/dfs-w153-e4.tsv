@@ -1,0 +1,52 @@
+n	project	task	date	kind	findings last two reviews	caused	answer	first review after	issues reviews after	later raises	last review ok
+1	roadmap-dfs	W116	2026-10-28	DRIFT	[0, 2]	C	stop	ok	3	1	False
+2	roadmap-dfs	W17	2026-10-08	REVIEW	[1, 1]	C	continue	ok	0	0	True
+3	roadmap-dfs	W3	2026-10-08	REVIEW	[1, 1]	C	continue	ok	0	0	True
+4	roadmap-dfs	W30	2026-10-09	REVIEW	[1, 1]	N	continue	ok	0	0	True
+5	roadmap-dfs	W61	2026-10-10	REVIEW	[0, 1]	-	continue	ok	3	0	True
+6	roadmap-dfs	W68	2026-10-11	REVIEW	[0, 1]	C	continue	ok	0	0	True
+7	roadmap-dfs	W74	2026-10-15	REVIEW	[1, 1]	C	continue	issues	1	0	True
+8	roadmap-dfs	W75	2026-10-16	SESSIONS	[2, 2]	N	continue	issues	15	9	True
+9	roadmap-dfs	W75	2026-10-16	REVIEW	[2, 2]	C	continue	issues	13	8	True
+10	roadmap-dfs	W75	2026-10-16	REVIEW	[2, 1]	N	continue	issues	11	7	True
+11	roadmap-dfs	W75	2026-10-17	REVIEW	[1, 1]	N	continue	issues	9	6	True
+14	roadmap-dfs	W81	2026-10-16	SESSIONS	[2, 1]	N	continue	ok	0	0	True
+15	shop-app	W13	2026-09-27	SESSIONS	[2, 2]	C	continue	issues	9	3	False
+16	shop-app	W13	2026-09-27	SESSIONS	[1, 1]	C	continue	issues	5	2	False
+17	shop-app	W13	2026-09-27	SESSIONS	[3, 1]	N	stop	-	0	0	False
+18	shop-app	W19	2026-09-28	SESSIONS	[4, 6]	N	steer	issues	2	2	True
+20	shop-app	W20	2026-09-26	SESSIONS	None	-	steer	issues	5	2	True
+21	shop-app	W20	2026-09-30	SESSIONS	[1, 1]	N	steer	ok	0	1	True
+22	shop-app	W21	2026-10-01	SESSIONS	None	-	steer	ok	0	1	True
+23	shop-app	W21	2026-10-01	SESSIONS	None	-	steer	ok	0	0	True
+24	shop-app	W25	2026-09-30	SESSIONS	[1, 1]	C	continue	ok	0	0	True
+25	shop-app	W29	2026-10-04	REVIEW	[1, 1]	N	continue	issues	2	1	True
+26	shop-app	W29	2026-10-04	REVIEW	[1, 1]	C	continue	ok	0	0	True
+27	shop-app	W32	2026-10-14	REVIEW	[3, 2]	C	continue	issues	16	10	True
+28	shop-app	W32	2026-10-14	REVIEW	[1, 1]	C	continue	issues	14	9	True
+29	shop-app	W32	2026-10-14	REVIEW	[2, 2]	C	continue	issues	12	8	True
+30	shop-app	W32	2026-10-15	REVIEW	[2, 2]	C	continue	issues	8	5	True
+31	shop-app	W32	2026-10-16	REVIEW	[4, 2]	C	continue	issues	6	4	True
+32	shop-app	W32	2026-10-16	REVIEW	[2, 2]	C	continue	issues	4	3	True
+33	shop-app	W32	2026-10-17	REVIEW	[2, 1]	C	continue	issues	2	1	True
+34	shop-app	W39	2026-10-06	SESSIONS	None	-	continue	issues	6	4	True
+35	shop-app	W39	2026-10-07	SESSIONS	[3, 1]	N	continue	issues	4	3	True
+36	shop-app	W39	2026-10-09	REVIEW	[1, 1]	N	continue	issues	1	0	True
+37	shop-app	W42	2026-10-11	REVIEW	[1, 1]	N	continue	issues	4	2	True
+38	shop-app	W42	2026-10-13	SESSIONS	[1, 0]	-	continue	issues	3	1	True
+39	shop-app	W42	2026-10-13	REVIEW	[1, 1]	N	continue	issues	1	0	True
+
+kinds: {'DRIFT': 1, 'REVIEW': 21, 'SESSIONS': 14} by project: {'roadmap-dfs': 12, 'shop-app': 24}
+answers: {'stop': 2, 'continue': 29, 'steer': 5}
+'continue' answers 29; followed by >=4 issues reviews to the end of the task: 15; by kind {'SESSIONS': 5, 'REVIEW': 10}
+all 36: followed by >=4 issues reviews: 16; first review after was ok: 12, issues: 23, none: 1
+
+rule A (no fall in findings between the last two reviews -> default stop): scorable 31 of 36 (two issues reviews with text), fires on 24
+  author said stop 2, continue 29, steer 5
+  default 'stop' agrees with the author's answer on 1 of the 24 it fires on; default 'continue' where it does not fire agrees on 6 of 7
+rule B (last review's findings caused or left by the previous fix -> default stop): classified 30 of 36, fires on 17
+  author said stop on 1 of those 17; continue where it does not fire: 10 of 13
+  rule A fires: continued on 23; first review after found issues 15, ok 8; median issues reviews to the end 2; ran on to >=4: 10
+  rule A silent: continued on 6; first review after found issues 5, ok 1; median issues reviews to the end 6; ran on to >=4: 4
+  rule B fires (C): continued on 16; first review after found issues 11, ok 5; median issues reviews to the end 5; ran on to >=4: 9
+  rule B silent (N): continued on 12; first review after found issues 9, ok 3; median issues reviews to the end 2; ran on to >=4: 5

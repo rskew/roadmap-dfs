@@ -1,0 +1,48 @@
+== roadmap-dfs as at d595c44a (the Background's pass), shop-app and farm-app as they are
+roadmap-dfs: hypotheses 127, with a page 104 (0 files missing), page bytes total 1801226 median 12192, est. output tokens 450306
+  pages built from the answer template: 60; their bytes beyond the template: total 703899, median 2674
+  pages on a node that also carries a raise (would still be made under E1): 3
+  author words: Hypothesis text 7988; Wrong-if halves 3191 (naming the author 2121, not 1070)
+  author rulings on a hypothesis: 15; refuted 10; on a page-bearing one 11; on one naming the author 8; replying with the page's own label 1
+shop-app: hypotheses 211, with a page 11 (0 files missing), page bytes total 93023 median 8068, est. output tokens 23255
+  pages built from the answer template: 2; their bytes beyond the template: total 3133, median 1566
+  pages on a node that also carries a raise (would still be made under E1): 0
+  author words: Hypothesis text 14671; Wrong-if halves 3640 (naming the author 188, not 3452)
+  author rulings on a hypothesis: 1; refuted 1; on a page-bearing one 0; on one naming the author 0; replying with the page's own label 0
+farm-app: hypotheses 38, with a page 20 (0 files missing), page bytes total 765919 median 14107, est. output tokens 191479
+  pages built from the answer template: 19; their bytes beyond the template: total 545554, median 3237
+  pages on a node that also carries a raise (would still be made under E1): 1
+  author words: Hypothesis text 2675; Wrong-if halves 752 (naming the author 609, not 143)
+  author rulings on a hypothesis: 2; refuted 2; on a page-bearing one 1; on one naming the author 1; replying with the page's own label 0
+TOTAL
+  hypotheses 376, with a page 135; page bytes 2660168, median 12393, est. output tokens 665042 (4926 a page)
+  E1 pages saved: 135 of 376 hypotheses have one, 4 of those sit on a node with a raise and would stay, so 131 pages are not made
+  tokens of those pages (bytes / 4): whole files 665042; if the template is copied not typed, 444620
+  of those pages 81 were built from the answer template (10885 bytes); beyond it they hold 1252586 bytes (median 2844), about 313146 tokens if the template is copied and not typed
+  author words (Wrong-if halves): today 7583; if only the hypotheses naming the author are shown as `assumed` 2918 (saves 4665 = 62%)
+  rulings: 18, refuted 13; on hypotheses naming the author 9 (refuted 7); NOT naming the author 9 (refuted 6); with no page 6 (refuted 4); replying with the page's option label 1
+
+== today's files
+roadmap-dfs: hypotheses 174, with a page 151 (0 files missing), page bytes total 2467015 median 12662, est. output tokens 616753
+  pages built from the answer template: 107; their bytes beyond the template: total 858093, median 2454
+  pages on a node that also carries a raise (would still be made under E1): 5
+  author words: Hypothesis text 10715; Wrong-if halves 4345 (naming the author 2825, not 1520)
+  author rulings on a hypothesis: 16; refuted 11; on a page-bearing one 12; on one naming the author 9; replying with the page's own label 1
+shop-app: hypotheses 211, with a page 11 (0 files missing), page bytes total 93023 median 8068, est. output tokens 23255
+  pages built from the answer template: 2; their bytes beyond the template: total 3133, median 1566
+  pages on a node that also carries a raise (would still be made under E1): 0
+  author words: Hypothesis text 14671; Wrong-if halves 3640 (naming the author 188, not 3452)
+  author rulings on a hypothesis: 1; refuted 1; on a page-bearing one 0; on one naming the author 0; replying with the page's own label 0
+farm-app: hypotheses 38, with a page 20 (0 files missing), page bytes total 765919 median 14107, est. output tokens 191479
+  pages built from the answer template: 19; their bytes beyond the template: total 545554, median 3237
+  pages on a node that also carries a raise (would still be made under E1): 1
+  author words: Hypothesis text 2675; Wrong-if halves 752 (naming the author 609, not 143)
+  author rulings on a hypothesis: 2; refuted 2; on a page-bearing one 1; on one naming the author 1; replying with the page's own label 0
+TOTAL
+  hypotheses 423, with a page 182; page bytes 3325957, median 12741, est. output tokens 831489 (4569 a page)
+  E1 pages saved: 182 of 423 hypotheses have one, 6 of those sit on a node with a raise and would stay, so 176 pages are not made
+  tokens of those pages (bytes / 4): whole files 831489; if the template is copied not typed, 483169
+  of those pages 128 were built from the answer template (10885 bytes); beyond it they hold 1406780 bytes (median 2522), about 351695 tokens if the template is copied and not typed
+  author words (Wrong-if halves): today 8737; if only the hypotheses naming the author are shown as `assumed` 3622 (saves 5115 = 59%)
+  rulings: 19, refuted 14; on hypotheses naming the author 10 (refuted 8); NOT naming the author 9 (refuted 6); with no page 6 (refuted 4); replying with the page's option label 1
+

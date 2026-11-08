@@ -910,3 +910,107 @@ A replay needs the configured agent's binary (claude, codex, kiro-cli or opencod
 (both from nixpkgs at the agent pin; `REPLAY_CLAUDE_CODE`, `REPLAY_KIRO_CLI`, `REPLAY_CODEX`,
 `REPLAY_OPENCODE` and `REPLAY_PROOT` name others) and a DEST that can run scripts
 (inside the repo's ignored `.dfs/runs` works on the box used here).
+
+### Seven changes weighed by the author's time (W153)
+
+W153 took seven changes to the hypothesis workflow and judged each on three tiers in this order:
+quality of the delivered tree, the author's time, credits. The order, the margins and the verdict
+rule are in `docs/dfs-w153-measures.md`; the order and the tie-break between tiers are my choice and
+were stated there as a Hypothesis, not seen by the author. Margins: quality 1.5 clauses (the judge's
+spread), words 60 a tree, counts one a tree, credits 2 times. A change whose evidence is inside the
+margin is called inconclusive, never adopt or drop. Every count reads roadmap-dfs, shop-app and
+farm-app as at d595c44a (1,519 nodes, 124 raises, 25 backtracks); today's files have grown
+(1,708 nodes), and the scripts in `docs/dfs-w153-*.py` rerun each count.
+
+What each kind of evidence can say here. Accounting (reading task files) shows what a change would
+have removed, not whether the tree got worse without it. The judges did not work: the text-only E2
+judge flagged 36 of 50 judgings of backtracked nodes and 53 of 82 of unchallenged ones (Fisher p
+0.43), and the judge that reads the repository flagged 2 of 12 backtracks and 0 of 12 controls (p
+0.239, 10 missed; 7 of the 12 critics' faults came from re-running something, which a read-only judge
+cannot do). Replay evidence is one task. On W17 the three controls met 5.0, 7.5 and 8.0 of 10
+clauses (a spread of 3, twice the judge's 1.5) and the pooled arm (E1, E2, E6, E7) met 6.5, so a gap
+under about 3 clauses is invisible, and no raise happened in any kept arm, so E4 and E5 had no case.
+The driver-answers assumption was not tested: the W109 and W3 pairs (table answers against a blank
+"proceed") never used a table answer, because the table arm raised nothing. W3's 2.5-clause gap
+(7 of 8 against 4 or 5) came from one flagged raise and a different design choice, not from the
+answers.
+
+The author-time tier for the accounting rows. The 60-word and one-raise margins are the spread between
+two replays of one task. The accounting rows are not noisy: they are totals over 238 tasks, and divided
+by 238 a total that cannot reach the margin never will (E1 can save at most 31.9 Wrong-if words a task,
+E5 remove at most 0.11 raises a task), while divided by the tasks that hold the cost it cannot fall
+below one raise (E5, 1.55 and 1.6). So the first version of this table called E1, E4 and E5 ties by
+construction, and the words "none shown to help past the margins" hid that no accounting result could
+have. These cells use a unit that can fail: the saving as a share of what the author faces in the same
+history. For raises that is the 124 of the history (as at d595c44a) and, beside it, the 89 the current tool
+can still raise: 124 less the 35 review-count and ten-session checkpoints whose code was removed (counted
+from `docs/dfs-w153-e4.tsv`: 21 review-count and 14 ten-session, all answered; the one scope-drift
+checkpoint stays). The 26 tooling raises are the raises of the Sep and Oct tool. Of the 17 that E5 removes
+on reading A, the current tool can still raise only 1 and an E5 arm could pass it with no new permission
+(row 1 of `docs/dfs-w153-e5.tsv`, a correction pruning a confirmed sibling); 2 are the task-file size guard
+(rows 2 and 4), which refuses an E5 arm's commit as much as a control's; 14 are fixed (11 rows, 5 to 15), no
+longer fire (24, 26) or are not a tooling fault at all (16, a stale pointer in a shop-app model file). The
+file has the command or file for each row. Those 14 leave the denominator as the 35 removed loop
+checkpoints do, giving 75 (and 70 if the 5 kept tooling raises, which were not read, go too). For words it is the 120,271 read in Determinations
+and Hypotheses, Summaries not counted (the Goal lists them; counting them adds to the words faced and so lowers every word share, which can only move a word row further inside the margin); the removed checkpoints do not change it. The margin is 15%, the
+quality tier's own relative margin (1.5 of 10 clauses): a unit from another tier, and a choice I made after
+the shares were printed. So each row is also read at 10% and 20%, and a row whose verdict under the rule
+changes inside that range is written as "margin-bound" and not as "inside". E1's `assumed` words, E4 and E7
+stay inside at every margin from 10% to 20%; E5 on the current tool (1 raise of 75, 1.3%; 3 of 75, 4.0%, if the
+size guard were passable) is inside too, while E5 as the history's tool raised its faults (reading A, 13.7% of
+124) and E6 at 80 words are margin-bound. A cell says
+"by construction" when the cap (all the tooling raises, all the words) is under the margin or the arm
+removes nothing. The verdict rule reads "quality not measured" as not worse, so a share over the margin is a
+gain on author time and the rule says adopt; where I hold a row back from that, the cell says why.
+`docs/dfs-w153-author-unit.py` prints every share and the rule at 10%, 15% and 20%. The 60 words and
+one raise stay for the replay arms, where the controls' noise sets them.
+
+| change | evidence | quality | author time | credits | verdict |
+|---|---|---|---|---|---|
+| E1 no page for a Hypothesis, `assumed` | accounting; W17 pooled arm | pooled arm inside the controls' range (one page-less Hypothesis) | 131 of 376 pages would not be made, but the files record no page opened, so the effect of pages on the author is not measurable from them: 12 of the 18 author rulings on a hypothesis were on a page-bearing node (7.9% of 152 author answers and corrections, 10.3% of the 117 still possible), which is a floor on pages used and not a saving, since the author still rules without a page; an `assumed` status would cut 4,665 of 7,583 `Wrong if` words (3.9% of the words read, cap 6.3%), inside by construction at every margin from 10% to 20% (about 20 words a task over all projects; the earlier 8 was roadmap-dfs alone) | about 1.9k to 2.8k output tokens a task, small | inconclusive |
+| E2 gate at determination | judge test; W17 and W87 pooled arms | no judging evidence (judges did not separate backtracks from controls; 10 of the 27 flagged controls were read by hand and 1 to 3 were weak, so the flags were mostly false alarms and the labels were not the cause, `docs/dfs-w153-e2-negatives-read.tsv`); the gate itself was not exercised in a replay (the pooled tool carries E1, E2, E6 and E7 together, so a pooled arm cannot isolate it) | not measured | not measured alone (the pooled arm's credits are the bundle's: W17 20.1 against 16.4 to 30.9, W87 46.6 against 24.2 to 39.0; 46.6 is 1.9 times the cheapest control, near the 2 times credits margin, and which control had which figure was not written down) | inconclusive |
+| E4 checkpoint shows churn and a default | accounting | not measured, and not measurable by replay: the review-count and ten-session checkpoints were removed on 15 and 20 Oct 2026, the worker never read them, and a replay driver answers both arms alike | no raise removed (0 of 124, 0 of the 89 still possible), so no saving, by construction; 35 of the 124 raises were loop checkpoints whose code no longer exists; the author answered stop 2, continue 29, steer 5; a default of stop would have been overridden 23 times of 24 where it fires; 15 of the 29 continues ran on to four or more issues reviews, all on five tasks, and neither the no-fall rule nor a caused-by-the-previous-fix reading separated those tasks from the rest | none | inconclusive |
+| E5 tooling fault filed as a draft | accounting | not measured | removes 17 of 26 tooling raises on reading A, 8 on B; shares of the 124 raises of the history and the 89 still possible: A 13.7% and 19.1%, B 6.5% and 9.0%; on the current tool 1 of 75 raises still possible (1.3%), 3 of 75 (4.0%) if the size guard were passable, inside at 10, 15 and 20%; no E5 pair was run (reasoning below the table) | none | inconclusive |
+| E6 word budget on a Determination | accounting; W17 and W87 pooled arms | no Determination was over 80 words in the final tree of any of 8 arms (W17 and W87, pooled and controls), so the budget was not exercised by any replay and the quality cell rests on the accounting alone (reasoning below the table) | 80 words refuses 365 of 1,483 and cuts 12,391 words, 10.3% of the words read: a gain at a 10% margin and inconclusive at 15% and 20%, so margin-bound (a budget of 60 cuts 18.9%: a gain at 10% and 15%, inconclusive at 20%); of 36 long ones read in full 1 has its verdict first past word 80 and 13 a hand-off (revert, keep, who does what) | not measured alone (the pooled arms' credits are the bundle's, E1, E2, E6 and E7 together: W17 20.1 against 16.4 to 30.9, W87 46.6 against 24.2 to 39.0; 46.6 is 1.9 times the cheapest control, near the 2 times credits margin, and which control had which figure was not written down) | inconclusive |
+| E7 minor findings in the review's `ok` | accounting; W17 pooled arm | no review round was owed to a minor node (169 reviews); at least 10 of 484 minor lines (2.1%) came back as the same defect and 29 (6.0%) as a related one | adds 10,014 words read, 8.3% of the words read (cap 18.0%), under 10%, 15% and 20% so inside at every margin tried (42 words a task over all tasks, 137 in the 73 tasks that have a minor node) | none | inconclusive |
+| E8 blind reviewer | review-only run on 23 trees, hand-matched | headline: 2 unmet clauses caught by the informed reviewer, 4 by the blind one (p 0.625); headline or minor line 5 against 4 (p 1.000); the pool is 35 targets with power 63% at 60% against 30% catch rates (59% on the 32 first counted; 49% at 50% against 25%; 80% needs 50 targets); the session's own hand reading (arm visible) was read again with the arm hidden, twice, by a fresh kiro-cli reader (`docs/dfs-w153-e8-second.py`): it agrees with the hand reading exactly on 27 of 35 targets (8 differ, 23%) and with itself on the same 27 of 35, and the informed-minus-blind count moves between readings (headline -2, -1, 0; headline or minor line +1, 0, +2; with doubtful ones -1, -1, +1; every sign test p 0.625 or more), so no reading separates the reviewers and the hand reading is one noisy reader's count, not a ground truth | not measured | not measured | inconclusive |
+
+E5, in full. removes 17 of 26 tooling raises if "blocks the Goal" means a fix was needed to finish (A), 8 if it means the commit was refused (B). Shares of the 124 raises of the history and of the 89 still possible after the loop checkpoints: A 13.7% and 19.1%; B 6.5% and 9.0%. Those 17 are the faults of the Sep and Oct tool, and on the current tool 14 of them cannot be raised again (11 fixed, 2 not firing, 1 not a tooling fault) and 2 are the size guard that refuses an E5 arm as much as a control, leaving 1 (a correction pruning a confirmed sibling): 1 of 75 raises still possible is 1.3% (1.4% of 70), 3 of 75 is 4.0% if the size guard were passable, inside at 10, 15 and 20% on every denominator. So on the current tool E5 is a tie on author time, by construction, and the history's 13.7% and 19.1% describe faults since fixed. What the figure does not say is how many new faults the next tool version will bring: the history shows 17 removable raises in 238 tasks (0.07 a task) while faults were being found, and nothing measures the rate now (this task alone met four tooling faults, W156 to W159, and raised one, the size guard, answered "Raise the budget"; one task is not a rate). Verdict rule: adopt on A over 89 at 15% only on the unfiltered 17, which I do not use. No E5 pair was run: the fault every page-writing worker meets in a replay sandbox (`artefact_check.sh` printing `exec: nix: not found`, the W156 family) was met by 2 of the 4 kept W87 arms and raised by none, so a control would not raise for an E5 arm to differ from, and the commit-refusing fault that still fires (the size guard on a task's own file, W157) was worked round inside this task without a raise (W153.42 moved two Evidence lines to the archive; W157 stays a draft). Reading A's 17 include rows 15 and 16 of `docs/dfs-w153-e5.tsv`, where the author answered "fix it inside the task", so those two are not a sign the author wanted a draft. Each removed raise had blocked its task a median 1.7 h (A) or 1.6 h (B), a wait of the task and not the author's attention
+
+E6, in full. no Determination was over 80 words in the final tree of any of 8 arms (W17: 3 controls and the pooled arm, largest 67; W87, a task whose original wrote 5 of 17 over 80: 3 controls, largest 68, and the pooled arm, largest 49, which met 9 of 10 clauses against the controls' 9, 10 and 9). That does not show the budget refused nothing: the pooled arms' workers were told it (the skill says at most 80 words), so a final-tree count cannot tell a budget that did not matter from one the worker wrote inside from the start. The logs do not show refusals either: `docs/dfs-w153-w87-count.py` counts the text "80 words" in the run logs, which in the pooled arm is the rule's own wording read by each session (8 hits, 0 in the controls), and the kept W17 pooled arm's logs hold no refusal text; the W87 clones are not kept, so "refused none" for W87 rests on the final trees' longest Determination (49 words in the pooled arm) and not on the log. E6's quality cell is "not exercised by any replay" and rests on the accounting alone
+
+Reading the table. No change was shown to hurt the delivered tree and none was shown to help it:
+every difference is inside the noise of the evidence that exists, so nothing is adopted or dropped
+on this round. What would settle each: E1, E6 and E7 need three or more paired tasks that raise
+hypotheses and minor findings (the W17 spread alone is 3 clauses); E5 needs a replayed task
+whose control raises on a tooling fault the current tool has (none found: the faults met in replays were gone around, not raised), and E4 needs the author's checkpoint back first (parked); E8 needs about 50 targets and
+the blind reviewer run with the git history closed (it ran `git log`, `git show` or `git diff` in
+all 20 first trees, and its output held 12 of 78 Determinations and 4 Summaries in 5 trees; the W132-k1 blind review leaked too, 2 of 11 Determinations and a Summary, so 6 blind runs in all); E2
+needs a judge that can run the node's check, since most critic backtracks rested on a rerun. A second replay, on W87, did not reach the budget either: see the E6 row.
+The driver-answers assumption (a table answer stands for the author's, tested by a table-against-"proceed" pair) stands untested, not held: no table answer was used in either pair (W109, W3).
+The E6 hand-off finding is the one to watch if a budget is tried: a verdict is rarely lost, a
+hand-off often. Of the 8 tooling raises E5 can remove without a new permission, 7 are fixed or were
+not tooling faults on the current tool and 1 can still be raised (a correction pruning a confirmed sibling): the part of E5
+that costs the law nothing is now small.
+
+Who reads E7's minor lines. The E7 row's 10,014 words assume the author reads every minor line. Every
+one of those lines came from a review that logged `issues` (482 of 484, `docs/dfs-w153-e7-read.py`), and
+the files do not show which log entries the author opens. On the reading that only `ok` bodies are read the
+cost is at most +0.9% (the lines a later `ok` repeats by name, less the Determinations no longer read), and if
+no body is read it is -9.7%; both are inside at 10%, 15% and 20%, so the row's verdict does not move. What
+does move is the quality cell: on those two readings most lines are read by nobody (219 to 484 of 484; of 12
+"repeats" read by hand none repeats its line in the same words), and with no open node no session is
+obliged to fix them. That is not measured, and the W17 pooled arm has no minor lines to show it.
+
+Tooling faults found on the way were filed as draft tasks and not fixed in W153:
+`artefact_check.sh` reports every page blank when fontconfig has no default config (W156, verified
+again here on the shipped template: `FAIL blank` without a config, `clean` with one),
+`tree.py shelve` leaving the task file over its budget on a commit that grows it (W157),
+`tree.py start` lost when the task file is restored from git (W158), and `replay.py run` leaving the
+killed run's runner alive when a wrapper `timeout` ends the command (W159). W157 to W159 were seen
+by earlier sessions of W153 and not re-run when filed.
+
+Scripts and outputs: `docs/dfs-w153-mine.py`, `-e1.py`, `-e4.py`, `-e5.py`, `-e6.py`, `-e7.py`,
+`-e8-test.py`, `-e8-hand.py`, `-author-unit.py`, `-judge.py`, `-judge-repo.py`, `-build-tool.sh`, with their `.txt` and
+`.tsv` beside them, the answer tables in `docs/dfs-w153-answers.md` and the W17 scores in
+`docs/dfs-w153-w17-scores.jsonl`.

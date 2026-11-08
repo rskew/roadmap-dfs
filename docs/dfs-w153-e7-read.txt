@@ -1,0 +1,16 @@
+minor nodes 170, lines 484, tasks 73
+lines by the verdict of the review that named the node: {'issues': 482, 'ok': 1, 'unknown': 1}
+minor nodes with no later `ok` review in the task: 2 of 170
+lines with no distinctive name (cannot be matched, counted as not repeated): 38
+lines a later `ok` body repeats (shared name): 265 of 484; their words 12741 of 21684
+Determination words saved (the node no longer exists): 11670
+
+reading   change in words read     share of 120,271   lines the author never reads
+ALL         +10014              +8.3%            0
+OK           +1071              +0.9%            219
+NONE        -11670              -9.7%            484
+
+verdict by margin (a gain/cost is outside when |share| >= margin):
+  ALL   10%: inside  15%: inside  20%: inside
+  OK    10%: inside  15%: inside  20%: inside
+  NONE  10%: inside  15%: inside  20%: inside
