@@ -1,0 +1,24 @@
+## farm-app W127.13 LINE: `status_verdict` in `farm-operator/app.py` checks a timer only for a command with `minutes`. So a `gate_open` (`on(channel, 0)`, which the node caps a
+   NAME farm-operator/app.py | OK BODY: Minor: `status_verdict` in `farm-operator/app.py` now caps a water's expected countdown at NODE_LONGEST_ON (7200 s). `config.h` also allows a longer longest on,
+## roadmap-dfs W48.8 LINE: `scripts/ptyrelay.py` `Relay.resize` sends SIGWINCH on every call and the redraw refreshes `last_out`, so a screen resize counts as activity for `acti
+   NAME scripts/ptyrelay.py | OK BODY: scripts/ptyrelay.py `attach` clearing the screen means everything the chat drew in the background is gone from view until it redraws on SIGWINCH; a chat that do
+## roadmap-dfs W21.5 LINE: docs/artefacts.md "An assumption's artefact": "that the controls tell the reader something is for the screenshot and the author" is garbled; say the c
+   NAME docs/artefacts.md | OK BODY: The artefact page a Hypothesis names is only operable from its link: the confirm/refute form hosts no page and the answer form hosts only a raise's first page (
+## roadmap-dfs W90.6 LINE: Done in W90.4: `scripts/ptyrelay.py` `Relay._resubmit` docstring said "the first message of every chat in the logs, typed 1.3s after the start". That 
+   NAME relay._resubmit | OK BODY: scripts/ptyrelay.py `Relay._resubmit` docstring still says the failure "could not be repeated against a real claude … so the cause is not known"; W90.11 found i
+## roadmap-dfs W130.50 LINE: The last paragraph of the "Next" part of `docs/dfs-optimization.md` still says the remaining candidates "(2, 4, 5)" are to be run as pairs, though 4 w
+   NAME docs/dfs-optimization.md | OK BODY: docs/dfs-optimization.md line ~819: "The changed arm's 6 of 6 has no refused command among them" does not say 6 of 6 what (the flagged calls and the issues revi
+## roadmap-dfs W104.16 LINE: `scripts/opencode_inbox/index.js` claims a message (moves it to `delivered/` through `inbox.py post`) before `ctx.session.prompt`, and `.catch(() => {
+   NAME scripts/opencode_inbox/index.js | OK BODY: Minor: scripts/opencode_inbox/index.js does not check whether `inbox("ack", ...names)` succeeded. If the ack fails after a prompt has landed, the messages stay 
+## shop-app W29.7 LINE: `shop-app/e2e/supplier-move-deploy-window.spec.js` exercises a lost second-half answer for supplier and box-size moves but not for the unit entry path
+   NAME shop-app/e2e/supplier-move-deploy-window.spec.js | OK BODY: shop-app/e2e/supplier-move-deploy-window.spec.js, the two "page loaded before replay statuses changed" cases: they run the current outbox.js with `supports_repl
+## roadmap-dfs W89.5 LINE: `scripts/paths.py` `hidden()` docstring: one line ("untracked, and an item's worktree, cut from git, … Only the parts that make the roadmap are asked 
+   NAME hidden() | OK BODY: Minor: `paths.py` `hidden()`'s planning exemption needs `ignored()` (it probes only `.dfs/items/W0.md`) and a rule naming `.dfs`, but not that git adds nothing 
+## farm-app W132.9 LINE: Small issues found by the implementation review; fix what is worth it and say which are left: - `farm-operator/README.md` (the map paragraph, around l
+   NAME declutter() | OK BODY: - `updateMap()` in farm-operator/static/map.js calls `declutter()` before it rewrites `#weather-box`. When the weather card first appears or grows (e.g. "· offl
+## farm-app W133.11 LINE: `push.rule_alarm` (`farm-operator/push.py`) says the value without its unit or rounding: the pump alarm's body read "Pump WS523: 30", not "30 W", and 
+   NAME farm-operator/push.py | OK BODY: `push.reading_text` (farm-operator/push.py) says an on/off reading as a bare number: a notify rule on `socket = 1` or `water_leak = 1` pushes "Pump WS523: 1", w
+## roadmap-dfs W103.7 LINE: README's "Stop breaks" section (`README.md`) names only the tui's `B`; the web page's Stop break / Plain break button (W103.5) is not mentioned. `walk
+   NAME readme.md | OK BODY: README.md "Stop breaks": the line W103.7 rewrote ("past it; a task you pin with `n` goes past it too. `B` on the tui's item list, or the Stop break / Plain brea
+## roadmap-dfs W81.16 LINE: chat.py `run_turn` and `end_turn` say "run.sh execs the agent, so this is the agent"; for codex, opencode and kiro the turn is a pipeline into `chat.p
+   NAME chat.py | OK BODY: chat.py Chats.turn: a first kiro turn stopped after kiro has written the message to its session (kiro writes the user line before calling the model) still says 

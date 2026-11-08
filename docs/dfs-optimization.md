@@ -988,6 +988,15 @@ hand-off often. Of the 8 tooling raises E5 can remove without a new permission, 
 not tooling faults on the current tool and 1 can still be raised (a correction pruning a confirmed sibling): the part of E5
 that costs the law nothing is now small.
 
+Who reads E7's minor lines. The E7 row's 10,014 words assume the author reads every minor line. Every
+one of those lines came from a review that logged `issues` (482 of 484, `docs/dfs-w153-e7-read.py`), and
+the files do not show which log entries the author opens. On the reading that only `ok` bodies are read the
+cost is at most +0.9% (the lines a later `ok` repeats by name, less the Determinations no longer read), and if
+no body is read it is -9.7%; both are inside at 10%, 15% and 20%, so the row's verdict does not move. What
+does move is the quality cell: on those two readings most lines are read by nobody (219 to 484 of 484; of 12
+"repeats" read by hand none repeats its line in the same words), and with no open node no session is
+obliged to fix them. That is not measured, and the W17 pooled arm has no minor lines to show it.
+
 Tooling faults found on the way were filed as draft tasks and not fixed in W153:
 `artefact_check.sh` reports every page blank when fontconfig has no default config (W156, verified
 again here on the shipped template: `FAIL blank` without a config, `clean` with one),

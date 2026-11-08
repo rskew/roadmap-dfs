@@ -1,0 +1,237 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W153.50: who reads E7's minor lines</title>
+<!--
+  An answer page: the page a raise names on its "Answer with:" line, or a node's
+  Hypothesis names. Copy this file to .dfs/artefacts/<uuid>.html. Everything above the
+  answer form is yours and has no layout to fill in: draw the issue the way it is best
+  seen, which is usually how the relevant part of the system works now and what each
+  option changes in it (docs/artefacts.md, "What an answer page shows"). Show, then
+  caption: a drawing the reader switches between options beats paragraphs.
+  The answer form at the end is the one shared part. Keep it as it is and edit only its
+  options (replace the two placeholder ones: a page that keeps them is refused); it is
+  what posts the author's answer or ruling. The drawing rules (.dg, .box, .link) are in
+  _TEMPLATE.html: copy them if the page draws boxes and arrows.
+  SELF-CONTAINED: no CDN, no fonts, no fetch but the form's own to /artefact-state (the
+  web page serves the page sandboxed, scripts allowed, the network off).
+  MOBILE FIRST: the author reads on a phone. Write the rules for a 360px screen, widen
+  them under @media (min-width: ...), and check the page with
+      <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
+-->
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .dg { display: flex; flex-direction: column; align-items: stretch; margin: 0 0 12px; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .box b { display: block; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  .box.on { background: #eef5ee; border-color: #2a6; }
+  .box.off { background: #f3f3f3; color: #777; border-style: dashed; }
+  .link { display: flex; flex-direction: column; align-items: center; padding: 2px 0; font-size: 14px; color: #333; }
+  .link::after { content: "\2193"; font-size: 22px; line-height: 1; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 10px; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  td, th { border: 1px solid #bbb; padding: 6px 8px; text-align: left; vertical-align: top; }
+  .cap { color: #444; font-size: 14px; max-width: 62ch; }
+</style>
+
+<h1>Who reads the minor lines under E7?</h1>
+<p class="cap">E7 puts a review's minor findings in the review's own body, not in a "Minor findings" node. Every one of the 170 nodes it would remove was named by a review that logged <b>issues</b> (482 of 484 lines). The files do not say which log entries the author opens. Pick a reading to see what it does to the cost.</p>
+
+<div class="dg">
+  <div class="box" data-node="review"><b>review logs <i>issues</i></b><span>a fix node, and minor lines</span></div>
+  <div class="link">today: lines in a node</div>
+  <div class="box" data-node="node"><b>"Minor findings" node</b><span>the next work session fixes it; the author reads its Determination (11,670 words in all)</span></div>
+  <div class="link">under E7: lines in the review body</div>
+  <div class="box" id="bodybox" data-node="body"><b>the <i>issues</i> body</b><span id="bodytxt">read by the fix session; the author may not open it</span></div>
+</div>
+
+<div class="tabs" role="group" aria-label="What the author reads">
+  <button type="button" data-r="ALL" aria-pressed="true">Reads every line</button>
+  <button type="button" data-r="OK" aria-pressed="false">Reads <i>ok</i> bodies only</button>
+  <button type="button" data-r="NONE" aria-pressed="false">Reads no body</button>
+</div>
+<table aria-live="polite">
+  <tr><th>Words the author reads</th><td id="r-delta"></td></tr>
+  <tr><th>Share of 120,271</th><td id="r-share"></td></tr>
+  <tr><th>Against the 10%, 15% and 20% margins</th><td id="r-margin"></td></tr>
+  <tr><th>Lines the author never reads</th><td id="r-lost"></td></tr>
+</table>
+<p class="cap" id="r-note"></p>
+
+<h2>What would show the Hypothesis wrong</h2>
+<p class="cap">The Hypothesis: the author reads every minor line under E7. It is wrong if the author reads <i>ok</i> bodies only, or none. The three tabs are those cases, counted at d595c44a by <code>docs/dfs-w153-e7-read.py</code>. None of them moves E7 out of the margins, so the E7 row stays inconclusive; the second and third add a quality question (lines no node obliges anyone to fix), which the row does not yet carry.</p>
+
+<script>
+  var R = {
+    ALL:  {d:"+10,014", s:"+8.3%", m:"inside at all three", l:"0 of 484",
+           n:"The reading the accounting used: every line read, in place of the Determination (21,684 words against 11,670)."},
+    OK:   {d:"+1,071 at most", s:"+0.9% at most", m:"inside at all three", l:"219 of 484, or more",
+           n:"A line counts as read only if a later ok review shares its function or file name (265 of 484 do). That over-counts: of 12 pairs read by hand none repeats its line in the same words, 2 are the same function again, 10 are other findings about the same file. So the true cost lies between +0.9% and the next tab."},
+    NONE: {d:"-11,670", s:"-9.7%", m:"inside at all three (0.3 points under the 10% line)", l:"484 of 484",
+           n:"The node is gone and nobody reads its Determination: a saving, but the author never sees the lines, and no open node obliges anyone to fix them."}
+  };
+  var cur = "ALL";
+  function show(k) {
+    cur = k; var r = R[k];
+    document.getElementById("r-delta").textContent = r.d;
+    document.getElementById("r-share").textContent = r.s;
+    document.getElementById("r-margin").textContent = r.m;
+    document.getElementById("r-lost").textContent = r.l;
+    document.getElementById("r-note").textContent = r.n;
+    var bt = document.getElementById("bodytxt"), bb = document.getElementById("bodybox");
+    bt.textContent = k === "ALL" ? "the author reads it: every line, 21,684 words"
+      : k === "OK" ? "the author opens ok bodies only: only lines a later ok repeats are read"
+      : "the author opens no body: the lines reach the fix session only";
+    bb.className = "box " + (k === "ALL" ? "on" : k === "OK" ? "" : "off");
+    var bs = document.querySelectorAll(".tabs button");
+    for (var i = 0; i < bs.length; i++) bs[i].setAttribute("aria-pressed", bs[i].getAttribute("data-r") === k ? "true" : "false");
+  }
+  document.querySelectorAll(".tabs button").forEach(function (b) {
+    b.addEventListener("click", function () { show(b.getAttribute("data-r")); if (window.dfsAnswer) window.dfsAnswer.keep(); });
+  });
+  window.dfsPageState = function () { return {reading: cur}; };
+  window.addEventListener("dfs-state", function (e) { if (e.detail && e.detail.reading) show(e.detail.reading); });
+  show("ALL");
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+    <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
