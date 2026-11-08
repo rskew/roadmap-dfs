@@ -36,8 +36,9 @@ rulings_all, rulings_nopage = int(rulings[0]), int(rulings[1])
 
 # the raises the current tool can still raise. The review-count and ten-session checkpoints were removed
 # (2e0429b8, 20 Oct 2026; e02dfe4e, 15 Oct), the scope-drift checkpoint was not; docs/dfs-w153-e4.tsv has the 36
-# loop checkpoints by kind, and every one was answered. The 26 tooling raises are counted as still possible: they
-# are the raises of the tool as it was in Sep and Oct, and which of them the current tool still raises is not known.
+# loop checkpoints by kind, and every one was answered. The 89 still counts the 26 tooling raises, which are the raises
+# of the tool as it was in Sep and Oct; the E5 block further down narrows both numerator and denominator by the reading
+# of which of the 17 removable ones the current tool can still raise (docs/dfs-w153-e5.tsv, W153.49).
 kinds = [l.split("\t")[4] for l in rd("dfs-w153-e4.tsv").splitlines()[1:] if re.match(r"\d+\t", l)]
 removed = sum(k in ("REVIEW", "SESSIONS") for k in kinds)
 assert len(kinds) == 36 and removed == 35, (len(kinds), removed)
@@ -64,6 +65,23 @@ for name, k, then, now, cost in rows:
     print(f"{name:<34}{k:>7}  {k:>5}/{then:<4}{k/then:>7.1%}  {k:>12}/{now:<4}{k/now:>7.1%}")
     for label, den in (("124-based", then), ("still-possible", now)):
         print(f"    rule on {label:<15}" + "  ".join(f"at {m:.0%}: {RULE(k/den, m):<13}" for m in MS))
+print()
+# W153.49: E5 on the current tool. docs/dfs-w153-e5.tsv sorts the 17 reading-A raises (row by row, with the command or
+# file) into those the current tool can still raise and an E5 arm could pass with no new permission, the size guard
+# (which refuses an E5 arm as much as a control), and the rest (fixed, not firing, not a tooling fault). Those 14 "gone"
+# raises leave the denominator too, as the 35 removed loop checkpoints did; the 5 tooling raises kept as raises under A
+# (rows 3, 18, 19, 20, 23) were not read against the current tool, so the floor takes them all out as well.
+e5 = rd("dfs-w153-e5.tsv")
+poss, guard, gone_n = (int(x) for x in re.search(r"E5-NOW: (\d+) possible; size-guard (\d+); gone (\d+)", e5).groups())
+den_gone, den_floor = raises_now - gone_n, raises_now - gone_n - 5
+print(f"E5 on the current tool (reading A): {poss} raise still possible and passable by an E5 arm; {guard} more are the size guard, "
+      f"which an E5 arm meets too; {gone_n} of the 17 are fixed, not firing or not a tooling fault.\n"
+      f"denominators: {raises} (history), {raises_now} (less the removed loop checkpoints), {den_gone} (less the {gone_n} gone), "
+      f"{den_floor} (floor: the 5 kept tooling raises not read are taken out as well)")
+for name, k in (("E5 now, no new permission", poss), ("E5 now, if the size guard were passable", poss + guard)):
+    print(f"{name:<40}{k:>3}  " + "  ".join(f"{k}/{d}={k/d:.1%}" for d in (raises, raises_now, den_gone, den_floor)))
+    for d in (den_gone, den_floor):
+        print(f"    rule on {d:<4}" + "  ".join(f"at {m:.0%}: {RULE(k/d, m):<13}" for m in MS))
 print()
 for name, k, den, cost in (
         ("E1 `assumed` words", int(wrongif_saved), words, False), ("E6 words, budget 80", cut80, words, False),

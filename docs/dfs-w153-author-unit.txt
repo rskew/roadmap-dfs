@@ -16,6 +16,15 @@ E4: raises removed                      0      0/124    0.0%             0/89   
     rule on 124-based      at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
     rule on still-possible at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
 
+E5 on the current tool (reading A): 1 raise still possible and passable by an E5 arm; 2 more are the size guard, which an E5 arm meets too; 14 of the 17 are fixed, not firing or not a tooling fault.
+denominators: 124 (history), 89 (less the removed loop checkpoints), 75 (less the 14 gone), 70 (floor: the 5 kept tooling raises not read are taken out as well)
+E5 now, no new permission                 1  1/124=0.8%  1/89=1.1%  1/75=1.3%  1/70=1.4%
+    rule on 75  at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+    rule on 70  at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+E5 now, if the size guard were passable   3  3/124=2.4%  3/89=3.4%  3/75=4.0%  3/70=4.3%
+    rule on 75  at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+    rule on 70  at 10%: inconclusive   at 15%: inconclusive   at 20%: inconclusive 
+
 E1 `assumed` words                   4665   4665/120271    3.9%   (words are not changed by the removed checkpoints: one denominator)
     rule                    at 10%: inconclusive         at 15%: inconclusive         at 20%: inconclusive       
 E6 words, budget 80                 12391  12391/120271   10.3%   (words are not changed by the removed checkpoints: one denominator)

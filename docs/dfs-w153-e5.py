@@ -87,3 +87,41 @@ print(f"tasks holding a removable raise: A {len(tasks(yesA))}, B {len(tasks(yesB
 for nm, ix in (("A-removable", yesA), ("B-removable", yesB), ("kept under A", [i for i in range(1, 27) if CLASS[i][0] == "fault" and CLASS[i][2] == N])):
     ws = [rows[i - 1][4] for i in ix]
     print(f"{nm}: median wait {statistics.median(ws):.1f} h over {len(ix)}")
+
+# W153.49: which of the 17 reading-A raises the CURRENT tool can still raise, and an E5 arm could pass with no new
+# permission. Each row has the command or file that put it in its group (the probes were run on the installed
+# scripts, roadmap-dfs d02e23e, on 2026-11-08, or read from the node named).
+#   fixed        the cause is gone from the current scripts or law
+#   not-firing   the refusal does not fire on the current hook
+#   not-tooling  not a tooling fault at all (a flaw in the project's own content)
+#   size-guard   still fires, but it refuses an E5 arm's commit as much as a control's: passing needs a permission
+#   possible     still happens, and nothing refuses a commit, so an E5 arm goes on and a control raises
+NOW = {
+ 1: ("possible", "probe on a scratch tree: after 'correct W60.3 confirmed' then 'correct W60.4 confirmed' W60.4 is pruned (W153.46). A replay logs no corrections, so no replay control meets it; real use does"),
+ 2: ("size-guard", "check.py task-file budget still refuses a commit of an over-budget task file (W153.46: raised in this task on 2026-11-07)"),
+ 4: ("size-guard", "same guard as 2"),
+ 5: ("fixed", "the non-atomic task-file write: tree.py writes through a temp file and os.replace (W113 says fixed in W114; W153.46 read tree.py)"),
+ 6: ("fixed", "the rebase-commit refusal, fixed 28 Oct (W127.1, W127.2)"),
+ 7: ("fixed", "status stuck open with no node: probe of status_of on a review ok then issues with no node reads the task as done (W153.46)"),
+ 8: ("fixed", "its four faults: S1 peak 0 -> `context.py` prints 'context 75,714' in this session (W113.2); S2 compaction offered by the briefing (W113.4, `tree.py compact` ran in W153.48); S3 `tree.py log W9 review issues <<< none` exits 2 'names no node' (probe, 2026-11-08; W113.3); S4 sentence in SKILL.md 'name the version or object' (W113.5). S5 was not a tooling fault"),
+ 9: ("fixed", "review note cannot be answered: the skill now sends a determined node's note to a new child (W113.6/W113.7; W153.46)"),
+10: ("fixed", "law says 'fifth work session', as the code counts (W113.10; W153.46)"),
+11: ("fixed", "same stuck status as 7"),
+12: ("fixed", "same rebase refusal as 6"),
+13: ("fixed", "same rebase refusal as 6"),
+14: ("fixed", "the two replay.py faults: history.py second verdict pattern, tool_docs clears the folder first (W153.46)"),
+15: ("fixed", "replay.py score misses a verdict over two lines: history.py second pattern (W153.46)"),
+16: ("not-tooling", "shop-app W8.2: the model file sync-flow.sysml gives a closed task as owner of an edge, a stale pointer in the project's own model (optimisation-data/shop-app/.dfs/items/W8.md line 166); no roadmap-dfs script is at fault, so E5 (a *tooling* fault is filed as a draft) does not apply, and the author's answer was 'fix it'"),
+24: ("not-firing", "a hook refusing for faults in other tasks: only staged files are judged, this session's commit printed 'W48.md is over the budget. Not grown here.' and passed (W153.46)"),
+26: ("not-firing", "same refusal as 24"),
+}
+yesA = [i for i in range(1, 27) if CLASS[i][2] == Y]
+assert sorted(NOW) == yesA, (sorted(NOW), yesA)
+print()
+for g in ("possible", "size-guard", "fixed", "not-firing", "not-tooling"):
+    ix = [i for i in NOW if NOW[i][0] == g]
+    print(f"on the current tool, reading A, {g}: {len(ix)} {ix}")
+for i in NOW:
+    print(f"  row {i}: {NOW[i][0]} - {NOW[i][1]}")
+gone = [i for i in NOW if NOW[i][0] in ("fixed", "not-firing", "not-tooling")]
+print(f"E5-NOW: {len([i for i in NOW if NOW[i][0] == 'possible'])} possible; size-guard {len([i for i in NOW if NOW[i][0] == 'size-guard'])}; gone {len(gone)} {gone}")

@@ -34,3 +34,27 @@ tasks holding a removable raise: A 11, B 5; per task of 238: A 0.07, B 0.03; per
 A-removable: median wait 1.7 h over 17
 B-removable: median wait 1.6 h over 8
 kept under A: median wait 0.2 h over 5
+
+on the current tool, reading A, possible: 1 [1]
+on the current tool, reading A, size-guard: 2 [2, 4]
+on the current tool, reading A, fixed: 11 [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+on the current tool, reading A, not-firing: 2 [24, 26]
+on the current tool, reading A, not-tooling: 1 [16]
+  row 1: possible - probe on a scratch tree: after 'correct W60.3 confirmed' then 'correct W60.4 confirmed' W60.4 is pruned (W153.46). A replay logs no corrections, so no replay control meets it; real use does
+  row 2: size-guard - check.py task-file budget still refuses a commit of an over-budget task file (W153.46: raised in this task on 2026-11-07)
+  row 4: size-guard - same guard as 2
+  row 5: fixed - the non-atomic task-file write: tree.py writes through a temp file and os.replace (W113 says fixed in W114; W153.46 read tree.py)
+  row 6: fixed - the rebase-commit refusal, fixed 28 Oct (W127.1, W127.2)
+  row 7: fixed - status stuck open with no node: probe of status_of on a review ok then issues with no node reads the task as done (W153.46)
+  row 8: fixed - its four faults: S1 peak 0 -> `context.py` prints 'context 75,714' in this session (W113.2); S2 compaction offered by the briefing (W113.4, `tree.py compact` ran in W153.48); S3 `tree.py log W9 review issues <<< none` exits 2 'names no node' (probe, 2026-11-08; W113.3); S4 sentence in SKILL.md 'name the version or object' (W113.5). S5 was not a tooling fault
+  row 9: fixed - review note cannot be answered: the skill now sends a determined node's note to a new child (W113.6/W113.7; W153.46)
+  row 10: fixed - law says 'fifth work session', as the code counts (W113.10; W153.46)
+  row 11: fixed - same stuck status as 7
+  row 12: fixed - same rebase refusal as 6
+  row 13: fixed - same rebase refusal as 6
+  row 14: fixed - the two replay.py faults: history.py second verdict pattern, tool_docs clears the folder first (W153.46)
+  row 15: fixed - replay.py score misses a verdict over two lines: history.py second pattern (W153.46)
+  row 16: not-tooling - shop-app W8.2: the model file sync-flow.sysml gives a closed task as owner of an edge, a stale pointer in the project's own model (optimisation-data/shop-app/.dfs/items/W8.md line 166); no roadmap-dfs script is at fault, so E5 (a *tooling* fault is filed as a draft) does not apply, and the author's answer was 'fix it'
+  row 24: not-firing - a hook refusing for faults in other tasks: only staged files are judged, this session's commit printed 'W48.md is over the budget. Not grown here.' and passed (W153.46)
+  row 26: not-firing - same refusal as 24
+E5-NOW: 1 possible; size-guard 2; gone 14 [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 24, 26]
