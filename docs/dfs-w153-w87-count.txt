@@ -2,4 +2,4 @@ c1 nodes=9 det_words=415 max=68 over80=0 over60=2 hyp=2 pages=2 minor_nodes=2 te
 c2 nodes=8 det_words=309 max=53 over80=0 over60=0 hyp=0 pages=0 minor_nodes=2 text_80_words_in_logs=0
 c3 nodes=9 det_words=371 max=54 over80=0 over60=0 hyp=1 pages=1 minor_nodes=2 text_80_words_in_logs=0
 p1 nodes=7 det_words=278 max=49 over80=0 over60=0 hyp=2 pages=0 minor_nodes=0 text_80_words_in_logs=8
-credits (kept replays are not on this box; the figures are those the W153.38 Determination recorded when the arms were scored): controls 39.0, 28.1 and 24.2, pooled arm 46.6. Which control had which figure was not written down.
+credits (kept replays are not on this box; the figures are those the W153.38 Determination recorded when the arms were scored): controls 39.0, 28.1 and 24.2, pooled arm 46.6. Which control had which figure was not written down. The pooled arm's 46.6 is 1.9 times the cheapest control (24.2), near the 2 times credits margin; the clones are gone, so the per-arm matching cannot be recovered and the credits are read as a range.

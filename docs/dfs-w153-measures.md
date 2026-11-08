@@ -15,7 +15,7 @@ The repo's mount (`/workspace/roadmap-dfs`, zfs) is executable; `$HOME` and `/tm
 | `replay.py` itself | runs | `plan W17`, `candidates` print |
 | Replay sandbox | **runs**, with DEST on the repo's mount (here `.dfs/runs/dfs-replay-w153-probe`, gitignored). kiro-cli runs inside proot. The Seccomp: 2 line and the refused `unshare -r` do not stop it. | `replay.py prepare W54 DEST --agent kiro` (0.4 s), then `replay.py run DEST W54 --cap 2 --agent kiro`: 2 sessions, exit 0 both, 23 turns, 6 min wall, W54.1 confirmed; `replay.py score` read 3.8 credits |
 | Replay sandbox with DEST in `/tmp` or under `$HOME` | **does not start** (proot: temporary directory has no execution permission) | the critic's run with the default `/tmp`; `mount` |
-| `docs/dfs-review-only.py` (E8) | Same sandbox call (`sandbox_argv`, `PROOT_TMP_DIR` in `<copy>/box/tmp`), so it runs when REPLAYS_DIR is on the repo's mount (`.dfs/runs/replays` is). Not itself run in this node. | read the script; same `make_box` and `sandbox_argv` as `replay.py run` |
+| `docs/dfs-review-only.py` (E8) | Same sandbox call (`sandbox_argv`, `PROOT_TMP_DIR` in `<copy>/box/tmp`), so it runs when REPLAYS_DIR is on the repo's mount (`.dfs/runs/replays` is). Not run in the node that wrote this table; E8 was run later, in W153.20 and W153.26 to W153.33. | read the script; same `make_box` and `sandbox_argv` as `replay.py run` |
 | Artefact check | runs only with a font config. Without one it reports `blank` even for the unmodified `_TEMPLATE.html` (Fontconfig error: no default config). With `FONTCONFIG_FILE` naming the DejaVu directory it is clean. | ran it on the template and on this task's page |
 | History data | `/workspace/roadmap-dfs/.dfs/{items,runs,archive}` and `optimisation-data/{shop-app,farm-app}` are in the main checkout, read-only for this task. They are not in the W153 worktree (`optimisation-data` is gitignored, `.dfs/runs` is untracked). The old scratch scripts are still in `/tmp/dfsmine`. | `ls` |
 | Replay trees | 20 in `.dfs/runs/replays` (W11, W22, W36, W5, each 5 arms), 4 in `optimisation-data` (W132-k1, W17-k1c, W17-k1w, W17-k2c) | `ls` |
@@ -45,7 +45,7 @@ Counted from the task file and log through `dfs_tree.load` (so archived words co
 
 - Raises the author must answer, in two columns: **loop checkpoints** (body matches `since you last spoke|implementation reviews? of|the review loop|walk stopped|runner` in its first 300 characters) and **tooling faults** (body matches `roadmap tooling|tooling|check.py|tree.py|run.sh|state.py|the guard|hook|dfs_run|supervisor`). Anything else is a substantive decision. These are the regexes of `/tmp/dfsmine/author.py`, kept as they were so the Background counts are comparable. A hand reading replaces the regex where a node says so.
 - Pages the author would open: Hypotheses that carry an `.dfs/artefacts/<uuid>.html` page. Those whose `Wrong if` only the author can answer are counted apart.
-- Words the author reads: every Determination and every Hypothesis (whitespace-separated words). Summaries are not counted (`docs/dfs-w153-author-unit.py`).
+- Words the author reads: every Determination and every Hypothesis (whitespace-separated words). Summaries are not counted (`docs/dfs-w153-author-unit.py`), though the Goal lists them; counting them adds to the words faced and so lowers every word share, which can only move a word row further inside the margin.
 
 ## Margins (from Background, fixed here)
 
