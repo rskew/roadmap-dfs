@@ -83,7 +83,8 @@ node on the web page opens the page in the viewer in place of the text dialog, a
 row in the terminal screen opens it in the browser in place of `$EDITOR`. Both mark the raise
 "answer page" beforehand, so the page is no surprise. The page's own buttons send the answer.
 A raise with no page keeps the text dialog and the editor, since it has nothing else to answer
-with.
+with. So does a page raise on the terminal screen when its web server is off or the page file is
+missing, since the page could not send; the editor says why.
 
 ### What an answer page shows
 

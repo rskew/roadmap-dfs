@@ -4702,14 +4702,20 @@ class UI(WalkMixin):
         r = raises[0]
         on = (" on " + r["args"][0]) if r["args"] else ""
         page = dfs_tree.answer_page(r["body"])
+        why = ""
         if page:
             # The page has its own buttons and records the answer itself, so the editor
-            # would only be a second, worse way to say the same thing.
-            self.open_artefact(dict(name=page, entry=r["ts"],
-                                    exists=dfs_paths.artefact_file(page).exists()))
-            return
+            # would only be a second, worse way to say the same thing. But it records
+            # it by posting to this screen's web server, so with that off, or the file
+            # gone, the page cannot send and the editor is the only way left to answer.
+            if self.web and dfs_paths.artefact_file(page).exists():
+                self.open_artefact(dict(name=page, entry=r["ts"], exists=True))
+                return
+            why = ("the web page is off, so the answer page cannot send" if not self.web
+                   else "%s is not in %s" % (page, dfs_paths.rel(ART_DIR)))
         frame = (["Answer to the raise logged at %s%s. Lines starting # are dropped;"
                   % (r["ts"], on), "an empty answer leaves the raise open.", ""]
+                 + (["%s: answering here instead." % why, ""] if page else [])
                  + r["body"].splitlines())
         body = self.compose(frame)
         if not body:
