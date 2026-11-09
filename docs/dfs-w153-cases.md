@@ -72,9 +72,11 @@ mechanism the change relies on: a reviewer handed the worker's "done" can stop a
   met, that it had closed the node that carried them, that W109 was otherwise ready for review, and
   recommended making them a task of their own. The author answered with exactly that option. Under E5 the
   worker would have filed the draft and gone to review: 15.1 hours of waiting and one author answer saved.
-- The E5 table (`docs/dfs-w153-e5.tsv`) files W113.1, W113.9, W113.10 and W130.4 under the same answer
-  (draft; waits of 3.8, 5.7, 1.4 and 1.8 hours). I read only W109.5's text for this file; W113.9 and W113.10
-  had no refusal and were answered with a change to the law. With W109.5 that is 5 of the 17 raises E5
+- The E5 table (`docs/dfs-w153-e5.tsv`) files W113.1, W113.6, W113.9 and W130.4 (rows 8, 9, 10 and 14) under the same
+  answer (draft; waits of 3.8, 5.7, 1.4 and 1.8 hours). I read only W109.5's text for this file. W113.6 and
+  W113.9 had no refusal either: the author answered with a change to the brief and law (option a) and a rewording
+  of the law (option b), so they are drafts in the table's sense (a fix in a task of its own) and not a
+  bypass of a hook. With W109.5 that is 5 of the 17 raises E5
   removes on the Goal's own test, 27.8 hours of a blocked task.
 
 Against it: 9 of the 17 removable raises need a permission the law does not give (going round a refusing
@@ -107,7 +109,9 @@ worker put it there and left the author reading the verdict and one line.
 
 Against it: W130.11's Determination (150 words) puts its verdict past word 100 and ends with "9a42daa71a is
 reverted ... 8a1225829a stays", the revert-or-keep a Determination is meant to carry. An 80-word
-budget would cut that tail, not the evidence before it. Of 36 long Determinations read in full, 13 had a
+budget would force the verdict (at word ~109) and the revert-or-keep to move up, ahead of the method and counts
+that fill the first 109 words; W130.11 is the one case in the reading where a verdict, and not only a hand-off,
+sat past word 80. Of 36 long Determinations read in full, 13 had a
 hand-off first past word 80 and 1 a verdict (see the E6 row). The case for E6 is a long Determination of
 the W39.18 kind; the case against is the W130.11 kind.
 
@@ -128,7 +132,8 @@ say whether the author opened the page.
 
 ## E7 · minor findings in the review's `ok` — no case found that shows it effective
 
-Nodes whose whole content is a wrapped docstring or a closed file (W75.69; W87.11) took a node and a commit
+Nodes that are mostly a wrapped docstring or a closed file (W87.11; W75.69, which also holds an `acceptable()`
+docstring line and a TMPDIR recursion finding, so only part of it is a docstring wrap) took a node and a commit
 each and would have been a line in an `ok`. That is the saving, and it is small. I found no case where a
 line left in an `ok` was shown to be enough, and the opposite is easy to find: the `uncommitted()` /
 `unpushed()` reading of the main checkout came back as a minor line in W75.12, W75.15 and W75.18, though
