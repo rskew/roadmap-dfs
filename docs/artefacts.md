@@ -159,9 +159,9 @@ content type needs a preflight this server never grants.
 When the web page opens the artefact (tapping a raise node with an `Answer with:` page, which
 opens it in full, or Confirm or Refute on a node whose Hypothesis names one, which opens it
 beside its form), `parent.postMessage({dfs: "answered"}, "*")` after a successful post returns
-to the task, or closes the form; opened alone, that message goes nowhere. The text box stays, for ruling in words. The
-answer form's "Send as my answer", Confirm and Refute buttons do all of this. The author
-reads what is posted, so write it as the decision, not a dump of the state.
+to the task, or closes the form; opened alone, that message goes nowhere. The text box stays,
+for ruling in words. The answer form's "Send as my answer", Confirm and Refute buttons do all
+of this. The author reads what is posted, so write it as the decision, not a dump of the state.
 
 ## Screenshots
 

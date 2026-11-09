@@ -632,6 +632,16 @@ class Web(unittest.TestCase):
         self.assertIn('r.raises.some(answerPage) ? `<span class="tag page"', src)
         self.assertIn('${answerPage(r) ? ` <span class="tag page">answer page</span>` : ""}</h4>', src)
 
+    def test_an_answered_message_from_the_viewer_frame_returns_to_the_task(self):
+        """Read from the page's source: the listener for the full-screen viewer's frame ignores any other sender,
+        then clears the task signature and redraws, so the closed raise is read again."""
+        src = (HERE / "web" / "index.html").read_text()
+        i = src.index('document.querySelector("iframe.artview")')
+        handler = src[i:src.index("});", i)]
+        self.assertIn("ev.source !== frame.contentWindow", handler)
+        self.assertIn('ev.data.dfs !== "answered"', handler)
+        self.assertIn('S.sig = ""; up();', handler)
+
     def test_the_walk_boxs_activity_list_wraps_the_runner_line_and_is_a_44px_target(self):
         """Read from the page's source: the Activity line `$ <path>/run.sh W7 1 (pid N)` is one unbreakable word, which
         pushed the walk box sideways at 320px (377 of 320 wide), and the Activity summary was 40px high."""

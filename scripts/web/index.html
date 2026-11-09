@@ -1682,9 +1682,10 @@ document.addEventListener("change", e => { if (e.target.name === "verdict") verd
 async function wrote(res, msg) { S.task = res.task; S.sig = ""; toast(msg); await render(true); }
 
 /* The page a raise names to answer with (`Answer with: .dfs/artefacts/<name>.html`, one page even when the raise
-   shows several), and the page a node's Hypothesis names to confirm or refute it, open beside their forms. Each is
-   the server's sandboxed response and records the answer or the ruling itself, to `/artefact-state/<name>`; it
-   tells this page with `{dfs: "answered"}` and only a message from that frame is read. */
+   shows several) opens in full in the viewer, where a tap on the raise node goes; the page a node's Hypothesis
+   names to confirm or refute it opens beside its form. Each is the server's sandboxed response and records the
+   answer or the ruling itself, to `/artefact-state/<name>`; it tells this page with `{dfs: "answered"}` and
+   only a message from that frame is read. */
 /* The open raise on a node that names this page, as {node, raise}, else null. */
 function raiseOnPage(file) {
   for (const x of (S.task ? S.task.rows : []))
