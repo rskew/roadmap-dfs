@@ -1436,6 +1436,7 @@ function drawTask() {
       const cls = ["row", "s-" + r.status, quiet ? "quiet" : "", r.assumes || r.ask ? "assumes" : "", r.raises.length ? "hasraise" : "", r.overruled ? "overruled" : "", S.node === r.key ? "sel" : ""].join(" ");
       const chips = [
         r.raises.length ? `<span class="tag attention">raise, ${esc(r.raises[0].age)}</span>` : "",
+        r.raises.some(answerPage) ? `<span class="tag page" title="Tapping this node opens its answer page">answer page</span>` : "",
         r.raises_below ? `<span class="tag attention">${r.raises_below} raise${r.raises_below === 1 ? "" : "s"} below</span>` : "",
         r.assumes ? `<span class="tag assumption">assumption</span>` : "",
         r.ask ? `<span class="tag attention">ask</span>` : "",
@@ -1529,7 +1530,7 @@ function artefactsHtml(t) {
     <div class="tiles">${arts.map(card).join("")}</div></div></details>`;
 }
 function raiseCard(r, where) {
-  return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you</h4>
+  return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you${answerPage(r) ? ` <span class="tag page">answer page</span>` : ""}</h4>
     <div class="text">${md(r.body)}</div>
     ${S.task && S.task.archived ? "" : `<div class="actions"><button class="btn primary" data-act="answer" data-ts="${esc(r.ts)}">Answer</button></div>`}</div>`;
 }

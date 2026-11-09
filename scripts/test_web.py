@@ -624,6 +624,13 @@ class Web(unittest.TestCase):
         # The raw `Answer with: .dfs/artefacts/<uuid>.html` line is not shown above the frame that is that page.
         self.assertIn("r.body.replace(/^[ \\t]*Answer with:", src)
 
+    def test_a_raise_with_an_answer_page_is_marked_on_its_row_and_its_card(self):
+        """Read from the page's source: the row chip and the raise card both say "answer page" when answerPage() finds one,
+        so a tap on the node is not a surprise."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertIn('r.raises.some(answerPage) ? `<span class="tag page"', src)
+        self.assertIn('${answerPage(r) ? ` <span class="tag page">answer page</span>` : ""}</h4>', src)
+
     def test_the_walk_boxs_activity_list_wraps_the_runner_line_and_is_a_44px_target(self):
         """Read from the page's source: the Activity line `$ <path>/run.sh W7 1 (pid N)` is one unbreakable word, which
         pushed the walk box sideways at 320px (377 of 320 wide), and the Activity summary was 40px high."""
