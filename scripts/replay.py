@@ -52,10 +52,13 @@ import json
 import os
 import re
 import shutil
+import signal
 import statistics as st
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -599,21 +602,88 @@ def launch(dest, task, cap, tool, bash_minutes, repo=None, agent="claude", shell
     return argv, {"PROOT_TMP_DIR": str(box_of(dest) / "tmp"), "PATH": os.environ.get("PATH", "")}
 
 
+TERM_GRACE = 15   # seconds the runner is given to stop after SIGTERM (run.sh's trap ends the chain's sessions) before SIGKILL
+
+
+def runner_alive(dest):
+    """The process group of a runner `run` started on DEST that still has a process (None when
+    there is none). `run` writes the group to .git/replay.pid and removes it when the group is
+    gone; a `kill -9` of replay.py leaves the file and the group, which is what this finds."""
+    try:
+        pgid = int((Path(dest) / ".git" / "replay.pid").read_text())
+    except (OSError, ValueError):
+        return None
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return None
+    except PermissionError:   # a group exists, and is not ours to signal
+        pass
+    return pgid
+
+
+def end_runner(p):
+    """End the runner `p` started in its own session and everything in its process group: SIGTERM
+    (run.sh's trap ends the chain and its sessions), SIGKILL when the group is still there after
+    TERM_GRACE seconds. Returns with the group gone and `p` reaped."""
+    def gone(secs):   # polls: reaping the leader matters, since a zombie leader still counts in the group
+        end = time.monotonic() + secs
+        while True:
+            p.poll()
+            try:
+                os.killpg(p.pid, 0)
+            except ProcessLookupError:
+                return True
+            if time.monotonic() >= end:
+                return False
+            time.sleep(0.05)
+    for sig, secs in ((signal.SIGTERM, TERM_GRACE), (signal.SIGKILL, 5)):
+        try:
+            os.killpg(p.pid, sig)
+        except ProcessLookupError:
+            break
+        if gone(secs):
+            break
+    p.wait()
+
+
 def run(dest, task, cap=None, tool=None, bash_minutes=BASH_MINUTES, repo=None, agent=None):
     dest = Path(dest).resolve()
     info = json.loads((dest / ".git" / "replay.json").read_text())
+    alive = runner_alive(dest)
+    if alive:   # a second runner on the same worktree would race the first
+        raise SystemExit(f"replay: a runner of an earlier run on {dest} is still alive (process group {alive}, "
+                         f"from {dest / '.git' / 'replay.pid'}); end it (kill -- -{alive}) and run again")
     tool = Path(tool or info["tool"])
     # the agent `prepare` recorded, unless this run names another
     cmd, env = launch(dest, task, cap, tool, bash_minutes, repo, configured_agent(repo, agent) if agent else info.get("agent", "claude"), shell=info.get("shell"), also=info.get("also", ()))
-    # The chain's own words are kept beside the replay: its last "dfs_run: DONE|BLOCKED|CAP"
-    # line is why it stopped, which the runner's meta.json (the task's status) does not say.
-    with subprocess.Popen(cmd, cwd=dest, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True, errors="replace") as p, open(dest / ".git" / "replay.out", "w") as log:
-        for line in p.stdout:
-            sys.stdout.write(line)
-            sys.stdout.flush()
-            log.write(line)
-    return p.returncode
+    # ⚠ THE RUNNER IS A PROCESS GROUP OF ITS OWN, AND `run` ENDS IT WHEN `run` ENDS. A wrapper
+    # such as `timeout --foreground` signals only replay.py: with the runner in replay.py's group
+    # it was left working DEST, under init. SIGTERM and SIGHUP raise here so the `finally` runs;
+    # SIGKILL cannot be caught, so the group is also written to .git/replay.pid for the next run.
+    def stop(num, frame):
+        raise SystemExit(128 + num)
+    here = threading.current_thread() is threading.main_thread()
+    saved = {n: signal.signal(n, stop) for n in (signal.SIGTERM, signal.SIGHUP)} if here else {}
+    pidfile = dest / ".git" / "replay.pid"
+    try:
+        # The chain's own words are kept beside the replay: its last "dfs_run: DONE|BLOCKED|CAP"
+        # line is why it stopped, which the runner's meta.json (the task's status) does not say.
+        with subprocess.Popen(cmd, cwd=dest, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, errors="replace", start_new_session=True) as p, open(dest / ".git" / "replay.out", "w") as log:
+            try:
+                pidfile.write_text(f"{p.pid}\n")
+                for line in p.stdout:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                    log.write(line)
+            finally:
+                end_runner(p)
+                pidfile.unlink(missing_ok=True)
+        return p.returncode
+    finally:
+        for n, handler in saved.items():
+            signal.signal(n, handler)
 
 
 def replay_config(dest):
