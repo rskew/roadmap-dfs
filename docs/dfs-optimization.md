@@ -1004,8 +1004,8 @@ obliged to fix them. That is not measured, and the W17 pooled arm has no minor l
 
 Worked cases, `docs/dfs-w153-cases.md`. The counts above are too small to show a gap, so single cases were
 read for how each change would or did work. They were chosen by reading, not drawn at random, and they move
-no verdict. E2: the W17 pooled arm wrote a before-and-after observation in 7 of its 9 Determinations (the
-controls 2 of 5, 4 of 8 and 3 of 10), and 13 of the 25 critic backtracks were for a check that could not have
+no verdict. E2: the W17 pooled arm wrote a before-and-after observation in 7 to 8 of its 9 Determinations (the
+three scored controls 10 to 11 of 23, by `docs/dfs-w153-e2-count.py`; the narrow regex gives 7 of 23, which misses wordings such as "fails without the change"), and 13 of the 25 critic backtracks were for a check that could not have
 come out differently (W68.5, W32.32). E8: the blind reviewer named unmet all-caps and signal-handling
 clauses (W22-c1c, W17-k2c) where the informed one, given the worker's Summary, returned `ok` or did not
 name them; the informed one named others the blind one missed. E5: W109.5 waited 15.1 hours for an answer

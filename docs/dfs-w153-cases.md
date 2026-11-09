@@ -15,11 +15,22 @@ sentence of each case says whether the change was *in effect* (a replay ran with
 
 In effect. In the W17 replay with the pooled tool (`dfs-replay-W153-W17-P1`), 7 of its 9 Determinations
 state a before-and-after observation (a probe test red before, green after; "the probe listed `apart`
-alone, where it listed `apart` and `deaf` before"; "the new test went red" on the old lock). In the
-controls the same wording is in 2 of 5, 4 of 8 and 3 of 10 (one control has no Determination).
-The count is a regex for red, before, and "would have", read on one pooled arm, and the arm's workers
-were told the gate. It shows the gate changes how a Determination is written. It does not show a better
-tree: the arm met 6.5 of 10 clauses against the controls' 5.0, 7.5 and 8.0.
+alone, where it listed `apart` and `deaf` before"; "the new test went red" on the old lock). The three
+controls the quality judge scored are C1, C2 and C4 (5.0, 7.5 and 8.0 clauses; C3 wrote no node and is not
+scored). `docs/dfs-w153-e2-count.py` counts them by three stated methods, output in `docs/dfs-w153-e2-count.txt`:
+
+| method | C1 (5 Determinations) | C2 (8) | C4 (10) | controls (23) | pooled P1 (9) |
+|---|---|---|---|---|---|
+| narrow regex: red, before, would have | 0 | 4 | 3 | 7 | 7 |
+| wide regex: also fails without, without the change, went red, was red, removed | 3 | 4 | 3 | 10 | 8 |
+| hand reading of each Determination | 3 | 5 | 3 | 11 | 7 |
+
+C1 writes the same observation in other words ("the new test fails without the change", "the wait test fails
+when the wait is removed"), which the narrow regex misses. By the wide and hand readings the controls state it in
+10 to 11 of 23 Determinations (43 to 48%) against 7 to 8 of 9 for the pooled arm (78 to 89%), with the arm's workers told
+the gate. A higher share in one arm is the most this shows, from one pooled arm and three controls; it is not
+shown to change a tree, and the arm met 6.5 of 10 clauses against the controls' 5.0, 7.5 and 8.0. The earlier
+figure "2 of 5, 4 of 8 and 3 of 10" in this file and in `docs/dfs-optimization.md` did not reproduce and is replaced.
 
 Counterfactual. Of the 25 critic backtracks, I read 13 whose reason is that the check could not have
 come out differently or did not observe the claimed thing. The clearest:
