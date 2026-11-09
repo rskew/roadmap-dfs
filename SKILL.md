@@ -267,7 +267,8 @@ a budget, a tooling bug, a choice between two wordings.
   ruling or the answer. A page the reader can only look at does not meet the rule. To
   make it a raise's answer, name it in the raise on a line of its own,
   `Answer with: .dfs/artefacts/<uuid>.html` (one page, even when the raise shows
-  several); a raise naming a page that cannot post an answer is refused.
+  several); a raise naming a page that cannot post an answer is refused. The author
+  answers it on that page, opened in full and marked "answer page" on the raise's node.
 - **For a picture alone**, start from `_TEMPLATE.html` and name the page in the raise by
   its path, `.dfs/artefacts/<uuid>.html` (the web page links it and the screen's `v`
   pane lists it).

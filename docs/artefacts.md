@@ -78,6 +78,13 @@ at, and this line picks the one that answers. `tree.py log raise` refuses a page
 not there or cannot answer: one with no control, no handler, or no post of an `answer` to
 `/artefact-state/`.
 
+A raise with an `Answer with:` page is answered on that page, opened in full: tapping its
+node on the web page opens the page in the viewer in place of the text dialog, and `a` on its
+row in the terminal screen opens it in the browser in place of `$EDITOR`. Both mark the raise
+"answer page" beforehand, so the page is no surprise. The page's own buttons send the answer.
+A raise with no page keeps the text dialog and the editor, since it has nothing else to answer
+with.
+
 ### What an answer page shows
 
 The answer template has no layout: its body is empty, because no one shape suits every
@@ -148,10 +155,10 @@ content type needs a preflight this server never grants.
   and not yet ruled on. The GET's `node` (`{task, id}`) is that node, or `null`, so show
   the buttons only when it can rule.
 
-When the web page opens the artefact beside its form (tapping Answer on a raise with an
-`Answer with:` page, or Confirm or Refute on a node whose Hypothesis names one),
-`parent.postMessage({dfs: "answered"}, "*")` after a successful post closes the form;
-opened alone, that message goes nowhere. The text box stays, for ruling in words. The
+When the web page opens the artefact (tapping a raise node with an `Answer with:` page, which
+opens it in full, or Confirm or Refute on a node whose Hypothesis names one, which opens it
+beside its form), `parent.postMessage({dfs: "answered"}, "*")` after a successful post returns
+to the task, or closes the form; opened alone, that message goes nowhere. The text box stays, for ruling in words. The
 answer form's "Send as my answer", Confirm and Refute buttons do all of this. The author
 reads what is posted, so write it as the decision, not a dump of the state.
 
