@@ -1385,6 +1385,40 @@ class Check(InARepo):
         self.assertEqual(code, 1, out)
         self.assertIn("GREW it", out)
 
+    def test_shelve_says_how_far_over_the_budget_the_file_still_is_and_what_to_shelve_next(self):
+        long = "Approach: " + "move me to the archive. " * 40 + "\n"
+        shelved = lambda pad: task(node(1, "confirmed", extra="Approach: archived.\n")
+                                   + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n")
+                                   + node(3, "confirmed", extra="Approach: archived.\n"), self.LOG)
+        pad = dfs_state.HANDOFF_BUDGET * 4 - 400 - len(shelved(0))   # both shelved: 100 tokens under
+        self.write(task(node(1, "confirmed", extra=long)
+                        + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n")
+                        + node(3, "confirmed", extra=long), self.LOG))
+        self.commit()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(dfs_tree.main(["tree.py", "shelve", "W1", "W1.1"]), 0)
+        self.assertIn("still ~", out.getvalue())
+        self.assertIn("over the 10,000 budget", out.getvalue())
+        self.assertIn("tree.py shelve W1 W1.3", out.getvalue())
+        self.assertNotIn("W1.1 ", out.getvalue().split("Shelve next")[1])
+        self.commit()
+        grown = (self.root / ".dfs/items/W1.md").read_text().replace(
+            "## Log", node(4, parent=2, extra="Approach: " + "one more step. " * 20 + "\n") + "## Log")
+        self.write(grown)
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        self.assertEqual(self.run_check("--staged")[0], 1)
+        subprocess.run("git reset -q --hard", shell=True, cwd=self.root, check=True)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(dfs_tree.main(["tree.py", "shelve", "W1", "W1.3"]), 0)
+        self.assertNotIn("still ~", out.getvalue(), "under the budget: nothing more to say")
+        self.write((self.root / ".dfs/items/W1.md").read_text().replace(
+            "## Log", node(4, parent=2, extra="Approach: " + "one more step. " * 20 + "\n") + "## Log"))
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+
     def test_shelve_moves_a_determination_leaving_its_first_clause_and_the_check_holds_it_to_that(self):
         det = ("Confirmed: the washes are now clearly tinted in dark, every rule applies in all four "
                "theme combinations and the text colours keep their contrast on them.")

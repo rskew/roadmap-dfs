@@ -65,6 +65,8 @@ Determination leaves its first clause, `Confirmed: the washes are tinted (archiv
 reader of the file alone still sees what it settled. `Plan` is the Approach's old name,
 read as it wherever it appears, in a task file or an archive. Status and Parent never
 move, so the tree reads the same from the file alone.
+If the file is still over the handoff budget afterwards, `shelve` says by how many tokens (and about how
+many words), which nodes to shelve next, and what only `compact` or a hand edit can move.
 
 A raise is only for what needs the author: a decision, a fact, or access only they
 have. What a critic or a reviewer FINDS is work, so it lands in the tree, not in a
@@ -612,6 +614,68 @@ def _unfield(raw, key, stub=SHELF_STUB):
     return out
 
 
+def _shelvable(nd):
+    """(field, text, stub) for each field of a determined node that `shelve` would move."""
+    out = []
+    for k in SHELVED:
+        v = nd["fields"].get(k)
+        stub = shelf_stub(k, v)
+        # A Determination no longer than its stub saves nothing: left in place.
+        if v and not is_stub(k, v) and (k != "Determination" or len(stub) < len(" ".join(v.split()))):
+            out.append((k, v, stub))
+    return out
+
+
+def shelve_report(task):
+    """What is left to do when the task file is still over the handoff budget, as a list of
+    lines (empty when it is under). `check.py` refuses any commit that GROWS a file over the
+    budget, so a commit that adds a node to this file must shrink it by at least that much
+    more. The size is the check's own count: characters // 4. Words are estimated at the
+    file's own words per character. Lists what `shelve` could still move, biggest first,
+    then what only a hand edit or `compact` can: Evidence of determined nodes, old log
+    entries, the Background."""
+    import state as dfs_state   # state imports this module, so not at the top
+    p = path_for(task)
+    if not p.exists():
+        return []
+    text = p.read_text()
+    budget = dfs_state.HANDOFF_BUDGET
+    tokens = len(text) // 4
+    if tokens <= budget:
+        return []
+    over = tokens - budget
+    words = round(over * 4 * len(text.split()) / max(len(text), 1))
+    t = parse(text, task)
+    tok = lambda chars: max(chars // 4, 1)
+    lines = ["%s is ~%s tokens, still ~%s over the %s budget (about %s words). The check refuses "
+             "any commit that grows it, so a commit that adds a node must also shrink it by "
+             "that node's size." % (dfs_paths.rel(p), f"{tokens:,}", f"{over:,}",
+                                    f"{budget:,}", f"{words:,}")]
+    nodes = [nd for nd in sorted(t["nodes"], key=order_key) if nd["status"] in DETERMINED]
+    save = sorted(((sum(len(v) - len(stub) for _, v, stub in _shelvable(nd)), nd["id"])
+                   for nd in nodes if _shelvable(nd)), reverse=True)
+    if save:
+        lines.append("Shelve next (about tokens saved): " + ", ".join(
+            "%s %s" % (i, f"{tok(c):,}") for c, i in save[:8])
+            + "\n  tree.py shelve %s %s" % (task, " ".join(i for _, i in save[:8])))
+    else:
+        lines.append("No determined node has an Approach, Hypothesis or Determination left to shelve.")
+    ev = sorted(((len(nd["fields"].get("Evidence", "")), nd["id"]) for nd in nodes
+                 if nd["fields"].get("Evidence", "") not in ("", SHELF_STUB)), reverse=True)
+    if ev and tok(ev[0][0]) > 0:
+        lines.append("Evidence moves by hand to the archive under a `**<id> Evidence**:` heading: "
+                     + ", ".join("%s %s" % (i, f"{tok(c):,}") for c, i in ev[:5]))
+    cut = log_cutoff(t["log"])
+    old = sum(len(e["text"]) for e in t["log"] if e["ts"] < cut)
+    if old:
+        lines.append("`tree.py compact %s` would move ~%s tokens of old log entries."
+                     % (task, f"{tok(old):,}"))
+    bg = len(t["sections"].get("Background", ""))
+    if bg:
+        lines.append("The Background is ~%s tokens." % f"{tok(bg):,}")
+    return lines
+
+
 def shelve(task, ids=()):
     """Move the Approach, Hypothesis and Determination of determined nodes (all of them, or
     `ids`) to the END of the archive, verbatim, each as one `**<id> <field>**: <text>` line,
@@ -634,13 +698,9 @@ def shelve(task, ids=()):
                 raise ValueError("%s is %s; only a determined node is history"
                                  % (nd["id"], nd["status"]))
             continue
-        for k in SHELVED:
-            v = nd["fields"].get(k)
-            stub = shelf_stub(k, v)
-            # A Determination no longer than its stub saves nothing: left in place.
-            if v and not is_stub(k, v) and (k != "Determination" or len(stub) < len(" ".join(v.split()))):
-                moved.append("**%s %s**: %s" % (nd["id"], k, v))
-                nd["raw"] = _unfield(nd["raw"], k, stub)
+        for k, v, stub in _shelvable(nd):
+            moved.append("**%s %s**: %s" % (nd["id"], k, v))
+            nd["raw"] = _unfield(nd["raw"], k, stub)
     if not moved:
         return 0
     a.parent.mkdir(parents=True, exist_ok=True)
@@ -2042,6 +2102,8 @@ def _main(argv):
         n = shelve(argv[2], tuple(argv[3:]))
         print("dfs_tree: moved %d Approach and Hypothesis field%s to %s"
               % (n, "" if n == 1 else "s", dfs_paths.rel(archive_path(argv[2]))))
+        for line in shelve_report(argv[2]):
+            print("dfs_tree: " + line)
         return 0
     if len(argv) == 3 and argv[1] == "show":
         t = load(argv[2])
