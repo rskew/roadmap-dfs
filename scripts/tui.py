@@ -2701,12 +2701,12 @@ class UI(WalkMixin):
             if kind == "break":
                 # ⚠️ The rule SAYS what it is holding. A bare line reads as decoration
                 # and a decoration that silently stops the walk is the worst of both:
-                # `waiting on W12` is the item to go and finish, and `above is done`
+                # `waiting on W12` is the item to go and finish, and `below is done`
                 # is a fence that is no longer in anybody's way.
                 # A stop break says so: it is also where a walk ends (`walk_stop_at`).
                 name = "stop break" if rows[self.list_scroll + i][2] else "break"
                 label = ("── %s · waiting on %s " % (name, val)) if val \
-                        else "── %s · above is done " % name
+                        else "── %s · below is done " % name
                 w = self.main_w() - 1
                 self.put(y, 2, (label + "─" * max(0, w - 2 - len(label)))[:max(0, w - 2)],
                          look("chrome"))

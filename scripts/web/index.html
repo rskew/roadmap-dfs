@@ -839,7 +839,7 @@ async function refreshNeeds() {
 function drawRail() {
   const rail = $("#rail"), r = route();
   if (r.view !== "task" || !S.state) return;
-  const html = S.state.items.map(it => {
+  const html = S.state.items.slice().reverse().map(it => {      // last in the walk order on top, like the task list
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     return `<button class="railitem${blocks ? " blocks" : assumes ? " assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" aria-current="${it.id === r.task}" title="${esc(it.goal)}"><span class="iid">${iidHtml(it.id)}</span>${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span></button>`;
   }).join("");
@@ -1172,13 +1172,17 @@ function drawTasks(push) {
   const held = push && typingInBox() ? $("#walkbox") : null;
   S.boxHeld = !!held;
   const table = !S.reorder && tableWide() && listStyle() === "table";
-  let seg = 0, html = held ? "" : walkHtml();
+  let html = held ? "" : walkHtml();
   if (!S.reorder && tableWide()) html += `<div class="actions listopt"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
   if (table) html += `<div class="tblhead" aria-hidden="true"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>`;
-  for (const it of S.state.items) {
-    const fenced = it.segment > seg;
-    if (fenced) html += `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "above is done"}</div>`;
-    seg = it.segment;
+  // The list is drawn upside down: the last task in the walk order is the top row, so the walk climbs the page. A break
+  // keeps its place between the same two tasks, which puts it under the task it holds. The reorder view keeps the walk
+  // order until its controls are flipped too.
+  const flip = !S.reorder;
+  for (const it of (flip ? items.slice().reverse() : items)) {
+    const fenced = it.segment > (items.indexOf(it) ? items[items.indexOf(it) - 1].segment : 0);
+    const fence = fenced ? `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : flip ? "below is done" : "above is done"}</div>` : "";
+    if (!flip) html += fence;
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     const draft = it.draft && it.status === "open" && !it.blocked_by;
     const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}${draft ? " draft" : ""}`;
@@ -1222,6 +1226,7 @@ function drawTasks(push) {
       const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
+    if (flip) html += fence;
   }
   // Archived tasks follow the live ones, apart from the order and its breaks; the reorder view is about live tasks.
   if (showArchived() && !S.reorder && S.archived.length) {

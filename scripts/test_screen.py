@@ -1073,7 +1073,7 @@ class ADoneTaskRecedesInTheList(unittest.TestCase):
             ui.draw_list(0, 10)
             return ui.scr.puts
         lines = [p[2] for p in draw(self) if p[2].startswith("──")]
-        self.assertTrue(lines[0].startswith("── stop break · above is done "), lines)
+        self.assertTrue(lines[0].startswith("── stop break · below is done "), lines)
         self.assertTrue(lines[1].startswith("── break · waiting on W2 "), lines)
 
     def test_the_list_is_drawn_last_item_first_with_the_fence_between_the_same_two(self):

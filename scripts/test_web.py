@@ -829,6 +829,27 @@ class Web(unittest.TestCase):
         self.assertEqual(html.count("Plain break"), 1, "W2 sits behind a stop break")
         self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
 
+    def test_the_task_list_is_drawn_last_task_first_with_a_break_under_the_task_it_holds(self):
+        """drawTasks() in index.html, run under node: the walk climbs the page (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
+              "const view = {}; const $ = s => s === '#view' ? view : null;"
+              "const row = (id, segment, w) => ({id, goal: 'g' + id, depth: 0, status: 'open', segment, stop: false, raises: 0,"
+              " assumptions: [], rev: '', waiting_on: w || '', blocked_by: '', why: '', needs_you: false});"
+              "const S = {reorder: false, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "row('W1', 0), row('W2', 1, 'W1'), row('W3', 1, 'W1')]}};" + body +
+              "drawTasks(); console.log(JSON.stringify(view.innerHTML))")
+        html = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        at = lambda needle: html.index(needle)
+        self.assertLess(at('data-id="W3"'), at('data-id="W2"'))
+        self.assertLess(at('data-id="W2"'), at("break, waiting on W1"))
+        self.assertLess(at("break, waiting on W1"), at('data-id="W1"'))
+        self.assertEqual(html.count('class="break cap"'), 1, "the fence sits once, between W2 and W1")
+
     def test_start_walk_asks_nothing_and_its_note_carries_the_permission_warning(self):
         """index.html read as text (no node needed): the walk starts at once, so no confirmation dialog
         is left, and the note under Start walk says what a walk does, since no dialog does."""
