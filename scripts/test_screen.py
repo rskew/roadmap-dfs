@@ -816,6 +816,49 @@ class TheNodePanel(unittest.TestCase):
         self.assertEqual(ui.card_scroll, 0)
 
 
+class ARaiseWithAnAnswerPage(unittest.TestCase):
+    """The tree marks a raise that names `Answer with:` a page, and `a` opens the page, not $EDITOR."""
+    LOG = "- 2026-01-01T00:00:00Z · raise · W1.1\n  Which?\n%s\n"
+
+    def screen(self, tail):
+        text = TREE.split("## Log")[0] + "## Log\n\n" + self.LOG % tail
+        t = TUI.dfs_tree.parse(text, "W1")
+        ui = a_screen([item("W1")], pane="item", focus="tree")
+        ui.tree_of = lambda task: (t, "", {})
+        ui.status_attr = lambda status: 0
+        ui._tree_cache = {}
+        ui.tree_item = "W1"
+        ui.tree_flagged = False
+        ui.tree_sel = next(n for n, r in enumerate(ui.tree_rows()) if r.get("raises"))
+        ui.opened, ui.edited = [], []
+        ui.open_artefact = ui.opened.append
+        ui.compose = lambda frame: ui.edited.append(frame) or ""
+        return ui
+
+    def drawn(self, ui):
+        look, pair = TUI.look, curses.color_pair
+        TUI.look, curses.color_pair = (lambda name: 0), (lambda n: 0)
+        try:
+            return "\n".join(l[0] for l in ui.lines_tree(100))
+        finally:
+            TUI.look, curses.color_pair = look, pair
+
+    def test_the_row_is_marked_and_a_plain_raise_is_not(self):
+        self.assertIn("answer page", self.drawn(self.screen("Answer with: .dfs/artefacts/c0ffee.html")))
+        self.assertNotIn("answer page", self.drawn(self.screen("Answer in words.")))
+
+    def test_a_opens_the_page_and_leaves_the_editor_alone(self):
+        ui = self.screen("Answer with: .dfs/artefacts/c0ffee.html")
+        ui.tree_answer("W1")
+        self.assertEqual([a["name"] for a in ui.opened], ["c0ffee.html"])
+        self.assertEqual(ui.edited, [])
+
+    def test_a_raise_without_a_page_still_opens_the_editor(self):
+        ui = self.screen("Answer in words.")
+        ui.tree_answer("W1")
+        self.assertEqual((ui.opened, len(ui.edited)), ([], 1))
+
+
 class AddingABreakAsks(unittest.TestCase):
     def screen(self, had, answers):
         ui = a_screen([dict(item("W2"), depth=0)], answers=list(answers))

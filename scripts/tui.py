@@ -839,7 +839,7 @@ KEYS = [
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
     ("tree", "space", ord(" "), "fold", "fold or unfold what is below it"),
     ("tree", "p", ord("p"), "flagged", "show only the ⚑ assumptions and raises, or every node"),
-    ("tree", "a", ord("a"), "answer", "answer the raise here"),
+    ("tree", "a", ord("a"), "answer", "answer the raise here (its page, if it names one)"),
     ("tree", "n  N", ord("n"), "next-flag", "next, previous raise or ⚑ in the tree"),
     ("tree", "^d  ^u", 4, "card-scroll", "scroll the node panel at the right"),
     ("tree", "i", ord("i"), "add", "add a node under the one at the cursor (none: under the task)"),
@@ -3959,7 +3959,8 @@ class UI(WalkMixin):
             if row["kind"] == "raise":
                 r = row["raise_"]
                 on = (" on " + r["args"][0]) if r["args"] else " on the task"
-                out.append(("%s ● raise%s · %s — needs you" % (cursor, on, age(r["ts"])),
+                page = " · answer page" if dfs_tree.answer_page(r["body"]) else ""
+                out.append(("%s ● raise%s%s · %s — needs you" % (cursor, on, page, age(r["ts"])),
                             red | curses.A_BOLD | (curses.A_REVERSE if sel else 0)))
                 for line in r["body"].splitlines():
                     para(line, indent="    ", hang="  ", rich=True)
@@ -3967,6 +3968,8 @@ class UI(WalkMixin):
             nd, st = row["node"], row["status"]
             fold = ("▸" if row["folded"] else "▾") if row["kids"] else " "
             flag = "  ● raise" if row["raises"] else ""
+            if any(dfs_tree.answer_page(r["body"]) for r in row["raises"]):
+                flag += " · answer page"
             assumes, asks = row["assumes"], row["asks"]
             if assumes:
                 flag += "  ⚑ assumption"
@@ -4036,7 +4039,9 @@ class UI(WalkMixin):
             if row["key"] not in self.tree_open and not row["raises"]:
                 continue
             for r in row["raises"]:
-                out.append((inner + "raise · %s — needs you" % age(r["ts"]), red | curses.A_BOLD))
+                page = " · answer page" if dfs_tree.answer_page(r["body"]) else ""
+                out.append((inner + "raise%s · %s — needs you" % (page, age(r["ts"])),
+                            red | curses.A_BOLD))
                 for line in r["body"].splitlines():
                     para(line, indent=inner + "  ", hang="  ", rich=True)
             if row["key"] in self.tree_open:
@@ -4087,6 +4092,8 @@ class UI(WalkMixin):
         elif self.tree_focused():
             actions = ["⏎ open", "n next ⚑", "p flagged", "space fold", "i add", "a answer"]
             row = self.tree_row()
+            if row and any(dfs_tree.answer_page(r["body"]) for r in row.get("raises", ())):
+                actions[-1] = "a answer page"
             if not (row and row.get("raises")):     # a node with an open raise is settled by answering it
                 actions.append("f correct")
             if it is not None and it["status"] == "done" and self.tree_acceptable(it):
@@ -4694,6 +4701,13 @@ class UI(WalkMixin):
             return
         r = raises[0]
         on = (" on " + r["args"][0]) if r["args"] else ""
+        page = dfs_tree.answer_page(r["body"])
+        if page:
+            # The page has its own buttons and records the answer itself, so the editor
+            # would only be a second, worse way to say the same thing.
+            self.open_artefact(dict(name=page, entry=r["ts"],
+                                    exists=dfs_paths.artefact_file(page).exists()))
+            return
         frame = (["Answer to the raise logged at %s%s. Lines starting # are dropped;"
                   % (r["ts"], on), "an empty answer leaves the raise open.", ""]
                  + r["body"].splitlines())
