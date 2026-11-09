@@ -127,6 +127,10 @@ pre.runlog .r-err { color: var(--attention); }
 .archive svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 .archive:active { background: var(--sel); color: var(--ink); }
 .item .iid { font-weight: 600; letter-spacing: .03em; }
+/* the Chats list: the item's id is a link to it, laid over the chat button's id column */
+.crow { position: relative; }
+.chatitem { position: absolute; left: 0; top: 0; bottom: 0; width: 3.2rem; padding-top: var(--s4); font-weight: 600; letter-spacing: .03em; text-decoration: underline; text-underline-offset: .2em; color: var(--ink); z-index: 1; }
+.chatitem:active { background: var(--sel); }
 .itag { display: block; font-size: var(--fs-label); letter-spacing: .03em; color: var(--muted); overflow-wrap: anywhere; }   /* a branch's tag, beside its number */
 .item.done .itag { flex: 1 0 100%; }
 .item .goal { font-weight: 500; overflow-wrap: anywhere; }
@@ -1129,11 +1133,13 @@ function drawChatsOff(why) {
 function drawChats() {
   const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
   const who = { you: "You", agent: "Agent", error: "Not answered", note: "Note" };
-  const row = c => `<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
-      <span class="iid">${c.scope === "project" ? "All" : iidHtml(c.scope)}</span>
+  // A link cannot sit inside the row's button, so the id is drawn in a link laid over the button's id column (`.chatitem`) and the
+  // button's own id cell is left empty; the project chat is about no item and has no link.
+  const row = c => `<div class="crow">${c.scope === "project" ? "" : `<a class="chatitem" href="#/t/${encodeURIComponent(c.scope)}" aria-label="Open ${esc(c.scope)}" title="Open ${esc(c.scope)}">${iidHtml(c.scope)}</a>`}<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
+      <span class="iid">${c.scope === "project" ? "All" : ""}</span>
       <span>${tagHtml(c.scope)}<span class="goal">${esc(goal(c.scope))}</span>
         <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}${c.ended ? `<span class="tag">ended</span>` : ""}<span class="tag">${esc(c.agent)}</span><span class="muted">${esc(ago(c.updated))}</span></span>
-        ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button>`;
+        ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button></div>`;
   const going = S.chats.filter(c => !c.ended), ended = S.chats.filter(c => c.ended);
   const rows = going.map(row).join("");
   $("#view").className = "col";

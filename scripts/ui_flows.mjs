@@ -536,13 +536,21 @@ const FLOWS = {
     await page.click("[data-act=chatclose]");
     await page.evaluate(() => { location.hash = "#/chats"; });
     await page.waitForSelector(".endedchats");
-    same(await page.$$eval("#view > .chatrow", e => e.length), 0, "nothing in progress is left above the Ended group");
+    same(await page.$$eval("#view > .crow", e => e.length), 0, "nothing in progress is left above the Ended group");
     same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Ended (2)", "the Ended group counts the ended chats");
     assert((await page.$eval("#title", e => e.textContent)).includes("0 going"), "the title counts only the chats in progress");
     await page.click(".endedchats summary"); await page.waitForTimeout(4500);
     assert(await page.$eval(".endedchats", e => e.open), "an open Ended group stays open through the list's redraws");
     same(await page.$$eval(".endedchats .chatrow", e => e.length), 2, "the ended chats are inside it");
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    // each line links the item its chat is about; the project chat is about none
+    same(await page.$$eval(".chatitem", e => e.map(x => [x.getAttribute("href"), x.textContent.trim()])), [["#/t/W9", "W9"]], "only the item's chat has a link, to that item");
+    same(await page.$$eval(".crow", e => e.map(x => x.querySelectorAll("a").length).sort()), [0, 1], "the project row has no link and the item's row has one");
+    same(await page.$$eval(".chatrow a", e => e.length), 0, "no link sits inside a row's button");
+    await page.click(".chatitem");
+    await page.waitForFunction(() => location.hash === "#/t/W9");
+    await page.waitForSelector("#tabs [data-act=chat]");
+    assert(!(await page.$("#chat[open]")), "the link opens the item, not the chat");
     same(errors, [], "no page errors");
   },
 
