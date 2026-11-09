@@ -224,9 +224,14 @@ class ChangedToolTest(unittest.TestCase):
 
         class Fake:
             returncode = 0
+            pid = 2 ** 22 + 7   # past pid_max: no such process group, so the group is already gone
             stdout = io.StringIO("dfs_run: DONE\n")
             def __init__(self, cmd, **kw):
-                seen["cmd"], seen["env"], seen["cwd"] = cmd, kw["env"], kw["cwd"]
+                seen["cmd"], seen["env"], seen["cwd"], seen["session"] = cmd, kw["env"], kw["cwd"], kw.get("start_new_session")
+            def poll(self):
+                return 0
+            def wait(self):
+                return 0
             def __enter__(self):
                 return self
             def __exit__(self, *a):
@@ -247,6 +252,7 @@ class ChangedToolTest(unittest.TestCase):
         self.assertIn("CLAUDE_CMD=/nix/store/c/bin/claude", cmd)
         self.assertEqual(seen["env"]["PROOT_TMP_DIR"], str(replay.box_of(out) / "tmp"))
         self.assertEqual(Path(seen["cwd"]), out)
+        self.assertTrue(seen["session"])   # the runner is a process group of its own, which `run` can end
 
 
 class SandboxTest(unittest.TestCase):
@@ -1227,6 +1233,97 @@ class HistoryKeepsReplaysApartTest(unittest.TestCase):
             self.assertEqual(tasks[("-w-proj", "W5")]["first_review"], "issues")
             _, tasks, _, _ = history.load(os.path.join(tmp, "*", "*.jsonl"), {}, replays=True)
             self.assertEqual(len(tasks), 2)
+
+
+DRIVER = """
+import sys
+sys.path.insert(0, %(here)r)
+import replay
+# stand-in for proot -> run.sh -> agent: a shell that starts a long grandchild and waits on it
+replay.TERM_GRACE = 2
+replay.launch = lambda *a, **k: (["sh", "-c", "echo runner-start; %(py)s -c 'import time; time.sleep(300)  # %(mark)s' & wait"], {"PATH": %(path)r})
+sys.exit(replay.run(sys.argv[1], "W1"))
+"""
+
+
+def marked(mark):
+    """Pids whose command line holds `mark`."""
+    found = []
+    for d in Path("/proc").iterdir():
+        if d.name.isdigit():
+            try:
+                if mark.encode() in (d / "cmdline").read_bytes():
+                    found.append(int(d.name))
+            except OSError:
+                pass
+    return found
+
+
+class RunEndsItsRunnerTest(unittest.TestCase):
+    """`replay.py run` that is killed or timed out leaves no runner working DEST, or the next run says one is."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dest = Path(self.tmp.name) / "dfs-replay-x"
+        (self.dest / ".git").mkdir(parents=True)
+        (self.dest / ".git" / "replay.json").write_text(json.dumps({"tool": self.tmp.name}))
+        self.mark = "w159-" + os.urandom(6).hex()
+        self.driver = Path(self.tmp.name) / "drive.py"
+        self.driver.write_text(DRIVER % {"here": str(Path(__file__).resolve().parent), "mark": self.mark, "py": sys.executable,
+                                        "path": os.environ.get("PATH", "")})
+        self.addCleanup(self.reap)
+
+    def reap(self):
+        for pid in marked(self.mark):
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
+
+    def wait_gone(self, secs=10):
+        import time
+        end = time.time() + secs
+        while marked(self.mark) and time.time() < end:
+            time.sleep(0.1)
+        return marked(self.mark)
+
+    def start(self, *wrapper):
+        p = subprocess.Popen([*wrapper, sys.executable, str(self.driver), str(self.dest)],
+                             stdout=subprocess.PIPE, text=True)
+        self.assertEqual(p.stdout.readline().strip(), "runner-start")
+        return p
+
+    def test_timeout_that_signals_only_replay_leaves_no_runner(self):
+        p = self.start("timeout", "--foreground", "1")
+        p.wait(timeout=20)
+        self.assertEqual(p.returncode, 124)
+        self.assertEqual(self.wait_gone(), [])
+        self.assertFalse((self.dest / ".git" / "replay.pid").exists())
+
+    def test_timeout_that_signals_the_group_leaves_no_runner(self):
+        p = self.start("timeout", "1")
+        p.wait(timeout=20)
+        self.assertEqual(self.wait_gone(), [])
+
+    def test_killed_replay_leaves_a_runner_the_next_run_names(self):
+        p = self.start()
+        p.kill()   # SIGKILL: no handler runs, the runner is left
+        p.wait(timeout=20)
+        self.assertTrue(marked(self.mark))
+        with mock.patch.object(replay, "launch") as launch, self.assertRaises(SystemExit) as e:
+            replay.run(self.dest, "W1")
+        self.assertIn("still alive", str(e.exception))
+        launch.assert_not_called()   # it started no second
+        self.assertEqual(len(marked(self.mark)), 2)   # the sh and its sleeper, as before
+
+    def test_a_stale_pid_file_does_not_block_a_run(self):
+        gone = subprocess.Popen(["true"])
+        gone.wait()
+        (self.dest / ".git" / "replay.pid").write_text(str(gone.pid))
+        with mock.patch.object(replay, "launch", return_value=(["true"], {"PATH": os.environ.get("PATH", "")})):
+            self.assertEqual(replay.run(self.dest, "W1"), 0)
+        self.assertFalse((self.dest / ".git" / "replay.pid").exists())
 
 
 if __name__ == "__main__":
