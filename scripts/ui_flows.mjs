@@ -739,25 +739,28 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
-  // The page a raise names ("Answer with:") records the answer itself: it is a sandboxed frame, yet its POST to
-  // /artefact-state reaches the server and the form closes when the page says so. Nothing else it sends does.
+  // The page a raise names ("Answer with:") replaces the answer dialog: a tap on the raise node opens it in full, it records the
+  // answer itself (a sandboxed frame, yet its POST to /artefact-state reaches the server), and the task shows the raise closed.
+  // Nothing else the page sends does.
   async answer_page(b) {
     const { page, errors } = await open(b, PHONE);
     await task(page, "W9");
+    assert(/answer page/.test(await page.textContent(".row.hasraise .chips")), "the raise node is marked as having a page");
     await page.click(".row.hasraise .main");
-    await page.waitForSelector("#sheet.open");
-    await page.click("#sheet [data-act=answer]"); await dialog(page);
+    await page.waitForSelector("iframe.artview");
+    assert(/#\/a\/W9\/c0ffee-choose\.html$/.test(page.url()), "a tap opens the page in full: " + page.url());
+    assert(await page.locator("dialog[open]").count() === 0, "and no dialog");
     const frame = page.frames().find(f => f.url().includes("/artefacts/c0ffee-choose.html"));
-    assert(frame, "the named page opens beside the form");
+    assert(frame, "the named page is the frame");
     same(await frame.evaluate(() => fetch("/api/walk/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
       .then(r => "reached " + r.status, () => "blocked")), "blocked", "the page still cannot reach the API");
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });   // for a node's screenshot
     await page.evaluate(() => postMessage({ dfs: "answered" }, "*"));
     await page.waitForTimeout(200);
-    assert(await page.locator("dialog[open] #answerpage").count() === 1, "a message from another window does not close the form");
-    assert(await page.locator(".row.hasraise").count() > 0, "the raise is still open");
-    await page.frameLocator("dialog #answerpage").locator("#send").click();
-    await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 });
+    assert(await page.locator("iframe.artview").count() === 1, "a message from another window does not leave the page");
+    assert(await page.locator("[data-act=card]").count() === 1, "the node's own text is a tap away");
+    await page.frameLocator("iframe.artview").locator("#send").click();
+    await page.waitForFunction(() => /#\/t\/W9$/.test(location.hash), null, { timeout: 5000 });
     await page.waitForFunction(() => !document.querySelector(".row.hasraise"), null, { timeout: 5000 });
     same(errors, [], "no page errors");
   },
@@ -864,18 +867,17 @@ const FLOWS = {
     const { page, errors } = await open(b, PHONE);
     await task(page, "W9");
     await page.click(".row.hasraise .main");
-    await page.waitForSelector("#sheet.open");
-    await page.click("#sheet [data-act=answer]"); await dialog(page);
-    const f = page.frameLocator("dialog #answerpage");
+    await page.waitForSelector("iframe.artview");
+    const f = page.frameLocator("iframe.artview");
     await f.locator("#dfs-answerbox").waitFor({ state: "visible" });
     assert(await f.locator("#dfs-rulebox").isHidden(), "no node waits on this page, so no Confirm or Refute");
     await f.locator("#dfs-send").click();
     assert(/Choose an option/.test(await f.locator("#dfs-answer-status").textContent()), "an empty answer is not sent");
-    assert(await page.locator("dialog[open]").count() === 1, "and nothing was recorded");
+    assert(await page.locator("iframe.artview").count() === 1, "and nothing was recorded");
     await f.locator("label.opt", { hasText: "The second option" }).click();
     await f.locator("#dfs-note").fill("Test on one.");
     await f.locator("#dfs-send").click();
-    await page.waitForFunction(() => !document.querySelector("dialog[open]"), null, { timeout: 5000 });
+    await page.waitForFunction(() => /#\/t\/W9$/.test(location.hash), null, { timeout: 5000 });
     await page.waitForFunction(() => !document.querySelector(".row.hasraise"), null, { timeout: 5000 });
     same(errors, [], "no page errors");
   },
@@ -2621,7 +2623,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       await page.keyboard.press("Escape");
       assert(await page.evaluate(() => document.querySelector("#ctx").hidden), `${name}: Escape closes the menu`);
       await page.click(".row .main", { button: "right" });
-      await page.click("#ctx [data-act=node]"); await page.waitForSelector("#sheet.open");
+      await page.click("#ctx [data-act=card]"); await page.waitForSelector("#sheet.open");
       // a click on another task in the rail goes there
       const other = await page.evaluate(() => [...document.querySelectorAll("#rail .railitem")].map(e => e.dataset.id).find(i => i !== "W9"));
       await page.click(`#rail .railitem[data-id=${other}]`);

@@ -621,8 +621,9 @@ class Web(unittest.TestCase):
         # options and the Send button inside it could be reached through a slot three lines high.
         frame = css[css.index("dialog .answerpage {"):]
         self.assertIn("flex: none", frame[:frame.index("}")])
-        # The raw `Answer with: .dfs/artefacts/<uuid>.html` line is not shown above the frame that is that page.
-        self.assertIn("r.body.replace(/^[ \\t]*Answer with:", src)
+        # A raise with an answer page is answered on that page, opened in full in the viewer, not in a frame inside the dialog.
+        self.assertIn("if (r && openRaisePage([r])) return;", src)
+        self.assertNotIn('Or in your own words, instead of the page"', src.split("function correctForm")[0].split("function answerForm")[1])
 
     def test_a_raise_with_an_answer_page_is_marked_on_its_row_and_its_card(self):
         """Read from the page's source: the row chip and the raise card both say "answer page" when answerPage() finds one,
