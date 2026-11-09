@@ -831,9 +831,9 @@ KEYS = [
     ("items", "[  -", ord("["), "up", "move up among its siblings"),
     ("items", "]  = +", ord("]"), "down", "move down among its siblings"),
     ("items", "{  <", ord("{"), "out", "move out of its branch"),
-    ("items", "}  >", ord("}"), "in", "move into the branch above"),
-    ("items", "b", ord("b"), "fence", "put a fence above it (asks first), or take the fence away"),
-    ("items", "B", ord("B"), "stopbreak", "make the fence above it a stop break, which ends a walk there, or plain again"),
+    ("items", "}  >", ord("}"), "in", "move into the branch below"),
+    ("items", "b", ord("b"), "fence", "put a fence below it (asks first), or take the fence away"),
+    ("items", "B", ord("B"), "stopbreak", "make the fence below it a stop break, which ends a walk there, or plain again"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
     ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
@@ -2096,8 +2096,10 @@ class UI(WalkMixin):
         elif self.tree_focused():
             self.tree_sel = max(0, min(self.tree_sel + step, len(self.tree_rows()) - 1))
         else:
+            # The list is drawn last item first (`list_rows`), so a step down the screen
+            # is a step toward the front of the walk order.
             if self.items:
-                self.sel = max(0, min(self.sel + step, len(self.items) - 1))
+                self.sel = max(0, min(self.sel - step, len(self.items) - 1))
             self.scroll = 0         # a new item is read from its top
 
     def nodes(self):
@@ -2105,21 +2107,29 @@ class UI(WalkMixin):
         return dfs_order.tree_of(self.items)
 
     def list_rows(self):
-        """The list as ROWS: every item, with a rule wherever a fence sits.
+        """The list as ROWS, drawn UPSIDE DOWN: the last item in the walk order is the
+        top row and the first is the bottom row, so the walk climbs the screen. A rule
+        is drawn wherever a fence sits, between the same two items as in `order.md`.
 
         A fence is DRAWN and not selectable. Everything this screen does to a row —
         run it, answer it, move it, stop its chain — needs an item, so a cursor that
         could land on a rule would make every one of those keys begin by asking
-        whether it had. `b` toggles the fence above the selected item instead, which
-        is the whole of what a fence has to do from here.
+        whether it had. `b` toggles the fence on the selected item's walk side instead
+        (below it on the screen), which is the whole of what a fence has to do from here.
+
+        ⚠ `self.items` stays in WALK order and `sel` indexes it; only the drawing is
+        flipped (`move`, `reorder` and the fence keys turn their steps to match).
         """
-        rows, seg = [], 0
-        for idx, it in enumerate(self.items):
-            while seg < it.get("segment", 0):
-                seg += 1
+        rows = []
+        for idx in range(len(self.items) - 1, -1, -1):
+            it = self.items[idx]
+            rows.append(("item", idx))
+            seg = it.get("segment", 0)
+            before = self.items[idx - 1].get("segment", 0) if idx else 0
+            while seg > before:
                 rows.append(("break", it.get("waiting_on"),
                              bool(it.get("stop")) and seg == it.get("segment", 0)))
-            rows.append(("item", idx))
+                seg -= 1
         return rows
 
     def reorder(self, step):
@@ -2137,7 +2147,9 @@ class UI(WalkMixin):
         it = self.current()
         if it is None:
             return
-        if self.retree(dfs_order.moved(self.nodes(), it["id"], step),
+        # `step` is on the SCREEN, which draws the walk order upside down (`list_rows`),
+        # so up the screen is later in `order.md`.
+        if self.retree(dfs_order.moved(self.nodes(), it["id"], -step),
                        it, "is already %s among its siblings"
                        % ("first" if step < 0 else "last")):
             self.said(it, "moved %s" % ("up" if step < 0 else "down"))
@@ -2159,7 +2171,7 @@ class UI(WalkMixin):
         # refusal is the same key doing nothing for two reasons — nesting under a
         # fence is not a shape, and reaching past one would move this work across it.
         refusal = ("is already at the root" if step < 0
-                   else "has no sibling above it in this section to go under")
+                   else "has no sibling below it in this section to go under")
         if self.retree(after, it, refusal):
             now = next((i for i in self.items if i["id"] == it["id"]), None)
             parent = now["parent"] if now else None
@@ -2167,7 +2179,8 @@ class UI(WalkMixin):
                           else "moved to the root")
 
     def toggle_break(self):
-        """Put a fence above the selected item, or take away the one that is there.
+        """Put a fence below the selected item (the walk side: the list is drawn upside
+        down, see `list_rows`), or take away the one that is there.
 
         The third thing an author knows about their own plan, after "this comes
         before that" and "this only makes sense under that": **nothing after here is
@@ -2183,22 +2196,22 @@ class UI(WalkMixin):
         had = dfs_order.has_break_above(nodes, it["id"])
         refusal = ("is nested — a break separates whole branches, never cuts one"
                    if it["depth"] else
-                   "is the first item — a break above it would gate nothing")
+                   "is the bottom item — a break below it would gate nothing")
         after = dfs_order.break_toggled(nodes, it["id"])
         # ⚠️ ADDING ONE ASKS; taking one away does not. A fence gates everything after
         # it on everything before, and `b` sits among the keys a hand finds by
         # accident. A refusal (nested, first) says so without asking first.
         if after is not None and not had:
-            if self.prompt("put a break above %s — everything after waits on "
-                           "everything above? [y/N]:" % it["id"])[:1].lower() != "y":
+            if self.prompt("put a break below %s — everything above it waits on "
+                           "everything below? [y/N]:" % it["id"])[:1].lower() != "y":
                 self.msg = "no break added"
                 return
         if self.retree(after, it, refusal):
             self.said(it, "is no longer behind a break" if had
-                          else "now waits on everything above the break")
+                          else "now waits on everything below the break")
 
     def toggle_stop(self):
-        """Make the fence above the selected item a STOP break, or plain again; with no
+        """Make the fence below the selected item a STOP break, or plain again; with no
         fence there, put up one that stops (asking first, as `b` does).
 
         A stop break holds what is after it as any fence does, and a walk that worked up
@@ -2212,13 +2225,13 @@ class UI(WalkMixin):
         stops = dfs_order.has_stop_above(nodes, it["id"])
         after = dfs_order.stop_toggled(nodes, it["id"])
         if after is not None and not had:
-            if self.prompt("put a stop break above %s — everything after waits on everything "
-                           "above, and a walk ends there? [y/N]:" % it["id"])[:1].lower() != "y":
+            if self.prompt("put a stop break below %s — everything above it waits on everything "
+                           "below, and a walk ends there? [y/N]:" % it["id"])[:1].lower() != "y":
                 self.msg = "no break added"
                 return
         refusal = ("is nested — a break separates whole branches, never cuts one"
                    if it["depth"] else
-                   "is the first item — a break above it would gate nothing")
+                   "is the bottom item — a break below it would gate nothing")
         if self.retree(after, it, refusal):
             self.said(it, "is behind a plain break: a walk goes on through it" if stops
                           else "is behind a stop break: a walk ends there")

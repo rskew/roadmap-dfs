@@ -745,7 +745,7 @@ class BreaksOnTheScreen(InAWorkRoot):
         dfs_order.write_order([("W1", 0), ("W2", 0), ("W3", 0)])
         reload()
 
-    def test_b_puts_a_fence_above_the_selected_item(self):
+    def test_b_puts_a_fence_below_the_selected_item(self):
         self.ui.sel = 1
         self.ui.answers = ["y"]
         self.ui.toggle_break()
@@ -754,8 +754,9 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.assertEqual([i["segment"] for i in self.ui.items], [0, 1, 1])
         self.assertEqual(self.ui.current()["id"], "W2", "the cursor stays on the item")
         self.assertEqual(self.ui.current()["waiting_on"], "W1")
-        self.assertEqual([r[0] for r in self.ui.list_rows()],
-                         ["item", "break", "item", "item"])
+        # The list is drawn upside down: W3, W2, the fence, then W1 at the bottom.
+        self.assertEqual(self.ui.list_rows(),
+                         [("item", 2), ("item", 1), ("break", "W1", False), ("item", 0)])
 
     def test_capital_b_makes_the_fence_a_stop_break_and_plain_again(self):
         self.ui.sel = 1
@@ -763,15 +764,15 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.ui.toggle_stop()
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
                          [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), ("W3", 0)])
-        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", True))
+        self.assertEqual(self.ui.list_rows()[2], ("break", "W1", True))
         self.assertIn("a walk ends there", self.ui.msg)
         self.ui.toggle_stop()
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
                          [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])
-        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", False))
+        self.assertEqual(self.ui.list_rows()[2], ("break", "W1", False))
         self.ui.sel = 0
         self.ui.toggle_stop()
-        self.assertIn("first item", self.ui.msg)
+        self.assertIn("bottom item", self.ui.msg)
 
     def test_capital_b_without_a_yes_adds_no_break(self):
         self.ui.sel = 1
@@ -816,7 +817,7 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.ui.answers = ["y"]
         self.ui.toggle_break()
         self.ui.sel = 2                      # W3, on the far side
-        self.ui.reorder(-1)
+        self.ui.reorder(1)                   # down the screen is earlier in the order
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
                          [("W1", 0), (dfs_order.BREAK, 0), ("W3", 0), ("W2", 0)])
 
@@ -836,7 +837,7 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.assertEqual(dfs_order.read_text(), before)
         self.assertIn("nested", self.ui.msg)
 
-    def test_b_on_the_first_item_says_so_and_writes_nothing(self):
+    def test_b_on_the_bottom_item_says_so_and_writes_nothing(self):
         before = dfs_order.read_text()
         self.ui.toggle_break()
         self.assertEqual(dfs_order.read_text(), before)
@@ -861,26 +862,37 @@ class Selection(InAWorkRoot):
 
         self.ui.reload = reload
 
+    # The list is drawn last item first, so up the screen is later in the order.
     def test_moving_down_keeps_the_cursor_on_the_moved_item(self):
         self.ui.reorder(1)
-        self.assertEqual([i["id"] for i in self.ui.items], ["W1", "W3", "W2"])
-        self.assertEqual(self.ui.current()["id"], "W2")
-        self.assertEqual(self.ui.sel, 2)
-
-    def test_moving_up_keeps_the_cursor_on_the_moved_item(self):
-        self.ui.reorder(-1)
         self.assertEqual([i["id"] for i in self.ui.items], ["W2", "W1", "W3"])
         self.assertEqual(self.ui.current()["id"], "W2")
         self.assertEqual(self.ui.sel, 0)
 
+    def test_moving_up_keeps_the_cursor_on_the_moved_item(self):
+        self.ui.reorder(-1)
+        self.assertEqual([i["id"] for i in self.ui.items], ["W1", "W3", "W2"])
+        self.assertEqual(self.ui.current()["id"], "W2")
+        self.assertEqual(self.ui.sel, 2)
+
+    def test_the_list_is_drawn_last_item_first_and_the_cursor_follows_the_screen(self):
+        self.assertEqual(self.ui.list_rows(), [("item", 2), ("item", 1), ("item", 0)])
+        self.ui.pane, self.ui.focus = "item", "list"
+        self.ui.sel = 1
+        self.ui.move(-1)                     # up the screen
+        self.assertEqual(self.ui.current()["id"], "W3")
+        self.ui.move(1)
+        self.ui.move(1)                      # down the screen, to the first item to work
+        self.assertEqual(self.ui.current()["id"], "W1")
+
     def test_at_the_top_it_says_so_and_writes_nothing(self):
-        self.ui.sel = 0
+        self.ui.sel = 2
         self.ui.reorder(-1)
         self.assertFalse(dfs_order.path().exists())
         self.assertIn("first", self.ui.msg)
 
     def test_at_the_bottom_it_says_so_and_writes_nothing(self):
-        self.ui.sel = 2
+        self.ui.sel = 0
         self.ui.reorder(1)
         self.assertFalse(dfs_order.path().exists())
         self.assertIn("last", self.ui.msg)

@@ -1076,6 +1076,26 @@ class ADoneTaskRecedesInTheList(unittest.TestCase):
         self.assertTrue(lines[0].startswith("── stop break · above is done "), lines)
         self.assertTrue(lines[1].startswith("── break · waiting on W2 "), lines)
 
+    def test_the_list_is_drawn_last_item_first_with_the_fence_between_the_same_two(self):
+        items = [item("W1"), item("W2"), dict(item("W3"), segment=1, waiting_on="W2")]
+        ui = a_screen(items, sel=0, list_scroll=0)
+        ui.scr = self.Rec()
+        ui.run_tag = lambda iid: ("", 0)
+        ui.status_attr = lambda status: 0
+        saved = dict(TUI.LOOK)
+        TUI.LOOK.clear()
+        TUI.LOOK.update(chrome=curses.A_DIM)
+        try:
+            ui.draw_list(0, 10)
+        finally:
+            TUI.LOOK.clear()
+            TUI.LOOK.update(saved)
+        at = lambda w: min(p[0] for p in ui.scr.puts if "goal of " + w in p[2])
+        self.assertEqual([at("W3"), at("W2"), at("W1")], [0, 2, 3],
+                         "W3 on top, the walk starts at the bottom")
+        rule = [p[2] for p in ui.scr.puts if p[0] == 1][0]
+        self.assertTrue(rule.startswith("── break · waiting on W2 "), rule)
+
     def test_a_draft_status_is_bold_amber_and_an_open_one_is_plain(self):
         items = [dict(item("W1"), draft=1), item("W2"), item("W3")]
         ui = a_screen(items, sel=2, list_scroll=0)
