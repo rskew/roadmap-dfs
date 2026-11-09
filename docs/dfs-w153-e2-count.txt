@@ -1,0 +1,7 @@
+arm  dets narrow wide hand
+C1      5      0    3    3
+C2      8      4    4    5
+C4     10      3    3    3
+P1      9      7    8    7
+controls (C1 C2 C4) 23 Determinations: narrow 7, wide 10, hand 11
+pooled (P1) 9 Determinations: narrow 7, wide 8, hand 7
