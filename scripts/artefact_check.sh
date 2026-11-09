@@ -64,6 +64,34 @@ node_path="$(sed -n "s|^NODE_PATH='\([^']*\)'\$NODE_PATH\$|\1|p" "$pw" | head -1
 browsers="$(sed -n "s|.*PLAYWRIGHT_BROWSERS_PATH=\${PLAYWRIGHT_BROWSERS_PATH-'\([^']*\)'}.*|\1|p" "$pw" | head -1)"
 [ -x "$node_bin" ] || { echo "dfs_artefact_check: could not read node out of $pw" >&2; exit 2; }
 
+# A box with no fontconfig default config (no /etc/fonts, FONTCONFIG_FILE unset) gives the
+# browser no fonts, so it draws no text and the page reads back blank. Write a minimal config
+# listing the font directories we can find; if there are none, say so (ARTEFACT_NO_FONTS) so the
+# check reports "no fonts available" rather than a false "blank".
+if [ -z "${FONTCONFIG_FILE:-}" ] && [ ! -r /etc/fonts/fonts.conf ]; then
+  # What fontconfig itself still finds (it has a built-in fallback), else the usual places.
+  fontdirs="$(fc-list : file 2>/dev/null | sed -n 's|^\(/.*\)/[^/]*:.*|\1|p' | sort -u)" || fontdirs=""
+  if [ -z "$fontdirs" ]; then
+    for d in /usr/share/fonts /usr/local/share/fonts /run/current-system/sw/share/X11/fonts \
+             /nix/store/*dejavu*/share/fonts; do
+      if [ -d "$d" ]; then fontdirs="$d"; break; fi
+    done
+  fi
+  if [ -n "$fontdirs" ]; then
+    # A fixed path (as the .mjs does for screenshots): exec below leaves no chance to clean up.
+    mkdir -p /tmp/artefact-check
+    fcconf=/tmp/artefact-check/fonts.conf
+    {
+      echo '<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig>'
+      echo "$fontdirs" | while IFS= read -r d; do echo "<dir>$d</dir>"; done
+      echo '<cachedir>/tmp/artefact-fontconfig-cache</cachedir></fontconfig>'
+    } > "$fcconf"
+    export FONTCONFIG_FILE="$fcconf"
+  else
+    export ARTEFACT_NO_FONTS=1
+  fi
+fi
+
 ARTEFACT_REPO_ROOT="$REPO_ROOT" \
  NODE_PATH="${node_path}${NODE_PATH:+:$NODE_PATH}" \
 PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH-$browsers}" \
