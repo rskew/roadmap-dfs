@@ -1002,6 +1002,20 @@ does move is the quality cell: on those two readings most lines are read by nobo
 "repeats" read by hand none repeats its line in the same words), and with no open node no session is
 obliged to fix them. That is not measured, and the W17 pooled arm has no minor lines to show it.
 
+Worked cases, `docs/dfs-w153-cases.md`. The counts above are too small to show a gap, so single cases were
+read for how each change would or did work. They were chosen by reading, not drawn at random, and they move
+no verdict. E2: the W17 pooled arm wrote a before-and-after observation in 7 of its 9 Determinations (the
+controls 2 of 5, 4 of 8 and 3 of 10), and 13 of the 25 critic backtracks were for a check that could not have
+come out differently (W68.5, W32.32). E8: the blind reviewer named unmet all-caps and signal-handling
+clauses (W22-c1c, W17-k2c) where the informed one, given the worker's Summary, returned `ok` or did not
+name them; the informed one named others the blind one missed. E5: W109.5 waited 15.1 hours for an answer
+that took the worker's own recommendation, a draft; that kind of fault is fixed on the current tool. E4:
+W32 was asked the same question seven times while its findings kept widening, and the continues led to a
+real defect (W32.51), so the cases show a gap in what the author sees and a case against a default of stop.
+E6: W39.18 (373 words, verdict first) against W130.11 (verdict past word 100, revert-or-keep at the end).
+E1: the controls' Hypothesis pages were 10.9 to 14.8 KB each, the pooled arm's none, and 6 of the author's
+18 rulings were on page-less nodes. E7: no favourable case found.
+
 Tooling faults found on the way were filed as draft tasks and not fixed in W153:
 `artefact_check.sh` reports every page blank when fontconfig has no default config (W156, verified
 again here on the shipped template: `FAIL blank` without a config, `clean` with one),
