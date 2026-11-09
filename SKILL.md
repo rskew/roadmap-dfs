@@ -122,6 +122,16 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   and show a check red without the change.
 - Add nodes freely and keep them small. After each node, re-plan the open nodes ahead:
   edit, add or refute them. Backing up is normal.
+- **`tree.py start` is a hint kept in the working copy, and a restore of the task file
+  drops it.** `git checkout -- .dfs/items/<task>.md` puts `Status: open` back, and it
+  takes any log line written since with it, since the log is in the same file; only
+  `git stash` then `pop` brings it back. That is accepted, not guarded. Nothing decides
+  on `started` (every derivation reads it as `open`); it shows as a mark on the screens
+  and makes the author confirm before a correction prunes a sibling that holds work. A
+  session cut off mid-node is still told by the uncommitted code in the briefing and its
+  `session` line with no `end`. So after a restore, if you are mid-node, run `start` again.
+  A restore also drops the node's unsaved Evidence, which is the larger loss: do not
+  restore the task file to undo a node, refute it.
 - **A determined node is history.** Once confirmed or refuted and committed, it is not
   edited; `check.py` refuses it. Later understanding goes in a new node. A task file
   over its budget shrinks by moving words, verbatim, to `.dfs/archive/items/<task>.md`,
