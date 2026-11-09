@@ -1,4 +1,4 @@
-"""artefact_check.sh fails a slider that moves nothing but its own number."""
+"""artefact_check.sh fails a slider that moves nothing but its own number, and does not call a page blank for want of fonts."""
 import os
 import subprocess
 import tempfile
@@ -21,12 +21,12 @@ PAGE = """<!doctype html><meta charset="utf-8">
 
 
 class ASliderMustChangeWhatTheReaderSees(unittest.TestCase):
-    def run_check(self, page):
+    def run_check(self, page, env=None):
         with tempfile.TemporaryDirectory() as d:
             f = Path(d) / "page.html"
             f.write_text(page)
             r = subprocess.run(["bash", str(SH), str(f), "--out", str(Path(d) / "page.png")],
-                               capture_output=True, text=True, timeout=300)
+                               capture_output=True, text=True, timeout=300, env=env)
         out = r.stdout + r.stderr
         if "dfs_artefact_check:" not in out:
             if os.environ.get("DFS_REQUIRE_BROWSER"):
@@ -57,6 +57,26 @@ class ASliderMustChangeWhatTheReaderSees(unittest.TestCase):
                 ).replace("<p id=\"r\">", "<style>#bar{height:20px;background:#07c;width:var(--w,30%)}</style>"
                           "<div id=\"bar\"></div><p id=\"r\">")
         self.assertNotIn("slider:", self.run_check(page))
+
+
+class AMissingFontConfigIsNotABlankPage(unittest.TestCase):
+    TEXT = ('<!doctype html><meta charset="utf-8">'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<title>t</title><p>Some words the reader can read.</p>')
+    run_check = ASliderMustChangeWhatTheReaderSees.run_check
+
+    def test_a_text_page_is_not_blank_when_no_font_config_is_set(self):
+        env = {k: v for k, v in os.environ.items() if k != "FONTCONFIG_FILE"}
+        self.assertNotIn("blank", self.run_check(self.TEXT, env))
+
+    def test_a_page_with_no_fonts_to_draw_with_says_so_instead_of_blank(self):
+        with tempfile.TemporaryDirectory() as d:
+            empty = Path(d) / "fonts.conf"
+            empty.write_text('<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig></fontconfig>')
+            env = dict(os.environ, FONTCONFIG_FILE=str(empty), ARTEFACT_NO_FONTS="1")
+            out = self.run_check(self.TEXT, env)
+        self.assertIn("no fonts available", out)
+        self.assertNotIn("FAIL blank", out)
 
 
 if __name__ == "__main__":

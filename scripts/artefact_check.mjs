@@ -82,7 +82,7 @@ async function pass(w, h, mobile) {
   await page.goto(pathToFileURL(file).href, { waitUntil: 'load' });
   await page.waitForTimeout(200);
 
-  const report = await page.evaluate(([minFont, mobile, minTarget]) => {
+  const report = await page.evaluate(([minFont, mobile, minTarget, noFonts]) => {
     const out = { fails: [], title: document.title || '', w: 0, h: 0 };
     const doc = document.documentElement;
     out.w = doc.scrollWidth;
@@ -95,7 +95,13 @@ async function pass(w, h, mobile) {
 
     // Rendered nothing at all.
     const text = (document.body.innerText || '').trim();
-    if (!text && !document.querySelector('svg, canvas, img')) out.fails.push('blank: the page rendered no text and no graphic');
+    if (!text && !document.querySelector('svg, canvas, img')) {
+      // The browser draws no text when it has no fonts, which reads back the same as an empty
+      // page. artefact_check.sh sets ARTEFACT_NO_FONTS when it found no font directory.
+      out.fails.push(noFonts
+        ? 'no fonts available: the browser has no font to draw text with (set FONTCONFIG_FILE to a config listing a font directory)'
+        : 'blank: the page rendered no text and no graphic');
+    }
 
     // Boxes that sit on top of each other. Nesting is legitimate (a label inside a
     // box), so only siblings-by-containment are compared.
@@ -147,7 +153,7 @@ async function pass(w, h, mobile) {
       }
     }
     return out;
-  }, [minFont, mobile, MIN_TARGET]);
+  }, [minFont, mobile, MIN_TARGET, !!process.env.ARTEFACT_NO_FONTS]);
 
   for (const f of report.fails) fails.push(tag + f);
   // A slider is there to change what the reader sees: a result sentence, a drawing, a size. One
