@@ -858,7 +858,8 @@ function drawBar(r) {
   let html, mode;
   if (r.view === "artefact" || r.view === "run") {
     mode = "artefact";
-    html = `<button data-act="up">Back</button>`;
+    const at = r.view === "artefact" ? raiseOnPage(r.name) : null;    // an answer page: the node it answers is a tap away
+    html = `<button data-act="up">Back</button>` + (at && at.node ? `<button data-act="card" data-id="${esc(at.node)}">Node ${esc(at.node)}</button>` : "");
   } else if (r.view !== "task" || wide()) {
     mode = "tabs";
     html = cell('data-act="all"', "All", list && !S.reorder)
@@ -1436,6 +1437,7 @@ function drawTask() {
       const cls = ["row", "s-" + r.status, quiet ? "quiet" : "", r.assumes || r.ask ? "assumes" : "", r.raises.length ? "hasraise" : "", r.overruled ? "overruled" : "", S.node === r.key ? "sel" : ""].join(" ");
       const chips = [
         r.raises.length ? `<span class="tag attention">raise, ${esc(r.raises[0].age)}</span>` : "",
+        r.raises.some(answerPage) ? `<span class="tag page" title="Tapping this node opens its answer page">answer page</span>` : "",
         r.raises_below ? `<span class="tag attention">${r.raises_below} raise${r.raises_below === 1 ? "" : "s"} below</span>` : "",
         r.assumes ? `<span class="tag assumption">assumption</span>` : "",
         r.ask ? `<span class="tag attention">ask</span>` : "",
@@ -1529,9 +1531,9 @@ function artefactsHtml(t) {
     <div class="tiles">${arts.map(card).join("")}</div></div></details>`;
 }
 function raiseCard(r, where) {
-  return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you</h4>
+  return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you${answerPage(r) ? ` <span class="tag page">answer page</span>` : ""}</h4>
     <div class="text">${md(r.body)}</div>
-    ${S.task && S.task.archived ? "" : `<div class="actions"><button class="btn primary" data-act="answer" data-ts="${esc(r.ts)}">Answer</button></div>`}</div>`;
+    ${S.task && S.task.archived ? "" : `<div class="actions"><button class="btn primary" data-act="answer" data-ts="${esc(r.ts)}">${answerPage(r) ? "Open the answer page" : "Answer"}</button></div>`}</div>`;
 }
 
 /* ── the node card ──────────────────────────────────────────────────────────── */
@@ -1680,9 +1682,27 @@ document.addEventListener("change", e => { if (e.target.name === "verdict") verd
 async function wrote(res, msg) { S.task = res.task; S.sig = ""; toast(msg); await render(true); }
 
 /* The page a raise names to answer with (`Answer with: .dfs/artefacts/<name>.html`, one page even when the raise
-   shows several), and the page a node's Hypothesis names to confirm or refute it, open beside their forms. Each is
-   the server's sandboxed response and records the answer or the ruling itself, to `/artefact-state/<name>`; it
-   tells this page with `{dfs: "answered"}` and only a message from that frame is read. */
+   shows several) opens in full in the viewer, where a tap on the raise node goes; the page a node's Hypothesis
+   names to confirm or refute it opens beside its form. Each is the server's sandboxed response and records the
+   answer or the ruling itself, to `/artefact-state/<name>`; it tells this page with `{dfs: "answered"}` and
+   only a message from that frame is read. */
+/* The open raise on a node that names this page, as {node, raise}, else null. */
+function raiseOnPage(file) {
+  for (const x of (S.task ? S.task.rows : []))
+    for (const q of (x.kind === "node" ? x.raises : x.kind === "raise" ? [x] : [])) {
+      const pg = answerPage(q);
+      if (pg && pg.file === file) return { node: x.kind === "node" ? x.id : "", raise: q };
+    }
+  return null;
+}
+/* A raise with an answer page is answered on that page, opened in full in the viewer, which has the buttons to send it.
+   One without has nothing else to answer with, so it keeps the text form. Returns whether the page was opened. */
+function openRaisePage(raises) {
+  const pg = (raises || []).map(answerPage).find(Boolean);
+  if (!pg) return false;
+  go(`a/${encodeURIComponent(S.task.id)}/${encodeURIComponent(pg.file)}`);
+  return true;
+}
 function answerPage(r) {
   const m = /^[ \t]*Answer with:[ \t]*(?:\.dfs\/)?(?:artefacts\/)?([0-9A-Za-z][0-9A-Za-z._-]*\.html)/im.exec(r ? r.body : "");
   return (m && ((S.task && S.task.artefacts) || []).find(a => a.file === m[1] && a.kind === "page")) || null;
@@ -1694,14 +1714,15 @@ addEventListener("message", ev => {
 });
 addEventListener("message", ev => {
   const frame = document.querySelector("iframe.artview");
-  if (frame && ev.source === frame.contentWindow && ev.data && ev.data.dfs === "answered") toast("Recorded by the page.");
+  if (!frame || ev.source !== frame.contentWindow || !ev.data || ev.data.dfs !== "answered") return;
+  toast("Recorded by the page.");
+  S.sig = ""; up();          // back to the task, which is read again: the raise is no longer open
 });
 function answerForm(ts) {
   const r = S.task.rows.flatMap(x => x.kind === "raise" ? [x] : x.kind === "node" ? x.raises : []).find(x => x.ts === ts);
-  const page = answerPage(r);
-  form(`<h3>Answer the raise</h3><div class="quote">${esc(r ? (page ? r.body.replace(/^[ \t]*Answer with:.*\n?/gim, "").trim() : r.body) : "")}</div>
-    ${page ? `<iframe id="answerpage" class="answerpage" src="artefacts/${esc(page.file)}" title="${esc(page.title)}" sandbox="allow-scripts"></iframe>` : ""}
-    <div><label for="b">${page ? "Or in your own words, instead of the page" : "Your answer, in your own words"}</label><textarea id="b" name="body" required></textarea></div>${buttons("Record answer")}`,
+  if (r && openRaisePage([r])) return;
+  form(`<h3>Answer the raise</h3><div class="quote">${esc(r ? r.body : "")}</div>
+    <div><label for="b">Your answer, in your own words</label><textarea id="b" name="body" required></textarea></div>${buttons("Record answer")}`,
     async fd => wrote(await api("/api/answer", { task: S.task.id, ts, body: fd.get("body") }), "Answered."));
 }
 function correctForm(id) {
@@ -2106,7 +2127,12 @@ document.addEventListener("click", e => {
     reorder: () => { S.reorder = route().view === "tasks" ? !S.reorder : true; S.moved = null; showList(); },
     move: () => moveTask(d.id, d.move),
     task: () => go("t/" + d.id),
-    node: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
+    // A raise node with an answer page opens that page in full; `card` is the node's own text (the menu's Open, the page's Node).
+    node: () => {
+      const row = S.task.rows.find(x => x.kind === "node" && x.id === d.id);
+      if (!row || !openRaisePage(row.raises)) go(`t/${S.task.id}/${d.id}`, !!S.node);
+    },
+    card: () => go(`t/${S.task.id}/${d.id}`, !!S.node),
     fold: () => { const s = S.folded[S.task.id] ||= new Set(); s.has(d.id) ? s.delete(d.id) : s.add(d.id); S.sig = ""; render(true); },
     close: () => leave(`t/${S.task.id}`), up,
     prev: () => step(-1), next: () => step(1), nextflag: nextFlag,
@@ -2263,7 +2289,7 @@ document.addEventListener("contextmenu", e => {
   if (!matchMedia("(hover: hover)").matches) return;      // a long-press on a touch screen keeps the browser's own menu
   e.preventDefault();
   const id = main.dataset.id, r = S.task.rows.find(x => x.id === id), m = $("#ctx");
-  const open = `<button role="menuitem" data-act="node" data-id="${esc(id)}">Open ${esc(id)}</button>`;
+  const open = `<button role="menuitem" data-act="card" data-id="${esc(id)}">Open ${esc(id)}</button>`;
   m.innerHTML = S.task.archived ? open : `${open}
     ${r && r.raises.length ? "" : `<button role="menuitem" data-act="correct" data-id="${esc(id)}">Refute/confirm</button>`}
     ${r && r.editable ? `<button role="menuitem" data-act="editnode" data-id="${esc(id)}">Edit</button>` : ""}
