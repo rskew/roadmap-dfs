@@ -35,14 +35,19 @@ section and no function is faded.
   `scripts/ptyrelay.py` or `scripts/walk.py` must update `docs/explain/*.json` for them too: renaming
   a noted function fails `scripts/test_explain.py`.
 - Changed behaviour under the same name is found by checksum. `docs/explain/<subject>.sums` keeps a
-  checksum of each function the notes mark (its syntax tree written out by `explain.py` itself, so comments and spacing do not count and the Python version does not matter).
-  `explain.py NOTES.json --drift` lists the marked functions that changed since, and a render prints
-  the same list as a warning. To update the notes: run `--drift`, and for each function listed read its
-  new source and every sentence that names it (as `at`, `from` or `to`, or in `handled`) and correct
-  the sentences that no longer hold; then run `--confirm` to keep the new checksums, and commit the
+  checksum of each function the notes mark (its syntax tree written out by `explain.py` itself, so comments and spacing do not count and the Python version does not matter; a docstring is part of the tree, so editing one does count).
+  `explain.py NOTES.json --drift` lists the marked functions that changed since, each with the note
+  sentences that name it (as `at`, `from` or `to`, or in `handled`), and a render prints the list of
+  names as a warning. A function with no kept checksum is listed as such. To update the notes: run
+  `--drift`, and for each function listed read its new source and the sentences printed under it, and
+  correct the ones that no longer hold; then run `--confirm` to keep the new checksums, and commit the
   `.sums` file with the notes. `--confirm` does not read anything: it says only that you did.
   `scripts/test_explain.py` fails while a shipped notes file has a function that changed
   and was not confirmed.
+  An empty `--drift` does not mean every note still holds: it looks only at the functions the notes
+  name. A function added to a noted class, or a callee the notes never name that now behaves
+  differently under a noted sentence, is not listed, so when a diff touches code near a noted function
+  read the notes for it too.
 
 ## Notes file
 

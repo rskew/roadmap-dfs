@@ -322,6 +322,19 @@ def drifted(notes, funcs, sums):
             if sums.get(q) != funcs[q]["sum"]]
 
 
+def sentences_naming(notes, q):
+    """The note sentences that name function `q`, each as one line: an edge's label (with its kind and ends)
+    where `q` is its `at`, `from` or `to`, and a handled note where `q` is its `at`."""
+    out = []
+    for e in notes.get("edges", []):
+        if q in (e.get("at"), e.get("from"), e.get("to")):
+            out.append("%s %s -> %s: %s" % (e.get("kind"), e.get("from"), e.get("to"), e.get("label")))
+    for h in notes.get("handled", []):
+        if h.get("at") == q:
+            out.append("handled: %s: %s" % (h.get("error"), h.get("how")))
+    return out
+
+
 def tree_html(funcs, notes):
     called = {c for f in funcs.values() for c in f["calls"]}
     roots = notes.get("entries") or [q for q in funcs if q not in called]
@@ -543,7 +556,11 @@ def main(argv):
             return 1
         moved = drifted(notes, funcs, sums)
         for q, why in moved:
-            print("%s (%s:%d): %s since the notes were confirmed" % (q, funcs[q]["file"], funcs[q]["line"], why))
+            print("%s (%s:%d): %s" % (q, funcs[q]["file"], funcs[q]["line"],
+                                      "changed since the notes were confirmed" if why == "changed"
+                                      else "has no checksum: run --confirm after reading"))
+            for line in sentences_naming(notes, q):
+                print("    " + line)
         return 1 if moved else 0
     out = None
     if "--out" in args:

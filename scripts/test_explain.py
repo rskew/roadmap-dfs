@@ -295,6 +295,24 @@ class Drift(unittest.TestCase):
         write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    return 1\n")
         self.assertEqual(self.drift(), [("b", "changed")])
 
+    def test_drift_says_why_and_prints_the_sentences_naming_each_function(self):
+        import contextlib, io
+        os.chdir(self.dir)
+        def run():
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = explain.main(["explain.py", self.notes, "--drift"])
+            return code, buf.getvalue()
+        code, text = run()
+        self.assertEqual(code, 1)
+        self.assertIn("a (./m.py:1): has no checksum: run --confirm after reading", text)
+        self.assertIn("    stops a -> b: x", text)
+        explain.confirm(self.notes)
+        write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    return 1\n")
+        code, text = run()
+        self.assertIn("b (./m.py:4): changed since the notes were confirmed", text)
+        self.assertNotIn("a (./m.py", text)
+
     def test_the_checksum_of_a_fixed_function_is_the_same_on_every_python(self):
         # A literal: a Python whose syntax tree differs must fail here, not in the shipped notes.
         import ast
