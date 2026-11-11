@@ -1,0 +1,215 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When is the explanation written?</title>
+<!--
+  An answer page: the page a raise names on its "Answer with:" line, or a node's
+  Hypothesis names. Copy this file to .dfs/artefacts/<uuid>.html. Everything above the
+  answer form is yours and has no layout to fill in: draw the issue the way it is best
+  seen, which is usually how the relevant part of the system works now and what each
+  option changes in it (docs/artefacts.md, "What an answer page shows"). Show, then
+  caption: a drawing the reader switches between options beats paragraphs.
+  The answer form at the end is the one shared part. Keep it as it is and edit only its
+  options (replace the two placeholder ones: a page that keeps them is refused); it is
+  what posts the author's answer or ruling. The drawing rules (.dg, .box, .link) are in
+  _TEMPLATE.html: copy them if the page draws boxes and arrows.
+  SELF-CONTAINED: no CDN, no fonts, no fetch but the form's own to /artefact-state (the
+  web page serves the page sandboxed, scripts allowed, the network off).
+  MOBILE FIRST: the author reads on a phone. Write the rules for a 360px screen, widen
+  them under @media (min-width: ...), and check the page with
+      <scripts>/artefact_check.sh .dfs/artefacts/<uuid>.html
+-->
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  /* A long name or path wraps, not off a phone's edge. Prose only: on a table cell or grid column `anywhere`
+     would shrink the column to one letter and split ordinary words (113 on the 175 pages made before). */
+  p, li, h1, h2, h3, .box, .legend, .lede { overflow-wrap: break-word; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .tabs button { min-height: 44px; padding: 0 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; font: inherit; }
+  .tabs button[aria-pressed=true] { background: #1f5fbf; color: #fff; border-color: #1f5fbf; }
+  ol.tl { list-style: none; margin: 0; padding: 0; border-left: 3px solid #bbb; }
+  ol.tl li { margin: 0 0 8px 12px; padding: 8px 10px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  ol.tl li.w b::before { content: "● "; }
+  ol.tl li.r { border-style: dashed; }
+  ol.tl li.r b::before { content: "▣ "; }
+  ol.tl li.x { border-color: #1f5fbf; box-shadow: 0 0 0 3px #1f5fbf; }
+  ol.tl li.x b::after { content: " ← writes the explanation"; color: #1f5fbf; }
+  .cost { color: #444; max-width: 62ch; }
+</style>
+
+<h1>When is the explanation written?</h1>
+<p class="cost">The explanation page for the code a task changed has to be written by someone. Pick the moment; the drawing shows the sessions of one task and which one writes it. ● is a work session, ▣ is the reviewer.</p>
+<div class="tabs" role="group" aria-label="Reading of a round">
+  <button type="button" id="b1" aria-pressed="true">A round ends when the tree is complete</button>
+  <button type="button" id="b2" aria-pressed="false">Every work session</button>
+</div>
+<ol class="tl" id="tl" aria-live="polite"></ol>
+<p class="cost" id="cap"></p>
+<script>
+  var S1 = [['w','Work session 1: node'],['w','Work session 2: node'],['w','Work session 3: last node, the tree is complete, Summary written',1],['r','Review: opens the page, marks each sentence true, loose or false'],['w','Work session 4: fixes the review findings'],['w','Work session 5: last node again, explanation updated',1],['r','Review: ok']];
+  var S2 = [['w','Work session 1: node, explanation written',1],['w','Work session 2: node, explanation updated',1],['w','Work session 3: last node, explanation updated',1],['r','Review: opens the page, marks each sentence'],['w','Work session 4: fixes findings, explanation updated',1],['r','Review: ok']];
+  var CAP = {1: 'One explanation per round, written when the code has settled: the reviewer reads the page of the finished code. Cost: the page is written once, so a work session in the middle leaves notes that may lag the code until the round ends.',
+             2: 'The notes never lag the code by more than one session, and the reviewer sees the history. Cost: every work session also writes and renders notes, even for a node that only fixes a typo, and the notes are rewritten many times before anyone reads them.'};
+  function draw(n) {
+    var tl = document.getElementById('tl'); tl.textContent = '';
+    (n === 1 ? S1 : S2).forEach(function (s) {
+      var li = document.createElement('li'); li.className = s[0] + (s[2] ? ' x' : '');
+      var b = document.createElement('b'); b.textContent = s[1]; li.appendChild(b); tl.appendChild(li);
+    });
+    document.getElementById('cap').textContent = CAP[n];
+    document.getElementById('b1').setAttribute('aria-pressed', n === 1);
+    document.getElementById('b2').setAttribute('aria-pressed', n === 2);
+    if (window.dfsAnswer) window.dfsAnswer.keep();
+  }
+  document.getElementById('b1').onclick = function () { draw(1); };
+  document.getElementById('b2').onclick = function () { draw(2); };
+  window.dfsPageState = function () { return document.getElementById('b2').getAttribute('aria-pressed') === 'true' ? 2 : 1; };
+  document.addEventListener('dfs-state', function (e) { draw(e.detail === 2 ? 2 : 1); });
+  draw(1);
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  /* An option's text is a flex item, which `overflow-wrap: break-word` cannot narrow: `anywhere` can, and a label is one
+     line of text in its own row, so it cannot squeeze a column of other words. */
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep it: a round ends when the tree is complete and waits for review; the session that completes it writes the explanation"> Keep it: written when the tree is complete</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Change it: every work session writes and updates the explanation"> Change it: every work session</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
