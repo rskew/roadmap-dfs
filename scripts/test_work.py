@@ -529,7 +529,7 @@ class Ticking(Ticks, unittest.TestCase):
         """`w` on an off work, with `line` read off the footer: "" is ⏎, None is Esc."""
         ui = self.ui(work_on=False, work_budget=budget)
         ui.pane, ui.scroll, ui.answers, ui.labels, ui.begun = "items", 0, [], [], []
-        ui.read_line = lambda label: ui.labels.append(label) or line
+        ui.read_line = lambda label, leave=None: ui.labels.append(label) or line
         ui.work_parallel = parallel
         ui.work_begin = lambda budget, par=1, stop_on_limit=False: ui.begun.append(
             (budget, par, True) if stop_on_limit else budget if par == 1 else (budget, par))

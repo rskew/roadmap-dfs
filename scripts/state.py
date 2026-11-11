@@ -383,7 +383,7 @@ def _full():
 
 
 def continue_last(worked):
-    """What the work works NEXT: the item the last run was on, while that item can
+    """What the runner works on NEXT: the item the last run was on, while that item can
     still be worked, and otherwise `next_item`.
 
     ⚠️ **A work finishes what it started.** `next_item` reads the order and nothing
@@ -509,7 +509,7 @@ def foreign_dirt(task):
     author's). Empty when the tree is clean or the dirt is this task's.
 
     ⚠️ IN `task`'S OWN WORKTREE only its own chain works, so only its own sessions say
-    whose the dirt is. Parallel works run other tasks' chains at the same time, and with a
+    whose the dirt is. Parallel runs work on other tasks' chains at the same time, and with a
     gitignored roadmap every worktree reads the same `items`, so their sessions were seen
     there too: the dirt of a chain's own capped session was briefed as "NOT this task's:
     the last session was" another's. Likewise in the checkout itself, the tasks that have
@@ -1023,7 +1023,7 @@ def critic_problem(task, transcript="", provider="claude"):
     # ⚠️ Only claude's transcript has been checked against the real thing (a critic run as a
     # subagent and its record read back). The other providers' parsers are written from
     # their formats and untested on a live session, and a parser that counts zero where
-    # the agent ran things would refuse good verdicts and stop works: so for them the
+    # the agent ran things would refuse good verdicts and stop the runner: so for them the
     # first rule stands alone, and this one waits for a real transcript to be checked.
     if transcript and provider in VERIFIED_TRANSCRIPTS:
         import context as dfs_context

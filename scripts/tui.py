@@ -3863,7 +3863,7 @@ class UI(WorkMixin):
         """What a work would do, before it is asked for money: the order it would
         take the items in if every chain finishes its item, what is held back and
         by what, and what the budget means. aptitude shows its pending actions
-        before `g`; a work is the same kind of commitment.
+        before `g`; a run of the work is the same kind of commitment.
 
         ⚠️ A FORECAST, and it says so: a chain that raises hands the work the next
         branch instead, and the order can change under it. What is certain is the
