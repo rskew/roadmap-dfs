@@ -110,6 +110,37 @@ def read_code(paths):
     return funcs
 
 
+def _canon(node, out):
+    """Write the tree out by node class and field name, skipping empty fields.
+
+    `ast.dump` is not used: the fields a node has change between Python versions (3.12 added
+    `type_params` to every def), and a checksum that moves with the interpreter would flag every noted
+    function as changed. An empty field is left out so a field a newer Python adds, empty, changes nothing."""
+    if isinstance(node, ast.AST):
+        out.append(type(node).__name__ + "(")
+        for name, value in ast.iter_fields(node):
+            if value is None or value == []:
+                continue
+            out.append(name + "=")
+            _canon(value, out)
+        out.append(")")
+    elif isinstance(node, list):
+        out.append("[")
+        for x in node:
+            _canon(x, out)
+            out.append(",")
+        out.append("]")
+    else:
+        out.append(repr(node))
+
+
+def checksum(node):
+    """A short hash of a function's code that ignores comments, spacing and the Python version."""
+    out = []
+    _canon(node, out)
+    return hashlib.sha1("".join(out).encode()).hexdigest()[:12]
+
+
 def _info(path, node, cls):
     raw = []
     errors = []
@@ -144,7 +175,7 @@ def _info(path, node, cls):
         elif isinstance(n, ast.Raise) and n.exc is not None:
             errors.append((n.lineno, "raises " + ast.unparse(n.exc).split("(")[0], ""))
     return {"file": path, "line": node.lineno, "cls": cls, "raw": raw, "errors": sorted(errors),
-            "sum": hashlib.sha1(ast.dump(node).encode()).hexdigest()[:12]}
+            "sum": checksum(node)}
 
 
 def _does(body):

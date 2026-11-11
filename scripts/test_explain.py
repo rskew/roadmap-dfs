@@ -295,6 +295,12 @@ class Drift(unittest.TestCase):
         write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    return 1\n")
         self.assertEqual(self.drift(), [("b", "changed")])
 
+    def test_the_checksum_of_a_fixed_function_is_the_same_on_every_python(self):
+        # A literal: a Python whose syntax tree differs must fail here, not in the shipped notes.
+        import ast
+        node = ast.parse("def f(a, *b, c=1):\n    # note\n    try:\n        return a[0] + 1.5\n    except (KeyError, E) as e:\n        raise\n").body[0]
+        self.assertEqual(explain.checksum(node), "e0c189562506")
+
     def test_the_shipped_notes_are_confirmed_against_the_code(self):
         os.chdir(ROOT)
         for name in ("inbox", "ptyrelay", "walk"):

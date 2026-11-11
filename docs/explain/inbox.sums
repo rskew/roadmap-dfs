@@ -1,14 +1,14 @@
 {
- "answer": "3e2a5412ccdd",
- "claim": "aada81738afe",
- "from_subagent": "c6c220b438d3",
- "held": "7d286693135a",
- "hook_input": "e7338d3dbd05",
- "install_kiro_agent": "fe7fdc7003d1",
- "kiro_agent_for": "a4f1923e52a5",
- "main": "7e99777e54b9",
- "peek": "adea0e9fdb16",
- "remove_kiro_agent": "c4aa531530a8",
- "take": "e2b25cd3eda7",
- "waiting": "e64db1f112e5"
+ "answer": "b5c0216a9d38",
+ "claim": "c247810dd6a6",
+ "from_subagent": "d45d4122b723",
+ "held": "25120cb5d170",
+ "hook_input": "1984491ed135",
+ "install_kiro_agent": "046e2884ca2d",
+ "kiro_agent_for": "f7e247d3479e",
+ "main": "d02a08a47ac2",
+ "peek": "58339141f49b",
+ "remove_kiro_agent": "f09ecefc501d",
+ "take": "fcab32d30679",
+ "waiting": "bb86e79d04c9"
 }

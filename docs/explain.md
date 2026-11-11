@@ -35,7 +35,7 @@ section and no function is faded.
   `scripts/ptyrelay.py` or `scripts/walk.py` must update `docs/explain/*.json` for them too: renaming
   a noted function fails `scripts/test_explain.py`.
 - Changed behaviour under the same name is found by checksum. `docs/explain/<subject>.sums` keeps a
-  checksum of each function the notes mark (its syntax tree, so comments and spacing do not count).
+  checksum of each function the notes mark (its syntax tree written out by `explain.py` itself, so comments and spacing do not count and the Python version does not matter).
   `explain.py NOTES.json --drift` lists the marked functions that changed since, and a render prints
   the same list as a warning. To update the notes: run `--drift`, and for each function listed read its
   new source and every sentence that names it (as `at`, `from` or `to`, or in `handled`) and correct
