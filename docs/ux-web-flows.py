@@ -5,7 +5,7 @@
 
 It builds a small site from `docs/tui-ux-review/items` (tasks W1-W10; W9.3 has an open raise),
 gives the W9.3 raise an answer page (a copy of the answer template, named by an `Answer with:` line), serves it with
-`SCRIPTS_DIR/web.py --no-walk`, and at 320, 390 and 1280 px wide drives:
+`SCRIPTS_DIR/web.py --no-work`, and at 320, 390 and 1280 px wide drives:
 
   raise-card    the node sheet of W9.3 with its open raise
   answer-page   the Answer dialog with the page in it: pick an option in the frame, press its Send button, see the dialog close
@@ -16,7 +16,7 @@ gives the W9.3 raise an answer page (a copy of the answer template, named by an 
 
 Every view is drawn (png), measured with the CHECKS of docs/ux-web-playwright.py (sideways scroll, tap targets under
 44 px, unlabelled buttons, clipped text, contrast, console errors), and `flows.json` in OUT_DIR holds the lot.
-The walk controls and the run log are driven by docs/ux-web-walk.py (this script serves with `--no-walk`).
+The walk controls and the run log are driven by docs/ux-web-work.py (this script serves with `--no-work`).
 """
 import json, os, re, shutil, socket, subprocess, sys, tempfile, time, urllib.request, uuid
 
@@ -55,7 +55,7 @@ def serve(site):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    srv = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-walk"], cwd=site,
+    srv = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-work"], cwd=site,
                            stdout=subprocess.DEVNULL, stderr=open(os.path.join(out, "server.err"), "a"))
     base = "http://127.0.0.1:%d" % port
     for _ in range(80):

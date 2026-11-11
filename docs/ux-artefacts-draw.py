@@ -5,7 +5,7 @@
 
 Until W131.38 the artefact audit (docs/ux-artefacts.py) read the HTML and a DOM text dump; no page was seen drawn,
 because chromium here drew no text (a missing fontconfig file, not the pages). This script serves a copy of
-ARTEFACT_DIR (default: this repository's `.dfs/artefacts`) with `SCRIPTS_DIR/web.py --no-walk` on a throw-away site,
+ARTEFACT_DIR (default: this repository's `.dfs/artefacts`) with `SCRIPTS_DIR/web.py --no-work` on a throw-away site,
 so the pages come with the same sandbox and Content-Security-Policy the author's browser gives them, opens each `.html`
 at a phone (390x844) and a desktop (1280x800) width, and writes to OUT_DIR:
 
@@ -95,7 +95,7 @@ def build_site():
 def main():
     site = build_site()
     port = free_port()
-    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-walk"], cwd=site,
+    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-work"], cwd=site,
                               stdout=subprocess.DEVNULL, stderr=open(os.path.join(out, "server.err"), "w"))
     base = "http://127.0.0.1:%d" % port
     for _ in range(60):

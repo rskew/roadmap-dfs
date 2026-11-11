@@ -4,7 +4,7 @@
     FONTCONFIG_FILE=<conf naming a font dir> python3 docs/ux-web-decision.py SITE_DIR OUT_DIR [SCRIPTS_DIR]
 
 SITE_DIR is a git repo with `.dfs/` (a copy of this repository's tasks); it is served with
-`SCRIPTS_DIR/web.py --no-walk`. For each task in TASKS, at a phone (390x844) and a desktop (1280x800)
+`SCRIPTS_DIR/web.py --no-work`. For each task in TASKS, at a phone (390x844) and a desktop (1280x800)
 width, it drives the real page and records:
 
  - the task page: whether each assumption's closed row shows its "Wrong if", whether the notes appear;
@@ -38,7 +38,7 @@ def words(t):
 
 def serve():
     port = free_port()
-    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-walk"],
+    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-work"],
                               cwd=site, stdout=subprocess.DEVNULL, stderr=open(os.path.join(out, "server.err"), "w"))
     base = "http://127.0.0.1:%d" % port
     for _ in range(80):

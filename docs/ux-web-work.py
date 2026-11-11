@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Drive the walk controls, the run log and the Reorder break buttons in headless chromium (W131.45).
+"""Drive the work controls, the run log and the Reorder break buttons in headless chromium (W131.45).
 
-    FONTCONFIG_FILE=<conf naming a font dir> [WALK_TMP=<a directory that allows exec>] python3 docs/ux-web-walk.py OUT_DIR [SCRIPTS_DIR]
+    FONTCONFIG_FILE=<conf naming a font dir> [WORK_TMP=<a directory that allows exec>] python3 docs/ux-web-work.py OUT_DIR [SCRIPTS_DIR]
 
-`docs/ux-web-flows.py` serves with `--no-walk`, which refuses every walk write, so it could not draw them. This script serves
-a fixture site (the tasks of `docs/tui-ux-review/items`) WITH the walk on, from a COPY of SCRIPTS_DIR whose `run.sh` is
+`docs/ux-web-flows.py` serves with `--no-work`, which refuses every work write, so it could not draw them. This script serves
+a fixture site (the tasks of `docs/tui-ux-review/items`) WITH the work on, from a COPY of SCRIPTS_DIR whose `run.sh` is
 a stub: it writes the `meta.json` a real chain writes, prints a few console lines for about 25 s, and on SIGINT (what Stop
-chain sends) writes its finish and leaves. No agent is started. Everything else, `web.py`, `walk.py`, `runs.py` and the page, is
+chain sends) writes its finish and leaves. No agent is started. Everything else, `web.py`, `work.py`, `runs.py` and the page, is
 the real code. At 320, 390 and 1280 px it draws:
 
-  idle-list / idle-open     the task list and the idle walk box (Next, Agent, models, Budget, Chains, Limit, Start walk)
-  invalid                   Start walk with Budget 0: the form must refuse it and send nothing
-  running / running-open    after Start walk: the state line, the chain row and its Stop chain button
+  idle-list / idle-open     the task list and the idle work box (Next, Agent, models, Budget, Chains, Limit, Start work)
+  invalid                   Start work with Budget 0: the form must refuse it and send nothing
+  running / running-open    after Start work: the state line, the chain row and its Stop chain button
   runs-live / runlog-live   the task page's Runs list and the live log, which must grow while it is open
-  chainstop-dialog / after  the Stop chain dialog, then the chain stopped and the walk's note
+  chainstop-dialog / after  the Stop chain dialog, then the chain stopped and the work's note
   reorder                   Reorder mode: the Break and Stop break buttons on every row
 
 Each view is measured with the CHECKS of docs/ux-web-playwright.py (sideways scroll, tap targets under 44 px, unlabelled
-buttons, clipped text, contrast, console errors); `walk.json` in OUT_DIR holds the lot, and the rows it prints are the ones
+buttons, clipped text, contrast, console errors); `work.json` in OUT_DIR holds the lot, and the rows it prints are the ones
 with a finding.
 """
 import json, os, re, shutil, socket, subprocess, sys, tempfile, time, urllib.request
@@ -58,7 +58,7 @@ echo "   exit 0"
 
 
 def build_site():
-    site = tempfile.mkdtemp(prefix="w131walk", dir=os.environ.get("WALK_TMP"))   # the stub must be executable: not a noexec /tmp
+    site = tempfile.mkdtemp(prefix="w131work", dir=os.environ.get("WORK_TMP"))   # the stub must be executable: not a noexec /tmp
     dfs = os.path.join(site, ".dfs")
     shutil.copytree(os.path.join(here, "tui-ux-review", "items"), os.path.join(dfs, "items"))
     os.makedirs(os.path.join(dfs, "artefacts"))
@@ -134,38 +134,38 @@ def main():
                       return { top: Math.round(r.top), bottom: Math.round(r.bottom), w: Math.round(r.width), h: Math.round(r.height), vh: innerHeight,
                         inView: r.top >= 0 && r.bottom <= innerHeight, underBar: !!br && r.top < br.bottom && r.bottom > br.top }; }""", sel)
 
-                # idle list, walk box shut then open
+                # idle list, work box shut then open
                 pg.goto(base + "/#/"); time.sleep(1.0)
-                see("idle-list", {"walkbox": bool(pg.query_selector("#walkbox")), "summary": pg.inner_text("#walkbox > summary") if pg.query_selector("#walkbox") else None})
-                pg.click("#walkbox > summary"); time.sleep(0.5)
-                fields = pg.evaluate("[...document.querySelectorAll('#walkbox label, #walkbox select, #walkbox input, #walkbox button')].map(e => e.tagName.toLowerCase() + ':' + ((e.textContent || e.id || '').trim().slice(0, 30)))")
-                see("idle-open", {"fields": fields, "start": rect("[data-act=walkstart]")})
-                pg.locator("[data-act=walkstart]").scroll_into_view_if_needed(); time.sleep(0.3)
-                see("idle-open-start-in-view", {"start": rect("[data-act=walkstart]"), "box": rect("#walkbox")})
+                see("idle-list", {"workbox": bool(pg.query_selector("#workbox")), "summary": pg.inner_text("#workbox > summary") if pg.query_selector("#workbox") else None})
+                pg.click("#workbox > summary"); time.sleep(0.5)
+                fields = pg.evaluate("[...document.querySelectorAll('#workbox label, #workbox select, #workbox input, #workbox button')].map(e => e.tagName.toLowerCase() + ':' + ((e.textContent || e.id || '').trim().slice(0, 30)))")
+                see("idle-open", {"fields": fields, "start": rect("[data-act=workstart]")})
+                pg.locator("[data-act=workstart]").scroll_into_view_if_needed(); time.sleep(0.3)
+                see("idle-open-start-in-view", {"start": rect("[data-act=workstart]"), "box": rect("#workbox")})
                 # an invalid budget must send nothing
                 pg.fill("#bud", "0"); posts.clear()
-                pg.click("[data-act=walkstart]"); time.sleep(0.6)
-                see("invalid", {"posts": list(posts), "validity": pg.evaluate("document.querySelector('#bud').validationMessage"), "on": api("/api/walk")["on"]})
+                pg.click("[data-act=workstart]"); time.sleep(0.6)
+                see("invalid", {"posts": list(posts), "validity": pg.evaluate("document.querySelector('#bud').validationMessage"), "on": api("/api/work")["on"]})
                 # start with a budget of one session
                 pg.fill("#bud", "1"); pg.fill("#par", "1"); posts.clear()
-                pg.click("[data-act=walkstart]")
+                pg.click("[data-act=workstart]")
                 live = None
                 for _ in range(40):
                     time.sleep(0.5)
-                    w = api("/api/walk")
+                    w = api("/api/work")
                     if [c for c in w.get("chains", []) if c.get("live")]:
                         live = w; break
                 item = next((c["item"] for c in (live or {}).get("chains", []) if c.get("live")), None)
-                see("running", {"posts": list(posts), "chain_item": item, "summary": pg.inner_text("#walkbox > summary"), "walk": {k: (live or {}).get(k) for k in ("on", "used", "budget", "note")}, "events": [e["text"] for e in api("/api/walk")["events"][:4]]})
-                pg.click("#walkbox > summary"); time.sleep(0.5)
-                see("running-open", {"line2": pg.inner_text("#walkbox .line2"), "chain_row": pg.inner_text("#walkbox .chain") if pg.query_selector("#walkbox .chain") else None,
-                                     "stopchain": rect("[data-act=chainstop]"), "stopwalk": rect("[data-act=walkstop]")})
+                see("running", {"posts": list(posts), "chain_item": item, "summary": pg.inner_text("#workbox > summary"), "work": {k: (live or {}).get(k) for k in ("on", "used", "budget", "note")}, "events": [e["text"] for e in api("/api/work")["events"][:4]]})
+                pg.click("#workbox > summary"); time.sleep(0.5)
+                see("running-open", {"line2": pg.inner_text("#workbox .line2"), "chain_row": pg.inner_text("#workbox .chain") if pg.query_selector("#workbox .chain") else None,
+                                     "stopchain": rect("[data-act=chainstop]"), "stopwork": rect("[data-act=workstop]")})
                 # the Activity list inside the box: opened, with its long runner line
-                if pg.query_selector("#walkbox .ev"):
-                    pg.click("#walkbox details > summary"); time.sleep(0.4)
-                    see("activity-open", {"summary": rect("#walkbox details > summary"), "li_overflow": pg.evaluate("[...document.querySelectorAll('#walkbox .ev li')].map(l => [Math.round(l.getBoundingClientRect().right), l.scrollWidth > l.clientWidth + 1 || l.getBoundingClientRect().right > innerWidth + 1])"),
-                                          "box_scroll_w": pg.evaluate("[document.querySelector('#walkbox').scrollWidth, document.querySelector('#walkbox').clientWidth]")})
-                    pg.click("#walkbox details > summary"); time.sleep(0.2)
+                if pg.query_selector("#workbox .ev"):
+                    pg.click("#workbox details > summary"); time.sleep(0.4)
+                    see("activity-open", {"summary": rect("#workbox details > summary"), "li_overflow": pg.evaluate("[...document.querySelectorAll('#workbox .ev li')].map(l => [Math.round(l.getBoundingClientRect().right), l.scrollWidth > l.clientWidth + 1 || l.getBoundingClientRect().right > innerWidth + 1])"),
+                                          "box_scroll_w": pg.evaluate("[document.querySelector('#workbox').scrollWidth, document.querySelector('#workbox').clientWidth]")})
+                    pg.click("#workbox details > summary"); time.sleep(0.2)
                 # the task page and the live log
                 if item:
                     pg.goto(base + "/#/t/" + item); time.sleep(1.2)
@@ -175,24 +175,24 @@ def main():
                     n2 = len(pg.inner_text("#runlog").splitlines())
                     see("runlog-live", {"head": pg.inner_text("#runhead"), "lines_then_later": [n1, n2], "msg_form_visible": pg.evaluate("!document.querySelector('#runmsg-form').hidden"),
                                         "log_h": rect("#runlog"), "at_end": pg.evaluate("(e => e.scrollHeight - e.scrollTop - e.clientHeight < 40)(document.querySelector('#runlog'))")})
-                # stop the chain from the walk box
+                # stop the chain from the work box
                 pg.goto(base + "/#/"); time.sleep(1.0)
-                if not pg.evaluate("document.querySelector('#walkbox').open"):
-                    pg.click("#walkbox > summary"); time.sleep(0.4)
+                if not pg.evaluate("document.querySelector('#workbox').open"):
+                    pg.click("#workbox > summary"); time.sleep(0.4)
                 if pg.query_selector("[data-act=chainstop]"):
                     pg.locator("[data-act=chainstop]").first.click(); time.sleep(0.6)
                     see("chainstop-dialog", {"dialog_open": pg.evaluate("document.querySelector('#form').open"), "heading": pg.inner_text("#form h3")})
                     posts.clear()
                     pg.click("#form button[value=ok]"); time.sleep(2.5)
-                    w = api("/api/walk")
+                    w = api("/api/work")
                     see("chainstop-after", {"posts": list(posts), "on": w["on"], "note": w.get("note"), "live": [c["item"] for c in w.get("chains", []) if c.get("live")],
-                                            "summary": pg.inner_text("#walkbox > summary")})
-                # a walk that is still on is stopped from its own button
-                if api("/api/walk")["on"]:
-                    if not pg.evaluate("document.querySelector('#walkbox').open"):
-                        pg.click("#walkbox > summary"); time.sleep(0.4)
-                    pg.click("[data-act=walkstop]"); time.sleep(1.2)
-                    see("walkstop-after", {"on": api("/api/walk")["on"]})
+                                            "summary": pg.inner_text("#workbox > summary")})
+                # a work that is still on is stopped from its own button
+                if api("/api/work")["on"]:
+                    if not pg.evaluate("document.querySelector('#workbox').open"):
+                        pg.click("#workbox > summary"); time.sleep(0.4)
+                    pg.click("[data-act=workstop]"); time.sleep(1.2)
+                    see("workstop-after", {"on": api("/api/work")["on"]})
                 # Reorder: the break buttons
                 pg.goto(base + "/#/"); time.sleep(1.0)
                 pg.click("[data-act=reorder]"); time.sleep(0.6)
@@ -207,7 +207,7 @@ def main():
                 shutil.rmtree(site, ignore_errors=True)
                 shutil.rmtree(site + "-tool", ignore_errors=True)
         b.close()
-    json.dump(findings, open(os.path.join(out, "walk.json"), "w"), indent=1)
+    json.dump(findings, open(os.path.join(out, "work.json"), "w"), indent=1)
     for f in findings:
         bad = {k: f[k] for k in ("small", "unlabelled", "outside", "clipped", "lowContrast", "errors") if f[k]}
         print(f["size"], f["view"], "scroll" if f["scrollW"][0] > f["scrollW"][1] else "", json.dumps(f["extra"])[:420], json.dumps(bad)[:500])
