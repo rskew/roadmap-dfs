@@ -1,0 +1,464 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Four ways to explore a code explanation</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 760px; }
+  p, li, h1, h2, h3, .box, .lede, td, th, .fact { overflow-wrap: break-word; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 18px 0 6px; }
+  .lede { margin: 0 0 12px; color: #444; }
+  .small { font-size: 14px; color: #555; margin: 6px 0; }
+  button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; color: #1a1a1a; }
+  button[aria-pressed=true], button[aria-selected=true] { background: #1a1a1a; color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+  .pane[hidden], #treebox[hidden] { display: none; }
+
+  /* lens colours: blue data, purple state, orange resources, red failure, green queue, teal errors handled */
+  .L-D { --c: #1f5fbf; } .L-S { --c: #7a3fb0; } .L-R { --c: #c25e00; }
+  .L-F { --c: #c0262d; } .L-Q { --c: #217a3c; } .L-E { --c: #0b7f80; }
+  .chip { display: inline-block; min-width: 20px; text-align: center; padding: 0 4px; margin: 0 2px 0 0; border-radius: 4px;
+          background: var(--c); color: #fff; font: 700 13px/20px system-ui, sans-serif; }
+  .chip.off { background: #ddd; color: #666; }
+  .lensbtn { border-color: var(--c, #333); }
+  .lensbtn[aria-pressed=true] { background: var(--c, #1a1a1a); color: #fff; }
+
+  /* the call tree: real calls in scripts/inbox.py */
+  #tree { list-style: none; margin: 0; padding: 0; }
+  #tree ul { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 2px solid #ccc; margin-left: 10px; }
+  .fn { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; margin: 3px 0; flex-wrap: wrap; }
+  .fn .nm { font-family: ui-monospace, Menlo, monospace; font-size: 15px; margin-right: 4px; }
+  .fn.dim { opacity: .35; }
+  .fn.hit { border-width: 3px; border-color: var(--c, #333); background: #fff; color: #1a1a1a; }
+  .fn.sel { background: #1a1a1a; color: #fff; }
+  .fn.sel .chip.off { background: #888; color: #fff; }
+  .fn.act { box-shadow: 0 0 0 3px #f0b400; }
+
+  .fact { border-left: 5px solid var(--c); padding: 4px 10px; margin: 6px 0; background: #fff; border-radius: 0 6px 6px 0; }
+  .fact code, .fn code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+  .none { color: #777; font-style: italic; }
+  .card { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 12px; margin: 8px 0; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; font-family: ui-monospace, Menlo, monospace; }
+  .lr { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
+  .lr .chip { flex: none; margin-top: 2px; }
+  .lr .t { flex: 1 1 0; min-width: 0; overflow-wrap: break-word; }
+
+  .st { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+  .sbox { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 8px 10px; min-height: 52px; }
+  .sbox b { display: block; font-size: 14px; }
+  .sbox span { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+  .sbox.q { border-color: #217a3c; } .sbox.d { border-color: #1f5fbf; } .sbox.r { border-color: #c25e00; }
+  @media (min-width: 720px) { .st { flex-direction: row; } .sbox { flex: 1 1 0; min-width: 0; } }
+  .stepline { background: #fff; border: 1.5px solid #333; border-radius: 6px; padding: 10px 12px; }
+
+  .diff .old { text-decoration: line-through; color: #8a2a2a; }
+  .diff .new { color: #1d6b32; }
+  .tag { display: inline-block; font: 700 12px/18px system-ui, sans-serif; padding: 0 6px; border-radius: 4px; background: #eee; margin-right: 6px; }
+  .tag.chg { background: #ffe9a8; } .tag.rip { background: #dbe8ff; } .tag.stale { background: #ffd0d0; }
+  label.chk { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+  label.chk input { width: 32px; height: 32px; flex: none; margin: 0; }
+
+  .scroll { overflow-x: auto; border: 1px solid #ccc; border-radius: 6px; background: #fff; }
+  table { border-collapse: collapse; font-size: 14px; min-width: 640px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid #e3e3e3; }
+  th { background: #f3f1ea; }
+</style>
+
+<h1>Four ways to explore a code explanation</h1>
+<p class="lede">All four show the same real facts about <code>scripts/inbox.py</code> (the hook that hands the
+  author's messages to a running agent), drawn from its call tree and notes. Pick a way and use it, then
+  choose at the foot. <b>Today:</b> one long page, the whole call tree and then six lens sections one after another.</p>
+
+<div class="row" role="tablist" aria-label="Ways to explore">
+  <button role="tab" data-mode="A">A · Lens lights</button>
+  <button role="tab" data-mode="B">B · Function card</button>
+  <button role="tab" data-mode="C">C · Scenario steps</button>
+  <button role="tab" data-mode="D">D · Round diff</button>
+  <button role="tab" data-mode="X">Compare</button>
+</div>
+
+<div id="treebox">
+  <p class="small" id="treehelp"></p>
+  <ul id="tree" aria-label="Call tree of inbox.py"></ul>
+</div>
+
+<!-- A -->
+<section class="pane" id="pane-A" hidden>
+  <h2>A · Lens lights: the tree stays, you pick the angle</h2>
+  <p class="small">Tap a lens. Functions with nothing to say in that lens fade, the rest light up, and only that
+    lens's sentences are listed below, in call order. Nothing new for the worker to write.</p>
+  <div class="row" id="lensrow"></div>
+  <div id="lensfacts"></div>
+</section>
+
+<!-- B -->
+<section class="pane" id="pane-B" hidden>
+  <h2>B · Function card: tap a function, see all six lenses on it</h2>
+  <p class="small">The opposite cut: one function at a time with everything known about it, and who calls it.
+    Nothing new for the worker to write.</p>
+  <div id="card"></div>
+</section>
+
+<!-- C -->
+<section class="pane" id="pane-C" hidden>
+  <h2>C · Scenario steps: walk one case through the code</h2>
+  <p class="small">Case: two hooks fire at once and one message, <code>001.txt</code>, is waiting. Step through
+    it and watch the queue, the stored state and the open resources change. The worker writes the steps
+    for each case by hand.</p>
+  <div class="row"><button id="failbtn" aria-pressed="false">The read fails after the rename: off</button></div>
+  <div class="stepline" id="stepline" aria-live="polite"></div>
+  <div class="st">
+    <div class="sbox q" data-node="inbox"><b>≣ inbox/ (waiting)</b><span id="s-inbox"></span></div>
+    <div class="sbox d" data-node="delivered"><b>▤ delivered/</b><span id="s-deliv"></span></div>
+    <div class="sbox r" data-node="open"><b>⬢ open files</b><span id="s-open"></span></div>
+  </div>
+  <div class="row"><button id="prev">◀ Back</button><button id="next">Next ▶</button><span class="small" id="stepn"></span></div>
+</section>
+
+<!-- D -->
+<section class="pane diff" id="pane-D" hidden>
+  <h2>D · Round diff: what the explanation says changed this round</h2>
+  <p class="small"><b>The change below is made up, to show the layout.</b> Say a round makes <code>take</code>
+    leave a blank message waiting instead of delivering and dropping it. The page lists only what moved, and the
+    reviewer ticks each sentence once checked against the code. It needs last round's notes, so the first round
+    has no diff.</p>
+  <div id="diffrows"></div>
+  <p class="small" id="diffcount" aria-live="polite"></p>
+</section>
+
+<!-- Compare -->
+<section class="pane" id="pane-X" hidden>
+  <h2>Compared on the same axes</h2>
+  <p class="small">The table scrolls sideways in its own box on a phone.</p>
+  <div class="scroll"><table>
+    <tr><th></th><th>Answers fast</th><th>New writing for the worker</th><th>Build</th><th>Helps the reviewer</th></tr>
+    <tr><th>Today</th><td>"What does this do overall?"</td><td>none</td><td>done</td><td>a long page to scroll</td></tr>
+    <tr><th>A · Lens lights</th><td>"Where can this fail?" "Where is state touched?"</td><td>none</td><td>small</td><td>reads one risk across the code</td></tr>
+    <tr><th>B · Function card</th><td>"What does this function do, and what can go wrong in it?"</td><td>none</td><td>small</td><td>checks a function being reviewed</td></tr>
+    <tr><th>C · Scenario steps</th><td>"What happens when two hooks race?" (queue, failure)</td><td>the steps for each case, by hand</td><td>medium</td><td>shows races and loss no list shows</td></tr>
+    <tr><th>D · Round diff</th><td>"What did this round change?"</td><td>the notes themselves, kept current</td><td>medium (last round's notes from git)</td><td>most: starts where the change is, and flags a changed function whose notes did not</td></tr>
+  </table></div>
+</section>
+
+<script>
+(function () {
+  var LENS = { D: 'data flow', S: 'state', R: 'resources', F: 'failure', Q: 'queue', E: 'errors handled' };
+  var ORDER = ['D', 'S', 'R', 'F', 'Q', 'E'];
+  // The real calls in scripts/inbox.py (read with explain.read_code): main calls these; claim calls take and waiting.
+  var TREE = ['main', ['hook_input', 'from_subagent', 'claim', ['waiting', 'take'], 'answer']];
+  var CALLS = { main: ['hook_input', 'from_subagent', 'claim', 'answer'], claim: ['waiting', 'take'] };
+  // Sentences from docs/explain/inbox.json (shortened), filed by the function the notes point at.
+  var F = {
+    main: { D: ['Passes the texts claim returned, oldest first, to answer.'],
+            R: ['Reads all of stdin, so the agent\u2019s write never blocks.'],
+            F: ['peek or ack with no DFS_INBOX: message on stderr, exit 2.', 'Nothing waiting: prints nothing and the session carries on.'],
+            E: ['stdin cannot be read: uses empty input.'] },
+    hook_input: { F: ['Input is not JSON: becomes {}, so it is treated as the main session, which may claim.'],
+                  E: ['Catches ValueError, returns {}.'] },
+    from_subagent: { S: ['Looks at the hook\u2019s input: has an agent_id? Then claim nothing.'],
+                     F: ['A subagent\u2019s hook claims nothing, so the message waits for the main session.'] },
+    claim: { D: ['Hands every waiting name to take.'], Q: ['Takes everything waiting at once, oldest first.'] },
+    waiting: { D: ['Returns the file names in inbox/.'], S: ['Looks at state: is the message in inbox/ (a .txt, no leading dot)?'],
+               F: ['inbox/ cannot be listed: no messages.'], E: ['Catches OSError, returns an empty list.'] },
+    take: { S: ['Moves a message from waiting to delivered by rename, before its text is read.'],
+            R: ['Makes delivered/ beside the inbox once per call; opens the message file and closes it when the with-block ends.'],
+            F: ['Rename fails because another hook took it: skip it.', 'An OSError after the rename: counted delivered, the model never gets it.', 'A blank message is delivered and dropped.'],
+            Q: ['Two hooks at once cannot both get a file: the second rename fails.'],
+            E: ['Catches OSError: skips this message.'] },
+    answer: { D: ['Sends the texts to the agent: additionalContext after a tool call, a block reason at a stop.'] }
+  };
+  var state = { mode: 'A', lens: 'F', fn: 'take', step: 0, fail: false, checks: {} };
+
+  function $(id) { return document.getElementById(id); }
+  function keep() { if (window.dfsAnswer) window.dfsAnswer.keep(); }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function chips(fn, lens) {
+    var w = document.createDocumentFragment();
+    ORDER.forEach(function (k) {
+      var on = F[fn] && F[fn][k] && F[fn][k].length;
+      if (lens && k !== lens) return;
+      var c = el('span', 'chip L-' + k + (on ? '' : ' off'), k); c.title = LENS[k] + (on ? '' : ': nothing noted');
+      w.appendChild(c);
+    });
+    return w;
+  }
+  function flat(t, out) { t.forEach(function (x) { if (typeof x === 'string') out.push(x); else flat(x, out); }); return out; }
+
+  // ---- the tree ----
+  var buttons = {};
+  function build(list, ul) {
+    for (var i = 0; i < list.length; i++) {
+      var name = list[i], li = el('li'), b = el('button', 'fn');
+      b.appendChild(el('span', 'nm', name)); b.dataset.fn = name; b.setAttribute('aria-pressed', 'false');
+      b.addEventListener('click', function () { state.fn = this.dataset.fn; if (state.mode !== 'A' && state.mode !== 'B') setMode('B'); render(); keep(); });
+      buttons[name] = b; li.appendChild(b);
+      if (list[i + 1] && typeof list[i + 1] !== 'string') { var sub = el('ul'); build(list[i + 1], sub); li.appendChild(sub); i++; }
+      ul.appendChild(li);
+    }
+  }
+  build(TREE, $('tree'));
+
+  function paintTree() {
+    var m = state.mode, cur = STEPS()[state.step];
+    Object.keys(buttons).forEach(function (n) {
+      var b = buttons[n], has = F[n] && F[n][state.lens] && F[n][state.lens].length;
+      b.className = 'fn' + (m === 'A' ? (has ? ' hit L-' + state.lens : ' dim') : '') + (m === 'B' && state.fn === n ? ' sel' : '') + (m === 'C' && cur.fns.indexOf(n) >= 0 ? ' act' : '');
+      b.setAttribute('aria-pressed', m === 'B' && state.fn === n ? 'true' : 'false');
+      while (b.children.length > 1) b.removeChild(b.lastChild);
+      b.appendChild(chips(n, m === 'A' ? state.lens : null));
+    });
+    $('treehelp').textContent = m === 'A' ? 'Lit functions have something to say in the chosen lens.' :
+      m === 'B' ? 'Tap a function. Its letters show which lenses have notes on it.' :
+      'Yellow rim: the functions running in this step.';
+  }
+
+  // ---- A ----
+  function paintA() {
+    var row = $('lensrow'); row.textContent = '';
+    ORDER.forEach(function (k) {
+      var b = el('button', 'lensbtn L-' + k, k + ' · ' + LENS[k]); b.setAttribute('aria-pressed', String(state.lens === k));
+      b.addEventListener('click', function () { state.lens = k; render(); keep(); }); row.appendChild(b);
+    });
+    var out = $('lensfacts'); out.textContent = '';
+    flat(TREE, []).forEach(function (n) {
+      (F[n] && F[n][state.lens] || []).forEach(function (s) {
+        var d = el('div', 'fact L-' + state.lens); var c = el('code', null, n); d.appendChild(c); d.appendChild(document.createTextNode(' \u2014 ' + s)); out.appendChild(d);
+      });
+    });
+  }
+
+  // ---- B ----
+  function paintB() {
+    var n = state.fn, c = $('card'); c.textContent = ''; var card = el('div', 'card'); card.appendChild(el('h3', null, n + '()'));
+    ORDER.forEach(function (k) {
+      var r = el('div', 'lr L-' + k), t = el('div', 't'); r.appendChild(el('span', 'chip L-' + k, k));
+      var ss = F[n] && F[n][k];
+      if (ss && ss.length) ss.forEach(function (s) { t.appendChild(el('div', null, s)); });
+      else t.appendChild(el('div', 'none', LENS[k] + ': nothing noted'));
+      r.appendChild(t); card.appendChild(r);
+    });
+    var callers = Object.keys(CALLS).filter(function (k) { return CALLS[k].indexOf(n) >= 0; });
+    card.appendChild(el('p', 'small', 'Called by: ' + (callers.join(', ') || 'nothing in this file (an entry point)') + '. Calls: ' + ((CALLS[n] || []).join(', ') || 'nothing in this file') + '.'));
+    c.appendChild(card);
+  }
+
+  // ---- C ----
+  function STEPS() {
+    var f = state.fail;
+    return [
+      { fns: ['main', 'claim', 'waiting'], t: 'Hooks A and B each run claim, which lists inbox/. Both see 001.txt.', inbox: '001.txt (A and B both listed it)', deliv: '(empty)', open: '(none)' },
+      { fns: ['take'], t: 'A renames 001.txt into delivered/: the message goes from waiting to delivered, before its text is read.', inbox: '(empty)', deliv: '001.txt', open: '(none)' },
+      { fns: ['take'], t: 'B tries to rename 001.txt. It is gone, so the rename fails, B skips it and gets no text.', inbox: '(empty)', deliv: '001.txt', open: '(none)' },
+      f ? { fns: ['take'], t: 'A opens delivered/001.txt but reading it raises OSError. A skips it. The message is already delivered, so the model never gets it.', inbox: '(empty)', deliv: '001.txt (lost: nobody read it)', open: '(none: handle released on the error)' }
+        : { fns: ['take'], t: 'A opens delivered/001.txt, reads the text and closes the file at the end of the with-block.', inbox: '(empty)', deliv: '001.txt', open: '001.txt (A) \u2192 closed' },
+      f ? { fns: ['main', 'answer'], t: 'A has no text, so answer returns nothing and prints nothing. B also prints nothing. The author\u2019s message was never shown to the model.', inbox: '(empty)', deliv: '001.txt (lost)', open: '(none)' }
+        : { fns: ['main', 'answer'], t: 'A passes the text to answer, which prints the JSON for the agent. B has no text and prints nothing.', inbox: '(empty)', deliv: '001.txt', open: '(none)' }
+    ];
+  }
+  function paintC() {
+    var s = STEPS(), i = Math.min(state.step, s.length - 1), x = s[i];
+    $('stepline').textContent = 'Step ' + (i + 1) + ' of ' + s.length + ': ' + x.t;
+    $('s-inbox').textContent = x.inbox; $('s-deliv').textContent = x.deliv; $('s-open').textContent = x.open;
+    $('prev').disabled = i === 0; $('next').disabled = i === s.length - 1;
+    $('stepn').textContent = x.fns.join(', ');
+    $('failbtn').setAttribute('aria-pressed', String(state.fail));
+    $('failbtn').textContent = 'The read fails after the rename: ' + (state.fail ? 'on' : 'off');
+  }
+  $('prev').addEventListener('click', function () { state.step = Math.max(0, state.step - 1); render(); keep(); });
+  $('next').addEventListener('click', function () { state.step = Math.min(4, state.step + 1); render(); keep(); });
+  $('failbtn').addEventListener('click', function () { state.fail = !state.fail; render(); keep(); });
+
+  // ---- D (invented change, for layout only) ----
+  var ROWS = [
+    { id: 'r1', tag: 'chg', tagText: 'changed', fn: 'take', lens: 'F', old: 'A blank message is delivered and dropped.', now: 'A blank message is left in inbox/ and never delivered.' },
+    { id: 'r2', tag: 'chg', tagText: 'changed', fn: 'take', lens: 'Q', old: '(nothing noted)', now: 'A blank message stays at the head of the queue, so it is listed again by every claim.' },
+    { id: 'r3', tag: 'rip', tagText: 'ripple', fn: 'claim', lens: 'D', old: 'Hands every waiting name to take.', now: 'Same words, but the reader should check: names that come back unread are still waiting.' },
+    { id: 'r4', tag: 'stale', tagText: 'code changed, notes did not', fn: 'main', lens: 'F', old: 'Nothing waiting: prints nothing and the session carries on.', now: 'Not edited. Is it still true when only a blank message is waiting?' }
+  ];
+  function paintD() {
+    var out = $('diffrows'); out.textContent = ''; var done = 0;
+    ROWS.forEach(function (r) {
+      var c = el('div', 'card L-' + r.lens), h = el('div'), t = el('span', 'tag ' + r.tag, r.tagText);
+      h.appendChild(t); h.appendChild(el('code', null, r.fn)); h.appendChild(document.createTextNode(' \u00b7 ')); h.appendChild(el('span', 'chip L-' + r.lens, r.lens)); h.appendChild(document.createTextNode(' ' + LENS[r.lens]));
+      c.appendChild(h);
+      var o = el('div', 'old', r.old), n = el('div', 'new', r.now); c.appendChild(o); c.appendChild(n);
+      var lb = el('label', 'chk'), cb = el('input'); cb.type = 'checkbox'; cb.checked = !!state.checks[r.id];
+      cb.addEventListener('change', function () { state.checks[r.id] = cb.checked; render(); keep(); });
+      lb.appendChild(cb); lb.appendChild(document.createTextNode('Checked against the code')); c.appendChild(lb);
+      if (state.checks[r.id]) done++;
+      out.appendChild(c);
+    });
+    $('diffcount').textContent = done + ' of ' + ROWS.length + ' sentences checked. A function that changed with no note changed is listed too, so the reviewer sees what was not updated.';
+  }
+
+  // ---- mode ----
+  function setMode(m) { state.mode = m; }
+  function render() {
+    var m = state.mode;
+    Array.prototype.forEach.call(document.querySelectorAll('[role=tab]'), function (b) { b.setAttribute('aria-selected', String(b.dataset.mode === m)); });
+    ['A', 'B', 'C', 'D', 'X'].forEach(function (k) { $('pane-' + k).hidden = k !== m; });
+    $('treebox').hidden = !(m === 'A' || m === 'B' || m === 'C');
+    paintTree(); if (m === 'A') paintA(); if (m === 'B') paintB(); if (m === 'C') paintC(); if (m === 'D') paintD();
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('[role=tab]'), function (b) {
+    b.addEventListener('click', function () { setMode(b.dataset.mode); render(); keep(); });
+  });
+  window.dfsPageState = function () { return state; };
+  document.addEventListener('dfs-state', function (e) { if (e.detail && typeof e.detail === 'object') { for (var k in e.detail) state[k] = e.detail[k]; render(); } });
+  render();
+})();
+</script>
+
+<h2>What stays the same in all four</h2>
+<p class="small">The same grammar as today's page: one colour and letter per lens (D data, S state, R resources,
+  F failure, Q queue, E errors handled), and every sentence comes from a hand-written note the generator checks
+  against the code. None of the four removes the need for notes written by the worker and read by someone else.</p>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  /* An option's text is a flex item, which `overflow-wrap: break-word` cannot narrow: `anywhere` can, and a label is one
+     line of text in its own row, so it cannot squeeze a column of other words. */
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>Which way to build</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build A and B together on one page (lens lights, then a card for a tapped function) and the round diff D in a later node; park the scenario steps C"> A + B now, D later, C parked (recommended)</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build the lens lights (A) only"> A only: lens lights</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build the function card (B) only"> B only: function card</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build the scenario steps (C) first"> C first: scenario steps</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Build the round diff (D) first, since the reviewer needs it most"> D first: round diff</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep today's long page and put the effort only into the worker and reviewer steps"> None: keep today's long page</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional): also say if "a round" is not the work that ends with the tree complete</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>

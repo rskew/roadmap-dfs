@@ -209,7 +209,9 @@ class Page(unittest.TestCase):
             for q in named:
                 self.assertIn("<b>ƒ %s</b>" % explain.esc(q), text, "%s: %s is not in the tree" % (name, q))
             for q, lenses in explain.lenses_at(notes).items():
-                span = text.split('data-node="t-%s"><b>' % explain.esc(q), 1)[1].split("</span>", 1)[0]
+                head, rest = text.split('data-node="t-%s" data-lenses="' % explain.esc(q), 1)
+                attr, span = rest.split('"', 1)[0], rest.split("</span>", 1)[0]
+                self.assertEqual(attr.split(), lenses, "%s: %s lights the wrong lenses" % (name, q))
                 for l in lenses:
                     self.assertIn('data-lens="%s"' % l, span, "%s: %s has no %s dot" % (name, q, l))
 
@@ -222,6 +224,31 @@ class NotedButUnreached(unittest.TestCase):
         text = explain.tree_html(funcs, notes)
         self.assertLess(text.index("<b>ƒ main</b>"), text.index("<b>ƒ alone</b>"))
         self.assertIn('data-lens="failure"', text.split("<b>ƒ alone</b>")[1])
+
+
+class LensLights(unittest.TestCase):
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        self.funcs = explain.read_code([write(d, "m.py", "def main():\n    a()\n    b()\n\ndef a():\n    b()\n\ndef b():\n    pass\n")])
+        self.notes = {"title": "t", "files": ["m.py"], "entries": ["main"], "edges": [
+            {"kind": "fails", "from": "a", "to": "main", "label": "x", "at": "a"},
+            {"kind": "puts", "from": "a", "to": "b", "label": "y", "at": "a"},
+            {"kind": "takes", "from": "b", "to": "main", "label": "z", "at": "b"}]}
+
+    def test_a_tree_function_lists_the_lenses_that_have_a_note_there(self):
+        text = explain.tree_html(self.funcs, self.notes)
+        self.assertIn('data-node="t-a" data-lenses="failure queue"', text)
+        self.assertIn('data-node="t-b" data-lenses="queue"', text)
+        self.assertIn('data-node="t-main" data-lenses=""', text)
+        self.assertIn('data-node="t-b" data-lenses="">↺ b', text)  # a repeat is never lit
+
+    def test_the_lens_buttons_come_before_the_tree_with_a_words_line_to_say_what_lit_up(self):
+        text = explain.page(self.notes, self.funcs)
+        self.assertLess(text.index('class="tabs"'), text.index('class="tree"'))
+        self.assertLess(text.index('id="treehelp"'), text.index('class="tree"'))
+        self.assertIn("f.classList.toggle('lit'", text)
+        self.assertIn(".fn.dim", text)
+        self.assertIn(".fn.lit", text)
 
 
 class NoRoots(unittest.TestCase):
@@ -238,6 +265,66 @@ class NoRoots(unittest.TestCase):
         with self.assertRaises(explain.NotesError) as ctx:
             explain.build(notes, root=d)
         self.assertIn("repository root", str(ctx.exception))
+
+
+class Drift(unittest.TestCase):
+    NOTES = '{"title": "t", "files": ["m.py"], "entries": ["a"], "edges": [{"kind": "stops", "from": "a", "to": "b", "label": "x", "at": "a"}]}'
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    pass\n")
+        self.notes = write(self.dir, "n.json", self.NOTES)
+        self.cwd = os.getcwd()
+        os.chdir(self.dir)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+
+    def drift(self):
+        notes, funcs, sums = explain.load(self.notes)
+        return explain.drifted(notes, funcs, sums)
+
+    def test_notes_never_confirmed_are_all_unconfirmed(self):
+        self.assertEqual(self.drift(), [("a", "unconfirmed"), ("b", "unconfirmed")])
+
+    def test_confirmed_notes_drift_when_a_noted_function_changes_and_not_for_a_comment(self):
+        explain.confirm(self.notes)
+        self.assertEqual(self.drift(), [])
+        write(self.dir, "m.py", "def a():\n    # a comment\n    b()\n\ndef b():\n    pass\n")
+        self.assertEqual(self.drift(), [])
+        write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    return 1\n")
+        self.assertEqual(self.drift(), [("b", "changed")])
+
+    def test_drift_says_why_and_prints_the_sentences_naming_each_function(self):
+        import contextlib, io
+        os.chdir(self.dir)
+        def run():
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                code = explain.main(["explain.py", self.notes, "--drift"])
+            return code, buf.getvalue()
+        code, text = run()
+        self.assertEqual(code, 1)
+        self.assertIn("a (./m.py:1): has no checksum: run --confirm after reading", text)
+        self.assertIn("    stops a -> b: x", text)
+        explain.confirm(self.notes)
+        write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    return 1\n")
+        code, text = run()
+        self.assertIn("b (./m.py:4): changed since the notes were confirmed", text)
+        self.assertNotIn("a (./m.py", text)
+
+    def test_the_checksum_of_a_fixed_function_is_the_same_on_every_python(self):
+        # A literal: a Python whose syntax tree differs must fail here, not in the shipped notes.
+        import ast
+        node = ast.parse("def f(a, *b, c=1):\n    # note\n    try:\n        return a[0] + 1.5\n    except (KeyError, E) as e:\n        raise\n").body[0]
+        self.assertEqual(explain.checksum(node), "e0c189562506")
+
+    def test_the_shipped_notes_are_confirmed_against_the_code(self):
+        os.chdir(ROOT)
+        for name in ("inbox", "ptyrelay", "walk"):
+            path = os.path.join(NOTES, name + ".json")
+            notes, funcs, sums = explain.load(path)
+            self.assertEqual(explain.drifted(notes, funcs, sums), [], name + ": read its notes, then --confirm")
 
 
 if __name__ == "__main__":

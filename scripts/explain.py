@@ -2,6 +2,8 @@
 """Code explainer: one page that shows a piece of code from six angles.
 
     explain.py NOTES.json [--out PAGE.html]
+    explain.py NOTES.json --drift      list the noted functions whose source changed since the notes were confirmed
+    explain.py NOTES.json --confirm    keep a checksum of each noted function, after reading its notes against it
 
 NOTES.json (see docs/explain.md) names the Python files to read and holds the facts a person has
 to judge. This script does the part a machine can do truthfully (a call is drawn only when the text fixes its
@@ -17,6 +19,7 @@ colour and arrow on it comes from the two tables below (PLACES and KINDS), and s
 a page cannot use a symbol the legend does not explain.
 """
 import ast
+import hashlib
 import html
 import itertools
 import json
@@ -107,6 +110,37 @@ def read_code(paths):
     return funcs
 
 
+def _canon(node, out):
+    """Write the tree out by node class and field name, skipping empty fields.
+
+    `ast.dump` is not used: the fields a node has change between Python versions (3.12 added
+    `type_params` to every def), and a checksum that moves with the interpreter would flag every noted
+    function as changed. An empty field is left out so a field a newer Python adds, empty, changes nothing."""
+    if isinstance(node, ast.AST):
+        out.append(type(node).__name__ + "(")
+        for name, value in ast.iter_fields(node):
+            if value is None or value == []:
+                continue
+            out.append(name + "=")
+            _canon(value, out)
+        out.append(")")
+    elif isinstance(node, list):
+        out.append("[")
+        for x in node:
+            _canon(x, out)
+            out.append(",")
+        out.append("]")
+    else:
+        out.append(repr(node))
+
+
+def checksum(node):
+    """A short hash of a function's code that ignores comments, spacing and the Python version."""
+    out = []
+    _canon(node, out)
+    return hashlib.sha1("".join(out).encode()).hexdigest()[:12]
+
+
 def _info(path, node, cls):
     raw = []
     errors = []
@@ -140,7 +174,8 @@ def _info(path, node, cls):
                 errors.append((h.lineno, "catches " + kind, _does(h.body)))
         elif isinstance(n, ast.Raise) and n.exc is not None:
             errors.append((n.lineno, "raises " + ast.unparse(n.exc).split("(")[0], ""))
-    return {"file": path, "line": node.lineno, "cls": cls, "raw": raw, "errors": sorted(errors)}
+    return {"file": path, "line": node.lineno, "cls": cls, "raw": raw, "errors": sorted(errors),
+            "sum": checksum(node)}
 
 
 def _does(body):
@@ -266,6 +301,40 @@ def named_in_notes(notes, funcs):
     return out
 
 
+def sums_path(notes_path):
+    """Where the checksums of the noted functions are kept: beside the notes, `inbox.json` → `inbox.sums`."""
+    return os.path.splitext(notes_path)[0] + ".sums"
+
+
+def read_sums(notes_path):
+    try:
+        with open(sums_path(notes_path)) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def drifted(notes, funcs, sums):
+    """The functions the notes mark whose source (comments and spacing aside) is not what it was when the
+    notes were last confirmed: `changed`, or `unconfirmed` when no checksum was ever kept for it. A changed
+    function may have made a note's sentence false; this says where to read, not what is wrong."""
+    return [(q, "changed" if q in sums else "unconfirmed") for q in named_in_notes(notes, funcs)
+            if sums.get(q) != funcs[q]["sum"]]
+
+
+def sentences_naming(notes, q):
+    """The note sentences that name function `q`, each as one line: an edge's label (with its kind and ends)
+    where `q` is its `at`, `from` or `to`, and a handled note where `q` is its `at`."""
+    out = []
+    for e in notes.get("edges", []):
+        if q in (e.get("at"), e.get("from"), e.get("to")):
+            out.append("%s %s -> %s: %s" % (e.get("kind"), e.get("from"), e.get("to"), e.get("label")))
+    for h in notes.get("handled", []):
+        if h.get("at") == q:
+            out.append("handled: %s: %s" % (h.get("error"), h.get("how")))
+    return out
+
+
 def tree_html(funcs, notes):
     called = {c for f in funcs.values() for c in f["calls"]}
     roots = notes.get("entries") or [q for q in funcs if q not in called]
@@ -284,11 +353,11 @@ def tree_html(funcs, notes):
                        % (LENS[l][2], l, l, esc(LENS[l][0]), esc(LENS[l][0][0])) for l in marks.get(q, []))
         if q in seen or q in path:
             why = "calls itself again" if q in path else "shown above"
-            return '<li><span class="fn again" data-node="t-%s">↺ %s <small>%s</small></span></li>' % (esc(q), esc(q), why)
+            return '<li><span class="fn again" data-node="t-%s" data-lenses="">↺ %s <small>%s</small></span></li>' % (esc(q), esc(q), why)
         seen.add(q)
         kids = "".join(node(c, path + [q]) for c in f["calls"])
-        return ('<li><span class="fn" data-node="t-%s"><b>ƒ %s</b> <small>%s:%d</small> %s</span>%s</li>'
-                % (esc(q), esc(q), esc(os.path.basename(f["file"])), f["line"], dots,
+        return ('<li><span class="fn" data-node="t-%s" data-lenses="%s"><b>ƒ %s</b> <small>%s:%d</small> %s</span>%s</li>'
+                % (esc(q), " ".join(marks.get(q, [])), esc(q), esc(os.path.basename(f["file"])), f["line"], dots,
                    "<ul>%s</ul>" % kids if kids else ""))
     main = "".join(node(r, []) for r in roots)
     # A function a note marks that no entry reaches (a call the tree does not draw, such as one on an
@@ -361,7 +430,9 @@ body{margin:0;padding:16px;background:#fbfaf7;color:#1a1a1a;font:16px/1.5 -apple
 h1{font-size:20px;margin:0 0 4px}h2{font-size:18px;margin:0 0 2px}h3{font-size:15px;margin:12px 0 4px}
 .lede,.ask{max-width:62ch;color:#444;margin:0 0 12px}
 small{color:#666;font-size:12px}
-.tabs{display:flex;gap:6px;overflow-x:auto;margin:16px 0 8px;padding-bottom:4px}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:12px 0 8px;padding:6px 0 4px;position:sticky;top:0;z-index:2;background:#fbfaf7}
+.treehelp{margin:0 0 10px;max-width:62ch;color:#222;min-height:1.5em}
+.fn.dim{opacity:.4}.fn.lit{border-width:3px;padding:3px 7px;border-color:var(--lc);box-shadow:0 0 0 3px var(--lc)}
 .tabs button{flex:0 0 auto;min-height:44px;padding:0 12px;border:1.5px solid var(--c);border-radius:6px;background:#fff;color:#1a1a1a;font:inherit}
 .tabs button[aria-pressed=true]{background:var(--c);color:#fff}
 .tree,.tree ul{list-style:none;margin:0;padding-left:16px;border-left:2px solid #d8d4c8}
@@ -400,9 +471,18 @@ details{margin:12px 0;max-width:70ch}summary{min-height:44px;display:flex;align-
 """
 
 JS = """
-(function(){var secs=[].slice.call(document.querySelectorAll('section.lens')),bs=[].slice.call(document.querySelectorAll('.tabs button'));
+(function(){var secs=[].slice.call(document.querySelectorAll('section.lens')),bs=[].slice.call(document.querySelectorAll('.tabs button')),
+fns=[].slice.call(document.querySelectorAll('.tree .fn')),help=document.getElementById('treehelp'),
+none=help?help.textContent:'';
 if(!secs.length)return;
-function show(id){secs.forEach(function(s){s.hidden=id!=='all'&&s.dataset.lens!==id});bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.lens===id)})}
+function show(id){secs.forEach(function(s){s.hidden=id!=='all'&&s.dataset.lens!==id});
+var btn=null;bs.forEach(function(b){var on=b.dataset.lens===id;b.setAttribute('aria-pressed',on);if(on)btn=b});
+var n=0,all=0;
+fns.forEach(function(f){var has=id!=='all'&&f.dataset.lenses.split(' ').indexOf(id)>=0;
+f.classList.toggle('lit',has);f.classList.toggle('dim',id!=='all'&&!has);
+if(id!=='all'&&!f.classList.contains('again')){all++;if(has)n++}});
+if(help)help.textContent=id==='all'?none:btn.textContent+': '+n+' of '+all+' functions in the tree have something to say here. The others are faded.';
+if(btn)fns.forEach(function(f){f.style.setProperty('--lc',btn.style.getPropertyValue('--c'))})}
 bs.forEach(function(b){b.onclick=function(){show(b.dataset.lens)}});
 [].forEach.call(document.querySelectorAll('a.dot'),function(a){a.onclick=function(){show(a.dataset.lens)}});
 show('all')})();
@@ -416,10 +496,12 @@ def page(notes, funcs):
     return ('<!doctype html>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             '<title>Explainer: %s</title>\n<style>%s</style>\n'
             '<h1>%s</h1>\n<p class="lede">%s</p>\n'
-            '<h2>The code at a glance</h2>\n<p class="ask">Who calls whom in %s. The coloured dots mark the functions each lens below has something to say about; tap one to see it. Every such function is in the tree.</p>\n%s\n'
-            '%s\n<div class="tabs" role="group" aria-label="Lenses">%s</div>\n%s\n<script>%s</script>\n'
+            '<h2>The code at a glance</h2>\n<p class="ask">Who calls whom in %s. The coloured dots mark the functions each lens below has something to say about; tap one to see it. Every such function is in the tree.</p>\n'
+            '<div class="tabs" role="group" aria-label="Lenses">%s</div>\n'
+            '<p class="treehelp" id="treehelp" aria-live="polite">Tap a lens to light the functions it has something to say about and fade the rest.</p>\n'
+            '%s\n%s\n%s\n<script>%s</script>\n'
             % (esc(notes["title"]), CSS, esc(notes["title"]), esc(notes.get("about", "")),
-               esc(", ".join(notes["files"])), tree_html(funcs, notes), legend_html(), tabs,
+               esc(", ".join(notes["files"])), tabs, tree_html(funcs, notes), legend_html(),
                "".join(lens_html(k, notes, funcs) for k, *_ in LENSES), JS))
 
 
@@ -436,21 +518,67 @@ def build(notes_path, root="."):
     return page(notes, funcs)
 
 
+def load(notes_path, root="."):
+    """The notes, the functions they were read against and the checksums kept for them."""
+    with open(notes_path) as fh:
+        notes = json.load(fh)
+    funcs = read_code([os.path.join(root, f) for f in notes["files"]])
+    check_notes(notes, funcs)
+    return notes, funcs, read_sums(notes_path)
+
+
+def confirm(notes_path, root="."):
+    """Keep a checksum of every function the notes mark: the notes have just been read against this code."""
+    notes, funcs, _ = load(notes_path, root)
+    with open(sums_path(notes_path), "w") as fh:
+        json.dump({q: funcs[q]["sum"] for q in named_in_notes(notes, funcs)}, fh, indent=1, sort_keys=True)
+        fh.write("\n")
+
+
 def main(argv):
     args = argv[1:]
+    mode = None
+    for flag in ("--drift", "--confirm"):
+        if flag in args:
+            mode = flag
+            args.remove(flag)
+    if mode:
+        if len(args) != 1:
+            print("usage: explain.py NOTES.json --drift | --confirm", file=sys.stderr)
+            return 2
+        try:
+            if mode == "--confirm":
+                confirm(args[0])
+                return 0
+            notes, funcs, sums = load(args[0])
+        except (NotesError, OSError, ValueError, KeyError) as exc:
+            print("explain.py: %s" % exc, file=sys.stderr)
+            return 1
+        moved = drifted(notes, funcs, sums)
+        for q, why in moved:
+            print("%s (%s:%d): %s" % (q, funcs[q]["file"], funcs[q]["line"],
+                                      "changed since the notes were confirmed" if why == "changed"
+                                      else "has no checksum: run --confirm after reading"))
+            for line in sentences_naming(notes, q):
+                print("    " + line)
+        return 1 if moved else 0
     out = None
     if "--out" in args:
         i = args.index("--out")
         out = args[i + 1] if i + 1 < len(args) else None
         args = args[:i] + args[i + 2:]
     if len(args) != 1 or ("--out" in argv and out is None):
-        print("usage: explain.py NOTES.json [--out PAGE.html] (run from the repository root: `files` are relative to it)", file=sys.stderr)
+        print("usage: explain.py NOTES.json [--out PAGE.html | --drift | --confirm] (run from the repository root: `files` are relative to it)", file=sys.stderr)
         return 2
     try:
         text = build(args[0])
+        moved = drifted(*load(args[0])[:2], read_sums(args[0]))
     except (NotesError, OSError, ValueError, KeyError) as exc:
         print("explain.py: %s" % exc, file=sys.stderr)
         return 1
+    if moved:
+        print("explain.py: %d noted function(s) changed since the notes were confirmed (`--drift` lists them): %s"
+              % (len(moved), ", ".join(q for q, _ in moved)), file=sys.stderr)
     if out:
         with open(out, "w") as fh:
             fh.write(text)

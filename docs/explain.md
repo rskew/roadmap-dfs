@@ -2,7 +2,17 @@
 
 `scripts/explain.py NOTES.json --out PAGE.html` writes one page that shows a piece of code from
 six angles: data flow, state, resources, failure, queue behaviour and errors handled. A page
-starts with the call tree (who calls whom), then the legend, then one section per lens.
+starts with the lens buttons, the call tree (who calls whom), the legend, then one section per lens.
+
+## Lens lights
+
+The lens buttons sit above the tree and stay at the top of the screen while the page scrolls. Tap a
+lens and every tree function with a note in that lens is lit (a thick border in the lens colour),
+the others fade, a line of words says how many of the tree's functions are lit, and only that lens's
+section is shown. "All" puts the page back. Each tree function carries the lenses it has a note in
+(`data-lenses`, read from the notes), so nothing new is written for this. A repeated function
+(marked ↺) is faded, since its notes are on the line above. Without JavaScript the page shows every
+section and no function is faded.
 
 ## What the machine does and what a person writes
 
@@ -21,9 +31,23 @@ starts with the call tree (who calls whom), then the legend, then one section pe
 - `files` are paths relative to the current directory, so run `explain.py` from the repository root.
   With no `entries`, the tree starts from the functions no other function calls, or, when every
   function is called by another, from the first function of each file.
-- A note is checked only for names, not for what it says. A task that changes `scripts/inbox.py`,
+- A note is checked for names, not for what it says. A task that changes `scripts/inbox.py`,
   `scripts/ptyrelay.py` or `scripts/walk.py` must update `docs/explain/*.json` for them too: renaming
-  a noted function fails `scripts/test_explain.py`, but changed behaviour under the same name does not.
+  a noted function fails `scripts/test_explain.py`.
+- Changed behaviour under the same name is found by checksum. `docs/explain/<subject>.sums` keeps a
+  checksum of each function the notes mark (its syntax tree written out by `explain.py` itself, so comments and spacing do not count and the Python version does not matter; a docstring is part of the tree, so editing one does count).
+  `explain.py NOTES.json --drift` lists the marked functions that changed since, each with the note
+  sentences that name it (as `at`, `from` or `to`, or in `handled`), and a render prints the list of
+  names as a warning. A function with no kept checksum is listed as such. To update the notes: run
+  `--drift`, and for each function listed read its new source and the sentences printed under it, and
+  correct the ones that no longer hold; then run `--confirm` to keep the new checksums, and commit the
+  `.sums` file with the notes. `--confirm` does not read anything: it says only that you did.
+  `scripts/test_explain.py` fails while a shipped notes file has a function that changed
+  and was not confirmed.
+  An empty `--drift` does not mean every note still holds: it looks only at the functions the notes
+  name. A function added to a noted class, or a callee the notes never name that now behaves
+  differently under a noted sentence, is not listed, so when a diff touches code near a noted function
+  read the notes for it too.
 
 ## Notes file
 

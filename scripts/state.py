@@ -971,7 +971,17 @@ def review_brief(task: str) -> str:
            "is history, so it is not edited): its Approach names the node, the assumption "
            "and what would show it wrong, and says to state it as a Hypothesis with its "
            "page. Do not repeat an assumption that a Hypothesis or an open node already "
-           "carries.", "",
+           "carries.",
+           "5. **Is the explanation true?** If the tree's last node names an explanation "
+           "page (`.dfs/artefacts/<uuid>.html`, from `docs/explain/*.json`), open it and "
+           "read each lens sentence against the code: mark it true, loose (imprecise, or "
+           "leaning on another file) or false. A false sentence, or a function whose code "
+           "changed while its notes did not, is a finding; `explain.py <notes> --drift` "
+           "lists the noted functions that changed since the notes were confirmed. Start your review of failure "
+           "and queue paths from the functions a lens lights on the page. End the body of "
+           "your log entry with a line `Explanation: N claims, T true, L loose, F false`, "
+           "so the notes' errors can be counted round by round. No page named, no line.",
+           "",
           ] + _round_note(t) + _record_block(task, "review") + [
            "### The task's commits, oldest first", ""]
     for nd in sorted(t["nodes"], key=lambda n: n["n"]):
