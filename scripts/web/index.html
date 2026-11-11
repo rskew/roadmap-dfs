@@ -1176,13 +1176,11 @@ function drawTasks(push) {
   if (!S.reorder && tableWide()) html += `<div class="actions listopt"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
   if (table) html += `<div class="tblhead" aria-hidden="true"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>`;
   // The list is drawn upside down: the last task in the walk order is the top row, so the walk climbs the page. A break
-  // keeps its place between the same two tasks, which puts it under the task it holds. The reorder view keeps the walk
-  // order until its controls are flipped too.
-  const flip = !S.reorder;
-  for (const it of (flip ? items.slice().reverse() : items)) {
+  // keeps its place between the same two tasks, which puts it under the task it holds. The reorder view is drawn the same
+  // way, and its controls mean up and down on the screen: a task moved up the screen moves later in the walk order.
+  for (const it of items.slice().reverse()) {
     const fenced = it.segment > (items.indexOf(it) ? items[items.indexOf(it) - 1].segment : 0);
-    const fence = fenced ? `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : flip ? "below is done" : "above is done"}</div>` : "";
-    if (!flip) html += fence;
+    const fence = fenced ? `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "below is done"}</div>` : "";
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     const draft = it.draft && it.status === "open" && !it.blocked_by;
     const cls = `item${blocks ? " tint blocks" : assumes ? " tint assumes" : ""}${it.status === "done" ? " done" : ""}${draft ? " draft" : ""}`;
@@ -1221,12 +1219,12 @@ function drawTasks(push) {
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       const whole = [it.id + " " + it.goal, it.status, it.waiting_on && "waiting on " + it.waiting_on, it.blocked_by && "held by " + it.blocked_by, it.pr_ready && "ready to open a pull request", it.rev, it.status !== "open" && it.status !== "done" && it.why].filter(Boolean).join(", ");   // the row clips its goal, tags and reason; the title has all of it
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" title="${esc(whole)}" style="${style}">${inner}
-        <span class="moves">${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break above" : "Put a break above")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break above a plain one, which a walk passes:" : "Make the break above a stop break, which ends a walk that waited at it:")}</span>${grip}</div>`;
+        <span class="moves">${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break below" : "Put a break below")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break below a plain one, which a walk passes:" : "Make the break below a stop break, which ends a walk that waited at it:")}</span>${grip}</div>`;
     } else if (it.archivable) {
       const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;
     } else html += `<button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button>`;
-    if (flip) html += fence;
+    html += fence;
   }
   // Archived tasks follow the live ones, apart from the order and its breaks; the reorder view is about live tasks.
   if (showArchived() && !S.reorder && S.archived.length) {
@@ -1264,7 +1262,7 @@ function guessMove(id, move, more) {
   const sibs = []; for (let j = lo; j < hi; j++) if (nodes[j].depth === nodes[i].depth) sibs.push(j);
   let t, after;
   if (move === "place") { t = nodes.findIndex(n => n.id === more.target); after = more.where === "after"; }
-  else { t = sibs[sibs.indexOf(i) + (move === "up" ? -1 : 1)]; after = move === "down"; }
+  else { t = sibs[sibs.indexOf(i) + (move === "up" ? 1 : -1)]; after = move === "up"; }   // up the screen is later in the order
   if (t === undefined || t < 0 || t === i || !sibs.includes(t)) return null;
   const at = after ? end(t) : t, cut = nodes.slice(i, end(i)), rest = nodes.slice(0, i).concat(nodes.slice(end(i)));
   const dest = at <= i ? at : at - cut.length, out = rest.slice(0, dest).concat(cut, rest.slice(dest));
@@ -1316,7 +1314,9 @@ const rowOf = id => $(`[data-row="${CSS.escape(id)}"]`);
 const isFence = x => x[0] === "|";
 const slotOf = x => isFence(x) ? $(`[data-fence="${CSS.escape(x.slice(1))}"]`) : rowOf(x);
 // the ids from `id` to the end of its subtree, and the ids beside it under the same parent, with the breaks drawn between
-// them at the root: the gaps either side of a break are two places, the end of one segment and the start of the next
+// them at the root: the gaps either side of a break are two places, the end of one segment and the start of the next.
+// The siblings come in screen order, last in the walk first, and a break after the task it holds. A task's subtree is
+// drawn upside down too: its last descendant is its top row and the task itself the bottom one.
 function spanOf(id) {
   const its = S.state.items, i = its.findIndex(x => x.id === id);
   let j = i + 1; while (j < its.length && its[j].depth > its[i].depth) j++;
@@ -1329,10 +1329,10 @@ function siblingsOf(id) {
   const out = [];
   for (let j = lo; j < hi; j++) {
     if (its[j].depth !== d) continue;
-    if (!d && its[j].segment > (j ? its[j - 1].segment : 0)) out.push("|" + its[j].id);   // as drawTasks draws one
+    if (!d && its[j].segment > (j ? its[j - 1].segment : 0)) out.push("|" + its[j].id);
     out.push(its[j].id);
   }
-  return out;
+  return out.reverse();   // so a break follows the task it holds, as drawTasks draws it
 }
 function dragUpdate() {
   const D = DRAG; if (!D) return;
@@ -1343,10 +1343,11 @@ function dragUpdate() {
   for (const r of document.querySelectorAll(".drop-before, .drop-after")) r.classList.remove("drop-before", "drop-after");
   D.drop = null;
   if (!others.length || idx === D.sibs.indexOf(D.id)) return;
-  // the gap is before the task under it, else after the task over it: so with a break under the gap it lands above the break
+  // the gap is above the task under it, else below the task over it: so with a break under the gap it lands above the break.
+  // The order file reads the other way up: above a task on the screen is after its subtree in the walk, below it is before it.
   const under = others[idx], over = others[idx - 1];
-  if (under !== undefined && !isFence(under)) { D.drop = { target: under, where: "before" }; rowOf(under).classList.add("drop-before"); }
-  else if (over !== undefined && !isFence(over)) { D.drop = { target: over, where: "after" }; rowOf(spanOf(over).pop()).classList.add("drop-after"); }
+  if (under !== undefined && !isFence(under)) { D.drop = { target: under, where: "after" }; rowOf(spanOf(under).pop()).classList.add("drop-before"); }
+  else if (over !== undefined && !isFence(over)) { D.drop = { target: over, where: "before" }; rowOf(over).classList.add("drop-after"); }
 }
 function dragEnd() {
   if (!DRAG) return;
@@ -1382,7 +1383,7 @@ document.addEventListener("pointerup", e => {
   if (D.drop) moveTask(D.id, "place", D.drop);
 });
 document.addEventListener("pointercancel", e => { if (DRAG && e.pointerId === DRAG.pointer) dragEnd(); });
-// Without a pointer the grip still moves the row: the up and down arrow keys, one place each.
+// Without a pointer the grip still moves the row: the up and down arrow keys, one place each, up and down the screen.
 document.addEventListener("keydown", async e => {
   const g = e.target.closest && e.target.closest("[data-grip]");
   if (!g || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
