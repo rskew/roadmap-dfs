@@ -1854,7 +1854,7 @@ class Branches(InARepo):
         self.assertEqual(dfs_paths.task_items("W1"), self.root / ".dfs" / "items")
 
     def test_a_finished_task_with_a_leftover_directory_is_still_done_and_is_not_next(self):
-        # W130, 2026-11-05: the leftover read as an empty tree, so the walk took the finished task.
+        # W130, 2026-11-05: the leftover read as an empty tree, so the trek took the finished task.
         (self.root / ".dfs/order.md").write_text("W1\n")
         self.write(task(node(1, "confirmed"), "- 2026-11-05T00:00:00Z · ready\n- 2026-11-05T00:00:01Z · accept\n"))
         self.commit()

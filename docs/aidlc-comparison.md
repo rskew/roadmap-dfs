@@ -7,7 +7,7 @@ A comparison of this tool with [awslabs/aidlc-workflows](https://github.com/awsl
 `docs/guide/` chapters 00, 04, 06, 07, 09, 10, 11, workflow-profiles and the glossary,
 `docs/harness-engineering/06-sensors.md` and `docs/reference/02-plane-architecture.md`. roadmap-dfs at
 `efbe2a9`: `README.md`, `SKILL.md`, `templates/ROADMAP.md` and the headers of `scripts/check.py`, `hook.sh`,
-`run.sh`, `branch.py` and `walk.py`.
+`run.sh`, `branch.py` and `trek.py`.
 **Not read:** AI-DLC's specification PDF, the rest of `docs/reference/`, the agents' knowledge files, its
 tests and its source beyond the file list. Where a claim about AI-DLC rests on a file, the file is named in
 brackets, relative to that repo.

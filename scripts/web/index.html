@@ -147,7 +147,7 @@ pre.runlog .r-err { color: var(--attention); }
 .item.done .body { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s1) var(--s2); min-width: 0; }
 .item.done .goal { flex: 1 0 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .item.done .meta { flex: 0 1 auto; min-width: 0; margin-top: 0; }
-/* a draft (an open task that no raise above holds, behind a break or not, which the walk passes over) is the one row marked in the list's own ink: a dashed stripe down its edge,
+/* a draft (an open task that no raise above holds, behind a break or not, which the trek passes over) is the one row marked in the list's own ink: a dashed stripe down its edge,
    its goal in italics and a filled badge, so it reads as not yet released without a colour that already means "needs you" */
 .item.draft { position: relative; }
 .item.draft::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: var(--rule-status); pointer-events: none; background: repeating-linear-gradient(180deg, var(--ink) 0 6px, transparent 6px 11px); }   /* a pseudo-element, so neither the hover wash nor the assumption's inset shadow on this edge covers it */
@@ -240,45 +240,45 @@ dl.keys { display: grid; grid-template-columns: max-content 1fr; gap: var(--s2) 
 dl.keys dt, dl.keys dd { margin: 0; }
 dl.keys kbd { font: inherit; font-weight: 600; white-space: pre; }
 
-/* the walk */
-/* The walk's controls stay in reach on a long list: the box sticks under the bar (its measured height, `--bar-h`, as a long
+/* the trek */
+/* The trek's controls stay in reach on a long list: the box sticks under the bar (its measured height, `--bar-h`, as a long
    title can make it taller), opaque, above the rows, and out to the view's edges so a tinted row (which bleeds 10px past the
    column) does not show either side of it. Open, it scrolls in itself under its own summary rather than cover the list, and
    a focus the list brings into view clears it too, a row or a control in one (its grip, move and archive buttons): each has a
    `scroll-margin-top` of `--pin-h`, the box's measured height; the page's own
    scroll padding stops at the bar's own edge, so the box, stuck just below it, lies inside the snapport and focusing it does not
    scroll the list; the pixel is for the box's fractional top). */
-.walk { margin: 6px calc(-1 * var(--s4)) 10px; padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); position: sticky; z-index: 4; background: var(--paper);
+.trek { margin: 6px calc(-1 * var(--s4)) 10px; padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); position: sticky; z-index: 4; background: var(--paper);
   top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule)))); }
-.walk[open] { max-height: 55dvh; overflow-y: auto; overscroll-behavior: contain; }
-.walk[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--paper); }
-:root:has(#walkbox) { scroll-padding-top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule))) - 1px); }
-:root:has(#walkbox) :is(.item, .item :is(button, a, select), .arow > button) { scroll-margin-top: calc(var(--pin-h, 0px) + var(--s3) + 1px); }
-.walk > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
-.walk > summary::-webkit-details-marker { display: none; }
-.walk > summary .state { font-size: var(--fs-body); font-weight: 500; }
-.walk > summary .brief { flex: 1; min-width: 0; color: var(--muted); font-size: calc(14px * var(--z)); }
-.walk > summary .chev { margin-left: auto; align-self: center; width: var(--s2); height: var(--s2); border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform var(--ease); }
-.walk[open] > summary .chev { transform: rotate(-135deg); }
-.walk .state .on { color: var(--settled); } .walk .state .hold { color: var(--assumption); }
-.walk .line2 { color: var(--muted); font-size: var(--fs-small); margin: 0 0 6px; }
-.walk .row2 { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0; }
-.walk .row2.act { margin-bottom: 14px; }
-.walk .pair { display: flex; align-items: center; gap: 10px; }
-.walk .pair input { flex: 1; min-height: var(--hit); padding-block: 0; }
-.walk .pair input[type=checkbox] { flex: none; width: var(--hit); }
-.walk label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
-.walk .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
-.walk .chain span:first-child { overflow-wrap: anywhere; }
-.walk details { margin-top: 6px; }
-.walk details > summary { min-height: var(--hit); display: flex; align-items: center; cursor: pointer; list-style: none; }
-.walk details > summary::after { content: ""; margin-left: 10px; width: 6px; height: 6px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
-.walk details[open] > summary::after { transform: rotate(-135deg); }
-.walk details summary::-webkit-details-marker { display: none; }
-.walk .ev { margin: 0; padding: 0 0 10px; list-style: none; font-size: calc(14px * var(--z)); color: var(--muted); }
-.walk .ev li { padding: 2px 0; display: flex; gap: 10px; }
-.walk .ev li span { min-width: 0; overflow-wrap: anywhere; }   /* the runner line is one long path: it wraps and does not push the box sideways */
-.walk .ev time { flex: none; width: 5.5em; font-variant-numeric: tabular-nums; }
+.trek[open] { max-height: 55dvh; overflow-y: auto; overscroll-behavior: contain; }
+.trek[open] > summary { position: sticky; top: 0; z-index: 1; background: var(--paper); }
+:root:has(#trekbox) { scroll-padding-top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule))) - 1px); }
+:root:has(#trekbox) :is(.item, .item :is(button, a, select), .arow > button) { scroll-margin-top: calc(var(--pin-h, 0px) + var(--s3) + 1px); }
+.trek > summary { min-height: calc(52px * var(--z)); display: flex; align-items: baseline; gap: var(--s3); padding: var(--s3) 0; cursor: pointer; list-style: none; flex-wrap: wrap; }
+.trek > summary::-webkit-details-marker { display: none; }
+.trek > summary .state { font-size: var(--fs-body); font-weight: 500; }
+.trek > summary .brief { flex: 1; min-width: 0; color: var(--muted); font-size: calc(14px * var(--z)); }
+.trek > summary .chev { margin-left: auto; align-self: center; width: var(--s2); height: var(--s2); border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform var(--ease); }
+.trek[open] > summary .chev { transform: rotate(-135deg); }
+.trek .state .on { color: var(--settled); } .trek .state .hold { color: var(--assumption); }
+.trek .line2 { color: var(--muted); font-size: var(--fs-small); margin: 0 0 6px; }
+.trek .row2 { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0; }
+.trek .row2.act { margin-bottom: 14px; }
+.trek .pair { display: flex; align-items: center; gap: 10px; }
+.trek .pair input { flex: 1; min-height: var(--hit); padding-block: 0; }
+.trek .pair input[type=checkbox] { flex: none; width: var(--hit); }
+.trek label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
+.trek .chain { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: var(--s2) 0; border-top: var(--rule) solid var(--faint); }
+.trek .chain span:first-child { overflow-wrap: anywhere; }
+.trek details { margin-top: 6px; }
+.trek details > summary { min-height: var(--hit); display: flex; align-items: center; cursor: pointer; list-style: none; }
+.trek details > summary::after { content: ""; margin-left: 10px; width: 6px; height: 6px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.trek details[open] > summary::after { transform: rotate(-135deg); }
+.trek details summary::-webkit-details-marker { display: none; }
+.trek .ev { margin: 0; padding: 0 0 10px; list-style: none; font-size: calc(14px * var(--z)); color: var(--muted); }
+.trek .ev li { padding: 2px 0; display: flex; gap: 10px; }
+.trek .ev li span { min-width: 0; overflow-wrap: anywhere; }   /* the runner line is one long path: it wraps and does not push the box sideways */
+.trek .ev time { flex: none; width: 5.5em; font-variant-numeric: tabular-nums; }
 
 /* one task */
 .head h2 { margin: 10px 0 var(--s1); font-size: var(--fs-title); line-height: 1.25; font-weight: 500; text-wrap: balance; }
@@ -492,7 +492,7 @@ const tagAt = id => String(id).indexOf("@");
 const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
 const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { walk: null, state: null, task: null, taskId: null, folded: {}, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0, q: "" };
+const S = { trek: null, state: null, task: null, taskId: null, folded: {}, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0, q: "" };
 /* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
 const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
@@ -617,7 +617,7 @@ addEventListener("pagehide", () => { try { sessionStorage.setItem("scroll", JSON
 
 /* ── scrolling with a controller: the control in the middle of the screen is the one selected ───────────────────────────
    A pad's stick reaches the page as the wheel or the page keys. While one of those scrolls a list of tasks, or a tree of
-   nodes, the control nearest the middle of what is visible (between the bar, the pinned Walk box and the tabs) takes
+   nodes, the control nearest the middle of what is visible (between the bar, the pinned Trek box and the tabs) takes
    focus, marked `.mid` since a focus ring does not show after the wheel, and Enter (the pad's A) presses it. The page
    keeps room above the first control and below the last so each can be scrolled to the middle (`--mid-top`, `--mid-bot`),
    and a screen is first drawn scrolled past the room above, as before. Only with a hovering pointer: a touch screen is
@@ -630,7 +630,7 @@ function midEdges(pinned) {
   let t = $("#bar").getBoundingClientRect().bottom, b = innerHeight;
   const tabs = $("#tabs").getBoundingClientRect();
   if (tabs.top > innerHeight / 2) b = tabs.top;           // the tabs are along the bottom on a narrow screen, in the bar on a wide one
-  const w = pinned && $("#walkbox");
+  const w = pinned && $("#trekbox");
   if (w) { const r = w.getBoundingClientRect(); if (r.top <= t + 1 && r.bottom > t) t = r.bottom; }
   return [t, b];
 }
@@ -652,7 +652,7 @@ function midLayout() {
 function midSelect() {
   MID.raf = 0;
   const a = document.activeElement;
-  if (document.querySelector("dialog[open]") || (a && a.closest("input, textarea, select, #walkbox, dialog"))) return;
+  if (document.querySelector("dialog[open]") || (a && a.closest("input, textarea, select, #trekbox, dialog"))) return;
   const [t, b] = midEdges(true), c = (t + b) / 2;
   let best = null, score = Infinity;
   for (const el of midCands()) {
@@ -683,7 +683,7 @@ let lastView = "";
 let RENDERS = 0;
 let PUSHES = 0;      // counts the pushes heard
 const stale = new Map();      // task id (or "*": any) -> the push that changed it, until a read of it has been kept
-/* A draw replaces the controls: for a keyboard user in the pinned Walk box, who goes there in the middle of a walk, put focus back on the same
+/* A draw replaces the controls: for a keyboard user in the pinned Trek box, who goes there in the middle of a trek, put focus back on the same
    control (by id, or its action and target, else its place among the focusable controls) when the draw left it on the page. */
 const FOCUSABLE = "button, a[href], summary, textarea, input:not([type=hidden]), select, [tabindex]:not([tabindex='-1'])";
 function focusKey(el) {
@@ -754,7 +754,7 @@ function findStep() {
   if (el) { el.focus(); el.scrollIntoView({ block: "nearest" }); }
 }
 async function render(force, changed) {
-  const key = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;
+  const key = document.activeElement?.closest?.("#trekbox") ? focusKey(document.activeElement) : null;
   const mine = RENDERS + 1;
   await renderDraw(force, changed);
   const lost = !document.activeElement || document.activeElement === document.body;
@@ -777,16 +777,16 @@ async function renderDraw(force, changed) {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
       let t; const at = WROTE, seen = PUSHES;
-      // A push that names the tasks it changed, and not this one, leaves the task as it is: only the walk is read again.
+      // A push that names the tasks it changed, and not this one, leaves the task as it is: only the trek is read again.
       // A change stays unread (`stale`) until a read of the task has landed and been kept, so a render that is replaced or
       // fails before that does not make the next push trust the old copy.
       const same = changed && !arrived && S.task && S.taskId === r.task && S.task.id === r.task && !stale.has(r.task) && !stale.has("*");
-      [t, S.walk] = await Promise.all([same ? S.task : api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/walk").then(walkSeen)]);
-      S.walkAt = at;
+      [t, S.trek] = await Promise.all([same ? S.task : api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/trek").then(trekSeen)]);
+      S.trekAt = at;
       if (mine !== RENDERS) return;
       if (!same) for (const k of [r.task, "*"]) if (stale.get(k) <= seen) stale.delete(k);      // a push that came in during the read stays
       S.node = r.node;
-      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.walk && S.walk.pinned) + "|" + walkHere(r.task) + "|" + JSON.stringify(walkOf(r.task));
+      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.trek && S.trek.pinned) + "|" + trekHere(r.task) + "|" + JSON.stringify(trekOf(r.task));
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
     } else if (r.view === "artefact") {
@@ -798,7 +798,7 @@ async function renderDraw(force, changed) {
       S.node = null;
       await drawRun(r, mine);
     } else if (r.view === "chats") {
-      // A server started with --no-walk answers /api/chats with 403 "chat is off": say so, and not leave the last screen up.
+      // A server started with --no-trek answers /api/chats with 403 "chat is off": say so, and not leave the last screen up.
       const [list, state] = await Promise.all([api("/api/chats").catch(e => /^chat is off/.test(e.message) ? { off: e.message } : Promise.reject(e)), api("/api/state")]);
       if (mine !== RENDERS) return;
       S.chats = list.off ? null : list.chats; S.state = state; syncColour(state); S.node = null;
@@ -808,16 +808,16 @@ async function renderDraw(force, changed) {
       // and a push renders again), since reading it again takes most of a second on a roadmap of many tasks.
       // Not after a write of the page's own since that state was read. The read then redraws only if something changed.
       let drawn = ""; const at = WROTE;
-      if (arrived && S.state && S.walk && S.stateAt === WROTE && S.walkAt === WROTE && !S.inflight) {
+      if (arrived && S.state && S.trek && S.stateAt === WROTE && S.trekAt === WROTE && !S.inflight) {
         S.node = null; drawTasks(); chrome(r); scrollBack(where);
-        drawn = JSON.stringify([S.state, S.walk, S.archived]);
+        drawn = JSON.stringify([S.state, S.trek, S.archived]);
       }
-      const [state, walk, arc] = await Promise.all([api("/api/state"), api("/api/walk").then(walkSeen), showArchived() ? api("/api/archived") : null]);
+      const [state, trek, arc] = await Promise.all([api("/api/state"), api("/api/trek").then(trekSeen), showArchived() ? api("/api/archived") : null]);
       if (mine !== RENDERS) return;
       if (S.inflight) { S.stale = true; return; }   // a move is being written: its reply (or undo) draws the list
       S.archived = arc ? arc.items : []; S.archivedCount = state.archived_count;   // the archived rows are not in S.state, so no move or push touches them
-      S.state = state; S.walk = walk; S.stateAt = S.walkAt = at; syncColour(state);
-      S.node = null; if (JSON.stringify([state, walk, S.archived]) !== drawn) drawTasks(true);
+      S.state = state; S.trek = trek; S.stateAt = S.trekAt = at; syncColour(state);
+      S.node = null; if (JSON.stringify([state, trek, S.archived]) !== drawn) drawTasks(true);
     }
     chrome(r);
     if (r.view === "task") refreshNeeds();
@@ -897,28 +897,28 @@ function chrome(r) {
   if (open) drawSheet();
 }
 
-/* ── the walk: start it, stop it, choose where it goes next ─────────────────────── */
-// A walk that is running, however it started, ends the numbers typed in the box: after it they show its own again.
-function walkSeen(w) { if (w && w.on) S.walkDraft = null; return w; }
-function walkHtml() {
-  const w = S.walk;
+/* ── the trek: start it, stop it, choose where it goes next ─────────────────────── */
+// A trek that is running, however it started, ends the numbers typed in the box: after it they show its own again.
+function trekSeen(w) { if (w && w.on) S.trekDraft = null; return w; }
+function trekHtml() {
+  const w = S.trek;
   if (!w || !w.enabled) return "";
   const mine = (w.chains || []).filter(c => c.live);
   const chain = mine[0];
   const names = mine.map(c => esc(c.item)).join(", ");
   const at = (w.parallel > 1 ? `, ${w.parallel} at a time` : "") + (w.stop_on_limit ? ", stops at a usage limit" : "");
   const state = w.on
-    ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : w.pending ? `<span class="hold">Waiting for a task</span>` : `<span class="on">Walking</span>`)
-    : "Walk is off";
+    ? (w.hold ? `<span class="hold">Holding ${Math.ceil(w.hold / 60)} min for a usage limit</span>` : w.pending ? `<span class="hold">Waiting for a task</span>` : `<span class="on">Trekking</span>`)
+    : "Trek is off";
   const line2 = w.on
     ? `${w.used} of ${w.budget} sessions used${at}${mine.length > 1 ? `. Now ${names}.` : chain ? `. Now ${esc(chain.item)}, ${esc(chain.progress)}.` : w.pending ? ". Nothing is workable; it takes the next task that appears." : "."}`
-    : (w.note ? `Stopped: ${esc(w.note)}.` : `A walk works the tasks depth-first, under a budget of sessions.`);
+    : (w.note ? `Stopped: ${esc(w.note)}.` : `A trek works the tasks depth-first, under a budget of sessions.`);
   const auto = w.auto ? `Automatic: ${esc(w.auto)}` : "Automatic: nothing is workable";
   const options = [`<option value="">${auto}</option>`].concat(w.candidates.map(c =>
     `<option value="${esc(c.id)}" ${w.pinned === c.id ? "selected" : ""}>${esc(c.id)}  ${esc(c.goal)}</option>`)).join("");
   const agents = (w.agents || []).map(a => `<option value="${esc(a)}" ${w.agent === a ? "selected" : ""}>${esc(a)}</option>`).join("");
   const others = w.live.filter(c => !mine.some(m => m.item === c.item));
-  // What a chain of this walk runs on is what it started with and recorded, not the Agent and model fields above,
+  // What a chain of this trek runs on is what it started with and recorded, not the Agent and model fields above,
   // which are the settings for the next chain: kind of session, agent, then the model ("its own" when the agent is told none).
   const runsOn = c => !c.agent ? "" : !c.kind ? `<span class="muted"> · ${esc(c.agent)}</span>`
     : `<span class="muted"> · ${esc(c.kind)} · ${esc(c.agent)}, ${c.model ? esc(c.model) : "its own model"}</span>`;
@@ -927,19 +927,19 @@ function walkHtml() {
   const events = w.events.length ? `<details><summary class="cap">Activity</summary><ul class="ev">${w.events.slice(0, 6).map(e =>
     `<li><time>${esc(e.age)}</time><span>${esc(e.text)}</span></li>`).join("")}</ul></details>` : "";
   const brief = w.on ? `${w.used}/${w.budget} sessions${names ? ", " + names : ""}` : `next ${esc(w.pinned || w.auto || "none")} · ${esc(w.agent)}`;
-  const open = S.walkOpen === true;
-  return `<details class="walk" id="walkbox" ${open ? "open" : ""}><summary><span class="cap">Walk</span><span class="state">${state}</span><span class="brief">${brief}</span><span class="chev" aria-hidden="true"></span></summary>
+  const open = S.trekOpen === true;
+  return `<details class="trek" id="trekbox" ${open ? "open" : ""}><summary><span class="cap">Trek</span><span class="state">${state}</span><span class="brief">${brief}</span><span class="chev" aria-hidden="true"></span></summary>
     <p class="line2">${line2}</p>
     <div class="row2"><label for="nextsel">Next</label><select id="nextsel">${options}</select></div>
     <div class="row2"><label for="agentsel">Agent</label><select id="agentsel">${agents}</select></div>
     ${modelFields(w)}
-    ${w.on ? "" : walkFields()}
-    <div class="row2 act"><span></span>${w.on ? `<button class="btn" data-act="walkstop">Stop walk</button>` : `<button class="btn primary" data-act="walkstart">Start walk</button>`}</div>
-    ${w.on ? "" : `<p class="line2" id="walkhow">The budget is sessions over the whole walk, shared by the chains that run at once on separate branches. Sessions run on this machine with the agent's permission prompts off.</p>`}
+    ${w.on ? "" : trekFields()}
+    <div class="row2 act"><span></span>${w.on ? `<button class="btn" data-act="trekstop">Stop trek</button>` : `<button class="btn primary" data-act="trekstart">Start trek</button>`}</div>
+    ${w.on ? "" : `<p class="line2" id="trekhow">The budget is sessions over the whole trek, shared by the chains that run at once on separate branches. Sessions run on this machine with the agent's permission prompts off.</p>`}
     ${chains}${events}</details>`;
 }
 async function setAgent(agent) {
-  try { S.walk = await api("/api/walk/agent", { agent }); toast("The next chain uses " + agent + "."); drawTasks(); }
+  try { S.trek = await api("/api/trek/agent", { agent }); toast("The next chain uses " + agent + "."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
 /* The model the next chain's agent runs on, per role: plan (the first session on a task, the critic and the review)
@@ -966,7 +966,7 @@ function modelFields(w) {
   return field("plan", "Plan model") + field("implement", "Implement model");
 }
 async function setModel(role, model) {
-  try { S.walk = await api("/api/walk/model", { role, model }); if (S.modelOther) S.modelOther[role] = false; toast(model ? "The " + role + " model is " + model + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }
+  try { S.trek = await api("/api/trek/model", { role, model }); if (S.modelOther) S.modelOther[role] = false; toast(model ? "The " + role + " model is " + model + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
 // "Other" picked: show the text box and put the caret in it.
@@ -974,39 +974,39 @@ function openModelOther(role) { S.modelOther = Object.assign({}, S.modelOther, {
 // The text box left empty: nothing is kept, and the box closes on the model that was.
 function closeModelOther(role) { if (S.modelOther) S.modelOther[role] = false; drawTasks(); }
 async function setNext(item) {
-  try { S.walk = await api("/api/walk/pin", { item: item || null }); toast(item ? "Next goes to " + item + "." : "Next is automatic."); drawTasks(); }
+  try { S.trek = await api("/api/trek/pin", { item: item || null }); toast(item ? "Next goes to " + item + "." : "Next is automatic."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
-/* The walk's budget and chains sit in the box beside Next and Agent, and Start walk takes them from there.
-   What is typed is kept in S.walkDraft, since a push redraws the list and the box with it. */
-function walkFields() {
-  const v = S.walkDraft || {};
-  return `<div class="row2"><label for="bud">Budget</label><span class="pair"><input type="number" id="bud" min="1" max="500" value="${esc(v.budget ?? S.walk.budget)}" required aria-describedby="walkhow">
-      <label for="par">Chains</label><input type="number" id="par" min="1" max="16" value="${esc(v.parallel ?? (S.walk.parallel || 1))}" required aria-describedby="walkhow"></span></div>
-    <div class="row2"><label for="stoplim">Limit</label><span class="pair"><input type="checkbox" id="stoplim" ${v.stop ? "checked" : ""} aria-describedby="walkhow"><label for="stoplim">Stop the walk if the agent hits its usage limit</label></span></div>`;
+/* The trek's budget and chains sit in the box beside Next and Agent, and Start trek takes them from there.
+   What is typed is kept in S.trekDraft, since a push redraws the list and the box with it. */
+function trekFields() {
+  const v = S.trekDraft || {};
+  return `<div class="row2"><label for="bud">Budget</label><span class="pair"><input type="number" id="bud" min="1" max="500" value="${esc(v.budget ?? S.trek.budget)}" required aria-describedby="trekhow">
+      <label for="par">Chains</label><input type="number" id="par" min="1" max="16" value="${esc(v.parallel ?? (S.trek.parallel || 1))}" required aria-describedby="trekhow"></span></div>
+    <div class="row2"><label for="stoplim">Limit</label><span class="pair"><input type="checkbox" id="stoplim" ${v.stop ? "checked" : ""} aria-describedby="trekhow"><label for="stoplim">Stop the trek if the agent hits its usage limit</label></span></div>`;
 }
-/* Start walk acts at once, with the numbers in the box; Start and Stop both fold the box away, as the walk's state is in its summary. */
+/* Start trek acts at once, with the numbers in the box; Start and Stop both fold the box away, as the trek's state is in its summary. */
 // The button that was pressed leaves with the open box, so focus goes to the box's summary, where its state now reads.
-function collapseWalk() { S.walkOpen = false; try { sessionStorage.setItem("walkOpen", "0"); } catch (e) {} drawTasks(); $("#walkbox > summary")?.focus(); }
-let walkStarting = false;   // a second click or Enter while the request is out must not send another
-async function walkStart() {
+function collapseTrek() { S.trekOpen = false; try { sessionStorage.setItem("trekOpen", "0"); } catch (e) {} drawTasks(); $("#trekbox > summary")?.focus(); }
+let trekStarting = false;   // a second click or Enter while the request is out must not send another
+async function trekStart() {
   const bud = $("#bud"), par = $("#par");
-  if (walkStarting || !bud || !par || !bud.reportValidity() || !par.reportValidity()) return;
-  walkStarting = true;
+  if (trekStarting || !bud || !par || !bud.reportValidity() || !par.reportValidity()) return;
+  trekStarting = true;
   try {
-    S.walk = await api("/api/walk/start", { budget: parseInt(bud.value, 10), parallel: parseInt(par.value, 10), stop_on_limit: !!$("#stoplim")?.checked });
-    S.walkDraft = null; toast("Walking."); collapseWalk();
+    S.trek = await api("/api/trek/start", { budget: parseInt(bud.value, 10), parallel: parseInt(par.value, 10), stop_on_limit: !!$("#stoplim")?.checked });
+    S.trekDraft = null; toast("Trekking."); collapseTrek();
   } catch (e) { toast(e.message, true); }
-  finally { walkStarting = false; }
+  finally { trekStarting = false; }
 }
-async function walkStop() {
-  try { S.walk = await api("/api/walk/stop", {}); collapseWalk(); }
+async function trekStop() {
+  try { S.trek = await api("/api/trek/stop", {}); collapseTrek(); }
   catch (e) { toast(e.message, true); }
 }
 function chainStopForm(item) {
   form(`<h3>Stop ${esc(item)}'s chain?</h3>
-    <p class="muted" style="margin:0">It stops after the run it is in, and if a walk is running it turns off too, so every other chain of the walk ends after its run. The next session picks up the node's uncommitted work.</p>${buttons("Stop chain", true)}`,
-    async () => { S.walk = await api("/api/chain/stop", { item }); toast("Told it to stop."); drawTasks(); });
+    <p class="muted" style="margin:0">It stops after the run it is in, and if a trek is running it turns off too, so every other chain of the trek ends after its run. The next session picks up the node's uncommitted work.</p>${buttons("Stop chain", true)}`,
+    async () => { S.trek = await api("/api/chain/stop", { item }); toast("Told it to stop."); drawTasks(); });
 }
 
 /* ── the task list ──────────────────────────────────────────────────────────── */
@@ -1128,7 +1128,7 @@ function runsHtml(t) {
 }
 function drawChatsOff(why) {
   $("#view").className = "col";
-  $("#view").innerHTML = `<p class="hint" id="chats-off" role="status">Chat is off: ${esc(why.replace(/^chat is off: /, ""))}. Restart the server without --no-walk to start or read a chat.</p>`
+  $("#view").innerHTML = `<p class="hint" id="chats-off" role="status">Chat is off: ${esc(why.replace(/^chat is off: /, ""))}. Restart the server without --no-trek to start or read a chat.</p>`
     + `<div class="actions top-actions"><button class="btn" data-act="all">Back to the tasks</button></div>`;
 }
 function drawChats() {
@@ -1149,30 +1149,30 @@ function drawChats() {
     + (rows || `<p class="hint">${ended.length ? "Nothing in progress." : "No conversations yet."}</p>`)
     + (ended.length ? `<details class="endedchats"${S.endedOpen ? " open" : ""}><summary>Ended (${ended.length})</summary>${ended.map(row).join("")}</details>` : "");
 }
-// Which task a chain is running on, and which the walk takes next: the same two tags on the list row and on the task's own screen.
-const walkTags = it => (it.running ? `<span class="tag settled">running ${esc(it.running)}</span>` : "") + (it.next ? `<span class="tag settled">next</span>` : "");
-// The task screen has no list row, so it reads the same two facts from the walk it fetches beside the task.
-const walkOf = id => ({ running: ((S.walk && S.walk.live) || []).filter(c => c.item === id).map(c => c.progress)[0] || "", next: !!S.walk && S.walk.next === id });
+// Which task a chain is running on, and which the trek takes next: the same two tags on the list row and on the task's own screen.
+const trekTags = it => (it.running ? `<span class="tag settled">running ${esc(it.running)}</span>` : "") + (it.next ? `<span class="tag settled">next</span>` : "");
+// The task screen has no list row, so it reads the same two facts from the trek it fetches beside the task.
+const trekOf = id => ({ running: ((S.trek && S.trek.live) || []).filter(c => c.item === id).map(c => c.progress)[0] || "", next: !!S.trek && S.trek.next === id });
 const pinSizes = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
-  const root = document.documentElement.style, box = $("#walkbox");
+  const root = document.documentElement.style, box = $("#trekbox");
   root.setProperty("--bar-h", $("#bar").getBoundingClientRect().height + "px");
   if (box) root.setProperty("--pin-h", box.getBoundingClientRect().height + "px");
 }) : null;
 function typingInBox() {
   const a = document.activeElement;
-  if (!a || !a.closest("#walkbox") || !S.walk || !S.walk.enabled) return false;
-  return ((a.id === "bud" || a.id === "par") && !S.walk.on) || !!(a.dataset && a.dataset.other);
+  if (!a || !a.closest("#trekbox") || !S.trek || !S.trek.enabled) return false;
+  return ((a.id === "bud" || a.id === "par") && !S.trek.on) || !!(a.dataset && a.dataset.other);
 }
 function drawTasks(push) {
   const had = findEnter();
-  const boxKey = document.activeElement?.closest?.("#walkbox") ? focusKey(document.activeElement) : null;     // a draw replaces the box: focus goes back to its control
+  const boxKey = document.activeElement?.closest?.("#trekbox") ? focusKey(document.activeElement) : null;     // a draw replaces the box: focus goes back to its control
   const items = S.state.items;
   // A push (drawTasks(true)) redraws the list, and a redrawn number field puts the caret back at its start: digits typed after the push
   // would land in front of those before it. While one has focus the box stays as it is, and is drawn once focus leaves.
-  const held = push && typingInBox() ? $("#walkbox") : null;
+  const held = push && typingInBox() ? $("#trekbox") : null;
   S.boxHeld = !!held;
   const table = !S.reorder && tableWide() && listStyle() === "table";
-  let html = held ? "" : walkHtml();
+  let html = held ? "" : trekHtml();
   if (!S.reorder && tableWide()) html += `<div class="actions listopt"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
   if (table) html += `<div class="tblhead" aria-hidden="true"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>`;
   // The list is drawn upside down: the last task in the walk order is the top row, so the walk climbs the page. A break
@@ -1188,7 +1188,7 @@ function drawTasks(push) {
     const inner = `<span class="iid">${iidHtml(it.id)}</span>
       <span class="body">${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span>
         <span class="meta"><span class="st ${esc(it.status)}">${esc(it.status)}</span>
-          ${walkTags(it)}${draft ? `<span class="tag draft">draft</span>` : ""}${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}
+          ${trekTags(it)}${draft ? `<span class="tag draft">draft</span>` : ""}${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}
           ${it.rev ? `<span class="tag assumption">${esc(it.rev)}</span>` : ""}
           ${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}
           ${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}
@@ -1207,7 +1207,7 @@ function drawTasks(push) {
         + cell("Branch", (it.pr ? "pull request, " : it.pr_ready ? "ready to open a pull request, " : "") + br.join(" "),
             `${it.pr ? `<a class="tag" href="${esc(it.pr)}" target="_blank" rel="noopener">pull request</a>` : it.pr_ready ? `<span class="tag attention">ready to open a pull request</span>` : ""}`
             + `${it.ahead ? `<span class="tag">${it.ahead} not on ${esc(it.base)}</span>` : ""}${it.uncommitted ? `<span class="tag">${it.ahead ? "+ " : ""}uncommitted ${it.uncommitted === "log" ? "log entries" : "edits"}, not on ${esc(it.base)}</span>` : ""}`)
-        + cell("Run", "", walkTags(it));
+        + cell("Run", "", trekTags(it));
       const row = `<span class="iid">${iidHtml(it.id)}</span><span class="goal" title="${esc(it.goal)}">${tagHtml(it.id)}${esc(it.goal)}</span><span class="cells">${cells}</span>`
         + (it.status !== "open" && it.status !== "done" && it.why ? `<span class="why">${esc(it.why)}</span>` : "");
       const lead = it.archivable
@@ -1219,7 +1219,7 @@ function drawTasks(push) {
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       const whole = [it.id + " " + it.goal, it.status, it.waiting_on && "waiting on " + it.waiting_on, it.blocked_by && "held by " + it.blocked_by, it.pr_ready && "ready to open a pull request", it.rev, it.status !== "open" && it.status !== "done" && it.why].filter(Boolean).join(", ");   // the row clips its goal, tags and reason; the title has all of it
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" title="${esc(whole)}" style="${style}">${inner}
-        <span class="moves">${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break below" : "Put a break below")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break below a plain one, which a walk passes:" : "Make the break below a stop break, which ends a walk that waited at it:")}</span>${grip}</div>`;
+        <span class="moves">${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break below" : "Put a break below")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break below a plain one, which a trek passes:" : "Make the break below a stop break, which ends a trek that waited at it:")}</span>${grip}</div>`;
     } else if (it.archivable) {
       const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;
@@ -1244,7 +1244,7 @@ function drawTasks(push) {
   findLeave(had);
   if (boxKey && (!document.activeElement || document.activeElement === document.body)) { const el = (boxKey.sel && $(boxKey.sel)) || document.querySelectorAll(FOCUSABLE)[boxKey.at]; if (el) el.focus({ preventScroll: true }); }
   const kept = on && $(`#view button.item[data-id="${CSS.escape(on)}"]`); if (kept) kept.focus({ preventScroll: true });   // the keys' place survives a redraw
-  if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
+  if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#trekbox")) pinSizes.observe($("#trekbox")); }
   const row = S.moved && $(`[data-row="${CSS.escape(S.moved)}"]`);
   if (row) row.scrollIntoView({ block: "nearest" });
 }
@@ -1367,9 +1367,9 @@ document.addEventListener("pointerdown", e => {
   for (const x of DRAG.span) rowOf(x).classList.add("dragging");
   // near the top or bottom edge the page scrolls under the pointer, so a long list can be crossed in one drag
   DRAG.timer = setInterval(() => {
-    // the pinned Walk box lies over the top of the list: the top edge starts under it, and both edges give way to the strip it
+    // the pinned Trek box lies over the top of the list: the top edge starts under it, and both edges give way to the strip it
     // leaves (open on a short screen that is under 200px), so some y inside the strip always holds the list still
-    const box = $("#walkbox")?.getBoundingClientRect().bottom ?? 0, strip = innerHeight - Math.max(90, box);
+    const box = $("#trekbox")?.getBoundingClientRect().bottom ?? 0, strip = innerHeight - Math.max(90, box);
     const room = Math.max(90, box + (box ? Math.min(30, strip / 3) : 0)), bottom = innerHeight - Math.min(130, strip / 3);
     const by = DRAG.y < room ? -12 : DRAG.y > bottom ? 12 : 0;
     if (by) { scrollBy(0, by); dragUpdate(); }
@@ -1405,8 +1405,8 @@ function visibleRows(t) {
   const hidden = r => { let p = r.parent; while (p && byId[p]) { if (folded.has(p)) return true; p = byId[p].parent; } return false; };
   return t.rows.filter(r => r.kind !== "node" || !hidden(r));
 }
-// The walk may go to this task, so its screen offers "Walk here next": a node added to a finished task reopens it.
-const walkHere = id => !!(S.walk && S.walk.enabled && S.walk.candidates.some(c => c.id === id));
+// The trek may go to this task, so its screen offers "Trek here next": a node added to a finished task reopens it.
+const trekHere = id => !!(S.trek && S.trek.enabled && S.trek.candidates.some(c => c.id === id));
 /* The mark before a node's id, so its state is not told by the rule's colour alone: complete, started (a session has
    begun to change code for it), not begun. A node the work has left (refuted, parked) has none; its chip says. */
 const PROGRESS_LABEL = { done: ["✓", "complete"], started: ["", "started"], open: ["", "not started"] };
@@ -1415,20 +1415,20 @@ function drawTask() {
   const t = S.task, folded = S.folded[t.id] || new Set();
   let html = `<div class="head"><h2>${inline(t.goal)}</h2>
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
-    ${(tags => tags ? `<p class="walktags">${tags}</p>` : "")(walkTags(walkOf(t.id)))}</div>
+    ${(tags => tags ? `<p class="trektags">${tags}</p>` : "")(trekTags(trekOf(t.id)))}</div>
     ${t.archived ? `<p class="hint archived-note" role="note">Archived: this task is kept for reading. Its files are under <code>.dfs/archive/archived</code>: move <code>items/</code> back to <code>.dfs/items</code> and <code>archive/</code> to <code>.dfs/archive/items</code> to work on it again.</p>
     <div class="actions"><button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button></div>` : `<div class="actions">
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>
       <button class="btn" data-act="edittask">Edit task</button>
-      ${t.status !== "done" ? `<button class="btn" data-act="draft" data-draft="${t.draft ? "0" : "1"}" aria-pressed="${t.draft}" title="${t.draft ? "The walk passes it over; Ready puts it back in its turn" : "Mark it a draft: the walk passes it over until it is ready"}">${t.draft ? "Draft: mark ready" : "Mark as draft"}</button>` : ""}
+      ${t.status !== "done" ? `<button class="btn" data-act="draft" data-draft="${t.draft ? "0" : "1"}" aria-pressed="${t.draft}" title="${t.draft ? "The trek passes it over; Ready puts it back in its turn" : "Mark it a draft: the trek passes it over until it is ready"}">${t.draft ? "Draft: mark ready" : "Mark as draft"}</button>` : ""}
       ${t.pr_ready ? `<button class="btn primary" data-act="openpr" title="Push the branch and open its pull request with gh">Open PR</button>` : ""}
       ${t.pr ? `<a class="btn" href="${esc(t.pr)}" target="_blank" rel="noopener">Pull request</a>` : ""}
       <button class="btn" data-act="deletetask">Delete task</button>
       <button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button>
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
-      ${walkHere(t.id) ? `<button class="btn" data-act="walkhere" data-item="${esc(t.id)}">${S.walk.pinned === t.id ? "Walk goes here next" : "Walk here next"}</button>` : ""}
+      ${trekHere(t.id) ? `<button class="btn" data-act="trekhere" data-item="${esc(t.id)}">${S.trek.pinned === t.id ? "Trek goes here next" : "Trek here next"}</button>` : ""}
     </div>`}${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
   for (const r of visibleRows(t)) {
     if (r.kind === "section") {
@@ -1682,8 +1682,8 @@ function verdictHelp() {
   const pk = $("#parkbox");
   if (pk) { const on = !!v && v.value === "confirmed"; pk.hidden = !on; pk.querySelector("input").required = on; }
 }
-try { const w = sessionStorage.getItem("walkOpen"); if (w !== null) S.walkOpen = w === "1"; } catch (e) {}
-document.addEventListener("toggle", e => { if (e.target.id !== "walkbox") return; S.walkOpen = e.target.open; try { sessionStorage.setItem("walkOpen", e.target.open ? "1" : "0"); } catch (x) {} }, true);
+try { const w = sessionStorage.getItem("trekOpen"); if (w !== null) S.trekOpen = w === "1"; } catch (e) {}
+document.addEventListener("toggle", e => { if (e.target.id !== "trekbox") return; S.trekOpen = e.target.open; try { sessionStorage.setItem("trekOpen", e.target.open ? "1" : "0"); } catch (x) {} }, true);
 document.addEventListener("change", e => { if (e.target.name === "verdict") verdictHelp(); });
 async function wrote(res, msg) { S.task = res.task; S.sig = ""; toast(msg); await render(true); }
 
@@ -1754,7 +1754,7 @@ function correctForm(id) {
   verdictHelp();
 }
 /* ── chat: basic, one agent turn at a time ─────────────────────────────────── */
-const chatOn = () => !!(S.walk && S.walk.enabled);
+const chatOn = () => !!(S.trek && S.trek.enabled);
 const CHAT = { scope: null, busyT: null, last: "", fresh: false, follow: false };
 const chatKey = () => "chat:" + CHAT.scope;
 // What was typed and not sent is kept for the tab, per chat, so closing the dialog by accident (or Back) loses nothing.
@@ -2007,7 +2007,7 @@ function accountForm() {
     else {
       if (st.phase === "done") h += `<p style="margin:0">Signed in. Runs and chats started from now on use this account.</p>`;
       if (st.phase === "failed") h += `<p class="warn" style="margin:0" id="acct-error">${esc(st.error)}</p>`;
-      if (st.enabled === false) h += `<p class="warn" style="margin:0" id="acct-off">Signing in is off: this server was started with --no-walk.</p>`;
+      if (st.enabled === false) h += `<p class="warn" style="margin:0" id="acct-off">Signing in is off: this server was started with --no-trek.</p>`;
       else h += `<div class="row-btns"><button class="btn primary" type="button" id="acct-start">${st.account && st.account.loggedIn ? "Sign in to another account" : "Sign in"}</button></div>`;
     }
     const code = $("#acct-code", box), kept = code ? code.value : "";
@@ -2030,7 +2030,7 @@ function newTaskForm() {
   form(`<h3>Add a task</h3>
     <div><label for="nn">Name</label>${line("nn", "name", "", ' placeholder="A few words"')}</div>
     <div><label for="ng">Goal, in your own words: what done looks like, and why</label><textarea id="ng" name="goal"></textarea></div>
-    <div><label><input type="checkbox" id="ndr" name="draft"> Draft: the walk passes it over until you mark it ready; pin it or run it to work it now</label></div>${buttons("Add task")}`,
+    <div><label><input type="checkbox" id="ndr" name="draft"> Draft: the trek passes it over until you mark it ready; pin it or run it to work it now</label></div>${buttons("Add task")}`,
     async fd => { const res = await api("/api/new", { name: fd.get("name"), goal: fd.get("goal"), draft: fd.get("draft") === "on" }); toast("Added " + res.added + "."); S.sig = ""; await render(true); });
 }
 function editTaskForm() {
@@ -2149,11 +2149,11 @@ document.addEventListener("click", e => {
     chatend: async () => { try { CHAT.last = ""; chatDraw(await api("/api/chat/end", { scope: CHAT.scope })); toast("Chat ended."); } catch (e) { toast(e.message, true); } },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
-    walkstart: walkStart, walkstop: walkStop,
+    trekstart: trekStart, trekstop: trekStop,
     chainstop: () => chainStopForm(d.item),
-    draft: async () => { try { const on = d.draft === "1"; wrote(await api("/api/draft", { task: S.task.id, draft: on }), on ? S.task.id + " is a draft: the walk passes it over." : S.task.id + " is ready: the walk takes it in its turn."); } catch (e) { toast(e.message, true); } },
+    draft: async () => { try { const on = d.draft === "1"; wrote(await api("/api/draft", { task: S.task.id, draft: on }), on ? S.task.id + " is a draft: the trek passes it over." : S.task.id + " is ready: the trek takes it in its turn."); } catch (e) { toast(e.message, true); } },
     openpr: async () => { if (!confirm("Push dfs/" + S.task.id + " and open its pull request with gh?")) return; try { wrote(await api("/api/open_pr", { task: S.task.id }), "Opened the pull request for " + S.task.id + "."); } catch (e) { toast(e.message, true); } },
-    walkhere: async () => { try { S.walk = await api("/api/walk/pin", { item: d.item }); toast(S.walk.pinned ? "The walk goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
+    trekhere: async () => { try { S.trek = await api("/api/trek/pin", { item: d.item }); toast(S.trek.pinned ? "The trek goes to " + d.item + " next." : "Next is automatic."); S.sig = ""; render(true); } catch (e) { toast(e.message, true); } },
   }[d.act] || (() => {}))();
 });
 // The bar's All and Reorder set how the list is drawn; from another screen they take you to it.
@@ -2314,17 +2314,17 @@ matchMedia("(min-width: 900px)").addEventListener("change", () => render(true));
 // is not redrawn under the pointer; and not between the press and the release of a tap on one of its buttons, which
 // the draw would swallow.
 document.addEventListener("focusout", e => setTimeout(function catchUp() {
-  const box = $("#view #walkbox");
+  const box = $("#view #trekbox");
   if (!S.boxHeld || !box || typingInBox() || (e.relatedTarget && box.contains(e.relatedTarget))) return;
-  if ($("#walkbox :active")) return void setTimeout(catchUp, 200);
-  S.boxHeld = false; box.outerHTML = walkHtml();
-  if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#walkbox")) pinSizes.observe($("#walkbox")); }
+  if ($("#trekbox :active")) return void setTimeout(catchUp, 200);
+  S.boxHeld = false; box.outerHTML = trekHtml();
+  if (pinSizes) { pinSizes.disconnect(); pinSizes.observe($("#bar")); if ($("#trekbox")) pinSizes.observe($("#trekbox")); }
 }, 0));
 document.addEventListener("input", e => {
-  if (e.target.id === "bud" || e.target.id === "par" || e.target.id === "stoplim") S.walkDraft = Object.assign({}, S.walkDraft, { budget: $("#bud").value, parallel: $("#par").value, stop: $("#stoplim").checked });
+  if (e.target.id === "bud" || e.target.id === "par" || e.target.id === "stoplim") S.trekDraft = Object.assign({}, S.trekDraft, { budget: $("#bud").value, parallel: $("#par").value, stop: $("#stoplim").checked });
 });
 document.addEventListener("keydown", e => {
-  if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); walkStart(); }
+  if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); trekStart(); }
   else if (e.key === "Enter" && e.target.dataset && e.target.dataset.other) { e.preventDefault(); e.target.dispatchEvent(new Event("change", { bubbles: true })); }
   else if (e.key === "Escape" && e.target.dataset && e.target.dataset.other) closeModelOther(e.target.dataset.role);
 });

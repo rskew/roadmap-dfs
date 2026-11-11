@@ -14,7 +14,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
 const within = (p, what, ms = 8000) => Promise.race([p, new Promise((_, no) => setTimeout(() => no(new Error(`${what}: never happened in ${ms} ms`)), ms))]);
 function same(a, b, msg) { assert(JSON.stringify(a) === JSON.stringify(b), `${msg}: ${JSON.stringify(a)} != ${JSON.stringify(b)}`); }
 // a list render replaces the rows, and a row measured in that instant has no box: ask again
-// The page measures the bar and the Walk box into --bar-h and --pin-h once it has drawn them; the pin flows start from there.
+// The page measures the bar and the Trek box into --bar-h and --pin-h once it has drawn them; the pin flows start from there.
 const pinned = page => page.waitForFunction(() => { const s = document.documentElement.style; return parseFloat(s.getPropertyValue("--bar-h")) > 0 && parseFloat(s.getPropertyValue("--pin-h")) > 0; });
 async function boxOf(page, sel) { for (let i = 0; i < 40; i++) { const e = await page.$(sel); const r = e && await e.boundingBox(); if (r) return r; await page.waitForTimeout(50); } throw new Error("no box for " + sel); }
 
@@ -74,7 +74,7 @@ async function open(browser, opts, scheme = "light") {
   page.on("pageerror", e => errors.push(String(e)));
   // What an artefact's own page logs is not the web page's: the fixture's tries the API on purpose, from the
   // opaque origin `null`, and the browser reports the refusal against the API's address.
-  const theirs = m => /\/artefacts\//.test(m.location().url || "") || /origin 'null'/.test(m.text()) || /\/api\/walk\/start$/.test(m.location().url || "");
+  const theirs = m => /\/artefacts\//.test(m.location().url || "") || /origin 'null'/.test(m.text()) || /\/api\/trek\/start$/.test(m.location().url || "");
   page.on("console", m => { if (m.type() === "error" && !theirs(m)) errors.push(m.text()); });
   await page.goto(URL_);
   await page.waitForSelector(".item");
@@ -95,8 +95,8 @@ async function toList(page) {
   await page.waitForSelector(".item");
 }
 async function dialog(page) { await page.waitForSelector("dialog[open]"); }
-async function openWalk(page) {
-  if (!(await page.$("#walkbox[open]"))) await page.click("#walkbox summary");
+async function openTrek(page) {
+  if (!(await page.$("#trekbox[open]"))) await page.click("#trekbox summary");
   await page.waitForSelector("#nextsel");
 }
 
@@ -173,8 +173,8 @@ const FLOWS = {
     same(await page.evaluate(() => window.__dp.filter(([k]) => /^Arrow(Left|Right)$/.test(k))), [["ArrowLeft", true], ["ArrowRight", true]], "Left and Right that fold or unfold do not also scroll the page");
     // A select on the list keeps its own arrow keys and type-ahead: they change its option, not the focused task.
     await page.goto(URL_); await page.waitForSelector(".item");
-    await openWalk(page);
-    assert((await page.$$("#nextsel option")).length > 1, "the walk box offers more than one Next");
+    await openTrek(page);
+    assert((await page.$$("#nextsel option")).length > 1, "the trek box offers more than one Next");
     await page.focus("#nextsel");
     const sel = () => page.$eval("#nextsel", e => e.value);
     const first = await sel();
@@ -752,7 +752,7 @@ const FLOWS = {
     assert(await page.locator("dialog[open]").count() === 0, "and no dialog");
     const frame = page.frames().find(f => f.url().includes("/artefacts/c0ffee-choose.html"));
     assert(frame, "the named page is the frame");
-    same(await frame.evaluate(() => fetch("/api/walk/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+    same(await frame.evaluate(() => fetch("/api/trek/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
       .then(r => "reached " + r.status, () => "blocked")), "blocked", "the page still cannot reach the API");
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });   // for a node's screenshot
     await page.evaluate(() => postMessage({ dfs: "answered" }, "*"));
@@ -1076,15 +1076,15 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
-  // The walk, through the controls the page offers (a recording walker stands behind them).
-  async walk(b) {
+  // The trek, through the controls the page offers (a recording trekker stands behind them).
+  async trek(b) {
     const { page, errors } = await open(b, PHONE);
-    await openWalk(page);
+    await openTrek(page);
     await page.selectOption("#nextsel", "W2");
     await page.selectOption("#agentsel", "codex");
-    // Every field is in the box: the budget and chains beside Next and Agent. Start walk still asks, with nothing to fill in.
-    await page.fill("#walkbox #bud", "7");
-    await page.fill("#walkbox #par", "2");
+    // Every field is in the box: the budget and chains beside Next and Agent. Start trek still asks, with nothing to fill in.
+    await page.fill("#trekbox #bud", "7");
+    await page.fill("#trekbox #par", "2");
     await page.evaluate(() => { document.activeElement.blur(); drawTasks(); });
     same(await page.$eval("#bud", el => el.value), "7", "a redraw of the list keeps what was typed in the box");
     // A push while a number is being typed leaves the field alone: the next digit goes after the last, not in front of it.
@@ -1093,58 +1093,58 @@ const FLOWS = {
     await page.keyboard.type("2");
     same(await page.$eval("#bud", el => el.value), "12", "a push between two digits does not reorder them");
     // What the held box missed is drawn once focus leaves the field.
-    await page.evaluate(() => { S.walk.agent = "held-agent"; drawTasks(true); });
-    assert(!/held-agent/.test(await page.textContent("#walkbox")), "the box is held while a number is typed in it");
+    await page.evaluate(() => { S.trek.agent = "held-agent"; drawTasks(true); });
+    assert(!/held-agent/.test(await page.textContent("#trekbox")), "the box is held while a number is typed in it");
     await page.evaluate(() => document.activeElement.blur());
-    await page.waitForFunction(() => /held-agent/.test(document.querySelector("#walkbox")?.textContent || ""));
+    await page.waitForFunction(() => /held-agent/.test(document.querySelector("#trekbox")?.textContent || ""));
     same(await page.$eval("#bud", el => el.value), "12", "and the draw after it keeps the number");
-    await page.evaluate(() => { S.walk.agent = "codex"; drawTasks(); });
-    await page.fill("#walkbox #bud", "7");
+    await page.evaluate(() => { S.trek.agent = "codex"; drawTasks(); });
+    await page.fill("#trekbox #bud", "7");
     await page.evaluate(() => document.activeElement.blur());
-    // Start walk asks nothing more: the numbers in the box are used at once, and the box folds away.
-    await page.evaluate(() => { walkSeen({ on: true }); });
-    same(await page.evaluate(() => S.walkDraft), null, "a walk running drops what was typed in the box");
-    await page.evaluate(() => { S.walkDraft = { budget: "7", parallel: "2" }; drawTasks(); });
-    assert(/permission prompts/i.test(await page.textContent("#walkhow")), "the box says what a walk does");
+    // Start trek asks nothing more: the numbers in the box are used at once, and the box folds away.
+    await page.evaluate(() => { trekSeen({ on: true }); });
+    same(await page.evaluate(() => S.trekDraft), null, "a trek running drops what was typed in the box");
+    await page.evaluate(() => { S.trekDraft = { budget: "7", parallel: "2" }; drawTasks(); });
+    assert(/permission prompts/i.test(await page.textContent("#trekhow")), "the box says what a trek does");
     for (const id of ["#bud", "#par"]) {
       await page.focus(id); await page.keyboard.press("Enter");
-      await page.waitForFunction(() => /Walking/.test(document.querySelector("#walkbox")?.textContent || ""));
-      assert(!(await page.$("dialog[open]")), `Enter in ${id} starts the walk with no dialog`);
-      assert(!(await page.$("#walkbox[open]")), "starting collapses the box");
-      await page.click("#walkbox summary"); await page.waitForSelector("[data-act=walkstop]");
-      await page.click("[data-act=walkstop]");
-      await page.waitForFunction(() => /Walk is off/.test(document.querySelector("#walkbox")?.textContent || ""));
-      await page.click("#walkbox summary"); await page.waitForSelector("#bud");
-      await page.fill("#walkbox #bud", "7"); await page.fill("#walkbox #par", "2");
+      await page.waitForFunction(() => /Trekking/.test(document.querySelector("#trekbox")?.textContent || ""));
+      assert(!(await page.$("dialog[open]")), `Enter in ${id} starts the trek with no dialog`);
+      assert(!(await page.$("#trekbox[open]")), "starting collapses the box");
+      await page.click("#trekbox summary"); await page.waitForSelector("[data-act=trekstop]");
+      await page.click("[data-act=trekstop]");
+      await page.waitForFunction(() => /Trek is off/.test(document.querySelector("#trekbox")?.textContent || ""));
+      await page.click("#trekbox summary"); await page.waitForSelector("#bud");
+      await page.fill("#trekbox #bud", "7"); await page.fill("#trekbox #par", "2");
     }
-    assert(!(await page.isChecked("#stoplim")), "a walk does not stop at a usage limit unless told to");
+    assert(!(await page.isChecked("#stoplim")), "a trek does not stop at a usage limit unless told to");
     await page.check("#stoplim");
     await page.evaluate(() => { document.activeElement.blur(); drawTasks(); });
     assert(await page.isChecked("#stoplim"), "a redraw keeps the stop-at-a-limit box ticked");
-    await page.click("[data-act=walkstart]");
-    await page.waitForFunction(() => /Walking/.test(document.querySelector("#walkbox")?.textContent || ""));
-    assert(!(await page.$("dialog[open]")), "Start walk opens no dialog");
-    assert(!(await page.$("#walkbox[open]")), "Start walk collapses the box");
-    assert(/7/.test(await page.textContent("#walkbox")), "the budget shows");
-    assert(/2 at a time/.test(await page.textContent("#walkbox")), "the chains went with it");
-    assert(/stops at a usage limit/.test(await page.textContent("#walkbox")), "the walk says it stops at a usage limit");
-    await openWalk(page);
-    await page.click("[data-act=walkstop]");
-    await page.waitForFunction(() => /Walk is off/.test(document.querySelector("#walkbox")?.textContent || ""));
-    assert(!(await page.$("#walkbox[open]")), "Stop walk collapses the box");
-    assert(!/stopped/i.test(await page.textContent("#toast")), "Stop walk shows no toast");
+    await page.click("[data-act=trekstart]");
+    await page.waitForFunction(() => /Trekking/.test(document.querySelector("#trekbox")?.textContent || ""));
+    assert(!(await page.$("dialog[open]")), "Start trek opens no dialog");
+    assert(!(await page.$("#trekbox[open]")), "Start trek collapses the box");
+    assert(/7/.test(await page.textContent("#trekbox")), "the budget shows");
+    assert(/2 at a time/.test(await page.textContent("#trekbox")), "the chains went with it");
+    assert(/stops at a usage limit/.test(await page.textContent("#trekbox")), "the trek says it stops at a usage limit");
+    await openTrek(page);
+    await page.click("[data-act=trekstop]");
+    await page.waitForFunction(() => /Trek is off/.test(document.querySelector("#trekbox")?.textContent || ""));
+    assert(!(await page.$("#trekbox[open]")), "Stop trek collapses the box");
+    assert(!/stopped/i.test(await page.textContent("#toast")), "Stop trek shows no toast");
     same(errors, [], "no page errors");
   },
 
   // A running chain shows what it runs on as it recorded it, not the Agent field (the next chain's): kind of session, agent, model.
-  async walkchain(b) {
+  async trekchain(b) {
     const { page, errors } = await open(b, PHONE);
-    // Set and read in one go, so a poll cannot put the real walk back between the two.
+    // Set and read in one go, so a poll cannot put the real trek back between the two.
     const shown = await page.evaluate(() => {
-      walkSeen({ on: true });
-      S.walk.on = true;
-      S.walk.agent = "codex";
-      const draw = c => { S.walk.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true }, c)]; drawTasks(true); return document.querySelector("#walkbox .chain")?.textContent || ""; };
+      trekSeen({ on: true });
+      S.trek.on = true;
+      S.trek.agent = "codex";
+      const draw = c => { S.trek.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true }, c)]; drawTasks(true); return document.querySelector("#trekbox .chain")?.textContent || ""; };
       return [draw({ agent: "claude", kind: "work", model: "sonnet" }), draw({ agent: "codex", kind: "work", model: "" }), draw({ agent: "claude", kind: "", model: "" }),
               document.querySelector("#agentsel").value];
     });
@@ -1152,57 +1152,57 @@ const FLOWS = {
     assert(/codex, its own model/.test(shown[1]), "an agent told no model says it uses its own: " + shown[1]);
     assert(!/own model/.test(shown[2]) && /claude/.test(shown[2]), "a chain that has not begun a session names no model: " + shown[2]);
     same(shown[3], "codex", "the Agent field still shows the next chain's agent");
-    if (process.env.W151_SHOT) { await openWalk(page); await page.evaluate(() => { S.walk.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true, agent: "claude", kind: "work", model: "sonnet" })]; drawTasks(true); }); await page.screenshot({ path: process.env.W151_SHOT }); }
+    if (process.env.W151_SHOT) { await openTrek(page); await page.evaluate(() => { S.trek.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true, agent: "claude", kind: "work", model: "sonnet" })]; drawTasks(true); }); await page.screenshot({ path: process.env.W151_SHOT }); }
     same(errors, [], "no page errors");
   },
 
-  // The walk's controls stay in reach on a list taller than the screen: the box sticks under the bar, the rows pass under it,
+  // The trek's controls stay in reach on a list taller than the screen: the box sticks under the bar, the rows pass under it,
   // open it scrolls in itself, and a row focus brings back into view is not left under it.
-  async walkpin(b) {
+  async trekpin(b) {
     for (const [name, opts] of [["phone", { viewport: { width: 390, height: 600 }, hasTouch: true, isMobile: true }], ["desktop", { viewport: { width: 1280, height: 500 } }]]) {
     const ctx = await b.newContext(opts);
     const page = await ctx.newPage(); PAGES.push(page);
     const errors = []; page.on("pageerror", e => errors.push(String(e)));
-    await page.goto(URL_); await page.waitForSelector("#walkbox"); await pinned(page);
+    await page.goto(URL_); await page.waitForSelector("#trekbox"); await pinned(page);
     assert(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 200), "the task list is taller than the screen");
     const at = () => page.evaluate(() => {
-      const bar = document.querySelector("#bar").getBoundingClientRect(), box = document.querySelector("#walkbox").getBoundingClientRect();
-      const s = document.querySelector("#walkbox > summary").getBoundingClientRect(), x = s.left + s.width / 2, y = s.top + s.height / 2;
-      return { bar: bar.bottom, top: box.top, bottom: box.bottom, h: innerHeight, mine: !!document.elementFromPoint(x, y)?.closest("#walkbox"),
+      const bar = document.querySelector("#bar").getBoundingClientRect(), box = document.querySelector("#trekbox").getBoundingClientRect();
+      const s = document.querySelector("#trekbox > summary").getBoundingClientRect(), x = s.left + s.width / 2, y = s.top + s.height / 2;
+      return { bar: bar.bottom, top: box.top, bottom: box.bottom, h: innerHeight, mine: !!document.elementFromPoint(x, y)?.closest("#trekbox"),
         under: [...document.querySelectorAll(".item")].some(r => { const q = r.getBoundingClientRect(); return q.top < box.bottom && q.bottom > box.top; }) };
     });
     await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight));
     await page.waitForTimeout(150);
     let p = await at();
-    assert(Math.abs(p.top - p.bar) <= 2, `scrolled to the end, the Walk box sits under the bar (box at ${p.top}, bar ends at ${p.bar})`);
+    assert(Math.abs(p.top - p.bar) <= 2, `scrolled to the end, the Trek box sits under the bar (box at ${p.top}, bar ends at ${p.bar})`);
     assert(p.under && p.mine, "rows pass under the box, which is drawn over them");
     // Reaching the pinned box from the keyboard leaves the list where it is: focus the summary, open it, Tab through its controls.
     const y0 = await page.evaluate(() => scrollY);
-    await page.focus("#walkbox > summary"); await page.waitForTimeout(100);
-    assert(await page.evaluate(() => scrollY) === y0, `${name}: focusing the Walk summary does not scroll the list`);
+    await page.focus("#trekbox > summary"); await page.waitForTimeout(100);
+    assert(await page.evaluate(() => scrollY) === y0, `${name}: focusing the Trek summary does not scroll the list`);
     await page.keyboard.press("Enter"); await page.waitForSelector("#nextsel"); await page.waitForTimeout(100);
     const y1 = await page.evaluate(() => scrollY);   // opening makes the page taller, and the end of it moves
-    const stops = await page.evaluate(() => document.querySelectorAll("#walkbox select, #walkbox button").length);
+    const stops = await page.evaluate(() => document.querySelectorAll("#trekbox select, #trekbox button").length);
     assert(stops >= 3, `${name}: the open box has controls to Tab through (${stops})`);
     for (let i = 0; i < stops; i++) {
       await page.keyboard.press("Tab"); await page.waitForTimeout(100);
-      const f = await page.evaluate(() => ({ y: scrollY, in: !!document.activeElement.closest("#walkbox") }));
+      const f = await page.evaluate(() => ({ y: scrollY, in: !!document.activeElement.closest("#trekbox") }));
       assert(f.in && f.y === y1, `${name}: Tab ${i + 1} stays in the box without scrolling the list (scrollY ${f.y}, was ${y1})`);
     }
     // A push from the server redraws the list; the control being Tabbed to in the box keeps focus through it.
     const was = await page.evaluate(() => document.activeElement.outerHTML.slice(0, 120));
     await page.evaluate(() => render(true)); await page.waitForTimeout(150);
-    same(await page.evaluate(() => document.activeElement.closest("#walkbox") ? document.activeElement.outerHTML.slice(0, 120) : "lost to " + document.activeElement.tagName), was, `${name}: a redraw leaves focus on the control in the Walk box`);
+    same(await page.evaluate(() => document.activeElement.closest("#trekbox") ? document.activeElement.outerHTML.slice(0, 120) : "lost to " + document.activeElement.tagName), was, `${name}: a redraw leaves focus on the control in the Trek box`);
     p = await at();
     assert(Math.abs(p.top - p.bar) <= 2 && p.bottom - p.top <= 0.6 * p.h, `open, it stays put and takes at most 60% of the screen (${p.bottom - p.top} of ${p.h})`);
     if (await page.$eval("#nextsel", e => e.value) !== "W2") await page.selectOption("#nextsel", "W2");   // picking the pinned one again takes the pin away, and the other width left W2 pinned
-    await page.waitForFunction(() => /W2/.test(document.querySelector("#walkbox .brief")?.textContent || ""));
-    await page.click("#walkbox summary");
-    await page.waitForFunction(() => !document.querySelector("#walkbox[open]"));
+    await page.waitForFunction(() => /W2/.test(document.querySelector("#trekbox .brief")?.textContent || ""));
+    await page.click("#trekbox summary");
+    await page.waitForFunction(() => !document.querySelector("#trekbox[open]"));
     // The first row, focused from the end of the list, comes into view below the box, not under it.
     const clear = await page.evaluate(() => {
       const r = document.querySelector(".item"); r.focus(); r.scrollIntoView({ block: "nearest" });
-      return { row: r.getBoundingClientRect().top, box: document.querySelector("#walkbox").getBoundingClientRect().bottom };
+      return { row: r.getBoundingClientRect().top, box: document.querySelector("#trekbox").getBoundingClientRect().bottom };
     });
     assert(clear.row >= clear.box - 0.5, `the first row comes into view at ${clear.row}, below the box ending at ${clear.box}`);
     // Dragging a row to reorder scrolls the list up when the pointer is held just under the box, not only above it.
@@ -1210,7 +1210,7 @@ const FLOWS = {
     await page.evaluate(() => scrollTo(0, document.documentElement.scrollHeight)); await page.waitForTimeout(150);
     const drag = await page.evaluate(() => {
       const g = [...document.querySelectorAll("[data-grip]")].map(e => e.getBoundingClientRect()).filter(r => r.top > 250 && r.bottom < innerHeight - 130).pop();
-      return { x: g.left + g.width / 2, y: g.top + g.height / 2, under: document.querySelector("#walkbox").getBoundingClientRect().bottom + 8, at: scrollY };
+      return { x: g.left + g.width / 2, y: g.top + g.height / 2, under: document.querySelector("#trekbox").getBoundingClientRect().bottom + 8, at: scrollY };
     });
     await page.evaluate(() => document.addEventListener("pointerdown", e => { window.dragPointer = e.pointerId; }, { once: true, capture: true }));
     await page.mouse.move(drag.x, drag.y); await page.mouse.down(); await page.mouse.move(drag.x, drag.under, { steps: 4 });
@@ -1220,15 +1220,15 @@ const FLOWS = {
     // and makes the page redraw (replacing the focused control) a second later, in the middle of the Tab loops that follow.
     await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: window.dragPointer, bubbles: true })));
     await page.mouse.up();
-    assert(up < drag.at - 50, `${name}: held just under the Walk box, a dragged row scrolls the list up (${drag.at} to ${up})`);
+    assert(up < drag.at - 50, `${name}: held just under the Trek box, a dragged row scrolls the list up (${drag.at} to ${up})`);
     // Still in reorder mode: a grip and a Move-out button lying just under the box come into view below it, focused as the pad
     // does (focus, then scrollIntoView) and as Shift+Tab does (the browser's own scroll to the control it lands on). Each is read
     // at once, before a poll can redraw the list.
     const found = () => { const e = document.activeElement, q = e.getBoundingClientRect();
-      return { top: q.top, box: document.querySelector("#walkbox").getBoundingClientRect().bottom, what: e.getAttribute("aria-label") || e.tagName }; };
+      return { top: q.top, box: document.querySelector("#trekbox").getBoundingClientRect().bottom, what: e.getAttribute("aria-label") || e.tagName }; };
     // scroll so control `i` of `sel` sits `dy` under the box's bottom edge (negative: partly under it), and focus it without scrolling
     const place = (sel, i, dy, andThen) => page.evaluate(([sel, i, dy, andThen]) => {
-      const box = document.querySelector("#walkbox").getBoundingClientRect().bottom, els = [...document.querySelectorAll(sel)].filter(e => e.getBoundingClientRect().height > 0);
+      const box = document.querySelector("#trekbox").getBoundingClientRect().bottom, els = [...document.querySelectorAll(sel)].filter(e => e.getBoundingClientRect().height > 0);
       const el = els[Math.min(i, els.length - 1)]; scrollTo(0, scrollY + el.getBoundingClientRect().top - box - dy); el.focus({ preventScroll: true });
       if (andThen) { el.scrollIntoView({ block: "nearest", inline: "nearest" }); const q = el.getBoundingClientRect(); return { top: q.top, box, what: el.getAttribute("aria-label") }; }
     }, [sel, i, dy, andThen]);
@@ -1252,11 +1252,11 @@ const FLOWS = {
     for (const [name, opts] of [["landscape phone", { viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true }], ["short desktop", { viewport: { width: 1280, height: 500 } }]]) {
       const ctx = await b.newContext(opts);
       const page = await ctx.newPage(); PAGES.push(page);
-      await page.goto(URL_); await page.waitForSelector("#walkbox"); await pinned(page);
-      await page.click("#walkbox summary"); await page.waitForSelector("#nextsel");
+      await page.goto(URL_); await page.waitForSelector("#trekbox"); await pinned(page);
+      await page.click("#trekbox summary"); await page.waitForSelector("#nextsel");
       await page.click("[data-act=reorder]"); await page.waitForSelector(".moves");
       const g = await page.evaluate(() => {   // scroll so a grip lies just under the box, and take hold of it there
-        const box = document.querySelector("#walkbox").getBoundingClientRect().bottom, el = document.querySelectorAll("[data-grip]")[3];
+        const box = document.querySelector("#trekbox").getBoundingClientRect().bottom, el = document.querySelectorAll("[data-grip]")[3];
         scrollTo(0, scrollY + el.getBoundingClientRect().top - box - 6);
         const r = el.getBoundingClientRect();
         return { x: r.left + r.width / 2, y: r.top + r.height / 2, box, h: innerHeight };
@@ -1271,7 +1271,7 @@ const FLOWS = {
       }
       await page.evaluate(() => document.dispatchEvent(new PointerEvent("pointercancel", { pointerId: window.dragPointer, bubbles: true })));
       await page.mouse.up();
-      assert(still.length > 0, `${name}: with the Walk box open (ending at ${Math.round(g.box)} of ${g.h}), some y under it holds a dragged row without scrolling the list`);
+      assert(still.length > 0, `${name}: with the Trek box open (ending at ${Math.round(g.box)} of ${g.h}), some y under it holds a dragged row without scrolling the list`);
       await ctx.close();
     }
   },
@@ -1787,14 +1787,14 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     // 1. the read of W9 is held while another task's push arrives and replaces it
     let hold = true, release; const gate = new Promise(r => { release = r; });
     await page.route("**/api/task/W9*", async r => { if (hold) await gate; await r.continue(); });
-    let held = 0, walks = 0;
-    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/task/W9")) held++; if (u === "/api/walk") walks++; });
+    let held = 0, treks = 0;
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/task/W9")) held++; if (u === "/api/trek") treks++; });
     retitle("Held then replaced"); touch("W9");
     for (let i = 0; i < 100 && !held; i++) await page.waitForTimeout(100);
     assert(held, "the push for the open task did not read it");
-    const w = walks; touch("W1");
-    for (let i = 0; i < 100 && walks === w; i++) await page.waitForTimeout(100);
-    assert(walks > w, "the push for the other task did not render");
+    const w = treks; touch("W1");
+    for (let i = 0; i < 100 && treks === w; i++) await page.waitForTimeout(100);
+    assert(treks > w, "the push for the other task did not render");
     hold = false; release();
     assert(await shown("Held then replaced"), "a change to the open task was lost when a later push replaced its read");
     // 2. the read of W9 fails once, and the next push is for another task
@@ -1831,11 +1831,11 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert(reads.slice(0, before).filter(u => u === "/api/state").length <= 2 && reads.slice(0, before).filter(u => u === "/api/task/W9").length === 1, "the first load made more than one set of reads: " + JSON.stringify(reads.slice(0, before)));
   },
   // A page whose first reads failed shows "Could not load", then draws once its stream connects, with no Retry.
-  // The task route reads /api/task/<id> and /api/walk (not /api/state). Two cases: every read fails, so the page holds no
-  // number to ask `?since=` from; and only the walk fails, where the task read may land (its number is then the live one,
+  // The task route reads /api/task/<id> and /api/trek (not /api/state). Two cases: every read fails, so the page holds no
+  // number to ask `?since=` from; and only the trek fails, where the task read may land (its number is then the live one,
   // which a `?since=` of that number would be told nothing about) or may not have landed when the stream connects.
   async push_failed_load(b) {
-    for (const [name, broken] of [["every read", /\/api\/(task|walk|state)/], ["the walk only", /\/api\/walk/]]) {
+    for (const [name, broken] of [["every read", /\/api\/(task|trek|state)/], ["the trek only", /\/api\/trek/]]) {
       const ctx = await b.newContext({ ...PHONE });
       const page = await ctx.newPage();
       PAGES.push(page);
@@ -2239,8 +2239,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
-  // A task a chain is running on says so, and so does the one the walk takes next: on its list row and on its own screen.
-  async walktags(b) {
+  // A task a chain is running on says so, and so does the one the trek takes next: on its list row and on its own screen.
+  async trektags(b) {
     const ctx = await b.newContext({ ...PHONE });
     const page = await ctx.newPage(); PAGES.push(page);
     const errors = [];
@@ -2250,7 +2250,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       for (const it of body.items) { it.running = it.id === "W3" ? "run 2/5" : ""; it.next = it.id === "W2"; }
       await route.fulfill({ json: body });
     });
-    await page.route("**/api/walk", async route => {
+    await page.route("**/api/trek", async route => {
       const body = await (await route.fetch()).json();
       await route.fulfill({ json: { ...body, enabled: true, live: [{ item: "W3", progress: "run 2/5" }], next: "W2" } });
     });
@@ -2261,10 +2261,10 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert((await tags("W2")).includes("next"), "the next task's row says so");
     assert(!(await tags("W3")).includes("next") && !(await tags("W2")).some(t => /^running/.test(t)), "and no other row does");
     await page.click(".item[data-id=W3]");
-    await page.waitForSelector(".walktags");
-    same(await page.textContent(".walktags"), "running run 2/5", "the task's own screen says it is running");
+    await page.waitForSelector(".trektags");
+    same(await page.textContent(".trektags"), "running run 2/5", "the task's own screen says it is running");
     await page.goto(URL_ + "/#/t/W2");
-    await page.waitForFunction(() => document.querySelector(".walktags")?.textContent === "next");
+    await page.waitForFunction(() => document.querySelector(".trektags")?.textContent === "next");
     same(errors, [], "no page errors");
     await ctx.close();
   },
@@ -2413,7 +2413,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       let release;
       const held = new Promise(r => { release = r; });
       const hold = async route => { await held; await route.continue(); };
-      await page.route("**/api/state", hold); await page.route("**/api/walk", hold);
+      await page.route("**/api/state", hold); await page.route("**/api/trek", hold);
       if (how === "bar") await page.click("#tabs [data-act=up]"); else await page.goBack();
       await page.waitForSelector(".item[data-id=W9]", { timeout: 500 });
       same(await y(), 120, how + ": the list is back where it was left while its reads are held");

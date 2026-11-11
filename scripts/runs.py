@@ -324,7 +324,7 @@ def run_dirs():
             # ⚠️ WHY it stopped, which is a fact the chain recorded rather than a
             # sentence a caller greps for. `run.sh` lists the values; `limit` is
             # the only one that means "wait and try the same thing again", so the
-            # walk cannot infer it from an exit code (a usage limit and a crash are
+            # trek cannot infer it from an exit code (a usage limit and a crash are
             # both rc 1).
             stop=str(meta.get("stop") or ""), resets=str(meta.get("resets") or ""),
             cause=str(meta.get("cause") or ""),   # what a `brief` stop failed on
@@ -356,7 +356,7 @@ def close_lost():
     ⚠️ A pid in `meta.json` is `run.sh`'s `$$` in the chain's own pid namespace, and
     `pid_is_chain` reads THIS namespace's `/proc`: a screen on the host or in another
     container (each `sandbox` container has its own) reads a live containerised chain as
-    gone, and closing it would turn that chain's own screen's walk off and let a second chain
+    gone, and closing it would turn that chain's own screen's trek off and let a second chain
     start on its task. So a record `run.sh` marked with another namespace (`pidns`) is not
     judged by its pid: it is closed only when `chain_is_gone` finds its lock free, which is
     how a chain left by a restarted container (a new namespace every start) is closed. A

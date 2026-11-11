@@ -268,7 +268,7 @@ commands that also run on their own).
   tests written as code against named actions
   ([Duffield](https://jesseduffield.com/Lazygit-5-Years-On/)). Textual ships a pilot for
   the same reason. Keeping decisions in pure functions beside the drawing (as
-  `row_state` and `walk_decide` are here) is the cheaper version.
+  `row_state` and `trek_decide` are here) is the cheaper version.
 
 ---
 
@@ -292,7 +292,7 @@ commands that also run on their own).
 
 Where it already matches what works: Esc goes back one level and never quits, `q` is
 the only exit (§2); chains run in the background with the screen kept (§4); follow
-breaks on a deliberate scroll (§4); a stopped walk leaves a dim reason where the badge
+breaks on a deliberate scroll (§4); a stopped trek leaves a dim reason where the badge
 was (§4); the footer is per context and computed from the same place as the action
 (§2); the screen is a view over `run.sh` and `state.py`, and anything that
 takes the author's words hands off to the runner (§7); decisions are pure functions
@@ -309,7 +309,7 @@ conventions"; tests in `scripts/test_screen.py`):
    printed it; the status line was the gap.
 3. **`/` searches the current pane** (items, tree nodes, runs, artefacts, keys, or the
    text of a pane with no cursor). Lower case matches either case, it wraps and says
-   so, and an empty `/` repeats the last search. `n`/`N` were taken (`n` pins the walk).
+   so, and an empty `/` repeats the last search. `n`/`N` were taken (`n` pins the trek).
 4. **`-` `=`/`+` `<` `>`** are aliases for `[` `]` `{` `}`. They're unshifted, or have
    their own key, on US, German and French layouts. `,`/`.` were left alone because
    `model-explorer.py` uses them.
@@ -345,8 +345,8 @@ conventions"):
 - **One line editor for every prompt**, on the footer row (htop, fzf): `/` moves as you
   type, and Esc cancels at once.
 - **`z`** (undo an order move, refused over another session's edit),
-  **the walk plan** while `w` asks for a budget, and **the bell** on a chain ending or
-  the walk stopping by itself (`DFS_NOTIFY`).
+  **the trek plan** while `w` asks for a budget, and **the bell** on a chain ending or
+  the trek stopping by itself (`DFS_NOTIFY`).
 - Found on the way: the screen crashed at start on a terminal without colour or cursor
   control (vt100). pyte, used for the screenshots, lacks `CSI T`/`S` (scroll), which
   curses uses when rows shift, so its snapshots can show stale rows a real terminal

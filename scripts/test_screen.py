@@ -286,7 +286,7 @@ class Commanding(unittest.TestCase):
         ui.command_run("go W2")
         self.assertEqual((ui.pane, ui.current()["id"]), ("item", "W2"))
 
-    def test_model_chooses_the_models_the_walk_gives_its_chains(self):
+    def test_model_chooses_the_models_the_trek_gives_its_chains(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
             ui = a_screen([item("W1")], agent="claude")
             ui.command_run("model")
@@ -414,12 +414,12 @@ class TheTaskLogPane(unittest.TestCase):
 
 
 class TheActivityLog(unittest.TestCase):
-    def test_a_started_chain_and_a_stopped_walk_are_recorded(self):
-        ui = a_screen([item("W1")], walk_on=True, walk_until=0.0,
-                      walk_note="")
-        ui.walk_off("W1: failed")
+    def test_a_started_chain_and_a_stopped_trek_are_recorded(self):
+        ui = a_screen([item("W1")], trek_on=True, trek_until=0.0,
+                      trek_note="")
+        ui.trek_off("W1: failed")
         kinds = [(k, t) for _, k, t in ui.events]
-        self.assertIn(("stop", "walk off — W1: failed"), kinds)
+        self.assertIn(("stop", "trek off — W1: failed"), kinds)
 
     def test_a_test_screen_writes_no_file_and_rings_no_bell(self):
         ui = a_screen([])
@@ -438,9 +438,9 @@ class TheActivityLog(unittest.TestCase):
     def test_the_file_is_read_back(self):
         import tempfile
         f = Path(tempfile.mkdtemp()) / "activity.log"
-        f.write_text("100\trun\t$ a\nnot a line\n200\tstop\twalk off — x\n")
+        f.write_text("100\trun\t$ a\nnot a line\n200\tstop\ttrek off — x\n")
         self.assertEqual(TUI.read_activity(str(f)),
-                         [(100.0, "run", "$ a"), (200.0, "stop", "walk off — x")])
+                         [(100.0, "run", "$ a"), (200.0, "stop", "trek off — x")])
 
 
 class TheAgentIsRemembered(unittest.TestCase):
@@ -473,7 +473,7 @@ class TheAgentIsRemembered(unittest.TestCase):
 
 
 class Ringing(unittest.TestCase):
-    """The bell is for the ends the walk exists to bring back, and nothing else."""
+    """The bell is for the ends the trek exists to bring back, and nothing else."""
 
     def setUp(self):
         import os
@@ -496,16 +496,16 @@ class Ringing(unittest.TestCase):
             os.environ["DFS_NOTIFY"] = notify
 
     def screen(self):
-        return a_screen([item("W1")], real=True, walk_on=True,
-                        walk_until=0.0, walk_note="")
+        return a_screen([item("W1")], real=True, trek_on=True,
+                        trek_until=0.0, trek_note="")
 
-    def test_a_walk_that_stopped_itself_rings_and_is_written_down(self):
-        self.screen().walk_off("W1: failed")
+    def test_a_trek_that_stopped_itself_rings_and_is_written_down(self):
+        self.screen().trek_off("W1: failed")
         self.assertEqual(self.rang, [1])
-        self.assertIn("walk off — W1: failed", self.log.read_text())
+        self.assertIn("trek off — W1: failed", self.log.read_text())
 
-    def test_a_walk_stopped_by_hand_does_not(self):
-        self.screen().walk_off("stopped by hand")
+    def test_a_trek_stopped_by_hand_does_not(self):
+        self.screen().trek_off("stopped by hand")
         self.assertEqual(self.rang, [])
 
     def test_a_chain_ending_rings(self):
@@ -517,7 +517,7 @@ class Ringing(unittest.TestCase):
     def test_off_is_off(self):
         import os
         os.environ["DFS_NOTIFY"] = "off"
-        self.screen().walk_off("W1: failed")
+        self.screen().trek_off("W1: failed")
         self.assertEqual(self.rang, [])
 
 
@@ -525,7 +525,7 @@ class ThePlan(unittest.TestCase):
     def test_the_first_is_the_pin_else_next_and_held_items_say_by_what(self):
         items = [item("W1"), dict(item("W2"), blocked_by="W1"), item("W3"),
                  dict(item("W4", status="blocked"))]
-        ui = a_screen(items, walk_next="W3")
+        ui = a_screen(items, trek_next="W3")
         ui.data["next_item"] = "W1"
         text = "\n".join(t for t, _ in ui.lines_plan(100))
         self.assertLess(text.index("W3"), text.index("W1"))
@@ -534,29 +534,29 @@ class ThePlan(unittest.TestCase):
 
     def test_a_pinned_draft_is_the_first_and_another_draft_says_it_is_one(self):
         items = [item("W7"), dict(item("W9"), draft=1), dict(item("W8"), draft=1)]
-        ui = a_screen(items, walk_next="W9")
+        ui = a_screen(items, trek_next="W9")
         ui.data["next_item"] = "W7"
         text = "\n".join(t for t, _ in ui.lines_plan(100))
         self.assertLess(text.index("W9"), text.index("W7"))
         self.assertIn("pinned", text.split("held back")[0])
         held = text.split("held back")[1]
         self.assertIn("W8", held)
-        self.assertIn("a draft: the walk passes it over", held)
+        self.assertIn("a draft: the trek passes it over", held)
         self.assertNotIn("fence", text)
         self.assertNotIn("W9", held)
 
-    def test_one_answer_to_which_task_the_walk_takes_next(self):
-        # The header's `next`, the plan's first line and the chain the walk starts all
-        # read `walk_target`: the pin while it is open, else the order's answer.
+    def test_one_answer_to_which_task_the_trek_takes_next(self):
+        # The header's `next`, the plan's first line and the chain the trek starts all
+        # read `trek_target`: the pin while it is open, else the order's answer.
         items = [item("W1"), item("W3"), item("W5", status="done")]
-        ui = a_screen(items, walk_next="W3")
+        ui = a_screen(items, trek_next="W3")
         ui.data["next_item"] = "W1"
-        self.assertEqual(ui.walk_target(), "W3")
-        ui.walk_next = "W5"             # a pin on a finished task is no pin
-        self.assertEqual(ui.walk_target(), "W1")
-        self.assertEqual(ui.walk_next, "W5", "reading the target does not drop the pin")
-        ui.walk_next = None
-        self.assertEqual(ui.walk_target(), "W1")
+        self.assertEqual(ui.trek_target(), "W3")
+        ui.trek_next = "W5"             # a pin on a finished task is no pin
+        self.assertEqual(ui.trek_target(), "W1")
+        self.assertEqual(ui.trek_next, "W5", "reading the target does not drop the pin")
+        ui.trek_next = None
+        self.assertEqual(ui.trek_target(), "W1")
 
 
 class TheKeysPane(unittest.TestCase):
@@ -605,7 +605,7 @@ class TheKeysPane(unittest.TestCase):
     def test_a_list_key_pressed_from_another_pane_is_pressed_on_the_list(self):
         ui = a_screen([item("W1")], pane="runs")
         pinned = []
-        ui.walk_pin = pinned.append
+        ui.trek_pin = pinned.append
         ui.act(ord("?"))
         ui.key_sel = next(i for i, k in enumerate(ui.key_rows()) if k[1] == "n")
         ui.act(10)
@@ -616,23 +616,23 @@ class TheKeysPane(unittest.TestCase):
         ui = a_screen([item("W1")])
         ui.next_action = lambda it: "work"
         ui.live = lambda mode="work": []
-        ui.walk_on = False
+        ui.trek_on = False
         for w in (200, 60, 30, 10):
             self.assertIn("? keys", ui.footer(w), w)
             self.assertTrue(ui.footer(w).endswith("q quit"), w)
 
-    def test_the_stop_walk_label_is_drawn_red_and_the_others_in_the_chrome_colour(self):
+    def test_the_stop_trek_label_is_drawn_red_and_the_others_in_the_chrome_colour(self):
         pair, look, bold = curses.color_pair, TUI.look, curses.A_BOLD
         curses.color_pair = lambda n: n << 8
         self.addCleanup(setattr, curses, "color_pair", pair)
-        for walking in (True, False):
-            ui = a_screen([item("W1")], walk_on=walking)
-            ui.footer = lambda w: "⏎ run · w stop walk · q quit"
+        for trekking in (True, False):
+            ui = a_screen([item("W1")], trek_on=trekking)
+            ui.footer = lambda w: "⏎ run · w stop trek · q quit"
             drawn = []
             ui.puts = lambda y, x, parts: drawn.extend(parts) or x
             ui.draw_footer(0, 80)
             attrs = dict(drawn)
-            self.assertEqual(attrs["stop walk"] == (1 << 8) | bold, walking)
+            self.assertEqual(attrs["stop trek"] == (1 << 8) | bold, trekking)
             self.assertEqual(attrs["quit"], look("chrome"))
 
 

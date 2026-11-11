@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What the roadmap SAYS, derived in one place.
 
-Each task's status, the walk over the task tree, the §0 counts, and the briefings a
+Each task's status, the trek over the task tree, the §0 counts, and the briefings a
 session is handed are all facts about `.dfs/items/<task>.md` (one decision tree per
 task, parsed only by `tree.py`) and `.dfs/order.md` (the order tasks are worked
 in). Two readers of them must not be two answers: `run.sh` reads its stop
@@ -110,13 +110,13 @@ def content(t):
     """What a task tree SAYS, as a set of short hashes: every node, every field value,
     every evidence line, and the agent's own log entries (the kinds `progress` counts).
 
-    ⚠️ The walk asks whether a chain MOVED a tree, and a count cannot answer that.
+    ⚠️ The trek asks whether a chain MOVED a tree, and a count cannot answer that.
     `dfs_check` refuses a commit that grows a task file past its budget and tells the
     session to move settled history to `.dfs/archive/`, so a session that does good
     work AND obeys that shrinks `progress`. Measured 2026-09-27 on W13: two nodes
     determined, one opened and nine evidence lines added, while the determined
     nodes' Plans and Hypotheses went to the archive; `progress` fell 148 -> 143 and
-    the walk stopped, blaming the item. A move only REMOVES elements from this set,
+    the trek stopped, blaming the item. A move only REMOVES elements from this set,
     so "something is here that was not" is true of the work and false of the tidy."""
     out = set()
 
@@ -165,7 +165,7 @@ def state_for(task: str):
         review_due=int(dfs_tree.review_due(t) and status == "open"
                        and not dfs_tree.open_raises(t)),
         review_rounds=dfs_tree.review_rounds_unsettled(t),
-        # Marked a draft: the walk never picks it, but a pin or a run by hand works it.
+        # Marked a draft: the trek never picks it, but a pin or a run by hand works it.
         draft=int(dfs_tree.is_draft(t)),
         # GitHub mode: the pull request's url once opened ("" before), and whether the
         # Open PR mark applies now (a finished task held for it).
@@ -192,13 +192,13 @@ def state_for(task: str):
     )
 
 
-def walk(items):
+def trek(items):
     """Fill in each item's `parent`, and what BLOCKS it, over the preorder.
 
     ⚠️ **A RAISE blocks the whole SUBTREE, not one item.** A child is work that only
     makes sense under its parent, so a question the parent cannot answer is one the
     child cannot either — and that is the whole of the depth-first move this tool is
-    named for: a walk that meets a blocked node steps sideways onto the next branch
+    named for: a trek that meets a blocked node steps sideways onto the next branch
     instead of stopping. `blocked_by` names the ANCESTOR that did it, so a screen can
     say which question to answer rather than only that something is wrong.
 
@@ -218,7 +218,7 @@ def walk(items):
     `reachable` is the AND of all three, and stays the only position fact `next_item` reads.
 
     ⚠️ **A DRAFT holds no fence.** It is a task the author has not released to the
-    walk, so a fence that waited on it would hold everything after it for work nobody
+    trek, so a fence that waited on it would hold everything after it for work nobody
     has asked for yet. It does not hold its subtree either: only a raise does that.
 
     ⚠️ All three are facts about the POSITION, not about how the item is getting on:
@@ -234,7 +234,7 @@ def walk(items):
     for it in items:
         # A fence: everything in every earlier segment has to be DONE, so whatever
         # this segment leaves unfinished becomes the gate for the next one. `gate`
-        # keeps the FIRST such item rather than the nearest — that is the one a walk
+        # keeps the FIRST such item rather than the nearest — that is the one a trek
         # would pick up next, so it is the one worth naming on a held row.
         if it.get("segment", 0) != seg:
             gate, pending, seg = gate or pending, None, it["segment"]
@@ -263,9 +263,9 @@ def next_item(items):
     """What the ORDER says to work: the first item in preorder that is open and whose
     branch nothing is holding. None means every branch is blocked or finished — which
     is a fact worth having, not an error. A draft is never the order's answer: the
-    author takes it with the walk's pin (`n`) or runs it by hand.
+    author takes it with the trek's pin (`n`) or runs it by hand.
 
-    It is the order's answer alone, which is not quite the walk's: a walk continues
+    It is the order's answer alone, which is not quite the trek's: a trek continues
     the item its last run was on before it reads the order at all (`continue_last`)."""
     return next((it["id"] for it in items
                  if it["reachable"] and it["status"] == "open" and not it.get("draft")), None)
@@ -282,9 +282,9 @@ def held_by_parent(by, it, busy=()):
     return False
 
 
-def next_items(walked, n, busy=(), first=None):
-    """Up to `n` tasks for a walk running chains side by side, in the order it takes them:
-    `first` (a task id or a list of them: the walk's pin, the tasks its chains left on a
+def next_items(trekked, n, busy=(), first=None):
+    """Up to `n` tasks for a trek running chains side by side, in the order it takes them:
+    `first` (a task id or a list of them: the trek's pin, the tasks its chains left on a
     cap, its continuation `continue_last`) and then the order's answers, skipping every
     task in `busy` (one a chain is already on).
 
@@ -298,7 +298,7 @@ def next_items(walked, n, busy=(), first=None):
     branch without the parent's work (and runs beside an open parent should the merge
     fail and reopen it). Separate branches share nothing and are what runs together.
     With `n` 1, nothing busy and no `first` this is `[next_item]`."""
-    by = {i["id"]: i for i in walked}
+    by = {i["id"]: i for i in trekked}
 
     def held(it):
         return held_by_parent(by, it, busy)
@@ -308,7 +308,7 @@ def next_items(walked, n, busy=(), first=None):
     for f in lead:
         if f is not None and f not in busy and f not in out:
             out.append(f)
-    for it in walked:
+    for it in trekked:
         if len(out) >= n:
             break
         if (it["reachable"] and it["status"] == "open" and not it.get("draft")
@@ -376,42 +376,42 @@ def _full():
         for nd in t["nodes"]:
             entries.append(dict(id=nd["id"], type="NODE", target=t["task"],
                                 disp=nd["status"], body="\n".join(nd["raw"][1:])))
-    walked = walk([dict(i, **state_for(i["id"])) for i in its])
-    return dict(items=walked, next_item=continue_last(walked), open_raises=raises,
+    trekked = trek([dict(i, **state_for(i["id"])) for i in its])
+    return dict(items=trekked, next_item=continue_last(trekked), open_raises=raises,
                 open_proposals=[], entries=entries, metrics=metrics(trees),
                 contents={t["task"]: sorted(content(t)) for t in trees})
 
 
-def continue_last(walked):
-    """What the walk works NEXT: the item the last run was on, while that item can
+def continue_last(trekked):
+    """What the trek works NEXT: the item the last run was on, while that item can
     still be worked, and otherwise `next_item`.
 
-    ⚠️ **A walk finishes what it started.** `next_item` reads the order and nothing
+    ⚠️ **A trek finishes what it started.** `next_item` reads the order and nothing
     else, so the moment something EARLIER in it becomes workable — a raise answered,
-    a done item reopened, an item moved up — the walk would leave a half-built tree
+    a done item reopened, an item moved up — the trek would leave a half-built tree
     where it stood and begin somewhere else. The item that had the last session is
     the one with an open node, evidence half-gathered, and (after a `cap` or a usage
     limit) work nobody has seen the end of; so it goes first, and the order decides
-    where the walk goes after it rather than whether it may abandon where it is.
+    where the trek goes after it rather than whether it may abandon where it is.
 
     ⚠️ This SUBSUMES the uncommitted-work resume it grew out of, rather than sitting
     beside it: uncommitted work outside `.dfs/` belongs to whichever task had the
     last session (`foreign_dirt`), so naming that task here is the same answer on a
-    dirty tree as on a clean one — one rule, and no second reason for the walk to
+    dirty tree as on a clean one — one rule, and no second reason for the trek to
     name an item.
 
     When the last run's item CANNOT be worked — finished, blocked by its own raise,
     or held by the tree (an ancestor's raise, a fence) — or is a DRAFT, the order's
-    answer stands: a draft the author pinned had its one chain, and the walk does not
+    answer stands: a draft the author pinned had its one chain, and the trek does not
     take it up again on its own.
     On a dirty tree the item the order names then starts by committing or stashing
-    that half-done work (`foreign_dirt`), so the walk goes on rather than waiting.
+    that half-done work (`foreign_dirt`), so the trek goes on rather than waiting.
     """
     owner, _ = latest_session()
-    row = next((i for i in walked if i["id"] == owner), None)
+    row = next((i for i in trekked if i["id"] == owner), None)
     if row and row["status"] == "open" and row["reachable"] and not row.get("draft"):
         return owner
-    return next_item(walked)
+    return next_item(trekked)
 
 
 # ── the working tree ────────────────────────────────────────────────────────────
@@ -509,7 +509,7 @@ def foreign_dirt(task):
     author's). Empty when the tree is clean or the dirt is this task's.
 
     ⚠️ IN `task`'S OWN WORKTREE only its own chain works, so only its own sessions say
-    whose the dirt is. Parallel walks run other tasks' chains at the same time, and with a
+    whose the dirt is. Parallel treks run other tasks' chains at the same time, and with a
     gitignored roadmap every worktree reads the same `items`, so their sessions were seen
     there too: the dirt of a chain's own capped session was briefed as "NOT this task's:
     the last session was" another's. Likewise in the checkout itself, the tasks that have
@@ -591,7 +591,7 @@ def _ignored_note(task):
     if not dfs_paths.ignored():
         return []
     return ["- **`.dfs/` is gitignored here**, so the task file is planning and never "
-            "committed: git history alone records the walk. Every node still ends in a "
+            "committed: git history alone records the trek. Every node still ends in a "
             "commit whose subject starts with its id, staging only the code (`git commit "
             "--allow-empty` for a node that changed no tracked file, a refuted one "
             "included). On a branch the body carries nothing of the node: the merge "
@@ -1023,7 +1023,7 @@ def critic_problem(task, transcript="", provider="claude"):
     # ⚠️ Only claude's transcript has been checked against the real thing (a critic run as a
     # subagent and its record read back). The other providers' parsers are written from
     # their formats and untested on a live session, and a parser that counts zero where
-    # the agent ran things would refuse good verdicts and stop walks: so for them the
+    # the agent ran things would refuse good verdicts and stop treks: so for them the
     # first rule stands alone, and this one waits for a real transcript to be checked.
     if transcript and provider in VERIFIED_TRANSCRIPTS:
         import context as dfs_context

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""A net under the one stop the walk is allowed to RETRY on.
+"""A net under the one stop the trek is allowed to RETRY on.
 
-`walk_decide` is already tested as a policy (test_walk.py): `limit` holds an hour,
+`trek_decide` is already tested as a policy (test_trek.py): `limit` holds an hour,
 everything else stops. What nothing tested was the fact it decides on — whether a run
 that died on a usage limit is recorded `limit` at all. It was a grep for two
-adjectives, and the day the provider used a third the walk turned itself off with two
+adjectives, and the day the provider used a third the trek turned itself off with two
 hours of its limit still to run.
 
 ⚠️ The cases below are the SHAPES, not one wording: the first is the real
@@ -31,7 +31,7 @@ def claude(**fields):
 
 
 class Claude(unittest.TestCase):
-    def test_the_session_limit_that_stopped_the_walk(self):
+    def test_the_session_limit_that_stopped_the_trek(self):
         # W18, 2026-09-16 12:37. The old grep wanted "weekly" or "usage"; this said
         # "session", carried 429, and was recorded `failed`.
         raw = claude(is_error=True, subtype="success", api_error_status=429,
@@ -139,7 +139,7 @@ class TheRunnerContract(unittest.TestCase):
 
 
 class ResetAt(unittest.TestCase):
-    """When the walk may retry: the stated reset, as an instant, from the real shapes."""
+    """When the trek may retry: the stated reset, as an instant, from the real shapes."""
     import calendar
     NOW = calendar.timegm((2026, 9, 21, 8, 22, 0))   # the 09-21 08:22 start
 

@@ -23,8 +23,8 @@ sys.path.insert(0, str(HERE))
 import paths as dfs_paths   # noqa: E402
 import tree as dfs_tree     # noqa: E402
 import web as dfs_web       # noqa: E402
-import walk as dfs_walk     # noqa: E402
-import test_walker          # noqa: E402  (its in-memory world, for the walk endpoints)
+import trek as dfs_trek     # noqa: E402
+import test_trekker          # noqa: E402  (its in-memory world, for the trek endpoints)
 
 TASK = """# W1 · Bound the limiter
 
@@ -76,12 +76,12 @@ class Web(unittest.TestCase):
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         dfs_web._commit_cache.clear()
         dfs_web._FULL.update(sig=None, data=None)
-        self.fake = test_walker.FakeWalker()
-        dfs_web.WALK.update(enabled=True, walker=self.fake)
+        self.fake = test_trekker.FakeTrekker()
+        dfs_web.TREK.update(enabled=True, trekker=self.fake)
 
     def tearDown(self):
         dfs_web.ALLOW_HOSTS.clear()
-        dfs_web.WALK.update(enabled=True, walker=None)
+        dfs_web.TREK.update(enabled=True, trekker=None)
         self.fake.restore()
         self.server.shutdown()
         self.server.server_close()
@@ -129,11 +129,11 @@ class Web(unittest.TestCase):
         self.assertTrue(dfs_web.accepts_gzip("*"))
         self.assertFalse(dfs_web.accepts_gzip("br, *;q=0"))
 
-    def test_the_list_and_the_walk_share_one_state_build_until_a_file_changes(self):
+    def test_the_list_and_the_trek_share_one_state_build_until_a_file_changes(self):
         real = dfs_web.dfs_state.full
         with mock.patch.object(dfs_web.dfs_state, "full", side_effect=real) as built:
             self.call("GET", "/api/state")
-            self.call("GET", "/api/walk")
+            self.call("GET", "/api/trek")
             self.call("GET", "/api/state")
             self.assertEqual(built.call_count, 1)                       # a render's two reads cost one build
             path = self.root / ".dfs" / "items" / "W1.md"
@@ -221,14 +221,14 @@ class Web(unittest.TestCase):
         saved = os.environ.get("DFS_WEB_ALLOW_HOST")
         try:
             os.environ["DFS_WEB_ALLOW_HOST"] = "phone.tail1234.ts.net, other.ts.net"
-            handle = dfs_web.serve("127.0.0.1", 0, walk_enabled=False, allow_hosts=["flag.ts.net"])
+            handle = dfs_web.serve("127.0.0.1", 0, trek_enabled=False, allow_hosts=["flag.ts.net"])
             try:
                 self.assertEqual([status(handle, h) for h in ("phone.tail1234.ts.net", "other.ts.net", "flag.ts.net", "evil.example")],
                                  [200, 200, 200, 421])
             finally:
                 handle.stop()
             os.environ.pop("DFS_WEB_ALLOW_HOST")
-            handle = dfs_web.serve("127.0.0.1", 0, walk_enabled=False)
+            handle = dfs_web.serve("127.0.0.1", 0, trek_enabled=False)
             try:
                 self.assertEqual(status(handle, "phone.tail1234.ts.net"), 421, "unset adds nothing")
             finally:
@@ -280,7 +280,7 @@ class Web(unittest.TestCase):
                 else:
                     os.environ[k] = v
 
-    def test_chat_goes_through_the_page_and_is_off_with_the_walk(self):
+    def test_chat_goes_through_the_page_and_is_off_with_the_trek(self):
         import stat
         import time as _t
         import test_chat
@@ -317,12 +317,12 @@ class Web(unittest.TestCase):
             self.assertEqual(self.call("POST", "/api/chat/end", dict(scope="W9"))[0], 409)
             self.assertEqual(self.call("POST", "/api/chat/clear", dict(scope="W1"))[1]["messages"], [])
             self.assertEqual(self.call("POST", "/api/chat/end", dict(scope="W1"))[0], 409, "a chat with nothing said is not ended")
-            dfs_web.WALK["enabled"] = False
+            dfs_web.TREK["enabled"] = False
             self.assertEqual(self.call("POST", "/api/chat/interrupt", dict(scope="W1"))[0], 403)
             self.assertEqual(self.call("POST", "/api/chat/send", dict(scope="W1", message="hi"))[0], 403)
             self.assertEqual(self.call("GET", "/api/chat/W1")[0], 403)
         finally:
-            dfs_web.WALK["enabled"] = True
+            dfs_web.TREK["enabled"] = True
             dfs_web.CHAT["chats"] = None
             for k, v in saved.items():
                 if v is None:
@@ -604,7 +604,7 @@ class Web(unittest.TestCase):
         self.assertNotIn("target", "".join(out))
 
     def test_the_phone_page_keeps_its_small_faults_fixed(self):
-        """Read from the page's source: a --no-walk server's Chats route says chat is off, the fold button is 44px, the phone
+        """Read from the page's source: a --no-trek server's Chats route says chat is off, the fold button is 44px, the phone
         adds a task from a tab and not from a button over the rows, and a scrolling note box shows a shadow."""
         src = (HERE / "web" / "index.html").read_text()
         css = (HERE / "web" / "design.css").read_text()
@@ -642,12 +642,12 @@ class Web(unittest.TestCase):
         self.assertIn('ev.data.dfs !== "answered"', handler)
         self.assertIn('S.sig = ""; up();', handler)
 
-    def test_the_walk_boxs_activity_list_wraps_the_runner_line_and_is_a_44px_target(self):
+    def test_the_trek_boxs_activity_list_wraps_the_runner_line_and_is_a_44px_target(self):
         """Read from the page's source: the Activity line `$ <path>/run.sh W7 1 (pid N)` is one unbreakable word, which
-        pushed the walk box sideways at 320px (377 of 320 wide), and the Activity summary was 40px high."""
+        pushed the trek box sideways at 320px (377 of 320 wide), and the Activity summary was 40px high."""
         src = (HERE / "web" / "index.html").read_text()
-        self.assertRegex(src, r"\.walk \.ev li span \{[^}]*overflow-wrap: anywhere")
-        self.assertRegex(src, r"\.walk details > summary \{ min-height: var\(--hit\);")
+        self.assertRegex(src, r"\.trek \.ev li span \{[^}]*overflow-wrap: anywhere")
+        self.assertRegex(src, r"\.trek details > summary \{ min-height: var\(--hit\);")
 
     def test_the_viewer_route_and_its_frame_are_keyed_on_task_and_name(self):
         """route() and drawArtefact() in index.html, run under node (skipped when there is none)."""
@@ -712,7 +712,7 @@ class Web(unittest.TestCase):
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
         body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
+        js = ("const esc = s => String(s), chatOn = () => false, trekHtml = () => '', trekTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment) => ({id, goal: 'g', depth: 0, status: 'open', segment, raises: 0,"
               " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
@@ -742,7 +742,7 @@ class Web(unittest.TestCase):
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
         body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = it => it.running ? '<span class=\"tag settled\">running</span>' : '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false;"
+        js = ("const esc = s => String(s), chatOn = () => false, trekHtml = () => '', trekTags = it => it.running ? '<span class=\"tag settled\">running</span>' : '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false;"
               "let isWide = true, style = 'table'; const tableWide = () => isWide, listStyle = () => style;"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, extra) => Object.assign({id, goal: 'g' + id, depth: 0, status: 'open', segment: 0, raises: 0,"
@@ -814,7 +814,7 @@ class Web(unittest.TestCase):
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
         body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
+        js = ("const esc = s => String(s), chatOn = () => false, trekHtml = () => '', trekTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment, stop, w) => ({id, goal: 'g', depth: 0, status: 'open', segment, stop, raises: 0,"
               " assumptions: [], rev: '', waiting_on: w || '', blocked_by: '', why: '', needs_you: false});"
@@ -838,13 +838,13 @@ class Web(unittest.TestCase):
         self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
 
     def test_the_task_list_is_drawn_last_task_first_with_a_break_under_the_task_it_holds(self):
-        """drawTasks() in index.html, run under node: the walk climbs the page (skipped when there is none)."""
+        """drawTasks() in index.html, run under node: the trek climbs the page (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
         src = (HERE / "web" / "index.html").read_text()
         body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
-        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
+        js = ("const esc = s => String(s), chatOn = () => false, trekHtml = () => '', trekTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
               "const view = {}; const $ = s => s === '#view' ? view : null;"
               "const row = (id, segment, w) => ({id, goal: 'g' + id, depth: 0, status: 'open', segment, stop: false, raises: 0,"
               " assumptions: [], rev: '', waiting_on: w || '', blocked_by: '', why: '', needs_you: false});"
@@ -904,57 +904,57 @@ class Web(unittest.TestCase):
               " top: ids(guessMove('W3', 'up')), bottom: ids(guessMove('W1', 'down'))}))")
         out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(out, {"up": "W1,W3,W2", "down": "W2,W1,W3", "top": None, "bottom": None},
-                         "up the screen is later in the walk order, and the top row cannot go further up")
+                         "up the screen is later in the trek order, and the top row cannot go further up")
 
-    def test_start_walk_asks_nothing_and_its_note_carries_the_permission_warning(self):
-        """index.html read as text (no node needed): the walk starts at once, so no confirmation dialog
-        is left, and the note under Start walk says what a walk does, since no dialog does."""
+    def test_start_trek_asks_nothing_and_its_note_carries_the_permission_warning(self):
+        """index.html read as text (no node needed): the trek starts at once, so no confirmation dialog
+        is left, and the note under Start trek says what a trek does, since no dialog does."""
         src = (HERE / "web" / "index.html").read_text()
-        self.assertNotIn("Start the walk?", src)
-        note = src[src.index('id="walkhow"'):]
+        self.assertNotIn("Start the trek?", src)
+        note = src[src.index('id="trekhow"'):]
         note = note[:note.index("</p>")]
         self.assertIn("permission prompts off", note)
-        start = src[src.index("async function walkStart()"):src.index("async function walkStop()")]
-        self.assertNotIn("form(", start, "Start walk opens no dialog")
-        self.assertIn("walkStarting", start, "a second click while the request is out sends nothing")
+        start = src[src.index("async function trekStart()"):src.index("async function trekStop()")]
+        self.assertNotIn("form(", start, "Start trek opens no dialog")
+        self.assertIn("trekStarting", start, "a second click while the request is out sends nothing")
 
-    def test_walk_start_and_stop_run_once_fold_the_box_and_stop_is_silent(self):
-        """walkStart/walkStop/collapseWalk from index.html, run in headless chromium (skipped when
+    def test_trek_start_and_stop_run_once_fold_the_box_and_stop_is_silent(self):
+        """trekStart/trekStop/collapseTrek from index.html, run in headless chromium (skipped when
         there is none) against stubbed api, toast and drawTasks: one request however many clicks,
         the box folded after a start and after a stop, no toast on stop, and a failure retryable."""
         chrome = (os.environ.get("DFS_CHROMIUM") or shutil.which("chromium") or shutil.which("chromium-browser")
                   or shutil.which("google-chrome"))
         if not chrome:
-            self.skipTest("no chromium on PATH (or DFS_CHROMIUM) to run the page's walk functions")
+            self.skipTest("no chromium on PATH (or DFS_CHROMIUM) to run the page's trek functions")
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("function collapseWalk()"):src.index("function chainStopForm")]
+        body = src[src.index("function collapseTrek()"):src.index("function chainStopForm")]
         js = """
 const out = [];
 const calls = [], toasts = []; let draws = 0, fail = false;
 const elems = {"#bud": {value: "5", reportValidity: () => true}, "#par": {value: "2", reportValidity: () => true}};
 const $ = s => elems[s] || null;
-const S = {walkOpen: true, walkDraft: {}, walk: null};
+const S = {trekOpen: true, trekDraft: {}, trek: null};
 const toast = (m, bad) => toasts.push([m, !!bad]);
 const drawTasks = () => { draws++; };
 const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTimeout(r, 20));
   if (fail) throw new Error("no"); return {on: p.endsWith("start")}; };
 """ + body + """
 (async () => {
-  await Promise.all([walkStart(), walkStart()]);
-  out.push(["starts", calls.filter(c => c[0] === "/api/walk/start").length, calls[0][1].budget, calls[0][1].parallel]);
-  out.push(["after start", S.walkOpen, draws, toasts.length]);
-  S.walkOpen = true; toasts.length = 0; draws = 0;
-  await walkStop();
-  out.push(["after stop", S.walkOpen, draws, toasts.length]);
-  fail = true; await walkStart();
+  await Promise.all([trekStart(), trekStart()]);
+  out.push(["starts", calls.filter(c => c[0] === "/api/trek/start").length, calls[0][1].budget, calls[0][1].parallel]);
+  out.push(["after start", S.trekOpen, draws, toasts.length]);
+  S.trekOpen = true; toasts.length = 0; draws = 0;
+  await trekStop();
+  out.push(["after stop", S.trekOpen, draws, toasts.length]);
+  fail = true; await trekStart();
   out.push(["failed start", JSON.stringify(toasts)]);
-  fail = false; calls.length = 0; await walkStart();
+  fail = false; calls.length = 0; await trekStart();
   out.push(["retry", calls.length]);
   document.body.textContent = "RESULT" + JSON.stringify(out) + "END";
 })();
 """
         with tempfile.TemporaryDirectory() as d:
-            page = Path(d) / "walk.html"
+            page = Path(d) / "trek.html"
             page.write_text("<!doctype html><body><script>" + js + "</script></body>")
             dom = subprocess.run([chrome, "--headless", "--no-sandbox", "--disable-gpu", "--virtual-time-budget=5000",
                                   f"--user-data-dir={d}/profile", "--dump-dom", page.as_uri()],
@@ -963,7 +963,7 @@ const api = async (p, b) => { calls.push([p, b]); await new Promise(r => setTime
         self.assertTrue(m, f"the page produced no result: {dom[:300]}")
         got = {r[0]: r[1:] for r in json.loads(m.group(1))}
         self.assertEqual(got["starts"], [1, 5, 2], "two clicks send one request, with the box's numbers")
-        self.assertEqual(got["after start"], [False, 1, 1], "start folds the box (one toast: Walking.)")
+        self.assertEqual(got["after start"], [False, 1, 1], "start folds the box (one toast: Trekking.)")
         self.assertEqual(got["after stop"], [False, 1, 0], "stop folds the box and toasts nothing")
         self.assertEqual(got["failed start"], ['[["no",true]]'], "a failure is an error toast")
         self.assertEqual(got["retry"], [1], "a failed start does not lock out the next one")
@@ -1023,26 +1023,26 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(got["sent"], 2, "each of the two steers went to the server")
         self.assertEqual(got["nochange"]["disabled"], False, "Send is usable again after a steer that changes nothing drawn")
 
-    def test_the_walk_panel_is_collapsed_until_the_reader_opens_it(self):
-        """walkHtml() in index.html, run under node (skipped when there is none): closed
-        even while a walk is on, and open only once the reader's own toggle said so."""
+    def test_the_trek_panel_is_collapsed_until_the_reader_opens_it(self):
+        """trekHtml() in index.html, run under node (skipped when there is none): closed
+        even while a trek is on, and open only once the reader's own toggle said so."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
-            self.skipTest("no node on PATH (or DFS_NODE) to run the page's walkHtml()")
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's trekHtml()")
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("function walkHtml() {"):src.index("async function setNext")]
+        body = src[src.index("function trekHtml() {"):src.index("async function setNext")]
         js = ("const esc = s => String(s); let S;" + body +
-              "const walk = on => ({enabled: true, on, hold: 0, used: 1, budget: 5, chain: null, live: [],"
+              "const trek = on => ({enabled: true, on, hold: 0, used: 1, budget: 5, chain: null, live: [],"
               " candidates: [], agents: ['claude'], agent: 'claude', events: [], auto: 'W1', pinned: null});"
               "const head = h => h.slice(0, h.indexOf('>') + 1);"
               "console.log(JSON.stringify([[true, undefined], [false, undefined], [true, false], [false, true]]"
-              ".map(([on, open]) => { S = {walk: walk(on), walkOpen: open}; return head(walkHtml()); })))")
+              ".map(([on, open]) => { S = {trek: trek(on), trekOpen: open}; return head(trekHtml()); })))")
         out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(["open" in h for h in out], [False, False, False, True],
-                         "only a reader's own toggle opens the panel, walking or not")
+                         "only a reader's own toggle opens the panel, trekking or not")
 
     def test_the_models_are_drop_downs_of_the_agents_models(self):
-        """modelFields() and walkSeen() in index.html, run under node (skipped when there is none);
+        """modelFields() and trekSeen() in index.html, run under node (skipped when there is none);
         the source is checked either way, since the script is not always run."""
         src = (HERE / "web" / "index.html").read_text()
         fields = src[src.index("const OTHER_MODEL"):src.index("async function setModel")]
@@ -1051,15 +1051,15 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's modelFields()")
-        seen = src[src.index("function walkSeen("):src.index("function walkHtml()")]
+        seen = src[src.index("function trekSeen("):src.index("function trekHtml()")]
         js = ("const esc = s => String(s); let S = {modelOther: {implement: true}};" + fields + seen +
               "const claude = modelFields({agent: 'claude', models: {plan: 'opus', implement: ''}, model_defaults: {plan: 'opus', implement: 'sonnet'}, model_choices: ['opus', 'sonnet', 'haiku', 'default']});"
               "const kiro = modelFields({agent: 'kiro', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: ['auto', 'claude-opus-5.5']});"
               "const codex = modelFields({agent: 'codex', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: []});"
-              "S = {walkDraft: {budget: '3'}}; walkSeen({on: true});"
+              "S = {trekDraft: {budget: '3'}}; trekSeen({on: true});"
               "S.modelOther = {};"
               "const closed = modelFields({agent: 'kiro', models: {plan: '', implement: ''}, model_defaults: {plan: '', implement: ''}, model_choices: ['auto']});"
-              "console.log(JSON.stringify([claude, kiro, codex, S.walkDraft, closed]))")
+              "console.log(JSON.stringify([claude, kiro, codex, S.trekDraft, closed]))")
         claude, kiro, codex, draft, closed = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(claude.count("<select"), 2)
         self.assertIn('<option value="opus" selected>opus</option>', claude, "the kept model is the selected one")
@@ -1074,7 +1074,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertNotIn("data-other", closed, "no text box until Other is picked")
         self.assertNotIn("__other__", codex, "nothing to choose, nothing to type")
         self.assertEqual(codex.count("disabled"), 2, "codex reads its model from its own config: nothing to choose")
-        self.assertIsNone(draft, "a walk starting drops the typed numbers")
+        self.assertIsNone(draft, "a trek starting drops the typed numbers")
 
     def test_the_artefacts_section_previews_each_artefact_and_offers_no_list_of_the_rest(self):
         """artefactsHtml() in index.html, run under node (skipped when there is none)."""
@@ -1543,26 +1543,26 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(w1["rev"], "rev 2")          # the raise and the assumption
         self.assertNotIn("2026-09-25T", w1["why"], "a timestamp is shown as an age")
 
-    def test_a_row_says_if_a_chain_is_running_on_it_and_if_the_walk_takes_it_next(self):
+    def test_a_row_says_if_a_chain_is_running_on_it_and_if_the_trek_takes_it_next(self):
         row = lambda: self.call("GET", "/api/state")[1]["items"][0]
         self.fake.next_item = None
         self.assertEqual((row()["running"], row()["next"]), ("", False))
         self.fake.next_item = "W1"
-        self.fake.run_dirs = [test_walker.run("d1", "W1", live=True, run_no="2", cap="5")]
+        self.fake.run_dirs = [test_trekker.run("d1", "W1", live=True, run_no="2", cap="5")]
         self.assertEqual((row()["running"], row()["next"]), ("run 2/5", True))
 
-    def test_the_walks_pin_is_the_next_task_while_it_is_open_and_the_order_otherwise(self):
+    def test_the_treks_pin_is_the_next_task_while_it_is_open_and_the_order_otherwise(self):
         self.fake.pin("W2")
         self.fake.next_item = "W1"
-        self.assertEqual(self.call("GET", "/api/walk")[1]["next"], "W2")
+        self.assertEqual(self.call("GET", "/api/trek")[1]["next"], "W2")
         self.fake.world_items[1]["status"] = "done"
-        self.assertEqual(self.call("GET", "/api/walk")[1]["next"], "W1")
+        self.assertEqual(self.call("GET", "/api/trek")[1]["next"], "W1")
 
-    def test_with_the_walk_off_the_rows_still_say_what_runs_and_what_is_next(self):
-        dfs_web.WALK.update(enabled=False)
-        self.assertEqual(dfs_web.walk_marks(dict(items=[], next_item="W4")), ({}, "W4"))
-        walk = self.call("GET", "/api/walk")[1]
-        self.assertEqual((walk["enabled"], walk["live"]), (False, []))
+    def test_with_the_trek_off_the_rows_still_say_what_runs_and_what_is_next(self):
+        dfs_web.TREK.update(enabled=False)
+        self.assertEqual(dfs_web.trek_marks(dict(items=[], next_item="W4")), ({}, "W4"))
+        trek = self.call("GET", "/api/trek")[1]
+        self.assertEqual((trek["enabled"], trek["live"]), (False, []))
 
     def test_a_node_drawn_at_its_parents_column_says_it_is_a_chain_step(self):
         rows = {r["key"]: r for r in self.task()["rows"] if r["kind"] == "node"}
@@ -1797,7 +1797,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="stop"))
         self.assertEqual([(i["id"], i["segment"], i["stop"]) for i in data["items"]],
                          [("W1", 0, False), ("W2", 1, True), ("W3", 1, True)],
-                         "no fence there: one is put in that stops a walk")
+                         "no fence there: one is put in that stops a trek")
         self.assertIn("--- stop", self.order_file())
         _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))
         self.assertEqual([(i["id"], i["stop"]) for i in data["items"]],
@@ -1965,7 +1965,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(self.call("POST", "/api/new", dict(name=""))[0], 400)
         self.assertEqual(self.call("POST", "/api/new", dict(name="x", id="W1"))[0], 409)     # taken
 
-    def test_a_new_task_can_be_a_draft_the_walk_passes_over(self):
+    def test_a_new_task_can_be_a_draft_the_trek_passes_over(self):
         new = self.call("POST", "/api/new", dict(name="Later, maybe", draft=True))[1]["added"]
         plain = self.call("POST", "/api/new", dict(name="Now"))[1]["added"]
         rows = {i["id"]: i for i in self.call("GET", "/api/state")[1]["items"]}
@@ -2073,10 +2073,10 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(done, {"open": 200, "delete": 200, "accept": 200})
         self.assertEqual(dfs_tree.pr_url(dfs_tree.load(task)), "https://github.com/o/r/pull/9")
 
-    def test_marking_a_draft_tells_the_walk_only_when_it_becomes_one(self):
+    def test_marking_a_draft_tells_the_trek_only_when_it_becomes_one(self):
         told = []
-        dfs_web.WALK["walker"] = type("W", (), {"draft_marked": lambda self, t: told.append(t)})()
-        self.addCleanup(dfs_web.WALK.update, walker=None)
+        dfs_web.TREK["trekker"] = type("W", (), {"draft_marked": lambda self, t: told.append(t)})()
+        self.addCleanup(dfs_web.TREK.update, trekker=None)
         task = self.call("POST", "/api/new", dict(name="Later, maybe"))[1]["added"]
         self.call("POST", "/api/draft", dict(task=task, draft=True))
         self.call("POST", "/api/draft", dict(task=task, draft=False))
@@ -2107,92 +2107,92 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(self.call("GET", "/artefact-state/0a1b2c%2Ehtml")[0], 200)
         self.assertEqual(self.call("GET", "/artefact-state/%2e%2e%2fsecret.html")[0], 404)
 
-    # ── the walk ────────────────────────────────────────────────────────────────
-    def test_the_walk_starts_with_a_budget_and_says_where_it_stands(self):
-        status, snap, _ = self.call("GET", "/api/walk")
+    # ── the trek ────────────────────────────────────────────────────────────────
+    def test_the_trek_starts_with_a_budget_and_says_where_it_stands(self):
+        status, snap, _ = self.call("GET", "/api/trek")
         self.assertEqual((status, snap["on"], snap["enabled"]), (200, False, True))
         self.assertEqual([c["id"] for c in snap["candidates"]], ["W1", "W2"])
-        status, snap, _ = self.call("POST", "/api/walk/start", dict(budget=6))
+        status, snap, _ = self.call("POST", "/api/trek/start", dict(budget=6))
         self.assertEqual((status, snap["on"], snap["budget"]), (200, True, 6))
         self.assertEqual(self.fake.started_chains, [("W1", "6")])
 
-    def test_the_walk_starts_with_the_chains_at_once_and_lists_them(self):
-        status, snap, _ = self.call("POST", "/api/walk/start", dict(budget=6, parallel=2))
+    def test_the_trek_starts_with_the_chains_at_once_and_lists_them(self):
+        status, snap, _ = self.call("POST", "/api/trek/start", dict(budget=6, parallel=2))
         self.assertEqual((status, snap["parallel"]), (200, 2))
         self.assertEqual(self.fake.started_chains, [("W1", "3"), ("W2", "3")])
-        self.fake.run_dirs = [test_walker.run("d1", "W1", live=True), test_walker.run("d2", "W2", live=True)]
-        snap = self.call("GET", "/api/walk")[1]
+        self.fake.run_dirs = [test_trekker.run("d1", "W1", live=True), test_trekker.run("d2", "W2", live=True)]
+        snap = self.call("GET", "/api/trek")[1]
         self.assertEqual([(c["item"], c["live"]) for c in snap["chains"]], [("W1", True), ("W2", True)])
 
-    def test_the_walk_can_be_told_to_stop_at_a_usage_limit_and_says_so(self):
-        self.assertFalse(self.call("GET", "/api/walk")[1]["stop_on_limit"])
-        status, snap, _ = self.call("POST", "/api/walk/start", dict(budget=6, stop_on_limit=True))
+    def test_the_trek_can_be_told_to_stop_at_a_usage_limit_and_says_so(self):
+        self.assertFalse(self.call("GET", "/api/trek")[1]["stop_on_limit"])
+        status, snap, _ = self.call("POST", "/api/trek/start", dict(budget=6, stop_on_limit=True))
         self.assertEqual((status, snap["on"], snap["stop_on_limit"]), (200, True, True))
-        self.call("POST", "/api/walk/stop", {})
-        status, snap, _ = self.call("POST", "/api/walk/start", dict(budget=6))
-        self.assertEqual((status, snap["stop_on_limit"]), (200, False), "the option is one walk's")
+        self.call("POST", "/api/trek/stop", {})
+        status, snap, _ = self.call("POST", "/api/trek/start", dict(budget=6))
+        self.assertEqual((status, snap["stop_on_limit"]), (200, False), "the option is one trek's")
 
     def test_a_stop_on_limit_that_is_not_true_or_false_is_refused(self):
         for bad in ("yes", 1, None):
-            self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=6, stop_on_limit=bad))[0], 409, bad)
-        self.assertFalse(self.fake.walk_on)
+            self.assertEqual(self.call("POST", "/api/trek/start", dict(budget=6, stop_on_limit=bad))[0], 409, bad)
+        self.assertFalse(self.fake.trek_on)
 
-    def test_a_number_of_chains_that_is_not_a_walk_is_refused(self):
+    def test_a_number_of_chains_that_is_not_a_trek_is_refused(self):
         for bad in (0, "two", None, -1, 17):
-            self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=6, parallel=bad))[0], 409, bad)
-        self.assertFalse(self.fake.walk_on)
+            self.assertEqual(self.call("POST", "/api/trek/start", dict(budget=6, parallel=bad))[0], 409, bad)
+        self.assertFalse(self.fake.trek_on)
 
     def test_a_budget_that_is_not_a_number_of_sessions_is_refused(self):
         for bad in (0, "many", None, -1):
-            self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=bad))[0], 409)
-        self.assertFalse(self.fake.walk_on)
+            self.assertEqual(self.call("POST", "/api/trek/start", dict(budget=bad))[0], 409)
+        self.assertFalse(self.fake.trek_on)
 
     def test_next_is_chosen_from_the_open_tasks_and_a_task_that_cannot_be_worked_is_refused(self):
-        status, snap, _ = self.call("POST", "/api/walk/pin", dict(item="W2"))
+        status, snap, _ = self.call("POST", "/api/trek/pin", dict(item="W2"))
         self.assertEqual((status, snap["pinned"]), (200, "W2"))
-        self.assertEqual(self.call("POST", "/api/walk/pin", dict(item="W3"))[0], 409)
-        status, snap, _ = self.call("POST", "/api/walk/pin", dict(item=None))
+        self.assertEqual(self.call("POST", "/api/trek/pin", dict(item="W3"))[0], 409)
+        status, snap, _ = self.call("POST", "/api/trek/pin", dict(item=None))
         self.assertIsNone(snap["pinned"])
 
     def test_the_agent_is_chosen_for_the_next_chain(self):
-        status, snap, _ = self.call("POST", "/api/walk/agent", dict(agent="codex"))
+        status, snap, _ = self.call("POST", "/api/trek/agent", dict(agent="codex"))
         self.assertEqual((status, snap["agent"]), (200, "codex"))
-        self.assertEqual(self.call("POST", "/api/walk/agent", dict(agent="bash"))[0], 409)
+        self.assertEqual(self.call("POST", "/api/trek/agent", dict(agent="bash"))[0], 409)
 
     def test_the_models_are_chosen_per_role_for_the_next_chain(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
-            status, snap, _ = self.call("POST", "/api/walk/model", dict(role="plan", model="haiku"))
+            status, snap, _ = self.call("POST", "/api/trek/model", dict(role="plan", model="haiku"))
             self.assertEqual((status, snap["models"]), (200, dict(plan="haiku", implement="")))
-            status, snap, _ = self.call("POST", "/api/walk/model", dict(role="plan", model=""))
+            status, snap, _ = self.call("POST", "/api/trek/model", dict(role="plan", model=""))
             self.assertEqual(snap["models"]["plan"], "")
-            self.assertEqual(self.call("POST", "/api/walk/model", dict(role="review", model="opus"))[0], 409)
-            self.assertEqual(self.call("POST", "/api/walk/model", dict(role="plan", model="--help"))[0], 409)
+            self.assertEqual(self.call("POST", "/api/trek/model", dict(role="review", model="opus"))[0], 409)
+            self.assertEqual(self.call("POST", "/api/trek/model", dict(role="plan", model="--help"))[0], 409)
 
-    def test_a_kiro_walk_answers_409_for_the_claude_name_opus_and_names_kiros_models(self):
+    def test_a_kiro_trek_answers_409_for_the_claude_name_opus_and_names_kiros_models(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}), \
-                mock.patch.object(dfs_walk, "fetch_kiro_models", return_value=[]), \
-                mock.patch.dict(dfs_walk._kiro_models, {"ids": [], "at": time.time(), "busy": False}):
-            self.call("POST", "/api/walk/agent", dict(agent="kiro"))
+                mock.patch.object(dfs_trek, "fetch_kiro_models", return_value=[]), \
+                mock.patch.dict(dfs_trek._kiro_models, {"ids": [], "at": time.time(), "busy": False}):
+            self.call("POST", "/api/trek/agent", dict(agent="kiro"))
             try:
-                status, body, _ = self.call("POST", "/api/walk/model", dict(role="implement", model="opus"))
+                status, body, _ = self.call("POST", "/api/trek/model", dict(role="implement", model="opus"))
                 self.assertEqual(status, 409)
                 self.assertIn("claude-opus-5.5", json.dumps(body))
-                status, snap, _ = self.call("POST", "/api/walk/model", dict(role="implement", model="claude-opus-5.5"))
+                status, snap, _ = self.call("POST", "/api/trek/model", dict(role="implement", model="claude-opus-5.5"))
                 self.assertEqual((status, snap["models"]["implement"]), (200, "claude-opus-5.5"))
             finally:
-                self.call("POST", "/api/walk/agent", dict(agent="claude"))
+                self.call("POST", "/api/trek/agent", dict(agent="claude"))
 
     def test_the_snapshot_gives_the_defaults_of_the_agent_the_next_chain_uses(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
-            self.assertEqual(self.call("GET", "/api/walk")[1]["model_defaults"], dict(plan="opus", implement="sonnet"))
-            snap = self.call("POST", "/api/walk/agent", dict(agent="codex"))[1]
+            self.assertEqual(self.call("GET", "/api/trek")[1]["model_defaults"], dict(plan="opus", implement="sonnet"))
+            snap = self.call("POST", "/api/trek/agent", dict(agent="codex"))[1]
             self.assertEqual(snap["model_defaults"], dict(plan="", implement=""))
-            self.call("POST", "/api/walk/agent", dict(agent="claude"))
+            self.call("POST", "/api/trek/agent", dict(agent="claude"))
 
-    def test_stopping_the_walk_ends_its_chain(self):
-        self.call("POST", "/api/walk/start", dict(budget=6))
-        self.fake.run_dirs = [test_walker.run("d1", "W1", live=True, run_no="2")]
-        status, snap, _ = self.call("POST", "/api/walk/stop", {})
+    def test_stopping_the_trek_ends_its_chain(self):
+        self.call("POST", "/api/trek/start", dict(budget=6))
+        self.fake.run_dirs = [test_trekker.run("d1", "W1", live=True, run_no="2")]
+        status, snap, _ = self.call("POST", "/api/trek/stop", {})
         self.assertEqual((status, snap["on"]), (200, False))
         self.assertEqual(self.fake.lowered, [("d1", 2)])
 
@@ -2200,11 +2200,11 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(self.call("POST", "/api/chain/stop", dict(item="W1"))[0], 409)
         self.assertEqual(self.call("POST", "/api/chain/stop", {})[0], 400)
 
-    def test_with_the_walk_off_the_page_can_still_read_and_write_but_not_start_agents(self):
-        dfs_web.WALK["enabled"] = False
-        status, snap, _ = self.call("GET", "/api/walk")
+    def test_with_the_trek_off_the_page_can_still_read_and_write_but_not_start_agents(self):
+        dfs_web.TREK["enabled"] = False
+        status, snap, _ = self.call("GET", "/api/trek")
         self.assertEqual((status, snap), (200, dict(enabled=False, live=[], next=None)))
-        self.assertEqual(self.call("POST", "/api/walk/start", dict(budget=3))[0], 403)
+        self.assertEqual(self.call("POST", "/api/trek/start", dict(budget=3))[0], 403)
         self.assertEqual(self.fake.started_chains, [])
         self.assertEqual(self.call("GET", "/api/state")[0], 200)
         old, dfs_web.LOGIN = dfs_web.LOGIN, dfs_web.dfs_login.Login(read=lambda: dict(loggedIn=False))
@@ -2361,6 +2361,29 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual(status, 200)
         self.assertIn(("<title>%s</title>" % dfs_web.project_title()).encode(), body)
         self.assertIn("text/html", r.getheader("Content-Type"))
+
+
+class NoTrekFlag(unittest.TestCase):
+    """--no-trek turns the trek controls off, and --no-walk (its old name) is kept as an alias."""
+
+    def enabled_after(self, flag):
+        seen = {}
+
+        def serve(host, port, **kw):
+            seen.update(kw)
+            raise SystemExit(0)     # stop main() before it prints and waits on a server
+        with mock.patch.object(dfs_web, "serve", serve), mock.patch.object(dfs_web, "_the_trekker"), \
+                mock.patch.object(dfs_paths, "has_roadmap", return_value=True):
+            with self.assertRaises(SystemExit):
+                dfs_web.main(([flag] if flag else []) + ["--host", "127.0.0.1"])
+        return seen["trek_enabled"]
+
+    def test_the_trek_is_on_unless_a_flag_turns_it_off(self):
+        self.assertTrue(self.enabled_after(None))
+        self.assertFalse(self.enabled_after("--no-trek"))
+
+    def test_the_old_flag_name_still_turns_it_off(self):
+        self.assertFalse(self.enabled_after("--no-walk"))
 
 
 if __name__ == "__main__":

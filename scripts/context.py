@@ -47,7 +47,7 @@ BITES = 315_000        # where the curve stops being flat and starts costing
 # person, and the only thing it has to be is far enough out that a session which
 # overran its own checkpoint by a normal margin is not treated as machinery that has
 # broken. A session at 224,700 — the 2026-09-16 W18 run — closed itself `overrun`
-# with its work done, and stopping the whole walk on it cost more than the context
+# with its work done, and stopping the whole trek on it cost more than the context
 # did. Raising `FLAT_TO` instead would have been the lie the REGIONS comment below
 # is about: it would tell a session at 380,000 it was inside the flat region.
 CHAIN_CEILING = 400_000
@@ -172,28 +172,28 @@ def _codex_writes(rec):
 # turn count: it is the number of `usage_update` events, on the assumption that kiro
 # sends one per model response.
 
-def _walk(obj, depth=0):
+def _trek(obj, depth=0):
     """Every dict inside one decoded record, the record first."""
     if depth > 6:
         return
     if isinstance(obj, dict):
         yield obj
         for v in obj.values():
-            yield from _walk(v, depth + 1)
+            yield from _trek(v, depth + 1)
     elif isinstance(obj, list):
         for v in obj:
-            yield from _walk(v, depth + 1)
+            yield from _trek(v, depth + 1)
 
 
 def acp_updates(rec):
     """The ACP session updates one kiro stream record carries."""
-    return [d for d in _walk(rec) if isinstance(d.get("sessionUpdate"), str)]
+    return [d for d in _trek(rec) if isinstance(d.get("sessionUpdate"), str)]
 
 
 def kiro_session_id(records):
     """The session a kiro stream belongs to, or "": the first `sessionId` in it."""
     for rec in records:
-        for d in _walk(rec):
+        for d in _trek(rec):
             sid = d.get("sessionId")
             if isinstance(sid, str) and sid:
                 return sid
@@ -216,7 +216,7 @@ WINDOWS = (128_000, 200_000, 1_000_000, 2_000_000)
 def kiro_context_usage(rec):
     """[(usagePercentage, window estimates)] for the `contextUsage` blocks in one record."""
     out = []
-    for d in _walk(rec):
+    for d in _trek(rec):
         cu = d.get("contextUsage")
         if not isinstance(cu, dict) or not isinstance(cu.get("usagePercentage"), (int, float)):
             continue

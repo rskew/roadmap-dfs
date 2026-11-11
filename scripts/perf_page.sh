@@ -34,7 +34,7 @@ for ((i = 1; i <= $#; i++)); do [ "${!i}" = "--task" ] && { j=$((i + 1)); TASK="
 OWN="$(ls "$COPY"/.dfs/items/"$TASK".md)"
 OTHER="$(ls "$COPY"/.dfs/items/*.md | grep -v "/$TASK.md" | sed -n 1p)"
 
-(cd "$COPY" && exec python3 -u "$HERE/web.py" --no-walk --host 127.0.0.1 --port 0 >"$LOG" 2>&1) &
+(cd "$COPY" && exec python3 -u "$HERE/web.py" --no-trek --host 127.0.0.1 --port 0 >"$LOG" 2>&1) &
 SRV=$!
 URL=""
 for _ in $(seq 1 100); do

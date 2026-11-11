@@ -1028,7 +1028,7 @@ class Chain(unittest.TestCase):
         self.assertIn("shelved", self.git("show", "HEAD:.dfs/archive/items/W1/fx.md"))
 
     def test_a_merge_waits_for_another_chains_merge_to_finish(self):
-        # Two chains of a parallel walk finishing at once: the second merge waits on the
+        # Two chains of a parallel trek finishing at once: the second merge waits on the
         # lock the first holds, and goes through after it, rather than failing on git's
         # index.lock and being raised as the author's edits in the way.
         import fcntl
@@ -1478,7 +1478,7 @@ class Chain(unittest.TestCase):
         self.assertTrue(self.log("accept"))
 
     def test_a_chain_started_on_a_merged_item_says_it_is_done_even_over_a_leftover_directory(self):
-        # W130, 2026-11-05: the walk started the item 3 seconds after it merged; a leftover
+        # W130, 2026-11-05: the trek started the item 3 seconds after it merged; a leftover
         # directory with a dangling `.git` was taken for its worktree and the chain died
         # saying the task file was missing.
         self.run_chain("work,confirm", cap=2)
@@ -2344,7 +2344,7 @@ class Chain(unittest.TestCase):
         self.assertEqual(self.models_run(), ["work opus"])
 
     def test_the_chain_records_the_model_of_the_session_it_is_in(self):
-        # The web page's walk box reads kind and model from meta.json.
+        # The web page's trek box reads kind and model from meta.json.
         rc, meta, out = self.run_chain("work", cap=1)
         self.assertEqual((meta.get("kind"), meta.get("model")), ("work", "sonnet"), out)
         rc, meta, out = self.run_chain("work", cap=1, IMPLEMENT_MODEL="")
@@ -2368,7 +2368,7 @@ class Chain(unittest.TestCase):
         self.assertEqual((rc, meta.get("stop")), (0, "done"), out)
 
     def test_a_dirty_tree_that_is_not_this_tasks_is_the_first_sessions_to_clear(self):
-        # It used to refuse to start, which stopped the walk until the author came.
+        # It used to refuse to start, which stopped the trek until the author came.
         self.enter()
         (self.wt / "app.txt").write_text("the author's edit\n")
         rc, meta, out = self.run_chain("stash,confirm,rok")
@@ -2406,7 +2406,7 @@ class Chain(unittest.TestCase):
         self.assertEqual(r.stdout.strip(), "", r.stderr)
 
     def test_a_worktree_tasks_later_session_does_not_make_an_in_place_tasks_dirt_foreign(self):
-        # Off main, a walk works W1 in place beside W2, which already has a worktree. W2's
+        # Off main, a trek works W1 in place beside W2, which already has a worktree. W2's
         # sessions are in its worktree, never in this tree, so W1's own capped session
         # left the edit and it is still W1's.
         w2 = self.root / ".dfs" / "items" / "W2.md"
@@ -2427,7 +2427,7 @@ class Chain(unittest.TestCase):
 
     def test_dirt_left_by_another_task_is_foreign_even_with_the_item_branch_checked_out_in_place(self):
         # The author has dfs/W1 checked out in the main checkout: that is not W1's own
-        # worktree, so an off-main walk's other tasks leave dirt there that is not W1's.
+        # worktree, so an off-main trek's other tasks leave dirt there that is not W1's.
         self.git("checkout", "-q", "-b", "dfs/W1")
         w1 = self.root / ".dfs" / "items" / "W1.md"
         w1.write_text(w1.read_text() + "\n- 2000-01-01T00:00:00Z · session · work\n")
@@ -2441,7 +2441,7 @@ class Chain(unittest.TestCase):
     def test_the_chain_s_directory_is_not_handed_to_its_agent(self):
         # ⚠️ 2026-09-27: a session working on this tooling ran a test that started its
         # own chain, which inherited RUNDIR and wrote its meta INTO the live chain's
-        # directory. The walk then read the live chain as ended and started another.
+        # directory. The trek then read the live chain as ended and started another.
         named = self.aside / "named"
         rc, _, out = self.run_chain("work", cap=1, RUNDIR=str(named))
         self.assertTrue((named / "meta.json").exists(), "the runner ignored RUNDIR:\n" + out)
@@ -2672,7 +2672,7 @@ class Chain(unittest.TestCase):
                               LOWER_FILE=str(rundir / "cap"))
 
     def test_a_cap_lowered_mid_chain_ends_it_after_the_run_in_flight(self):
-        # The walk turned off by hand: the session in flight finishes, none follows.
+        # The trek turned off by hand: the session in flight finishes, none follows.
         rc, meta, out = self.lowered("work,lower,work,work", cap=6)
         self.assertEqual((rc, meta.get("stop"), meta.get("cap")), (0, "cap", "2"), out)
         self.assertEqual(self.kinds_run(), ["work", "work"], out)

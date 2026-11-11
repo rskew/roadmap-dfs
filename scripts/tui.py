@@ -23,7 +23,7 @@ Four panes over the same selection, all scrollable:
   l  agent  the runs on disk — a live chain's console AND the turns the agent is
             taking inside it, then any finished run's captured result
   v  art    the artefacts this item's raises name, opened in a real browser
-  h  act    the activity log: what this screen and its walk did (from 150 columns,
+  h  act    the activity log: what this screen and its trek did (from 150 columns,
             a column beside the tree, under the live chain's console tail)
 and `?`, every key (`KEYS`), where Enter presses the one under the cursor; `:`, any of
 them by name; `/`, search as you type.
@@ -74,8 +74,8 @@ import runs as dfs_runs               # noqa: E402  (needs HERE on the path firs
 import order as dfs_order              # noqa: E402  (the same)
 import paths as dfs_paths              # noqa: E402  (the same)
 import limit as dfs_limit              # noqa: E402  (the same)
-from walk import (AGENTS, MAX_PARALLEL, MODEL_AGENTS, MODEL_ROLES, WALK_CONTINUE, WALK_HOLD, WALK_RAISE, WALK_START_GRACE,   # noqa: E402,F401
-                  WALK_STOP, WalkMixin, agent_file, read_agent, walk_decide, walk_held_for)
+from trek import (AGENTS, MAX_PARALLEL, MODEL_AGENTS, MODEL_ROLES, TREK_CONTINUE, TREK_HOLD, TREK_RAISE, TREK_START_GRACE,   # noqa: E402,F401
+                  TREK_STOP, TrekMixin, agent_file, read_agent, trek_decide, trek_held_for)
 import tree as dfs_tree               # noqa: E402  (the same)
 import github as dfs_github             # noqa: E402  (the same)
 
@@ -815,9 +815,9 @@ KEY_PLACES = [("items", "on the item list"), ("tree", "in the tree — tab"),
 KEYS = [
     ("items", "⏎", 10, "work", "work it in the background, or review it — whichever it needs"),
     ("items", "tab", 9, "tree", "into the item's tree, and back out"),
-    ("items", "w", ord("w"), "walk", "walk the roadmap depth-first (add `stop` to end at a usage limit), or stop the walk"),
-    ("items", "n", ord("n"), "pin", "pin this item as where the walk goes next (again: unpin)"),
-    ("items", "s", ord("s"), "draft", "mark it a draft, which the walk passes over (again: ready); n still pins it"),
+    ("items", "w", ord("w"), "trek", "trek the roadmap depth-first (add `stop` to end at a usage limit), or stop the trek"),
+    ("items", "n", ord("n"), "pin", "pin this item as where the trek goes next (again: unpin)"),
+    ("items", "s", ord("s"), "draft", "mark it a draft, which the trek passes over (again: ready); n still pins it"),
     ("items", "P", ord("P"), "open-pr", "GitHub mode: push this finished item's branch and open its pull request (asks first)"),
     ("items", "K", ord("K"), "stop", "stop this item's running chain (asks first)"),
     ("items", "D", ord("D"), "delete", "delete this item; its files are kept under .dfs/archive/deleted (asks first)"),
@@ -833,7 +833,7 @@ KEYS = [
     ("items", "{  <", ord("{"), "out", "move out of its branch"),
     ("items", "}  >", ord("}"), "in", "move into the branch below"),
     ("items", "b", ord("b"), "fence", "put a fence below it (asks first), or take the fence away"),
-    ("items", "B", ord("B"), "stopbreak", "make the fence below it a stop break, which ends a walk there, or plain again"),
+    ("items", "B", ord("B"), "stopbreak", "make the fence below it a stop break, which ends a trek there, or plain again"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
     ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
@@ -857,7 +857,7 @@ KEYS = [
     ("panes", "v", ord("v"), "art", "artefacts: the pictures its raises name"),
     ("panes", "t", ord("t"), "todo", "the epic's todo"),
     ("panes", "H", ord("H"), "assumptions", "every open assumption, across the tasks"),
-    ("panes", "h", ord("h"), "activity", "what this screen and its walk did"),
+    ("panes", "h", ord("h"), "activity", "what this screen and its trek did"),
     ("any", "↑↓ j k", ord("j"), "move", "move the cursor, or the text where there is none"),
     ("any", "d  u", ord("d"), "half-page", "half a page down, up"),
     ("any", "space pgdn", curses.KEY_NPAGE, "page", "a page down (pgup: up)"),
@@ -1673,7 +1673,7 @@ def row_state(it):
     """
     held = it.get("blocked_by") or it.get("waiting_on")
     if it["status"] == "open" and not it.get("blocked_by") and it.get("draft"):
-        # The author's own mark, that the walk passes it over: said where `open` was. A
+        # The author's own mark, that the trek passes it over: said where `open` was. A
         # break above it does not hide the mark (a draft holds no fence and is passed over
         # whatever is before it); a raise above it does, since that is the move to make.
         return "draft"
@@ -1908,7 +1908,7 @@ def read_activity(path, keep=ACTIVITY_KEEP):
     return out
 
 
-class UI(WalkMixin):
+class UI(TrekMixin):
     WATCH_HINT = ", [l] to watch"      # what a started chain's message adds for a person at the screen
     # State a screen built without __init__ (the tests' `object.__new__`) still
     # needs to draw: nothing being typed, no activity yet, the whole list shown.
@@ -1937,8 +1937,8 @@ class UI(WalkMixin):
         self.left_with = None       # the `leave` key that ended the last `read_line`, if one did
         self.order_undo = []        # `z`: (order.md before, order.md we wrote)
         self.answers = []           # `:`'s arguments, handed to the prompts it meets
-        # The activity log: what this screen and its walk DID, newest last. Read back
-        # from the file, so a restart does not forget why the walk stopped.
+        # The activity log: what this screen and its trek DID, newest last. Read back
+        # from the file, so a restart does not forget why the trek stopped.
         self.events = collections.deque(read_activity(activity_file()),
                                         maxlen=ACTIVITY_KEEP)
         self.real = True
@@ -1964,7 +1964,7 @@ class UI(WalkMixin):
         self._measure_cache = {}    # transcript -> (when, peak, responses)
         self._sel_row = self._sel_end = None
         self.body_h = 1             # rows the detail pane showed at the last draw
-        self.walk_init()
+        self.trek_init()
         # The review tree. Folds and opened nodes are keyed by node id, which
         # carries its task, so a fold survives a trip to another item and back.
         self.tree_sel = 0
@@ -2002,8 +2002,8 @@ class UI(WalkMixin):
 
     # ---- the web page beside this screen ---------------------------------------
     # The web server runs in this process, on its own threads, and shares this screen's
-    # walk: one state, one set of decisions, controllable from either. Curses and the
-    # walk's state belong to THIS thread, so the server does not touch them: it hands
+    # trek: one state, one set of decisions, controllable from either. Curses and the
+    # trek's state belong to THIS thread, so the server does not touch them: it hands
     # a function to `call_soon`, which `poll` runs here, and waits for what it returns.
 
     commands = None
@@ -2025,7 +2025,7 @@ class UI(WalkMixin):
                     call.cancelled = True
             if call.cancelled:
                 raise ValueError("the terminal screen is busy (a prompt is open): try again in a moment")
-            # The screen began it before the timeout and is still inside it (a walk's Start
+            # The screen began it before the timeout and is still inside it (a trek's Start
             # spawns the runner and reloads the roadmap). It can no longer be called off, so
             # report what it does rather than "busy" for a command that took effect.
             if not call.done.wait(running_timeout):
@@ -2157,10 +2157,10 @@ class UI(WalkMixin):
     def reparent(self, step):
         """Move the selected item sideways: out of its branch, or into the one above.
 
-        This is the other half of the tree, and the half the walk turns on — a child
+        This is the other half of the tree, and the half the trek turns on — a child
         is work that only makes sense under its parent, so putting an item under
         another is a claim that a question the parent cannot answer is one this item
-        cannot either (`dfs_state.walk`).
+        cannot either (`dfs_state.trek`).
         """
         it = self.current()
         if it is None:
@@ -2214,9 +2214,9 @@ class UI(WalkMixin):
         """Make the fence below the selected item a STOP break, or plain again; with no
         fence there, put up one that stops (asking first, as `b` does).
 
-        A stop break holds what is after it as any fence does, and a walk that worked up
-        to it ends there, so the author reviews before a walk they start goes past it
-        (`walk.walk_stop_at`). Taking the fence away altogether is `b`'s."""
+        A stop break holds what is after it as any fence does, and a trek that worked up
+        to it ends there, so the author reviews before a trek they start goes past it
+        (`trek.trek_stop_at`). Taking the fence away altogether is `b`'s."""
         it = self.current()
         if it is None:
             return
@@ -2226,15 +2226,15 @@ class UI(WalkMixin):
         after = dfs_order.stop_toggled(nodes, it["id"])
         if after is not None and not had:
             if self.prompt("put a stop break below %s — everything above it waits on everything "
-                           "below, and a walk ends there? [y/N]:" % it["id"])[:1].lower() != "y":
+                           "below, and a trek ends there? [y/N]:" % it["id"])[:1].lower() != "y":
                 self.msg = "no break added"
                 return
         refusal = ("is nested — a break separates whole branches, never cuts one"
                    if it["depth"] else
                    "is the bottom item — a break below it would gate nothing")
         if self.retree(after, it, refusal):
-            self.said(it, "is behind a plain break: a walk goes on through it" if stops
-                          else "is behind a stop break: a walk ends there")
+            self.said(it, "is behind a plain break: a trek goes on through it" if stops
+                          else "is behind a stop break: a trek ends there")
 
     def said(self, it, did):
         self.event("order", "%s %s" % (it["id"], did))
@@ -2296,7 +2296,7 @@ class UI(WalkMixin):
         was_node = self.tree_row() if self.tree_focused() else None
         was_run = (self.runs[self.run_sel]["path"]
                    if 0 <= self.run_sel < len(self.runs) else None)
-        was_walk = self.walk_view()
+        was_trek = self.trek_view()
         self.data = load()
         self.dirty = roadmap_dirty()
         self.hidden = dfs_paths.hidden()
@@ -2320,15 +2320,15 @@ class UI(WalkMixin):
                                  self.open_run)
         if note:
             self.msg = note
-        # ⚠️ The page beside this screen reads the walk from HERE (`UiWalker.snapshot`), not
+        # ⚠️ The page beside this screen reads the trek from HERE (`UiTrekker.snapshot`), not
         # from the files, so after a write of its own (a node added to a finished task) it
-        # reads the walk as it stood before, and the file watcher's push can land before this
+        # reads the trek as it stood before, and the file watcher's push can land before this
         # reload too. Once the screen has caught up, the page is told to read again.
-        if self.web is not None and self.walk_view() != was_walk:
+        if self.web is not None and self.trek_view() != was_trek:
             self.web.notify()
 
-    def walk_view(self):
-        """What the page's walk shows that a reload can change: the tasks it may go to, and
+    def trek_view(self):
+        """What the page's trek shows that a reload can change: the tasks it may go to, and
         the one it goes to next."""
         return ([i["id"] for i in self.items if i["status"] == "open"],
                 self.data.get("next_item"))
@@ -2336,11 +2336,11 @@ class UI(WalkMixin):
     # ---- activity ------------------------------------------------------------
 
     def event(self, kind, text):
-        """Record something this screen or its walk DID, and return the text.
+        """Record something this screen or its trek DID, and return the text.
 
         ⚠️ The message line is not a record: the next poll writes "refreshed" over
-        it, and the walk makes its decisions a tick at a time with nobody looking.
-        Every runner command started, every order written, every walk decision and
+        it, and the trek makes its decisions a tick at a time with nobody looking.
+        Every runner command started, every order written, every trek decision and
         every chain that ended lands here too, and in `activity.log` beside the run
         directories, so the answer to "what happened while I was away" is on the
         screen rather than reconstructed from consoles."""
@@ -2361,7 +2361,7 @@ class UI(WalkMixin):
         """Say something happened to somebody not looking: the terminal's bell, which
         tmux and most terminals turn into a mark on the tab rather than a sound, and
         with DFS_NOTIFY=desktop a desktop notification too. DFS_NOTIFY=off for none.
-        For the ends the walk exists to bring back — a chain ending, a walk stopping —
+        For the ends the trek exists to bring back — a chain ending, a trek stopping —
         and nothing else."""
         how = os.environ.get("DFS_NOTIFY", "bell").lower()
         if not self.real or how == "off":
@@ -2378,7 +2378,7 @@ class UI(WalkMixin):
             except OSError:
                 pass
 
-    GLYPH = {"run": ("$", "accent"), "walk": ("●", "red"), "stop": ("○", "chrome"),
+    GLYPH = {"run": ("$", "accent"), "trek": ("●", "red"), "stop": ("○", "chrome"),
              "order": ("↕", "chrome"), "review": ("✎", "accent"),
              "done": ("■", "green"), "died": ("■", "red"), "raise": ("●", "red"),
              "trees": ("+", "chrome"), "hold": ("◔", "amber")}
@@ -2405,7 +2405,7 @@ class UI(WalkMixin):
             for more in lines[1:]:
                 out.append((" " * len(head) + more, 0))
         if not out:
-            out.append(("nothing yet — runs, walk decisions and order moves land here",
+            out.append(("nothing yet — runs, trek decisions and order moves land here",
                         look("chrome")))
         return out
 
@@ -2435,7 +2435,7 @@ class UI(WalkMixin):
                 "sessions %d" % m.get("work_sessions", 0),
                 "~%.0fk tokens" % (m.get("tokens", 0) / 1000.0))), look("chrome"))
             out.append(("", 0))
-        out.append(("activity — what this screen and its walk did, newest last",
+        out.append(("activity — what this screen and its trek did, newest last",
                     curses.A_BOLD))
         out.append(("", 0))
         return out + self.activity_lines(width - 2)
@@ -2491,7 +2491,7 @@ class UI(WalkMixin):
         self.follow_terminal_size()
         self.agent_update_tick()
         self.drain_commands()
-        self.walk_tick()
+        self.trek_tick()
         if self.chat_host is not None and CHAT_IDLE > 0:
             self.chat_host.reap_idle(CHAT_IDLE)
         sig = watch_signature()
@@ -2590,28 +2590,28 @@ class UI(WalkMixin):
         h, w = self.scr.getmaxyx()
         agent = self.agent
         live = len(self.live())
-        # What a depth-first walk would take next, which is the whole point of the
+        # What a depth-first trek would take next, which is the whole point of the
         # tree and is otherwise only derivable by reading every row's blocked_by.
-        nxt = self.walk_target()
-        # ⚠️ The walk goes in the HEADER, not the message line: a message is the last
+        nxt = self.trek_target()
+        # ⚠️ The trek goes in the HEADER, not the message line: a message is the last
         # thing that happened and scrolls away, while "something is spending money
         # unattended right now" is a state, and one nobody should have to remember
         # they left on.
-        walk = self.walk_badge()
+        trek = self.trek_badge()
         warn = header_warn(self.dirty, getattr(self, "hidden", []))
         # The page this screen serves, as its port: enough to find it (the full address
         # is the first line of `h`), short enough that it is the first thing to yield.
         web = ("web :%s  " % self.web.url.rsplit(":", 1)[1].strip("/")) if self.web else ""
         right = warn + web + ("%s " % agent)
-        # ⚠️ Still ONE LINE THAT CHANGES SHAPE when the walk is on: the badge goes
-        # first, in capitals, and red only while it is spending (see `walk_badge`).
+        # ⚠️ Still ONE LINE THAT CHANGES SHAPE when the trek is on: the badge goes
+        # first, in capitals, and red only while it is spending (see `trek_badge`).
         # The bar under it is gone — a slab of reverse video was the loudest thing
         # on the screen and said nothing — so the words carry it: the name in bold,
         # labels grey, the values in the terminal's own colour.
         x = 1
-        if walk:
-            x = self.puts(0, x, [(walk, (curses.color_pair(1) | curses.A_BOLD)
-                                  if self.walk_on else look("chrome")),
+        if trek:
+            x = self.puts(0, x, [(trek, (curses.color_pair(1) | curses.A_BOLD)
+                                  if self.trek_on else look("chrome")),
                                  ("   ", 0)])
         grey = look("chrome")
         # ⚠️ ONE LINE, AND ONLY WHAT ASKS SOMETHING OF YOU OR SAYS WHERE THINGS ARE.
@@ -2700,10 +2700,10 @@ class UI(WalkMixin):
             y = top + i
             if kind == "break":
                 # ⚠️ The rule SAYS what it is holding. A bare line reads as decoration
-                # and a decoration that silently stops the walk is the worst of both:
+                # and a decoration that silently stops the trek is the worst of both:
                 # `waiting on W12` is the item to go and finish, and `below is done`
                 # is a fence that is no longer in anybody's way.
-                # A stop break says so: it is also where a walk ends (`walk_stop_at`).
+                # A stop break says so: it is also where a trek ends (`trek_stop_at`).
                 name = "stop break" if rows[self.list_scroll + i][2] else "break"
                 label = ("── %s · waiting on %s " % (name, val)) if val \
                         else "── %s · below is done " % name
@@ -3627,13 +3627,13 @@ class UI(WalkMixin):
 
     def command(self):
         """`:` — any key by its name, and an item to do it to: `:work W7 5`,
-        `:review W12`, `:walk 20`, `:pin W9`, `:go W3`, `:model plan opus`.
+        `:review W12`, `:trek 20`, `:pin W9`, `:go W3`, `:model plan opus`.
 
         ⚠️ NAMES SCALE WHERE LETTERS DO NOT. k9s ran out of letters and grew a `:`;
         this screen was already one key short (`n` could not be "next match"). A
         command is a row of `KEYS` pressed through `key_run`, so there is no second
         implementation of anything: an item id selects that item first, and what is
-        left over answers the prompts the key meets (`answers`) — `:walk 20` is `w`
+        left over answers the prompts the key meets (`answers`) — `:trek 20` is `w`
         answered 20, and nothing is ever confirmed on your behalf, since a y/N is
         only answered by a `y` you typed. As you type, the matches are listed above
         the line with what each does, helix's way, and Tab takes the picked one."""
@@ -3687,7 +3687,7 @@ class UI(WalkMixin):
         return "(%s's own)" % self.agent if self.agent in MODEL_AGENTS else "(%s's own, not set here)" % self.agent
 
     def command_model(self, args):
-        """`:model` shows the models chosen for the walk's claude sessions; `:model plan opus`
+        """`:model` shows the models chosen for the trek's claude sessions; `:model plan opus`
         and `:model implement sonnet` choose them for the next chain, `:model plan default`
         leaves claude to its own default and `:model plan none` takes the choice away (the
         runner's opus to plan and sonnet to implement). Kept like the agent, for the next screen."""
@@ -3857,20 +3857,20 @@ class UI(WalkMixin):
         return bool(it["status"] == "blocked" or it.get("open_raises")
                     or it.get("standing") or it.get("corrections"))
 
-    # the walk's plan, shown while `w` asks for its budget
+    # the trek's plan, shown while `w` asks for its budget
 
     def lines_plan(self, width):
-        """What a walk would do, before it is asked for money: the order it would
+        """What a trek would do, before it is asked for money: the order it would
         take the items in if every chain finishes its item, what is held back and
         by what, and what the budget means. aptitude shows its pending actions
-        before `g`; a walk is the same kind of commitment.
+        before `g`; a trek is the same kind of commitment.
 
-        ⚠️ A FORECAST, and it says so: a chain that raises hands the walk the next
+        ⚠️ A FORECAST, and it says so: a chain that raises hands the trek the next
         branch instead, and the order can change under it. What is certain is the
-        FIRST item — `walk_target`, the pin else `next_item` — and that is the line in the accent."""
+        FIRST item — `trek_target`, the pin else `next_item` — and that is the line in the accent."""
         out, para = self.wrapper(width)
         grey = look("chrome")
-        first = self.walk_target()
+        first = self.trek_target()
         take, held, blocked, done = [], [], [], 0
         for it in self.items:
             state = row_state(it)
@@ -3884,7 +3884,7 @@ class UI(WalkMixin):
             else:
                 take.append(it)
         take.sort(key=lambda it: it["id"] != first)
-        out.append(("the walk, if each chain finishes its item", curses.A_BOLD))
+        out.append(("the trek, if each chain finishes its item", curses.A_BOLD))
         para("a chain that raises hands it the next branch instead, so only the first "
              "is certain", grey)
         out.append(("", 0))
@@ -3892,14 +3892,14 @@ class UI(WalkMixin):
             out.append(("  nothing it can take — every branch is blocked or finished",
                         curses.color_pair(1)))
         for n, it in enumerate(take, 1):
-            pin = "  pinned" if it["id"] == self.walk_next else ""
+            pin = "  pinned" if it["id"] == self.trek_next else ""
             out.append(("  %2d  %-6s %s%s" % (n, it["id"], it["goal"], pin),
                         look("accent") if n == 1 else 0))
         if held:
             out.append(("", 0))
             out.append(("held back", grey))
             for it, state in held:
-                why = ("a draft: the walk passes it over, n pins it" if state == "draft"
+                why = ("a draft: the trek passes it over, n pins it" if state == "draft"
                        else "a raise above it, on %s" % state[1:] if state.startswith("↳")
                        else "a fence, until %s is done" % state[1:])
                 out.append(("      %-6s %s — %s" % (it["id"], it["goal"], why), grey))
@@ -3908,7 +3908,7 @@ class UI(WalkMixin):
             out.append(("waiting on your answer: %s" % ", ".join(i["id"] for i in blocked),
                         curses.color_pair(1)))
         out.append(("", 0))
-        para("%d finished. The budget is sessions over the whole walk; each chain is "
+        para("%d finished. The budget is sessions over the whole trek; each chain is "
              "given a share of what is left, so they cannot overshoot. A second number runs that many "
              "chains at once, on separate branches, sharing the budget: a task under "
              "another waits until its parent is done." % done, grey)
@@ -4089,7 +4089,7 @@ class UI(WalkMixin):
         # footer is not worth walking /proc for.
         if it is not None and any(r["item"] == it["id"] for r in self.live()):
             enter = "⏎ (running)"
-        actions = [enter, "w walk" if not self.walk_on else "w stop walk", "n walk next",
+        actions = [enter, "w trek" if not self.trek_on else "w stop trek", "n trek next",
                    "r review", "c chat", "o open", "e edit", "[/] order",
                    "{/} branch", "b break", "3 log", "l last log", "L runs", "v art", "t todo",
                    "x agent"]
@@ -4175,7 +4175,7 @@ class UI(WalkMixin):
         name = {"item": "item", "reglog": "task log", "runs": "agent runs",
                 "agentlog": "agent log", "todo": "epic todo",
                 "artefact": "artefacts", "keys": "keys", "activity": "activity",
-                "plan": "walk plan", "assumptions": "assumptions"}[self.pane]
+                "plan": "trek plan", "assumptions": "assumptions"}[self.pane]
         if self.pane == "item":
             cur = self.current()
             # ⚠ The rule is the one row of the pane that never scrolls, so it carries
@@ -4262,14 +4262,14 @@ class UI(WalkMixin):
 
         `footer` still decides WHICH keys fit, as text; this only draws them, so the
         narrowing rule has one home. A label that says a state is on wants seeing
-        (`w stop walk`, while a walk runs) and is drawn in red."""
+        (`w stop trek`, while a trek runs) and is drawn in red."""
         x = 1
         for seg in self.footer(w).split(" · "):
             key, _, label = seg.partition(" ")
             if seg.startswith("●"):
                 x = self.puts(y, x, [(seg, curses.color_pair(2)), ("   ", 0)])
                 continue
-            loud = self.walk_on and label == "stop walk"
+            loud = self.trek_on and label == "stop trek"
             x = self.puts(y, x, [(key, look("accent") | curses.A_BOLD), (" ", 0),
                                  (label, (curses.color_pair(1) | curses.A_BOLD) if loud
                                   else look("chrome")), ("   ", 0)])
@@ -4352,16 +4352,16 @@ class UI(WalkMixin):
     def draw_side(self, x0, top, bottom, w):
         """The activity column: what is running now, then what has happened.
 
-        ⚠️ WATCHING THE WALK WAS THREE KEYS AWAY from the tree you would be watching
+        ⚠️ WATCHING THE TREK WAS THREE KEYS AWAY from the tree you would be watching
         it from (`L`, pick the run, ⏎), and the tree was gone while you did. From
         `SIDE_AT` columns both are on the screen: the live chain's console tail at
         the top, and the activity log under it — the record of what this screen and
-        its walk did, which is the part the message line kept losing."""
+        its trek did, which is the part the message line kept losing."""
         for y in range(top, bottom):
             self.put(y, x0, "│", look("chrome"))
         x = x0 + 2
         width = w - x - 1
-        live = sorted(self.live(), key=lambda r: r["dir"] not in self.walk_dirs())
+        live = sorted(self.live(), key=lambda r: r["dir"] not in self.trek_dirs())
         y = top
         if live:
             r = live[0]
@@ -4448,7 +4448,7 @@ class UI(WalkMixin):
     def open_chat(self, scope):
         """What `c` and `C` do: look at this scope's chat, running it first if it is not.
         ctrl-] comes back to the roadmap and leaves it running. The screen goes on polling
-        meanwhile (it draws nothing), so the page's walk Start is run and a walk goes on ticking."""
+        meanwhile (it draws nothing), so the page's trek Start is run and a trek goes on ticking."""
         relay = self.start_chat(scope)
         self.event("run", "chat %s" % scope)
         curses.def_prog_mode()
@@ -4473,7 +4473,7 @@ class UI(WalkMixin):
         agent here is stopped and the chat is marked ended, so the Chats list keeps it apart from
         those in progress. The conversation stays, and a later message makes it in progress again."""
         import chat as dfs_chat
-        chats = dfs_chat.Chats(walker=lambda: UiWalker(self))
+        chats = dfs_chat.Chats(trekker=lambda: UiTrekker(self))
         if not chats.sid(scope):
             self.msg = "%s has no chat to end" % scope
             return
@@ -4530,11 +4530,11 @@ class UI(WalkMixin):
         # to read, and that chain then runs for an hour.
         self.scroll = 10 ** 6 if at_end or is_growing(self.open_run) else 0
 
-    # ---- the walk ------------------------------------------------------------
+    # ---- the trek ------------------------------------------------------------
 
     def set_agent(self, name):
         """`x`'s choice, kept for the next screen (and the web page) in `agent_file`."""
-        WalkMixin.set_agent(self, name)
+        TrekMixin.set_agent(self, name)
         if self.real:
             try:
                 with open(os.path.join(dfs_runs.ensure_run_root(), "agent"), "w") as fh:
@@ -4542,51 +4542,51 @@ class UI(WalkMixin):
             except OSError:
                 pass
 
-    def walk_toggle(self):
-        """Turn the depth-first walk on or off.
+    def trek_toggle(self):
+        """Turn the depth-first trek on or off.
 
-        ⚠️ The budget is in SESSIONS, over the WHOLE walk, and it is the only bound
+        ⚠️ The budget is in SESSIONS, over the WHOLE trek, and it is the only bound
         there is. A per-item cap was the obvious thing to ask for and was worse than
         useless: a chain that used one up left the item still open, so `next_item`
-        named it again and the walk started another chain on it immediately — "cap 5"
+        named it again and the trek started another chain on it immediately — "cap 5"
         meant five sessions, then five more, for as long as the item stayed open. A
         number that reads like a limit and is not one is worse than no number.
 
         ⚠️ The prompt is also the confirmation. `K` already asks before stopping ONE
         chain because that is an hour of somebody's subscription; this starts chains
         until the budget or the tree runs out, so a bare keypress is not enough of a
-        decision. Escaping it leaves the walk off.
+        decision. Escaping it leaves the trek off.
 
         ⚠️ ⏎ TAKES THE NUMBER SHOWN; ESC IS THE CANCEL. It once read `session budget
         [20], empty to cancel:`, where `[n]` meant the opposite of what it means two
         keys away at `cap [5]:`, so ⏎ on the number the screen was showing answered
-        "walk: not started". The brackets then went, and ⏎ still took nothing. Now
-        it is the other prompt's convention: `[n]` is what ⏎ takes, the last walk's
+        "trek: not started". The brackets then went, and ⏎ still took nothing. Now
+        it is the other prompt's convention: `[n]` is what ⏎ takes, the last trek's
         budget being what you would usually type again (W82), and the decision is
-        still two keys, `w` then ⏎, with Esc between them leaving the walk off.
+        still two keys, `w` then ⏎, with Esc between them leaving the trek off.
 
         The line may carry a second number, the chains to run at once (`20 3`), which is
-        1 when it is left out and the last walk's when ⏎ takes the line shown. A last word
-        `stop` (`20 stop`, `20 3 stop`) ends the walk at the first usage limit instead of
-        holding for the reset; it is for that walk only, and is never part of the line shown.
+        1 when it is left out and the last trek's when ⏎ takes the line shown. A last word
+        `stop` (`20 stop`, `20 3 stop`) ends the trek at the first usage limit instead of
+        holding for the reset; it is for that trek only, and is never part of the line shown.
         """
-        if self.walk_on:
-            self.walk_end_chain()
+        if self.trek_on:
+            self.trek_end_chain()
             return
         was = (self.pane, self.scroll)
         self.pane, self.scroll = "plan", 0
         try:
             # sessions, then optionally how many chains at once: `20` or `20 3`
-            shown = str(self.walk_budget) + (" %d" % self.walk_parallel
-                                             if self.walk_parallel > 1 else "")
-            raw = self.prompt("walk: how many sessions, and at once? [%s], esc cancels:"
+            shown = str(self.trek_budget) + (" %d" % self.trek_parallel
+                                             if self.trek_parallel > 1 else "")
+            raw = self.prompt("trek: how many sessions, and at once? [%s], esc cancels:"
                               % shown, shown)
         finally:
             self.pane, self.scroll = was
         if not raw:
-            self.msg = "walk: not started"
+            self.msg = "trek: not started"
             return
-        # ⚠️ `:walk 20 3` hands the prompt one answer per question, and this is ONE
+        # ⚠️ `:trek 20 3` hands the prompt one answer per question, and this is ONE
         # question with two numbers: what the `:` line has left over is the rest of it.
         raw, self.answers = " ".join([raw] + self.answers), []
         words = raw.split()
@@ -4599,44 +4599,44 @@ class UI(WalkMixin):
             budget = int(words[0])
             parallel = int(words[1]) if len(words) > 1 else 1
         except (ValueError, IndexError):
-            self.msg = ("walk: %r is not a number of sessions, then the number of chains "
+            self.msg = ("trek: %r is not a number of sessions, then the number of chains "
                         "at once, then `stop` to end at a usage limit" % raw)
             return
         try:
             if stop:
-                self.walk_begin(budget, parallel, stop_on_limit=True)
+                self.trek_begin(budget, parallel, stop_on_limit=True)
             else:
-                self.walk_begin(budget, parallel)
+                self.trek_begin(budget, parallel)
         except ValueError as e:
-            self.msg = "walk: %s" % e
+            self.msg = "trek: %s" % e
 
     def chain_progress(self, chain):
-        """Where a chain IS — placed in the walk when the walk started it.
+        """Where a chain IS — placed in the trek when the trek started it.
 
-        ⚠️ A WALK-STARTED CHAIN HAS NO CAP OF ITS OWN. `walk_tick` passes it the
+        ⚠️ A TREK-STARTED CHAIN HAS NO CAP OF ITS OWN. `trek_tick` passes it the
         budget REMAINING (`left`), deliberately, so a chain cannot overshoot the
-        walk by running one more session than it has left to spend. That makes
+        trek by running one more session than it has left to spend. That makes
         `run/cap` a fraction of two different things: the numerator counts inside
-        this chain, the denominator belongs to the walk. The fourth session of a
-        100-session walk read `run 1/97` — two true numbers, one false fraction,
-        and neither half the number anybody is spending. So the walk's own chain
-        is placed in the walk, which is what `walk_badge` already says in the
+        this chain, the denominator belongs to the trek. The fourth session of a
+        100-session trek read `run 1/97` — two true numbers, one false fraction,
+        and neither half the number anybody is spending. So the trek's own chain
+        is placed in the trek, which is what `trek_badge` already says in the
         header; a chain started by hand off `s` keeps `run/cap`, where the cap IS
         the bound that was typed.
         """
-        if self.walk_on and chain["dir"] in self.walk_dirs():
-            return "run %d/%d" % (self.walk_used(), self.walk_budget)
+        if self.trek_on and chain["dir"] in self.trek_dirs():
+            return "run %d/%d" % (self.trek_used(), self.trek_budget)
         return dfs_runs.progress(chain)
 
-    def walk_badge(self):
-        """The walk as a BADGE: what it is doing, or why it stopped.
+    def trek_badge(self):
+        """The trek as a BADGE: what it is doing, or why it stopped.
 
-        ⚠️ THE REASON IT STOPPED IS A STATE, AND IT LIVES HERE. `walk_off` also puts
+        ⚠️ THE REASON IT STOPPED IS A STATE, AND IT LIVES HERE. `trek_off` also puts
         it on the message line, and the message line cannot hold it: `poll` writes
-        "refreshed" (or a chain's ended note) from the SAME tick, so a walk that
+        "refreshed" (or a chain's ended note) from the SAME tick, so a trek that
         stopped because of a bug was a badge quietly disappearing and nothing said.
-        `walk_note` was written and read by nothing at all until 2026-09-16 — a
-        recorded reason nobody could see. It stays up until the next walk starts.
+        `trek_note` was written and read by nothing at all until 2026-09-16 — a
+        recorded reason nobody could see. It stays up until the next trek starts.
 
         ⚠️ Shape first, colour second. Written as one dot-separated segment in the
         middle of the header it read exactly like `18 items` — same weight, same
@@ -4646,21 +4646,21 @@ class UI(WalkMixin):
         a screenshot, and out of the corner of an eye. The red overlay in `header`
         is reinforcement, never the signal.
         """
-        pin = (" → %s" % self.walk_next) if self.walk_next else ""
-        if not self.walk_on:
-            if self.walk_note:
-                return "○ walk off%s · %s" % (pin, self.walk_note)
-            return ("○ walk off%s" % pin) if pin else ""
-        spent = "%d/%d" % (self.walk_used(), self.walk_budget)
-        held = self.walk_until - time.time()
+        pin = (" → %s" % self.trek_next) if self.trek_next else ""
+        if not self.trek_on:
+            if self.trek_note:
+                return "○ trek off%s · %s" % (pin, self.trek_note)
+            return ("○ trek off%s" % pin) if pin else ""
+        spent = "%d/%d" % (self.trek_used(), self.trek_budget)
+        held = self.trek_until - time.time()
         if held > 0:
-            return "● walk held %s%s %s" % (walk_held_for(held), pin, spent)
-        runs = [r for r in self.walk_runs() if r["live"]]
+            return "● trek held %s%s %s" % (trek_held_for(held), pin, spent)
+        runs = [r for r in self.trek_runs() if r["live"]]
         if runs:
-            return "● walk %s%s %s" % (" ".join(r["item"] for r in runs), pin, spent)
-        if self.walk_pending:
-            return "● walk waiting for a task%s %s" % (pin, spent)
-        return "● walk%s %s" % (pin, spent)
+            return "● trek %s%s %s" % (" ".join(r["item"] for r in runs), pin, spent)
+        if self.trek_pending:
+            return "● trek waiting for a task%s %s" % (pin, spent)
+        return "● trek%s %s" % (pin, spent)
 
     def stop_chain(self, item):
         """Ctrl-C for a chain nobody has a terminal on.
@@ -4805,7 +4805,7 @@ class UI(WalkMixin):
         self.msg = self.event("review", "added %s under %s" % (nid, parent or item))
 
     def toggle_draft(self, item):
-        """`s`: mark the item a draft, which the walk never picks (`n` and a run by hand
+        """`s`: mark the item a draft, which the trek never picks (`n` and a run by hand
         still work it), or ready again. A log entry, so the task file says when."""
         if item is None:
             return
@@ -4816,10 +4816,10 @@ class UI(WalkMixin):
             self.msg = "not changed: %s" % e
             return
         self.reload()
-        self.msg = self.event("order", "%s is a draft: the walk passes it over, n pins it" % item
-                              if on else "%s is ready: the walk takes it in its turn" % item)
+        self.msg = self.event("order", "%s is a draft: the trek passes it over, n pins it" % item
+                              if on else "%s is ready: the trek takes it in its turn" % item)
         if on:
-            self.walk_draft_marked(item)
+            self.trek_draft_marked(item)
 
     def open_pr(self, item):
         """`P`: GitHub mode's Open PR mark. After a yes, push the held branch and open its
@@ -4935,7 +4935,7 @@ class UI(WalkMixin):
         """A line typed on the footer: what was typed, `default` for an empty ⏎, and
         "" for Esc — which cancels past the default, since Esc then ⏎ at `cap [5]:`
         used to start a chain. A `:` command's arguments answer these first
-        (`answers`), so `:walk 20` is `w` and 20 without the question.
+        (`answers`), so `:trek 20` is `w` and 20 without the question.
         `leave` is keys that end the line at once when typed first (see `read_line`)."""
         if self.answers:
             return self.answers.pop(0)
@@ -5117,7 +5117,7 @@ class UI(WalkMixin):
         elif ch == ord("z"):
             self.undo_order()
         elif ch == 27:
-            # Esc walks BACK one level and never quits. A key that sometimes exits
+            # Esc treks BACK one level and never quits. A key that sometimes exits
             # the program and sometimes closes a pane is one you stop pressing;
             # `q` is the only way out, from anywhere.
             self.follow = False
@@ -5325,11 +5325,11 @@ class UI(WalkMixin):
             # same pairing, and nothing else to learn once `[`/`]` is in the hand.
             self.reparent(-1 if ch == ord("{") else 1)
         elif ch == ord("w"):
-            self.walk_toggle()
+            self.trek_toggle()
         elif ch in (ord("n"), ord("N")) and self.tree_focused():
             self.tree_jump_flag(1 if ch == ord("n") else -1)
         elif ch == ord("n"):
-            self.walk_pin(it)
+            self.trek_pin(it)
         elif ch == ord("o"):
             self.shell([RUNNER, "--open"])
         elif ch == ord("e"):
@@ -5380,8 +5380,8 @@ class _Call:
         self.lock = threading.Lock()    # decides, once, between "cancelled" and "started"
 
 
-class UiWalker:
-    """The screen's own walk, as the web page sees it: the interface `HeadlessWalk` has,
+class UiTrekker:
+    """The screen's own trek, as the web page sees it: the interface `HeadlessTrek` has,
     but nothing here is state. Controls are run on the screen's thread (`UI.call_soon`);
     the snapshot is only read."""
 
@@ -5389,16 +5389,16 @@ class UiWalker:
         self.ui = ui
 
     def start(self, budget, parallel=1, stop_on_limit=False):
-        self.ui.call_soon(lambda: self.ui.walk_start(budget, parallel, stop_on_limit))
+        self.ui.call_soon(lambda: self.ui.trek_start(budget, parallel, stop_on_limit))
 
     def stop(self):
-        self.ui.call_soon(lambda: self.ui.walk_end_chain() if self.ui.walk_on else None)
+        self.ui.call_soon(lambda: self.ui.trek_end_chain() if self.ui.trek_on else None)
 
     def pin(self, item):
-        self.ui.call_soon(lambda: self.ui.walk_pin_id(item))
+        self.ui.call_soon(lambda: self.ui.trek_pin_id(item))
 
     def draft_marked(self, item):
-        self.ui.call_soon(lambda: self.ui.walk_draft_marked(item))
+        self.ui.call_soon(lambda: self.ui.trek_draft_marked(item))
 
     def stop_chain(self, item):
         self.ui.call_soon(lambda: self.ui.interrupt_chain(item))
@@ -5448,10 +5448,10 @@ class UiWalker:
         return r.interrupt() if r else None
 
     def loop(self, stop, interval=1.0):
-        stop.wait()             # the screen's own poll steps the walk
+        stop.wait()             # the screen's own poll steps the trek
 
     def snapshot(self, data=None):
-        return self.ui.walk_snapshot()
+        return self.ui.trek_snapshot()
 
 
 # Seconds a background chat may sit without a word before the screen ends its agent (0: never).
@@ -5461,20 +5461,20 @@ CHAT_IDLE = float(os.environ.get("DFS_CHAT_IDLE", 30 * 60))
 
 def start_web(ui):
     """Serve the web page from this process, beside the screen, unless DFS_WEB says not
-    to. It shares the screen's walk. The first free port from DFS_WEB_PORT (8765) up:
+    to. It shares the screen's trek. The first free port from DFS_WEB_PORT (8765) up:
     another project's screen may have the first. Returns the server's handle or None."""
     if os.environ.get("DFS_WEB", "1").lower() in ("0", "off", "no", "false"):
         return None
     try:
         import web as dfs_web
         handle = dfs_web.serve(dfs_web.default_host(),
-                               int(os.environ.get("DFS_WEB_PORT", "8765")), walker=UiWalker(ui),
+                               int(os.environ.get("DFS_WEB_PORT", "8765")), trekker=UiTrekker(ui),
                                tries=20)
     except (OSError, ValueError, ImportError) as e:
         ui.event("stop", "web: not serving (%s)" % e)
         return None
     ui.event("run", "web: %s%s" % (handle.url, "  (no login: anyone on this network can "
-                                    "answer, correct, accept and start the walk)"
+                                    "answer, correct, accept and start the trek)"
                                     if handle.public else ""))
     ui.msg = "web: " + handle.url
     return handle

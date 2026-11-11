@@ -3,7 +3,7 @@
 
 Every task file is a decision tree (`tree.py`), and the mechanisms built on it
 fail silently when its shape is wrong: an answer naming no raise leaves the task
-blocked for ever, a node whose parent does not exist falls off the walk, and an
+blocked for ever, a node whose parent does not exist falls off the trek, and an
 edited log line or a rewritten determination erases what the author reviews. So:
 
   refused, even with --warn:

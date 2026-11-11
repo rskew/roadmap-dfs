@@ -21,7 +21,7 @@
 # or backtracks to where the reasoning stopped holding. Only a decision that needs
 # the author is a raise. Neither work sessions without the author nor rounds of
 # implementation review have a limit of their own, since some tasks need extensive
-# review: the cap below (the walk's budget, for a walk-started chain) is the backstop
+# review: the cap below (the trek's budget, for a trek-started chain) is the backstop
 # for a loop. An answer reopens the task
 # until a work session has acted on it. All of it is counted from the
 # task's own Log, where the runner records every session it starts and how it ended;
@@ -37,7 +37,7 @@
 # a commit, not a session: a usage limit or the context checkpoint leaves the node's
 # uncommitted work in the tree, and the briefing tells the next session it is its
 # own. That is only true per checkout: a task's own worktree, or the one in-place chain,
-# since a parallel walk runs other chains beside it elsewhere. Uncommitted work that is NOT
+# since a parallel trek runs other chains beside it elsewhere. Uncommitted work that is NOT
 # this task's (another task's last session, or the author's) does not stop a chain:
 # its first session is told to commit or stash it before touching its node, and that
 # first session is always a work session (see `foreign`, below).
@@ -229,7 +229,7 @@ build_prompt() {  # build_prompt work|critic|review
   cat "$RUNDIR/brief.err" >&2   # a notice the briefing prints is shown whether or not it succeeds
   if [ "$ok" = 0 ]; then
     echo "dfs_run: state.py $flag $ITEM failed; a session cannot be briefed." >&2
-    # recorded, so the walk says why the chain ended rather than that it did not say
+    # recorded, so the trek says why the chain ended rather than that it did not say
     stop_is brief
     meta_set cause="state.py $flag failed: $(tail -n 1 "$RUNDIR/brief.err")"
     return 1
@@ -406,8 +406,8 @@ fi
 # One turn of a chat, for the web page: the author's message on stdin, the agent's reply as
 # the JSON claude prints on stdout. ⚠️ FULL PERMISSIONS, the same flags as the interactive chat
 # above: Edit, Write and Bash all work and nothing is refused or asked about. That is the
-# exposure the port already has (the walk it starts runs with permission prompts off), and
-# `--no-walk` turns the chat off with it. The turn is headless and one-shot so that a resumed
+# exposure the port already has (the trek it starts runs with permission prompts off), and
+# `--no-trek` turns the chat off with it. The turn is headless and one-shot so that a resumed
 # turn reads the cached prefix. The first turn gets the framing; a resumed one is just the
 # message, the session already has it.
 if [ "$MODE" = chatturn ]; then
@@ -513,7 +513,7 @@ fi
 # it), so everything this starts inherited it: the agent, and whatever the agent
 # runs. On 2026-09-27 a W13 session working on this tooling ran test_live.py,
 # whose own `run.sh --codex W1 2` then wrote its meta INTO the live chain's
-# directory: item W1, cap 2, agent codex, and a pid that soon died. The walk read
+# directory: item W1, cap 2, agent codex, and a pid that soon died. The trek read
 # its own chain as ended, started a second chain on W13 beside the first, and that
 # one's critic found the first one's edits and stopped `failed`. A chain's directory
 # is the chain's, so the name stops at this process.
@@ -545,7 +545,7 @@ META
 
 
 # ⚠️ WHY THE CHAIN STOPPED, RECORDED RATHER THAN PRINTED, so a caller deciding what
-# to do next — the TUI's walk — never greps for a sentence.
+# to do next — the TUI's trek — never greps for a sentence.
 #
 #   limit       a usage limit; the only reason a caller should WAIT and retry
 #   blocked     an open raise — the agent's, the critic's or the reviewer's
@@ -633,10 +633,10 @@ on_interrupt() {
   exit 130
 }
 
-# ⚠️ THE CAP CAN BE LOWERED FROM OUTSIDE, BETWEEN RUNS. A walk-started chain is given
-# its share of the budget the walk's live chains have not reserved as its cap, so turning the walk off used to leave
+# ⚠️ THE CAP CAN BE LOWERED FROM OUTSIDE, BETWEEN RUNS. A trek-started chain is given
+# its share of the budget the trek's live chains have not reserved as its cap, so turning the trek off used to leave
 # a chain that could run thirty more sessions with nothing watching it (W19,
-# 2026-09-28: the walk went off at run 3 and the chain carried on to run 5 of 33).
+# 2026-09-28: the trek went off at run 3 and the chain carried on to run 5 of 33).
 # The TUI writes the run it is on into `$RUNDIR/cap` (`dfs_runs.lower_cap`), and this
 # reads it between runs, so the session in flight finishes and no further one starts.
 # Only ever LOWERS: a stray file cannot buy a chain more sessions than it was given.
@@ -1030,7 +1030,7 @@ name = ask("  short name: ")
 if not name:
     say("dfs_run: nothing opened."); raise SystemExit(0)
 goal = block("  Goal — what done looks like and WHY (lone '.' ends it):")
-draft = ask("  Draft, so the walk passes it over until it is marked ready? [y/N]: ").lower().startswith("y")
+draft = ask("  Draft, so the trek passes it over until it is marked ready? [y/N]: ").lower().startswith("y")
 try:
     task = dfs_tree.create_task(name, goal, task=task, draft=draft)
 except ValueError as e:
@@ -1097,10 +1097,10 @@ meta_set item="$ITEM" cap="$CAP" agent="$AGENT" mode="$MODE" \
 trap on_exit EXIT
 trap on_interrupt INT TERM
 # An `enter` that fails (a BranchError, a traceback) is recorded as the stop, with its cause,
-# so the walk does not say the chain ended without recording why.
+# so the trek does not say the chain ended without recording why.
 # ⚠ A DONE ITEM WITH NO BRANCH IS NOT CUT A WORKTREE. Its branch was merged and deleted (or it was
 # never branched): there is nothing left to work or merge, and the loop below ends `done` on the
-# first state it reads. On 2026-11-05 the walk started W130 3 seconds after W130 merged, over
+# first state it reads. On 2026-11-05 the trek started W130 3 seconds after W130 merged, over
 # a leftover directory taken for its worktree; `enter` handed that back and the chain died
 # saying the task file was missing, not that the item was finished.
 if [ "$(python3 "$HERE/state.py" --sh "$ITEM" | sed -n 's/^status=//p')" = done ] \
@@ -1266,10 +1266,10 @@ for i in $(seq 1 "$CAP"); do
       if [ "$AGENT" = claude ]; then model="${IMPLEMENT_MODEL-sonnet}"; else model="${IMPLEMENT_MODEL-}"; fi
     fi
     # ⚠ kiro has no default of ours: its model names are its own (claude-opus-5.5, not opus), so it is
-    # told one only when the walk's model list chose one, and is otherwise left to its config.
+    # told one only when the trek's model list chose one, and is otherwise left to its config.
     [ -z "$model" ] || MODEL_ARGV=(--model "$model")
     echo "   model ${model:-$AGENT default}"
-    meta_set model="${model:-$AGENT default}"   # what the web page's walk box shows beside the run
+    meta_set model="${model:-$AGENT default}"   # what the web page's trek box shows beside the run
   else
     meta_set model=""                           # codex and opencode read theirs from their own config
   fi
@@ -1324,7 +1324,7 @@ for i in $(seq 1 "$CAP"); do
     # ⚠️ A critic or a reviewer judges; it does not work, and it must give a verdict.
     # A change outside .dfs/ during its session is NOT a stop: the tree cannot say
     # whether the session or the author (a chat session, an editor) made it, and
-    # stopping the walk for the author's own edit cost a finished task its review.
+    # stopping the trek for the author's own edit cost a finished task its review.
     # It is said on the console and in the end entry, and left uncommitted for the
     # next session to commit as the node's uncommitted work.
     fp_after="$(python3 "$HERE/state.py" --fingerprint --outside-dfs)"
@@ -1338,10 +1338,10 @@ for i in $(seq 1 "$CAP"); do
        && [ "$(python3 "$HERE/state.py" --fingerprint)" = "$fp_tree_before" ]; then
       # ⚠️ A SESSION THAT CHANGED NOTHING AT ALL IS NOT A FAILED ONE. It wrote no
       # verdict and touched neither the code nor the task file, so there is nothing
-      # to look at, and `failed` stopped the whole walk for it. The chain carries on:
+      # to look at, and `failed` stopped the whole trek for it. The chain carries on:
       # the critic's cadence restarts as it does for any critic, and a review that is
       # still due is simply the next run. Silence TWICE RUNNING, with no work session
-      # between, is `idle`, which the walk takes as a fact about THIS item: it raises
+      # between, is `idle`, which the trek takes as a fact about THIS item: it raises
       # on it and goes on to the next, and a review that can never speak does not
       # loop to the cap. A critic that DID write to the task and still gave no
       # verdict is the case below, and that one is still `failed`.

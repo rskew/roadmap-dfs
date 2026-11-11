@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""The depth-first walk: ONE engine, for the terminal screen and for the web page alone.
+"""The depth-first trek: ONE engine, for the terminal screen and for the web page alone.
 
-A chain ends and something has to decide what happens next; `walk_decide` is that decision
-as a function, and `WalkMixin` is the bookkeeping around it: the budget, the usage-limit
-hold, the pin, which chain is the walk's own, raising on a suspect item. The screen
-(`tui.UI`) mixes it in and steps it from its own poll; `HeadlessWalk`, below, is the same
+A chain ends and something has to decide what happens next; `trek_decide` is that decision
+as a function, and `TrekMixin` is the bookkeeping around it: the budget, the usage-limit
+hold, the pin, which chain is the trek's own, raising on a suspect item. The screen
+(`tui.UI`) mixes it in and steps it from its own poll; `HeadlessTrek`, below, is the same
 engine behind a lock and a thread, for `web.py` run without a screen. Neither repeats a
 decision: they differ only in the world they hand it (the `world` methods below), which is
 what lets one set of tests stand over both.
@@ -14,7 +14,7 @@ The world an engine needs, as methods of `self`:
     live(mode="work")  the live chains of that mode
     reload()           re-read `self.data` (the trees) and so `self.items`
     start_chain(item, cap) -> run directory | None
-    event(kind, text) -> text      record what the walk did
+    event(kind, text) -> text      record what the trek did
     notify(text)                   say so to somebody not looking
     msg                            a line for a person, where there is one
 """
@@ -42,7 +42,7 @@ import tree as dfs_tree      # noqa: E402
 
 RUNNER = dfs_paths.rel(dfs_paths.SCRIPTS / "run.sh")
 AGENTS = ("claude", "codex", "kiro", "opencode")
-TICK = 2.0           # seconds between a headless walk's steps
+TICK = 2.0           # seconds between a headless trek's steps
 MAX_PARALLEL = 16    # chains at once, as far as a page may ask
 EVENTS_KEEP = 400    # activity lines held (the screen reads them back from the file)
 
@@ -66,7 +66,7 @@ def read_agent(path):
 MODEL_ROLES = ("plan", "implement")      # the two things run.sh gives a claude session a model for
 MODEL_ENV = {"plan": "PLAN_MODEL", "implement": "IMPLEMENT_MODEL"}
 MODEL_DEFAULTS = {"plan": "opus", "implement": "sonnet"}   # what run.sh runs a claude session on when none is chosen
-# The agents run.sh can tell a model, and the models the walk offers for each. A model is chosen for an
+# The agents run.sh can tell a model, and the models the trek offers for each. A model is chosen for an
 # agent, because their names differ: claude takes aliases, kiro its own ids (`kiro-cli chat --list-models`).
 # "" is run.sh's own choice (opus / sonnet for claude, the agent's config for kiro); "default" is claude's
 # own default. A name already kept that is not listed stays in the list, so no choice is lost.
@@ -119,7 +119,7 @@ def kiro_models():
 
 
 def models_file():
-    """Where the models chosen for the walk are kept, beside `agent_file`."""
+    """Where the models chosen for the trek are kept, beside `agent_file`."""
     return os.path.join(dfs_runs.run_root(), "models")
 
 
@@ -146,13 +146,13 @@ def read_models(path=None, agent="claude"):
     return out
 
 
-# ── the walk ──────────────────────────────────────────────────────────────────
+# ── the trek ──────────────────────────────────────────────────────────────────
 #
 # A chain ends; something has to decide what happens next. That decision is a
 # FUNCTION OF THREE FACTS and nothing else, so it lives out here where it can be
 # read and tested without a terminal: what the chain recorded about why it stopped
 # (`run.sh` writes it, `runs.py` gives it meaning), whether §3 actually
-# grew while it ran, and what a depth-first walk would take now (`dfs_state`).
+# grew while it ran, and what a depth-first trek would take now (`dfs_state`).
 #
 # ⚠️ ONLY `limit` MEANS "WAIT AND TRY THE SAME THING AGAIN". Every other unhappy
 # ending — a crash, a session that appended nothing, a blown context ceiling —
@@ -164,17 +164,17 @@ def read_models(path=None, agent="claude"):
 # ⚠️ A SUSPECT ITEM IS A RAISE, NOT A STOP. A chain that moved nothing in its tree,
 # or a session the runner found `idle`, says something about THAT item, and the
 # author's instrument for "look at this item" is a raise: it blocks the item, and
-# `next_item` then takes the next branch. Stopping the whole walk instead held every
+# `next_item` then takes the next branch. Stopping the whole trek instead held every
 # other branch hostage to one item, overnight, for a check that can be wrong (see
 # `dfs_state.content`). It is still bounded: each raise blocks one item for good, so
 # a broken machine raises once per item and ends at "every branch is blocked".
-WALK_CONTINUE = {"blocked", "done", "cap"}
+TREK_CONTINUE = {"blocked", "done", "cap"}
 # Endings that say something about THE ITEM, so the author hears about it on the item
-# and the walk takes the next branch.
-WALK_RAISE = {
+# and the trek takes the next branch.
+TREK_RAISE = {
     "idle": "a session on it changed nothing in the repo",
 }
-# Endings that STOP the walk, because the next item would fare no better or because
+# Endings that STOP the trek, because the next item would fare no better or because
 # they are significant enough that a person should look before more is spent.
 # ⚠️ `overbudget` and `overturns` stay here: the context ceiling (CHAIN_CEILING,
 # 400,000) was set far past any normal overrun precisely so that reaching it means
@@ -183,18 +183,18 @@ WALK_RAISE = {
 # (on 2026-09-25 that was nix failing to fetch the agent, which every item would hit
 # next), and a critic or reviewer that changed code or gave no verdict. Raising on
 # the item for the first would raise on every item in turn.
-WALK_STOP = {
+TREK_STOP = {
     "interrupt": "interrupted",
     "overbudget": "a session went past the context ceiling; the budget is not holding",
     "overturns": "a session went past the turn ceiling with no context reading",
     "brief": "a session could not be briefed",
-    # reached only when another screen closes one of THIS walk's own chains: a walk judges
+    # reached only when another screen closes one of THIS trek's own chains: a trek judges
     # the chains it started, and `runs.close_lost` runs as a screen starts, before it has any
     "lost": "the chain died with its supervisor and never finished",
     "failed": "a session failed; its console says whether the agent exited non-zero "
               "or a critic or reviewer changed code or gave no verdict",
 }
-WALK_HOLD = 3600                # the fallback when the reset time is unparseable
+TREK_HOLD = 3600                # the fallback when the reset time is unparseable
 
 # ⚠️ A CHAIN IS NOT ON THE BOX UNTIL IT HAS SAID SO, AND IT SAYS SO SECOND.
 # `start_chain` MAKES the run directory and `run.sh` IDENTIFIES it, by writing
@@ -202,12 +202,12 @@ WALK_HOLD = 3600                # the fallback when the reset time is unparseabl
 # directory without one cannot be asked which item it is or whether it is alive. The
 # gap between those two moments is real and was measured on 2026-09-16: the chain
 # writes its meta about 110 ms after exec (three python starts before it), while
-# `start_chain`'s own `reload()` reaches `run_dirs()` at about 55 ms. So the walk's
-# own chain was absent from the list the walk then judged it by. This is how long it
+# `start_chain`'s own `reload()` reaches `run_dirs()` at about 55 ms. So the trek's
+# own chain was absent from the list the trek then judged it by. This is how long it
 # may stay absent before that is read as a chain that DIED rather than one that has
 # not spoken yet.
 PR_POLL = 300                   # seconds between looks at the open pull requests (GitHub mode)
-WALK_START_GRACE = 15           # seconds — see `walk_tick`
+TREK_START_GRACE = 15           # seconds — see `trek_tick`
 
 
 def chain_cause(rundir):
@@ -215,7 +215,7 @@ def chain_cause(rundir):
 
     A chain that dies before its `meta.json` (`run.sh` exits 2 when `agent.py --rev`
     cannot resolve nixpkgs) leaves its cause only in `console.log`, which neither the
-    screen's message line nor the page reads; the walk's stop reason is where it shows."""
+    screen's message line nor the page reads; the trek's stop reason is where it shows."""
     try:
         with open(os.path.join(rundir, "console.log"), "rb") as fh:
             fh.seek(0, os.SEEK_END)
@@ -230,15 +230,15 @@ def chain_cause(rundir):
     return ": " + (failed or lines)[-1] if lines else ""
 
 
-def walk_decide(stop, moved, next_item, cause="", stop_on_limit=False):
-    """What the walk does after a chain ends, as `(action, why)`.
+def trek_decide(stop, moved, next_item, cause="", stop_on_limit=False):
+    """What the trek does after a chain ends, as `(action, why)`.
 
     `run` carries the item, `hold`, `pend` and `stop` carry a reason to show a person.
-    `pend` is nothing workable now: the walk stays on and waits for a task to appear.
+    `pend` is nothing workable now: the trek stays on and waits for a task to appear.
     `cause` is what the chain recorded beside its stop (`brief` has one), added to a stop's reason.
-    `stop_on_limit` is the walk's option to end at a usage limit instead of holding for it.
+    `stop_on_limit` is the trek's option to end at a usage limit instead of holding for it.
 
-    `raise` carries the question to put to the author on the item; the walk then
+    `raise` carries the question to put to the author on the item; the trek then
     goes on to the next item, which the raise has just made the item stop being.
 
     ⚠️ The `moved` cross-check is deliberately redundant with the runner's own
@@ -258,10 +258,10 @@ def walk_decide(stop, moved, next_item, cause="", stop_on_limit=False):
     """
     if stop == "limit":
         return ("stop" if stop_on_limit else "hold", "a usage limit")
-    if stop in WALK_RAISE:
-        return ("raise", WALK_RAISE[stop])
-    if stop not in WALK_CONTINUE:
-        why = WALK_STOP.get(stop) or stop or "the chain ended without recording why"
+    if stop in TREK_RAISE:
+        return ("raise", TREK_RAISE[stop])
+    if stop not in TREK_CONTINUE:
+        why = TREK_STOP.get(stop) or stop or "the chain ended without recording why"
         return ("stop", "%s: %s" % (why, cause) if cause else why)
     if not moved and stop != "done":
         return ("raise", "the chain moved nothing in the task tree")
@@ -270,27 +270,27 @@ def walk_decide(stop, moved, next_item, cause="", stop_on_limit=False):
     return ("run", next_item)
 
 
-def walk_held_for(seconds):
+def trek_held_for(seconds):
     """A hold, in the units a person reads: whole minutes, floor 1."""
     return "%dm" % max(1, int(seconds // 60))
 
 
-class WalkMixin:
-    """The walk's state and steps. See the module docstring for the world it asks of
-    `self`. Everything the walk does it also says through `event`."""
+class TrekMixin:
+    """The trek's state and steps. See the module docstring for the world it asks of
+    `self`. Everything the trek does it also says through `event`."""
 
-    # Defaults for a screen built without `walk_init` (the tests do): never changed in
+    # Defaults for a screen built without `trek_init` (the tests do): never changed in
     # place, only rebound, so one value serves every instance.
-    walk_parallel = 1
-    walk_stop_on_limit = False
-    walk_chains = ()
-    walk_carry = ()
-    walk_carry_pinned = ()
-    walk_stops = frozenset()
-    walk_on = False
-    walk_pr_next = 0.0          # epoch before which the pull requests are not polled again
-    walk_pr_thread = None       # the poll in flight: `gh` is slow and must not stall the tick
-    walk_pr_sync = False        # the tests poll in the tick's own thread
+    trek_parallel = 1
+    trek_stop_on_limit = False
+    trek_chains = ()
+    trek_carry = ()
+    trek_carry_pinned = ()
+    trek_stops = frozenset()
+    trek_on = False
+    trek_pr_next = 0.0          # epoch before which the pull requests are not polled again
+    trek_pr_thread = None       # the poll in flight: `gh` is slow and must not stall the tick
+    trek_pr_sync = False        # the tests poll in the tick's own thread
 
     def close_lost_runs(self):
         """Close, and say, each run record a dead supervisor left open: called once as a
@@ -300,92 +300,92 @@ class WalkMixin:
                        "was gone and it never finished" % (
                            r["item"], os.path.basename(r["dir"]), r["run"] or "?", r["pid"]))
 
-    def walk_init(self):
-        self.walk_on = False
-        self.walk_budget = 20       # SESSIONS, over the whole walk — see walk_toggle
-        self.walk_spent = 0         # sessions run by chains this walk has finished
-        self.walk_until = 0.0       # epoch; a usage-limit hold
-        self.walk_stop_on_limit = False     # end the walk at a usage limit rather than hold for it
-        self.walk_parallel = 1      # chains at once, each on a task of its own
-        # One record per chain THIS walk started and has not yet judged: `dir` (its run
-        # directory), `item`, `started` (epoch — see walk_tick), `content` (what that
+    def trek_init(self):
+        self.trek_on = False
+        self.trek_budget = 20       # SESSIONS, over the whole trek — see trek_toggle
+        self.trek_spent = 0         # sessions run by chains this trek has finished
+        self.trek_until = 0.0       # epoch; a usage-limit hold
+        self.trek_stop_on_limit = False     # end the trek at a usage limit rather than hold for it
+        self.trek_parallel = 1      # chains at once, each on a task of its own
+        # One record per chain THIS trek started and has not yet judged: `dir` (its run
+        # directory), `item`, `started` (epoch — see trek_tick), `content` (what that
         # task's tree said when it started), `pin` (the author pinned it) and `cap`
         # (the sessions it may run: its share of the budget, lowered when it is told to end).
-        self.walk_chains = []
-        self.walk_carry = []        # tasks whose chain ended on its cap or a limit, still open: they go first
-        self.walk_carry_pinned = set()  # of those, the ones the author pinned: a draft among them stays workable
-        self.walk_note = ""         # why the last walk stopped, until the next one
-        self.walk_next = None       # an item the author pinned for the next chain — walk_pin
-        self.walk_pending = False   # on, but nothing is workable: waiting for a task to appear
-        self.walk_stops = frozenset()   # tasks behind a stop break that held them this walk
+        self.trek_chains = []
+        self.trek_carry = []        # tasks whose chain ended on its cap or a limit, still open: they go first
+        self.trek_carry_pinned = set()  # of those, the ones the author pinned: a draft among them stays workable
+        self.trek_note = ""         # why the last trek stopped, until the next one
+        self.trek_next = None       # an item the author pinned for the next chain — trek_pin
+        self.trek_pending = False   # on, but nothing is workable: waiting for a task to appear
+        self.trek_stops = frozenset()   # tasks behind a stop break that held them this trek
 
-    def walk_begin(self, budget, parallel=1, stop_on_limit=False):
-        """Turn the walk on with `budget` sessions, run `parallel` chains at a time: what `w`
+    def trek_begin(self, budget, parallel=1, stop_on_limit=False):
+        """Turn the trek on with `budget` sessions, run `parallel` chains at a time: what `w`
         does once the numbers are in, and what the web page's Start does. With
-        `stop_on_limit` the walk ends at the first usage limit any of its chains hits,
-        instead of holding until the reset (the default). The option lasts for this walk
+        `stop_on_limit` the trek ends at the first usage limit any of its chains hits,
+        instead of holding until the reset (the default). The option lasts for this trek
         only. A ValueError says why not."""
         if budget < 1:
-            raise ValueError("a budget of %d sessions is not a walk" % budget)
+            raise ValueError("a budget of %d sessions is not a trek" % budget)
         if parallel < 1:
-            raise ValueError("a walk runs at least one chain at a time, not %d" % parallel)
+            raise ValueError("a trek runs at least one chain at a time, not %d" % parallel)
         if parallel > MAX_PARALLEL:
             raise ValueError("%d chains at once is more than a machine runs: at most %d"
                              % (parallel, MAX_PARALLEL))
-        self.walk_budget = budget
-        self.walk_parallel = parallel
-        self.walk_stop_on_limit = bool(stop_on_limit)
-        self.walk_spent = 0
-        self.walk_on = True
-        self.walk_until = 0.0
-        self.walk_chains = []
-        self.walk_carry = []
-        self.walk_carry_pinned = set()
-        self.walk_note = ""
-        self.walk_pending = False
-        self.walk_stops = frozenset()
+        self.trek_budget = budget
+        self.trek_parallel = parallel
+        self.trek_stop_on_limit = bool(stop_on_limit)
+        self.trek_spent = 0
+        self.trek_on = True
+        self.trek_until = 0.0
+        self.trek_chains = []
+        self.trek_carry = []
+        self.trek_carry_pinned = set()
+        self.trek_note = ""
+        self.trek_pending = False
+        self.trek_stops = frozenset()
         both = ("%d sessions" % budget + (", %d at a time" % parallel if parallel > 1 else "")
                 + (", stopping at a usage limit" if stop_on_limit else ""))
-        self.msg = "walk: on, %s — w to stop" % both
-        if parallel > 1 and not self.walk_cuts_new():
+        self.msg = "trek: on, %s — w to stop" % both
+        if parallel > 1 and not self.trek_cuts_new():
             # No worktree is cut here (the checkout is off main/master, has no commit, or is
             # no repo), so a task without one would be worked in the one checkout; see
-            # `walk_tick`.
+            # `trek_tick`.
             self.msg += ("; no worktree is cut here, so tasks without one run in this "
                          "checkout one at a time")
-        self.event("walk", "walk on, %s" % both)
-        self.walk_tick()
+        self.event("trek", "trek on, %s" % both)
+        self.trek_tick()
 
-    def walk_off(self, why):
-        """Turn the walk off, and end every chain of it still running after the run it is
+    def trek_off(self, why):
+        """Turn the trek off, and end every chain of it still running after the run it is
         in. Returns `(lowered, failed)`: the `(item, run)` pairs told to end and the
         `(item, error)` pairs that could not be.
 
-        ⚠️ A walk's chain carries a share of the walk's budget as its cap, so a walk turned
+        ⚠️ A trek's chain carries a share of the trek's budget as its cap, so a trek turned
         off with chains left alone let them run every session they had, unwatched — W19
-        went from run 3 to run 5 of 33 after the walk was off. Each cap is lowered to the
+        went from run 3 to run 5 of 33 after the trek was off. Each cap is lowered to the
         run its chain is on (`dfs_runs.lower_cap`), which is a chain of one from here: the
         session in flight finishes its node's work, and no further one starts. `K` is
         still the key for stopping the run in flight as well."""
-        chains = self.walk_chains
-        self.walk_on = False
-        self.walk_chains = []
-        self.walk_carry = []
-        self.walk_carry_pinned = set()
-        self.walk_until = 0.0
-        self.walk_pending = False
-        self.walk_note = why
-        self.msg = "walk: stopped — %s" % why
-        self.event("stop", "walk off — %s" % why)
+        chains = self.trek_chains
+        self.trek_on = False
+        self.trek_chains = []
+        self.trek_carry = []
+        self.trek_carry_pinned = set()
+        self.trek_until = 0.0
+        self.trek_pending = False
+        self.trek_note = why
+        self.msg = "trek: stopped — %s" % why
+        self.event("stop", "trek off — %s" % why)
         if why != "stopped by hand":
-            self.notify("walk stopped: %s" % why)
-        return self.walk_lower(chains)
+            self.notify("trek stopped: %s" % why)
+        return self.trek_lower(chains)
 
-    def walk_lower(self, chains):
-        """End the live ones of `chains` (records) after the run each is in; see `walk_off`."""
+    def trek_lower(self, chains):
+        """End the live ones of `chains` (records) after the run each is in; see `trek_off`."""
         lowered, failed = [], []
         for rec in chains:
-            run = self.walk_run_of(rec)
+            run = self.trek_run_of(rec)
             if not (run and run["live"]):
                 continue
             n = int(run["run"] or 0)
@@ -399,43 +399,43 @@ class WalkMixin:
             self.event("stop", "%s's chain told to end after run %d" % (rec["item"], n))
         return lowered, failed
 
-    def walk_end_chain(self):
-        """Turn the walk off by hand, and end its chains after the run each is in."""
-        lowered, failed = self.walk_off("stopped by hand")
+    def trek_end_chain(self):
+        """Turn the trek off by hand, and end its chains after the run each is in."""
+        lowered, failed = self.trek_off("stopped by hand")
         if failed:
-            self.msg = ("walk: stopped, but %s's chain could not be told to end (%s) — "
+            self.msg = ("trek: stopped, but %s's chain could not be told to end (%s) — "
                         "K stops it" % failed[0])
         elif len(lowered) > 1:
-            self.msg = ("walk: stopped — %d chains end after their current runs; K stops "
+            self.msg = ("trek: stopped — %d chains end after their current runs; K stops "
                         "those runs too" % len(lowered))
         elif lowered:
             item, n = lowered[0]
-            self.msg = ("walk: stopped — %s's chain ends after run %d; K stops that run too"
+            self.msg = ("trek: stopped — %s's chain ends after run %d; K stops that run too"
                         % (item, n) if n else
-                        "walk: stopped — %s's chain ends before its first run" % item)
+                        "trek: stopped — %s's chain ends before its first run" % item)
 
-    def walk_run_of(self, rec):
+    def trek_run_of(self, rec):
         """The run directory behind a chain record, as `dfs_runs` currently sees it."""
         return next((r for r in self.chains if r["dir"] == rec["dir"]), None)
 
-    def walk_runs(self):
-        """The runs of the chains this walk started that `dfs_runs` can see, oldest first."""
-        return [r for r in (self.walk_run_of(c) for c in self.walk_chains) if r]
+    def trek_runs(self):
+        """The runs of the chains this trek started that `dfs_runs` can see, oldest first."""
+        return [r for r in (self.trek_run_of(c) for c in self.trek_chains) if r]
 
-    def walk_run(self):
-        """The first run this walk started, as `dfs_runs` currently sees it (None with none)."""
-        return next(iter(self.walk_runs()), None)
+    def trek_run(self):
+        """The first run this trek started, as `dfs_runs` currently sees it (None with none)."""
+        return next(iter(self.trek_runs()), None)
 
-    def walk_dirs(self):
-        """The run directories of the chains this walk started: how a chain is told to be its."""
-        return {c["dir"] for c in self.walk_chains}
+    def trek_dirs(self):
+        """The run directories of the chains this trek started: how a chain is told to be its."""
+        return {c["dir"] for c in self.trek_chains}
 
-    def walk_foreign(self):
-        """The live work chains this walk did not start: each fills a slot and its task is busy."""
-        own = self.walk_dirs()
+    def trek_foreign(self):
+        """The live work chains this trek did not start: each fills a slot and its task is busy."""
+        own = self.trek_dirs()
         return [r for r in self.live() if r["dir"] not in own]
 
-    def walk_used(self):
+    def trek_used(self):
         """Sessions spent so far: the finished chains, plus each live chain's own count.
 
         ⚠️ Read off the chain rather than counted here. `run.sh` records the run
@@ -443,39 +443,39 @@ class WalkMixin:
         BEGUN — which is the one that should be charged against a budget, since a
         session that started has already cost its context.
         """
-        return self.walk_spent + sum(int(r["run"] or 0) for r in self.walk_runs())
+        return self.trek_spent + sum(int(r["run"] or 0) for r in self.trek_runs())
 
-    def walk_tick(self):
-        """One step of the walk, on the poll this screen already runs.
+    def trek_tick(self):
+        """One step of the trek, on the poll this screen already runs.
 
         ⚠️ It counts ANY live work chain against its slots, not only its own: a chain
-        started by hand fills one and its task is busy. The walk is a second pair of
+        started by hand fills one and its task is busy. The trek is a second pair of
         hands, not a second author, and two chains on one task would append to its tree
         at the same time, which is how this roadmap's ids collided in the first place.
         Chains on different tasks share nothing (each has its own worktree).
         """
-        if not self.walk_on:
+        if not self.trek_on:
             return
-        # ⚠️ THE WALK DECIDES ON A LIST IT MADE ITSELF. `poll` runs this tick BEFORE
+        # ⚠️ THE TREK DECIDES ON A LIST IT MADE ITSELF. `poll` runs this tick BEFORE
         # it re-derives `self.chains`, so what it hands over is the list
         # `start_chain`'s own reload made — and that reload happens BEFORE the chain
-        # has written its `meta.json` (see `WALK_START_GRACE`). Every question below
+        # has written its `meta.json` (see `TREK_START_GRACE`). Every question below
         # is about chains, so every one of them was being asked of a list that could
-        # not contain the chain this walk had just started: the walk turned itself
+        # not contain the chain this trek had just started: the trek turned itself
         # off one second after starting its first chain, every time, and the chain
-        # ran on unwatched. Nobody saw why either — `walk_off` writes `self.msg` and
+        # ran on unwatched. Nobody saw why either — `trek_off` writes `self.msg` and
         # the same `poll` overwrote it with "refreshed" before the screen was drawn,
-        # which is why a stop is now in the HEADER too (`walk_badge`).
+        # which is why a stop is now in the HEADER too (`trek_badge`).
         self.refresh_chains()
         ended = []
-        for rec in self.walk_chains:
-            run = self.walk_run_of(rec)
+        for rec in self.trek_chains:
+            run = self.trek_run_of(rec)
             if run is None:
                 # Made, but not yet named by the chain itself. That is a start in
                 # progress, not a death — and the difference is how long it has had.
-                if time.time() - rec["started"] < WALK_START_GRACE:
+                if time.time() - rec["started"] < TREK_START_GRACE:
                     continue
-                self.walk_off("the chain it started is no longer on the box"
+                self.trek_off("the chain it started is no longer on the box"
                               + chain_cause(rec["dir"]))
                 return
             if not run["live"]:
@@ -485,38 +485,38 @@ class WalkMixin:
             # the chain list is. `poll` reloads only once this tick has returned, so
             # a chain whose last append and whose exit landed inside the same second
             # would be judged against a §3 that predates its own entry — and an
-            # entry the walk cannot see is `moved` false, which STOPS the walk and
+            # entry the trek cannot see is `moved` false, which STOPS the trek and
             # blames the item for appending nothing.
             self.reload()
             for rec, run in ended:
-                if not self.walk_judge(rec, run):
+                if not self.trek_judge(rec, run):
                     return
-        # Recorded on every tick the walk is on, before the returns for a hold and for
-        # no free slot: a walk whose slots a hand-started chain filled still waits at
+        # Recorded on every tick the trek is on, before the returns for a hold and for
+        # no free slot: a trek whose slots a hand-started chain filled still waits at
         # the break, and must end there rather than go past it once that chain is done.
-        stop = self.walk_stop_at()
-        self.walk_poll_prs()
-        if time.time() < self.walk_until:
+        stop = self.trek_stop_at()
+        self.trek_poll_prs()
+        if time.time() < self.trek_until:
             return
 
-        foreign = self.walk_foreign()
-        free = self.walk_parallel - len(self.walk_chains) - len(foreign)
-        left = self.walk_budget - self.walk_spent
-        if left < 1 and not self.walk_chains:
-            self.walk_off("%d sessions spent" % self.walk_spent)
+        foreign = self.trek_foreign()
+        free = self.trek_parallel - len(self.trek_chains) - len(foreign)
+        left = self.trek_budget - self.trek_spent
+        if left < 1 and not self.trek_chains:
+            self.trek_off("%d sessions spent" % self.trek_spent)
             return
         if free < 1:
             return
-        busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in foreign}
+        busy = {c["item"] for c in self.trek_chains} | {r["item"] for r in foreign}
         items = [i for i in self.items if stop is None or i.get("segment", 0) < stop]
         before = {i["id"] for i in items}
         # ⚠️ A CHAIN WITH NO WORKTREE WORKS IN THE ONE CHECKOUT. Two of them there find each
         # other's half-done work as foreign dirt and interleave commits on one branch, so at
         # most one chain without a worktree runs at a time; those with one run beside it.
-        in_place = any(not self.walk_cuts(i) for i in busy)
+        in_place = any(not self.trek_cuts(i) for i in busy)
         behind = {i["id"] for i in self.items} - {i["id"] for i in items}
-        lead = [x for x in self.walk_lead(busy)
-                if x not in behind or x == self.walk_next or x in self.walk_carry_pinned]
+        lead = [x for x in self.trek_lead(busy)
+                if x not in behind or x == self.trek_next or x in self.trek_carry_pinned]
         picks, skipped = [], set()
         while True:
             # A task that would share the checkout with a chain already there is passed
@@ -526,7 +526,7 @@ class WalkMixin:
             if not asked:
                 break
             for item in asked:
-                if not self.walk_cuts(item):
+                if not self.trek_cuts(item):
                     if in_place:
                         skipped.add(item)
                         continue
@@ -534,75 +534,75 @@ class WalkMixin:
                 picks.append(item)
             if len(picks) >= free or not skipped & set(asked):
                 break
-        if not picks and stop is not None and not self.walk_chains and not any(
+        if not picks and stop is not None and not self.trek_chains and not any(
                 r["item"] in before for r in foreign) and not any(
                 i.get("waiting_on") for i in self.items if i.get("segment", 0) == stop):
             # Everything before the stop break is done and no chain is still working on
-            # it, the walk's own or one started by hand (it may still be merging the last
+            # it, the trek's own or one started by hand (it may still be merging the last
             # task): the end the author asked for, so they review before going on.
             first = next(i["id"] for i in self.items if i.get("segment", 0) == stop)
-            self.walk_off("stopped at the stop break above %s: everything before it is "
-                          "done — review it, then start a walk to go on" % first)
+            self.trek_off("stopped at the stop break above %s: everything before it is "
+                          "done — review it, then start a trek to go on" % first)
             return
         if not picks:
-            # ⚠️ NOTHING TO TAKE IS A WAIT, NOT AN END. The walk stays on and asks
+            # ⚠️ NOTHING TO TAKE IS A WAIT, NOT AN END. The trek stays on and asks
             # again on every tick (`reload` re-reads the trees), so a task created
-            # later, or one a raise's answer unblocks, is taken without the walk
+            # later, or one a raise's answer unblocks, is taken without the trek
             # being started again. Nothing is spent while it waits. Free slots beside
-            # a running chain are not a wait: that chain is the walk's work.
-            if not (self.walk_chains or foreign or self.walk_pending):
-                self.walk_pending = True
-                self.msg = self.event("walk", "walk: nothing workable — waiting for a task")
+            # a running chain are not a wait: that chain is the trek's work.
+            if not (self.trek_chains or foreign or self.trek_pending):
+                self.trek_pending = True
+                self.msg = self.event("trek", "trek: nothing workable — waiting for a task")
             return
         for item in picks:
             # ⚠️ A chain's cap is its share of the budget the live chains have not
             # already reserved, which is what makes the budget a real bound rather
             # than a thing checked between chains: the caps of the chains running at
-            # once never add up to more than the walk has left to spend.
-            avail = left - sum(c["cap"] for c in self.walk_chains)
+            # once never add up to more than the trek has left to spend.
+            avail = left - sum(c["cap"] for c in self.trek_chains)
             if avail < 1:
                 return
-            if self.walk_pending:
-                self.walk_pending = False
-                self.event("walk", "walk: %s is workable — resuming" % item)
+            if self.trek_pending:
+                self.trek_pending = False
+                self.event("trek", "trek: %s is workable — resuming" % item)
             cap = max(1, avail // (free - picks.index(item)))
-            pin = self.walk_next == item
-            self.walk_next = None if pin else self.walk_next
-            self.walk_carry = [c for c in self.walk_carry if c != item]
+            pin = self.trek_next == item
+            self.trek_next = None if pin else self.trek_next
+            self.trek_carry = [c for c in self.trek_carry if c != item]
             content = set(self.data.get("contents", {}).get(item, ()))
             started = time.time()
             rundir = self.start_chain(item, str(cap))
             if rundir is None:
-                self.walk_off("could not start a chain on %s" % item)
+                self.trek_off("could not start a chain on %s" % item)
                 return
-            self.walk_chains = self.walk_chains + [dict(
+            self.trek_chains = self.trek_chains + [dict(
                 dir=rundir, item=item, started=started, content=content, pin=pin, cap=cap)]
 
-    def walk_poll_prs(self):
+    def trek_poll_prs(self):
         """GitHub mode: every PR_POLL seconds, look at each open pull request for comments and
-        reviews (`github.watch`), each new one an open node the walk then takes like any other.
+        reviews (`github.watch`), each new one an open node the trek then takes like any other.
         The look runs in a thread, since `gh` takes seconds and the tick runs on the screen's
         poll; a task with a chain on it is passed over until the next look, as its tree is
         being written."""
         now = time.time()
-        if now < self.walk_pr_next or not dfs_paths.read_github():
+        if now < self.trek_pr_next or not dfs_paths.read_github():
             return
-        if self.walk_pr_thread is not None and self.walk_pr_thread.is_alive():
+        if self.trek_pr_thread is not None and self.trek_pr_thread.is_alive():
             return
-        self.walk_pr_next = now + PR_POLL
-        busy = {c["item"] for c in self.walk_chains} | {r["item"] for r in self.walk_foreign()}
-        if self.walk_pr_sync:
-            self.walk_look_at_prs(busy)
+        self.trek_pr_next = now + PR_POLL
+        busy = {c["item"] for c in self.trek_chains} | {r["item"] for r in self.trek_foreign()}
+        if self.trek_pr_sync:
+            self.trek_look_at_prs(busy)
             return
-        self.walk_pr_thread = threading.Thread(target=self.walk_look_at_prs, args=(busy,),
+        self.trek_pr_thread = threading.Thread(target=self.trek_look_at_prs, args=(busy,),
                                                daemon=True)
-        self.walk_pr_thread.start()
+        self.trek_pr_thread.start()
 
-    def walk_look_at_prs(self, busy):
+    def trek_look_at_prs(self, busy):
         for task in dfs_github.watched():
             # `busy` is as of the tick; a chain the same tick (or a later one) started since
             # is on the list now, and its tree is not ours to write beside it
-            if task in busy or task in {c["item"] for c in self.walk_chains}:
+            if task in busy or task in {c["item"] for c in self.trek_chains}:
                 continue
             try:
                 added = dfs_github.watch(task)
@@ -613,95 +613,95 @@ class WalkMixin:
                 self.event("github", "%s: %d new comment%s on its pull request, now open: %s" % (
                     task, len(added), "" if len(added) == 1 else "s", ", ".join(added)))
 
-    def walk_stop_at(self, keep=True):
-        """The segment this walk takes nothing from, or None: the first one a STOP BREAK
-        (`--- stop`, `order.py`) opens that has held a task while the walk was on.
+    def trek_stop_at(self, keep=True):
+        """The segment this trek takes nothing from, or None: the first one a STOP BREAK
+        (`--- stop`, `order.py`) opens that has held a task while the trek was on.
 
-        ⚠️ HELD WHILE THE WALK WAS ON, not merely there. A stop break is for the author
-        to review what was worked before it, so the walk that worked up to it ends there
-        (`walk_tick`), and the walk they start afterwards, which finds it open, passes it.
-        The tasks it held are kept by id, so a fence it held stays this walk's end once it
-        opens, and a renumbering of segments by a break added mid-walk does not move it.
-        Only the walk reads it: what the order says (`next_item`) is the fence as ever.
+        ⚠️ HELD WHILE THE TREK WAS ON, not merely there. A stop break is for the author
+        to review what was worked before it, so the trek that worked up to it ends there
+        (`trek_tick`), and the trek they start afterwards, which finds it open, passes it.
+        The tasks it held are kept by id, so a fence it held stays this trek's end once it
+        opens, and a renumbering of segments by a break added mid-trek does not move it.
+        Only the trek reads it: what the order says (`next_item`) is the fence as ever.
         The pin is the author overriding the order, and goes past it. `keep` False reads
-        without recording what is held now (`walk_target`)."""
-        if not self.walk_on:
+        without recording what is held now (`trek_target`)."""
+        if not self.trek_on:
             return None
-        stops = self.walk_stops | {i["id"] for i in self.items
+        stops = self.trek_stops | {i["id"] for i in self.items
                                    if i.get("stop") and i.get("waiting_on")}
         if keep:
-            self.walk_stops = frozenset(stops)
+            self.trek_stops = frozenset(stops)
         return min((i.get("segment", 0) for i in self.items
                     if i.get("stop") and i["id"] in stops), default=None)
 
-    def walk_cuts_new(self):
+    def trek_cuts_new(self):
         """Whether a task with no worktree yet gets one cut (`paths.cuts_worktrees`)."""
         return dfs_paths.cuts_worktrees()
 
-    def walk_cuts(self, item):
+    def trek_cuts(self, item):
         """Whether `item`'s chain is worked in a worktree of its own (`paths.gets_worktree`)."""
         return dfs_paths.gets_worktree(item)
 
-    def walk_judge(self, rec, run):
-        """Judge one chain that ended: charge its sessions, then what `walk_decide` says.
-        False when the walk is off now (and the tick ends)."""
+    def trek_judge(self, rec, run):
+        """Judge one chain that ended: charge its sessions, then what `trek_decide` says.
+        False when the trek is off now (and the tick ends)."""
         item = run["item"]
         moved = bool(set(self.data.get("contents", {}).get(item, ())) - rec["content"])
-        action, why = walk_decide(run["stop"], moved, self.walk_target(),
-                                  run.get("cause", ""), self.walk_stop_on_limit)
-        self.walk_spent += int(run["run"] or 0)
-        self.walk_chains = [c for c in self.walk_chains if c is not rec]
+        action, why = trek_decide(run["stop"], moved, self.trek_target(),
+                                  run.get("cause", ""), self.trek_stop_on_limit)
+        self.trek_spent += int(run["run"] or 0)
+        self.trek_chains = [c for c in self.trek_chains if c is not rec]
         if action == "hold":
             # Until the stated reset when there is one; the flat hour only when
             # the provider said nothing we can parse (dfs_limit.reset_at).
             now = time.time()
             at = dfs_limit.reset_at(run["resets"], now)
-            self.walk_until = max(self.walk_until, at if at is not None else now + WALK_HOLD)
+            self.trek_until = max(self.trek_until, at if at is not None else now + TREK_HOLD)
             tail = (" (%s)" % run["resets"]) if run["resets"] else ""
-            self.msg = self.event("hold", "walk: %s hit %s — holding %s%s" % (
-                item, why, walk_held_for(self.walk_until - now), tail))
+            self.msg = self.event("hold", "trek: %s hit %s — holding %s%s" % (
+                item, why, trek_held_for(self.trek_until - now), tail))
             # ⚠️ A limit means "try the same thing again": the task goes first when the
             # hold is over, a draft the author pinned included (`next_item` never offers
             # one). A newer pin is the author's later word and still goes before it.
-            self.walk_carry_add(item, rec)
+            self.trek_carry_add(item, rec)
             return True
         if action == "stop":
             if run["stop"] == "limit" and run["resets"]:
                 why += " (%s)" % run["resets"]
-            self.walk_off("%s: %s" % (item, why))
+            self.trek_off("%s: %s" % (item, why))
             return False
         if action == "raise":
-            return self.walk_raise(item, why)
+            return self.trek_raise(item, why)
         # "run" and "pend" carry on to fill the slots; a chain that used its share of the
         # budget with the task still open has more to do there, and goes first.
         if run["stop"] == "cap":
-            self.walk_carry_add(item, rec)
+            self.trek_carry_add(item, rec)
         return True
 
-    def walk_carry_add(self, item, rec):
+    def trek_carry_add(self, item, rec):
         """Carry `item` to go first next time. Whether the author pinned it is remembered,
         since a pinned draft is workable here and no other draft is."""
-        self.walk_carry = self.walk_carry + [item]
-        if rec["pin"] or item in self.walk_carry_pinned:
-            self.walk_carry_pinned = set(self.walk_carry_pinned) | {item}
+        self.trek_carry = self.trek_carry + [item]
+        if rec["pin"] or item in self.trek_carry_pinned:
+            self.trek_carry_pinned = set(self.trek_carry_pinned) | {item}
 
-    def walk_lead(self, busy=()):
-        """The tasks the walk takes before the order: the pin, the tasks its chains left
-        on a cap or a limit while still workable, then the walk's continuation.
+    def trek_lead(self, busy=()):
+        """The tasks the trek takes before the order: the pin, the tasks its chains left
+        on a cap or a limit while still workable, then the trek's continuation.
 
         ⚠️ A carried task is asked again what the order would ask: it may have been made a
-        draft (`walk_draft_marked` ends its chain on the cap, which is how it got here),
+        draft (`trek_draft_marked` ends its chain on the cap, which is how it got here),
         or an ancestor's raise or a fence may hold it now. Only a draft the author pinned
         is carried on. The continuation is asked the same of a parent in `busy`: it falls
         back to `next_item`, which names the child of a parent whose review has just
         landed and whose chain is still merging it."""
         by = {i["id"]: i for i in self.items}
-        pin = self.walk_pinned()    # drops a pin that cannot be worked, and says so
+        pin = self.trek_pinned()    # drops a pin that cannot be worked, and says so
         lead = [pin] if pin else []
-        for c in self.walk_carry:
+        for c in self.trek_carry:
             it = by.get(c)
             if (it and it["status"] == "open" and it.get("reachable", True)
-                    and (not it.get("draft") or c in self.walk_carry_pinned)
+                    and (not it.get("draft") or c in self.trek_carry_pinned)
                     and not dfs_state.held_by_parent(by, it, busy)):
                 lead.append(c)
         nxt = self.data.get("next_item")
@@ -710,124 +710,124 @@ class WalkMixin:
             lead.append(nxt)
         return lead
 
-    def walk_target(self):
-        """The one answer to "which task does the walk take next": the pin while that
+    def trek_target(self):
+        """The one answer to "which task does the trek take next": the pin while that
         task is open, else the order's answer (`next_item`), unless that is behind the
-        stop break this walk ends at (`walk_stop_at`). The screen's header and walk
-        preview, the page's `next`, and the chain the walk starts all read this, so
-        what is shown is what is taken. Reads only; `walk_pinned` is what drops a dead pin."""
-        pin = self.walk_next
+        stop break this trek ends at (`trek_stop_at`). The screen's header and trek
+        preview, the page's `next`, and the chain the trek starts all read this, so
+        what is shown is what is taken. Reads only; `trek_pinned` is what drops a dead pin."""
+        pin = self.trek_next
         if pin is not None and any(i["id"] == pin and i["status"] == "open"
                                    for i in self.items):
             return pin
         nxt = self.data.get("next_item")
-        stop = self.walk_stop_at(keep=False)
+        stop = self.trek_stop_at(keep=False)
         if stop is not None and any(i["id"] == nxt and i.get("segment", 0) >= stop
                                     for i in self.items):
             return None
         return nxt
 
-    def walk_pinned(self):
+    def trek_pinned(self):
         """The pinned item, while it can still be worked; a pin that cannot is dropped.
 
         ⚠️ Checked when the chain STARTS, not when the key was pressed: a chain on an
         item that finished or raised in between would end "done before run 1" having
-        moved nothing, and `walk_decide` would raise on it for that. Only the item's
+        moved nothing, and `trek_decide` would raise on it for that. Only the item's
         OWN status is asked — a fence or an ancestor's raise is exactly the order the
         author is overriding by pinning it."""
-        if self.walk_next is None:
+        if self.trek_next is None:
             return None
-        row = next((i for i in self.items if i["id"] == self.walk_next), None)
+        row = next((i for i in self.items if i["id"] == self.trek_next), None)
         if row is None or row["status"] != "open":
-            self.msg = "walk: dropped the pin on %s — it is %s" % (
-                self.walk_next, row["status"] if row else "gone")
-            self.walk_next = None
+            self.msg = "trek: dropped the pin on %s — it is %s" % (
+                self.trek_next, row["status"] if row else "gone")
+            self.trek_next = None
             return None
-        return self.walk_next
+        return self.trek_next
 
-    def walk_pin(self, it):
-        """`n`: the walk's next chain goes to the selected item, not `next_item`.
+    def trek_pin(self, it):
+        """`n`: the trek's next chain goes to the selected item, not `next_item`.
 
-        A chain's cap is a share of the walk's budget, so "next" would otherwise mean
-        "whenever a slot is free". With every slot taken, the walk's most recently
+        A chain's cap is a share of the trek's budget, so "next" would otherwise mean
+        "whenever a slot is free". With every slot taken, the trek's most recently
         started chain on another item is ended after the run in flight
         (`dfs_runs.lower_cap`, as `w` does), so the switch happens at the next
-        session. After that one chain, the order decides as usual — and since a walk
+        session. After that one chain, the order decides as usual — and since a trek
         finishes what it started (`dfs_state.continue_last`), that keeps it on the
         pinned item while it is open and nothing holds it. `n` on the pinned item takes
         the pin away."""
         if it is None:
             return
-        if self.walk_next == it["id"]:
-            self.walk_next = None
-            self.msg = self.event("walk", "walk: pin on %s removed" % it["id"])
+        if self.trek_next == it["id"]:
+            self.trek_next = None
+            self.msg = self.event("trek", "trek: pin on %s removed" % it["id"])
             return
         if it["status"] != "open":
-            self.msg = "walk: %s is %s — nothing for a chain to do there" % (
+            self.msg = "trek: %s is %s — nothing for a chain to do there" % (
                 it["id"], it["status"])
             return
-        self.walk_next = it["id"]
-        live = [c for c in self.walk_chains if (self.walk_run_of(c) or {}).get("live")]
-        full = len(self.walk_chains) + len(self.walk_foreign()) >= self.walk_parallel
-        if not (self.walk_on and live and full) or any(c["item"] == it["id"] for c in live):
-            self.msg = self.event("walk", "walk: its next chain goes to %s" % it["id"]
-                                  if self.walk_on else
-                                  "walk: %s goes first when w starts it" % it["id"])
+        self.trek_next = it["id"]
+        live = [c for c in self.trek_chains if (self.trek_run_of(c) or {}).get("live")]
+        full = len(self.trek_chains) + len(self.trek_foreign()) >= self.trek_parallel
+        if not (self.trek_on and live and full) or any(c["item"] == it["id"] for c in live):
+            self.msg = self.event("trek", "trek: its next chain goes to %s" % it["id"]
+                                  if self.trek_on else
+                                  "trek: %s goes first when w starts it" % it["id"])
             return
         rec = max(live, key=lambda c: c["started"])
-        run = self.walk_run_of(rec)
+        run = self.trek_run_of(rec)
         n = int(run["run"] or 0)
         try:
             self.lower_cap(run["dir"], n)
         except OSError as e:
-            self.msg = ("walk: %s pinned, but %s's chain could not be told to end (%s)"
+            self.msg = ("trek: %s pinned, but %s's chain could not be told to end (%s)"
                         % (it["id"], run["item"], e))
             return
         rec["cap"] = n
-        self.msg = self.event("walk", "walk: pinned %s — %s's chain ends after run %d" % (
+        self.msg = self.event("trek", "trek: pinned %s — %s's chain ends after run %d" % (
             it["id"], run["item"], n))
 
-    def walk_draft_marked(self, item):
-        """`item` was just marked a draft: end the walk's own chain on it after the run in
-        flight, as `walk_pin` does for a chain on another item. A chain carries a share
-        of the walk's budget and `run.sh` has no draft stop, so it would otherwise work
+    def trek_draft_marked(self, item):
+        """`item` was just marked a draft: end the trek's own chain on it after the run in
+        flight, as `trek_pin` does for a chain on another item. A chain carries a share
+        of the trek's budget and `run.sh` has no draft stop, so it would otherwise work
         the draft to the end. A chain the author pinned stays: pinning was asking for it."""
-        rec = next((c for c in self.walk_chains if c["item"] == item), None)
-        run = self.walk_on and rec and self.walk_run_of(rec)
+        rec = next((c for c in self.trek_chains if c["item"] == item), None)
+        run = self.trek_on and rec and self.trek_run_of(rec)
         if not (run and run["live"]) or rec["pin"]:
             return
         n = int(run["run"] or 0)
         try:
             self.lower_cap(run["dir"], n)
         except OSError as e:
-            self.msg = "walk: %s is a draft, but its chain could not be told to end (%s)" % (item, e)
+            self.msg = "trek: %s is a draft, but its chain could not be told to end (%s)" % (item, e)
             return
         rec["cap"] = n
-        self.msg = self.event("walk", "walk: %s is a draft — its chain ends after run %d" % (item, n))
+        self.msg = self.event("trek", "trek: %s is a draft — its chain ends after run %d" % (item, n))
 
-    def walk_raise(self, item, why):
+    def trek_raise(self, item, why):
         """Put a suspect item to the author and re-read the trees; True to carry on.
 
-        ⚠️ The raise is what moves the walk on, so it is checked rather than trusted:
+        ⚠️ The raise is what moves the trek on, so it is checked rather than trusted:
         if `next_item` still names the item afterwards, the raise did not block it,
         and starting another chain there is the loop this exists to prevent."""
-        body = ("The walk suspects a problem with %s: %s. Look at the last chain's "
-                "run and the tree (%s --review %s): answer this to let the walk take "
+        body = ("The trek suspects a problem with %s: %s. Look at the last chain's "
+                "run and the tree (%s --review %s): answer this to let the trek take "
                 "it again, or correct the node where it went wrong."
                 % (item, why, RUNNER, item))
         try:
             self.raise_on(item, body)
         except (OSError, ValueError) as e:
-            self.walk_off("%s: %s, and the raise failed (%s)" % (item, why, e))
+            self.trek_off("%s: %s, and the raise failed (%s)" % (item, why, e))
             return False
         self.reload()
         if self.data.get("next_item") == item:
-            self.walk_off("%s: %s, and the raise did not block it" % (item, why))
+            self.trek_off("%s: %s, and the raise did not block it" % (item, why))
             return False
-        self.msg = self.event("raise", "walk: raised on %s — %s; moving on" % (item, why))
+        self.msg = self.event("raise", "trek: raised on %s — %s; moving on" % (item, why))
         return True
 
-    # ---- what both the screen and the page ask of the walk ------------------------
+    # ---- what both the screen and the page ask of the trek ------------------------
 
     WATCH_HINT = ""
 
@@ -894,7 +894,7 @@ class WalkMixin:
         self.event("run", "$ %s  (pid %d)" % (shlex.join(argv), proc.pid))
         self.msg = "$ %s  — in the background, pid %d%s" % (
             shlex.join(argv), proc.pid, self.WATCH_HINT)
-        # ⚠️ The DIRECTORY, not the pid: the walk has to judge the chain it started
+        # ⚠️ The DIRECTORY, not the pid: the trek has to judge the chain it started
         # and no other, and a pid is reused while a run directory is not (see
         # `dfs_runs.pid_is_chain`, which needs both to answer even "is it alive").
         return rundir
@@ -920,10 +920,10 @@ class WalkMixin:
             raise ValueError("agent must be one of " + ", ".join(AGENTS))
         self.agent = name
         self.msg = "agent: " + name
-        self.event("walk", "agent: " + name)
+        self.event("trek", "agent: " + name)
 
     def models(self):
-        """The models chosen for the chains the walk starts next, per role, for the agent they use."""
+        """The models chosen for the chains the trek starts next, per role, for the agent they use."""
         return read_models(agent=self.agent)
 
     def model_choices(self):
@@ -993,60 +993,60 @@ class WalkMixin:
             raise ValueError("could not keep the choice: %s" % e)
         what = "%s model: %s" % (role, name or "run.sh's default")
         self.msg = what
-        self.event("walk", what)
+        self.event("trek", what)
 
-    def walk_start(self, budget, parallel=1, stop_on_limit=False):
-        """Start a walk from outside the prompt: the page's Start, validated as `w`'s
+    def trek_start(self, budget, parallel=1, stop_on_limit=False):
+        """Start a trek from outside the prompt: the page's Start, validated as `w`'s
         numbers are (and bounded, since a web page is further from the person than a key)."""
         if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
-            raise ValueError("a walk needs a budget of at least one session")
+            raise ValueError("a trek needs a budget of at least one session")
         if budget > 500:
-            raise ValueError("a budget of %d sessions is not a walk, it is a month" % budget)
+            raise ValueError("a budget of %d sessions is not a trek, it is a month" % budget)
         if not isinstance(parallel, int) or isinstance(parallel, bool) or parallel < 1:
-            raise ValueError("a walk runs at least one chain at a time")
+            raise ValueError("a trek runs at least one chain at a time")
         if parallel > MAX_PARALLEL:
             raise ValueError("%d chains at once is more than a machine runs: at most %d"
                              % (parallel, MAX_PARALLEL))
         if not isinstance(stop_on_limit, bool):
             raise ValueError("stop_on_limit is true or false, not %r" % (stop_on_limit,))
-        if self.walk_on:
-            raise ValueError("the walk is already on")
-        self.walk_begin(budget, parallel, stop_on_limit)
+        if self.trek_on:
+            raise ValueError("the trek is already on")
+        self.trek_begin(budget, parallel, stop_on_limit)
 
-    def walk_pin_id(self, item):
+    def trek_pin_id(self, item):
         """The page's `n`: pin an item by id, or with None (or the pinned one again) take
         the pin away. ValueError says why not."""
-        if item is None or item == self.walk_next:
-            if self.walk_next is not None:
-                self.walk_next = None
-                self.event("walk", "walk: pin removed")
+        if item is None or item == self.trek_next:
+            if self.trek_next is not None:
+                self.trek_next = None
+                self.event("trek", "trek: pin removed")
             return
         row = next((i for i in self.items if i["id"] == item), None)
         if row is None:
             raise ValueError("no task %s" % item)
         if row["status"] != "open":
             raise ValueError("%s is %s: nothing for a chain to do there" % (item, row["status"]))
-        self.walk_pin(row)
+        self.trek_pin(row)
 
-    def walk_snapshot(self):
-        """Where the walk stands, for the page: read, never written."""
+    def trek_snapshot(self):
+        """Where the trek stands, for the page: read, never written."""
         now = time.time()
         items = list(self.items)
         auto = self.data.get("next_item")
         goal = next((i["goal"] for i in items if i["id"] == auto), "")
         return dict(
-            next=self.walk_target(),
-            on=self.walk_on, pending=self.walk_pending,
-            budget=self.walk_budget, used=self.walk_used(), parallel=self.walk_parallel,
-            stop_on_limit=self.walk_stop_on_limit,
-            hold=max(0, int(self.walk_until - now)) if self.walk_until > now else 0,
-            note=self.walk_note, agent=self.agent, agents=list(AGENTS), models=self.models(),
+            next=self.trek_target(),
+            on=self.trek_on, pending=self.trek_pending,
+            budget=self.trek_budget, used=self.trek_used(), parallel=self.trek_parallel,
+            stop_on_limit=self.trek_stop_on_limit,
+            hold=max(0, int(self.trek_until - now)) if self.trek_until > now else 0,
+            note=self.trek_note, agent=self.agent, agents=list(AGENTS), models=self.models(),
             model_defaults=self.model_defaults(), model_choices=self.model_choices(),
-            pinned=self.walk_next, auto=auto, auto_goal=goal,
+            pinned=self.trek_next, auto=auto, auto_goal=goal,
             chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],
                          agent=r["agent"], kind=r["kind"], model=r["model"],
                          progress=dfs_runs.progress(r), live=r["live"])
-                    for r in self.walk_runs()],
+                    for r in self.trek_runs()],
             live=[dict(item=r["item"], pid=r["pid"], progress=dfs_runs.progress(r))
                   for r in self.live()],
             candidates=[dict(id=i["id"], goal=i["goal"]) for i in items if i["status"] == "open"],
@@ -1062,9 +1062,9 @@ def ago(secs):
     return "just now"
 
 
-class HeadlessWalk(WalkMixin):
+class HeadlessTrek(TrekMixin):
     """The same engine with no screen: `web.py` run on its own. The world is read from
-    disk; a lock serialises the page's controls with the thread that steps the walk."""
+    disk; a lock serialises the page's controls with the thread that steps the trek."""
 
     # no screen, so no chat of the screen's to join: the page runs its own turns
     has_screen = False
@@ -1098,7 +1098,7 @@ class HeadlessWalk(WalkMixin):
         self.data = {}
         self.events = collections.deque(maxlen=EVENTS_KEEP)
         self._agent = None
-        self.walk_init()
+        self.trek_init()
 
     # the world
     @property
@@ -1149,24 +1149,24 @@ class HeadlessWalk(WalkMixin):
     def start(self, budget, parallel=1, stop_on_limit=False):
         with self.lock:
             self.reload()
-            self.walk_start(budget, parallel, stop_on_limit)
+            self.trek_start(budget, parallel, stop_on_limit)
 
     def stop(self):
         with self.lock:
             self.refresh_chains()
-            if self.walk_on:
-                self.walk_end_chain()
+            if self.trek_on:
+                self.trek_end_chain()
 
     def pin(self, item):
         with self.lock:
             self.refresh_chains()
             self.reload()
-            self.walk_pin_id(item)
+            self.trek_pin_id(item)
 
     def draft_marked(self, item):
         with self.lock:
             self.refresh_chains()
-            self.walk_draft_marked(item)
+            self.trek_draft_marked(item)
 
     def stop_chain(self, item):
         with self.lock:
@@ -1174,20 +1174,20 @@ class HeadlessWalk(WalkMixin):
 
     def set_agent(self, name):
         with self.lock:
-            WalkMixin.set_agent(self, name)
+            TrekMixin.set_agent(self, name)
 
     def set_model(self, role, name):
         with self.lock:
-            WalkMixin.set_model(self, role, name)
+            TrekMixin.set_model(self, role, name)
 
     def snapshot(self, data=None):
-        """The walk as the page shows it. `data` is a state the caller already holds (the page's
-        shared build, up to `web.FULL_TTL` old), kept as `self.data`; the walker's own actions
+        """The trek as the page shows it. `data` is a state the caller already holds (the page's
+        shared build, up to `web.FULL_TTL` old), kept as `self.data`; the trekker's own actions
         reload before they act, so none of them acts on it."""
         with self.lock:
             self.refresh_chains()
             self.reload(data)
-            return self.walk_snapshot()
+            return self.trek_snapshot()
 
     def loop(self, stop, interval=TICK):
         while True:
@@ -1196,11 +1196,11 @@ class HeadlessWalk(WalkMixin):
                     self.refresh_chains()
                     # Off, the tick does nothing, and a state build every TICK is a
                     # core's worth of work nobody reads: the page builds its own.
-                    if self.walk_on:
+                    if self.trek_on:
                         self.reload()
-                        self.walk_tick()
-                except Exception as e:          # a thread that dies stops a walk silently
-                    if self.walk_on:
-                        self.walk_off("the walk failed: %s" % e)
+                        self.trek_tick()
+                except Exception as e:          # a thread that dies stops a trek silently
+                    if self.trek_on:
+                        self.trek_off("the trek failed: %s" % e)
             if stop.wait(interval):
                 return
