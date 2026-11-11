@@ -757,11 +757,13 @@ def new_task(body):
 MOVES = {"up", "down", "out", "in", "break", "stop", "place"}
 
 # Why a move that cannot be made cannot: the terminal's own words (tui.py reorder,
-# reparent, toggle_break), since it is the same rule refusing.
+# reparent, toggle_break), since it is the same rule refusing. The list is drawn upside
+# down (the last task in the walk order is the top row), and up and down are on that
+# screen, as the terminal's keys are: up is later in order.md, and "first" is the top row.
 MOVE_REFUSAL = {
     "up": "is already first among its siblings", "down": "is already last among its siblings",
     "out": "is already at the root",
-    "in": "has no sibling above it in this section to go under",
+    "in": "has no sibling below it in this section to go under",
     "place": "cannot go there: a drag stays among its own siblings",
 }
 
@@ -787,12 +789,12 @@ def reorder(body):
             after = dfs_order.break_toggled(nodes, item)
             refusal = ("is nested — a break separates whole branches, never cuts one"
                        if dict(nodes).get(item) else
-                       "is the first task — a break above it would gate nothing")
+                       "is the bottom item — a break below it would gate nothing")
         elif move == "stop":
             after = dfs_order.stop_toggled(nodes, item)
             refusal = ("is nested — a break separates whole branches, never cuts one"
                        if dict(nodes).get(item) else
-                       "is the first task — a break above it would gate nothing")
+                       "is the bottom item — a break below it would gate nothing")
         else:
             if move == "place":
                 target, where = need(body, "target", "the task to go beside"), body.get("where")
@@ -800,8 +802,8 @@ def reorder(body):
                     raise Refused("where is before or after")
                 if dfs_order.index_of(nodes, target) is None:
                     raise Refused("no task %s" % target, 404)
-            after = {"up": lambda: dfs_order.moved(nodes, item, -1),
-                     "down": lambda: dfs_order.moved(nodes, item, 1),
+            after = {"up": lambda: dfs_order.moved(nodes, item, 1),
+                     "down": lambda: dfs_order.moved(nodes, item, -1),
                      "out": lambda: dfs_order.outdented(nodes, item),
                      "in": lambda: dfs_order.indented(nodes, item),
                      "place": lambda: dfs_order.placed(nodes, item, target, where == "after")}[move]()

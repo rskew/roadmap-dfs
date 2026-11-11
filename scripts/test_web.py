@@ -824,10 +824,87 @@ class Web(unittest.TestCase):
         html = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(html.count('class="break cap stop"'), 1, "only the stop break is drawn as one")
         self.assertEqual(html.count('class="break cap"'), 1)
-        self.assertIn("stop break, above is done", html)
+        self.assertIn("stop break, below is done", html)
+        self.assertNotIn("above is done", html)
         self.assertIn("break, waiting on W2", html)
+        at = lambda needle: html.index(needle)
+        self.assertLess(at('data-row="W3"'), at("break, waiting on W2"), "the reorder rows run last task first")
+        self.assertLess(at("break, waiting on W2"), at('data-row="W2"'))
+        self.assertLess(at('data-row="W2"'), at("stop break, below is done"))
+        self.assertLess(at("stop break, below is done"), at('data-row="W1"'))
+        self.assertIn("Put a break below", html)
+        self.assertNotIn("break above", html, "a break is drawn under the task it holds")
         self.assertEqual(html.count("Plain break"), 1, "W2 sits behind a stop break")
         self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
+
+    def test_the_task_list_is_drawn_last_task_first_with_a_break_under_the_task_it_holds(self):
+        """drawTasks() in index.html, run under node: the walk climbs the page (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, walkHtml = () => '', walkTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
+              "const view = {}; const $ = s => s === '#view' ? view : null;"
+              "const row = (id, segment, w) => ({id, goal: 'g' + id, depth: 0, status: 'open', segment, stop: false, raises: 0,"
+              " assumptions: [], rev: '', waiting_on: w || '', blocked_by: '', why: '', needs_you: false});"
+              "const S = {reorder: false, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "row('W1', 0), row('W2', 1, 'W1'), row('W3', 1, 'W1')]}};" + body +
+              "drawTasks(); console.log(JSON.stringify(view.innerHTML))")
+        html = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        at = lambda needle: html.index(needle)
+        self.assertLess(at('data-id="W3"'), at('data-id="W2"'))
+        self.assertLess(at('data-id="W2"'), at("break, waiting on W1"))
+        self.assertLess(at("break, waiting on W1"), at('data-id="W1"'))
+        self.assertEqual(html.count('class="break cap"'), 1, "the fence sits once, between W2 and W1")
+
+    def test_reorder_drag_and_arrow_keys_mean_up_and_down_on_the_screen(self):
+        """siblingsOf() and the arrow-key handler from index.html, under node: the siblings come in screen order,
+        and a gap above a row is after its subtree in the order file (skipped when there is no node)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drag code")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("const isFence = "):src.index("function dragUpdate(")]
+        drag = src[src.index("function dragUpdate("):src.index("function dragEnd(")]
+        js = ("var document, window; const CSS = {escape: s => s};"
+              "const row = (id, segment, depth) => ({id, depth: depth || 0, segment});"
+              "const S = {state: {items: [row('W1', 0), row('W2', 0), row('W2a', 0, 1), row('W3', 1), row('W4', 1)]}};"
+              "const marks = []; let SCREEN = [], DRAG = null;"
+              "const box = x => ({getBoundingClientRect: () => ({top: SCREEN.indexOf(x) * 10, height: 10})});"
+              "const rowOf = id => ({...box(id), style: {}, classList: {add: c => marks.push(id + '.' + c)}});"
+              "const $ = sel => box('|' + sel.match(/data-fence=\"(.*)\"/)[1]);"
+              + body + drag +
+              "const at = (id, y) => { marks.length = 0; document = {querySelectorAll: () => []}; window = {scrollY: 0};"
+              " SCREEN = siblingsOf(id); DRAG = {id, y, y0: y, scroll0: 0, sibs: SCREEN, span: spanOf(id), drop: null}; dragUpdate();"
+              " return [DRAG.drop, marks.slice()]; };"
+              "console.log(JSON.stringify({sibs: siblingsOf('W3'), here: at('W4', 3), belowW3: at('W4', 20), aboveW2: at('W4', 30)}))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(out["sibs"], ["W4", "W3", "|W3", "W2", "W1"], "last task first, a break after the task it holds")
+        self.assertEqual(out["here"], [None, []], "dropped back where it is changes nothing")
+        # the gap over the break is the end of the segment above it: below W3 on the screen, before it in the order file
+        self.assertEqual(out["belowW3"], [{"target": "W3", "where": "before"}, ["W3.drop-after"]])
+        # the gap under the break is above W2 on the screen: after W2's subtree, whose top row on the screen is its last descendant
+        self.assertEqual(out["aboveW2"], [{"target": "W2", "where": "after"}, ["W2a.drop-before"]])
+        keys = src[src.index('document.addEventListener("keydown", async e => {\n  const g = e.target.closest'):]
+        keys = keys[:keys.index("});")]
+        self.assertIn('e.key === "ArrowUp" ? "up" : "down"', keys, "the arrow keys move a row up and down the screen")
+
+    def test_reorder_guess_moves_up_the_screen_later_in_the_order(self):
+        """guessMove() from index.html, under node: the drawn guess agrees with what the server writes for up and down."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's move code")
+        src = (HERE / "web" / "index.html").read_text()
+        guess = src[src.index("function guessMove("):src.index("let SENT = 0")]
+        js = ("const row = (id, segment) => ({id, depth: 0, segment});"
+              "const S = {state: {items: [row('W1', 0), row('W2', 0), row('W3', 0)]}};" + guess +
+              "const ids = s => s && s.items.map(x => x.id).join();"
+              "console.log(JSON.stringify({up: ids(guessMove('W2', 'up')), down: ids(guessMove('W2', 'down')),"
+              " top: ids(guessMove('W3', 'up')), bottom: ids(guessMove('W1', 'down'))}))")
+        out = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(out, {"up": "W1,W3,W2", "down": "W2,W1,W3", "top": None, "bottom": None},
+                         "up the screen is later in the walk order, and the top row cannot go further up")
 
     def test_start_walk_asks_nothing_and_its_note_carries_the_permission_warning(self):
         """index.html read as text (no node needed): the walk starts at once, so no confirmation dialog
@@ -1667,12 +1744,14 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
 
     def test_a_task_moves_among_its_siblings_and_the_order_is_written(self):
         self.three_tasks()
-        status, data, _ = self.call("POST", "/api/order", dict(item="W3", move="up"))
+        status, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))   # up the screen is later in the order
         self.assertEqual((status, self.ids(data)), (200, ["W1", "W3", "W2"]))
         self.assertEqual(self.order_file().splitlines()[-3:], ["- W1", "- W3", "- W2"])
         self.assertEqual(self.ids(self.call("GET", "/api/state")[1]), ["W1", "W3", "W2"])
-        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="down"))
+        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="up"))
         self.assertEqual((status, self.ids(data)), (200, ["W3", "W1", "W2"]))
+        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="down"))
+        self.assertEqual((status, self.ids(data)), (200, ["W1", "W3", "W2"]))
 
     def test_a_task_is_placed_beside_a_sibling_and_a_stranger_is_refused(self):
         self.three_tasks()
@@ -1706,7 +1785,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
                          [("W1", 0), ("W2", 1), ("W3", 1)])
         self.assertIn("---", self.order_file())
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="up"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))
         self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
                          [("W1", 0), ("W3", 1), ("W2", 1)], "a move keeps the fence")
         _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
@@ -1720,7 +1799,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
                          [("W1", 0, False), ("W2", 1, True), ("W3", 1, True)],
                          "no fence there: one is put in that stops a walk")
         self.assertIn("--- stop", self.order_file())
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="up"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))
         self.assertEqual([(i["id"], i["stop"]) for i in data["items"]],
                          [("W1", False), ("W3", True), ("W2", True)], "a move keeps the stop")
         _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="stop"))
@@ -1735,14 +1814,14 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         self.three_tasks()
         status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
         self.assertEqual(status, 409)
-        self.assertIn("first task", data["error"])
+        self.assertIn("bottom item", data["error"])
         self.assertFalse((self.root / ".dfs" / "order.md").exists())
 
     def test_a_move_that_cannot_be_made_is_refused_with_the_reason_and_writes_nothing(self):
         self.three_tasks()
-        for item, move, why in (("W1", "up", "first"), ("W3", "down", "last"),
-                                ("W1", "out", "root"), ("W1", "in", "no sibling above"),
-                                ("W1", "break", "first task")):
+        for item, move, why in (("W3", "up", "first"), ("W1", "down", "last"),
+                                ("W1", "out", "root"), ("W1", "in", "no sibling below"),
+                                ("W1", "break", "bottom item")):
             status, data, _ = self.call("POST", "/api/order", dict(item=item, move=move))
             self.assertEqual(status, 409, (item, move))
             self.assertIn(why, data["error"])
