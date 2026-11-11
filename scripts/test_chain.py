@@ -2648,6 +2648,7 @@ class Chain(unittest.TestCase):
         # The explanation page the last node names is read, marked, and counted in the verdict.
         self.assertIn("Is the explanation true?", b)
         self.assertIn("Explanation: N claims, T true, L loose, F false", b)
+        self.assertIn("--drift", b)
         # Later rounds are named too, and none warns of a raise.
         self.count.write_text("0")
         self.kinds.write_text("")

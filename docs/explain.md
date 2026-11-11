@@ -31,9 +31,18 @@ section and no function is faded.
 - `files` are paths relative to the current directory, so run `explain.py` from the repository root.
   With no `entries`, the tree starts from the functions no other function calls, or, when every
   function is called by another, from the first function of each file.
-- A note is checked only for names, not for what it says. A task that changes `scripts/inbox.py`,
+- A note is checked for names, not for what it says. A task that changes `scripts/inbox.py`,
   `scripts/ptyrelay.py` or `scripts/walk.py` must update `docs/explain/*.json` for them too: renaming
-  a noted function fails `scripts/test_explain.py`, but changed behaviour under the same name does not.
+  a noted function fails `scripts/test_explain.py`.
+- Changed behaviour under the same name is found by checksum. `docs/explain/<subject>.sums` keeps a
+  checksum of each function the notes mark (its syntax tree, so comments and spacing do not count).
+  `explain.py NOTES.json --drift` lists the marked functions that changed since, and a render prints
+  the same list as a warning. To update the notes: run `--drift`, and for each function listed read its
+  new source and every sentence that names it (as `at`, `from` or `to`, or in `handled`) and correct
+  the sentences that no longer hold; then run `--confirm` to keep the new checksums, and commit the
+  `.sums` file with the notes. `--confirm` does not read anything: it says only that you did.
+  `scripts/test_explain.py` fails while a shipped notes file has a function that changed
+  and was not confirmed.
 
 ## Notes file
 

@@ -1,0 +1,14 @@
+{
+ "answer": "3e2a5412ccdd",
+ "claim": "aada81738afe",
+ "from_subagent": "c6c220b438d3",
+ "held": "7d286693135a",
+ "hook_input": "e7338d3dbd05",
+ "install_kiro_agent": "fe7fdc7003d1",
+ "kiro_agent_for": "a4f1923e52a5",
+ "main": "7e99777e54b9",
+ "peek": "adea0e9fdb16",
+ "remove_kiro_agent": "c4aa531530a8",
+ "take": "e2b25cd3eda7",
+ "waiting": "e64db1f112e5"
+}

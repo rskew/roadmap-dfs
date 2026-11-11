@@ -2,6 +2,8 @@
 """Code explainer: one page that shows a piece of code from six angles.
 
     explain.py NOTES.json [--out PAGE.html]
+    explain.py NOTES.json --drift      list the noted functions whose source changed since the notes were confirmed
+    explain.py NOTES.json --confirm    keep a checksum of each noted function, after reading its notes against it
 
 NOTES.json (see docs/explain.md) names the Python files to read and holds the facts a person has
 to judge. This script does the part a machine can do truthfully (a call is drawn only when the text fixes its
@@ -17,6 +19,7 @@ colour and arrow on it comes from the two tables below (PLACES and KINDS), and s
 a page cannot use a symbol the legend does not explain.
 """
 import ast
+import hashlib
 import html
 import itertools
 import json
@@ -140,7 +143,8 @@ def _info(path, node, cls):
                 errors.append((h.lineno, "catches " + kind, _does(h.body)))
         elif isinstance(n, ast.Raise) and n.exc is not None:
             errors.append((n.lineno, "raises " + ast.unparse(n.exc).split("(")[0], ""))
-    return {"file": path, "line": node.lineno, "cls": cls, "raw": raw, "errors": sorted(errors)}
+    return {"file": path, "line": node.lineno, "cls": cls, "raw": raw, "errors": sorted(errors),
+            "sum": hashlib.sha1(ast.dump(node).encode()).hexdigest()[:12]}
 
 
 def _does(body):
@@ -264,6 +268,27 @@ def named_in_notes(notes, funcs):
     for h in notes.get("handled", []):
         add(h.get("at"))
     return out
+
+
+def sums_path(notes_path):
+    """Where the checksums of the noted functions are kept: beside the notes, `inbox.json` → `inbox.sums`."""
+    return os.path.splitext(notes_path)[0] + ".sums"
+
+
+def read_sums(notes_path):
+    try:
+        with open(sums_path(notes_path)) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def drifted(notes, funcs, sums):
+    """The functions the notes mark whose source (comments and spacing aside) is not what it was when the
+    notes were last confirmed: `changed`, or `unconfirmed` when no checksum was ever kept for it. A changed
+    function may have made a note's sentence false; this says where to read, not what is wrong."""
+    return [(q, "changed" if q in sums else "unconfirmed") for q in named_in_notes(notes, funcs)
+            if sums.get(q) != funcs[q]["sum"]]
 
 
 def tree_html(funcs, notes):
@@ -449,21 +474,63 @@ def build(notes_path, root="."):
     return page(notes, funcs)
 
 
+def load(notes_path, root="."):
+    """The notes, the functions they were read against and the checksums kept for them."""
+    with open(notes_path) as fh:
+        notes = json.load(fh)
+    funcs = read_code([os.path.join(root, f) for f in notes["files"]])
+    check_notes(notes, funcs)
+    return notes, funcs, read_sums(notes_path)
+
+
+def confirm(notes_path, root="."):
+    """Keep a checksum of every function the notes mark: the notes have just been read against this code."""
+    notes, funcs, _ = load(notes_path, root)
+    with open(sums_path(notes_path), "w") as fh:
+        json.dump({q: funcs[q]["sum"] for q in named_in_notes(notes, funcs)}, fh, indent=1, sort_keys=True)
+        fh.write("\n")
+
+
 def main(argv):
     args = argv[1:]
+    mode = None
+    for flag in ("--drift", "--confirm"):
+        if flag in args:
+            mode = flag
+            args.remove(flag)
+    if mode:
+        if len(args) != 1:
+            print("usage: explain.py NOTES.json --drift | --confirm", file=sys.stderr)
+            return 2
+        try:
+            if mode == "--confirm":
+                confirm(args[0])
+                return 0
+            notes, funcs, sums = load(args[0])
+        except (NotesError, OSError, ValueError, KeyError) as exc:
+            print("explain.py: %s" % exc, file=sys.stderr)
+            return 1
+        moved = drifted(notes, funcs, sums)
+        for q, why in moved:
+            print("%s (%s:%d): %s since the notes were confirmed" % (q, funcs[q]["file"], funcs[q]["line"], why))
+        return 1 if moved else 0
     out = None
     if "--out" in args:
         i = args.index("--out")
         out = args[i + 1] if i + 1 < len(args) else None
         args = args[:i] + args[i + 2:]
     if len(args) != 1 or ("--out" in argv and out is None):
-        print("usage: explain.py NOTES.json [--out PAGE.html] (run from the repository root: `files` are relative to it)", file=sys.stderr)
+        print("usage: explain.py NOTES.json [--out PAGE.html | --drift | --confirm] (run from the repository root: `files` are relative to it)", file=sys.stderr)
         return 2
     try:
         text = build(args[0])
+        moved = drifted(*load(args[0])[:2], read_sums(args[0]))
     except (NotesError, OSError, ValueError, KeyError) as exc:
         print("explain.py: %s" % exc, file=sys.stderr)
         return 1
+    if moved:
+        print("explain.py: %d noted function(s) changed since the notes were confirmed (`--drift` lists them): %s"
+              % (len(moved), ", ".join(q for q, _ in moved)), file=sys.stderr)
     if out:
         with open(out, "w") as fh:
             fh.write(text)

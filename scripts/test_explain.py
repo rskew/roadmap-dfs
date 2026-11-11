@@ -267,5 +267,41 @@ class NoRoots(unittest.TestCase):
         self.assertIn("repository root", str(ctx.exception))
 
 
+class Drift(unittest.TestCase):
+    NOTES = '{"title": "t", "files": ["m.py"], "entries": ["a"], "edges": [{"kind": "stops", "from": "a", "to": "b", "label": "x", "at": "a"}]}'
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    pass\n")
+        self.notes = write(self.dir, "n.json", self.NOTES)
+        self.cwd = os.getcwd()
+        os.chdir(self.dir)
+
+    def tearDown(self):
+        os.chdir(self.cwd)
+
+    def drift(self):
+        notes, funcs, sums = explain.load(self.notes)
+        return explain.drifted(notes, funcs, sums)
+
+    def test_notes_never_confirmed_are_all_unconfirmed(self):
+        self.assertEqual(self.drift(), [("a", "unconfirmed"), ("b", "unconfirmed")])
+
+    def test_confirmed_notes_drift_when_a_noted_function_changes_and_not_for_a_comment(self):
+        explain.confirm(self.notes)
+        self.assertEqual(self.drift(), [])
+        write(self.dir, "m.py", "def a():\n    # a comment\n    b()\n\ndef b():\n    pass\n")
+        self.assertEqual(self.drift(), [])
+        write(self.dir, "m.py", "def a():\n    b()\n\ndef b():\n    return 1\n")
+        self.assertEqual(self.drift(), [("b", "changed")])
+
+    def test_the_shipped_notes_are_confirmed_against_the_code(self):
+        os.chdir(ROOT)
+        for name in ("inbox", "ptyrelay", "walk"):
+            path = os.path.join(NOTES, name + ".json")
+            notes, funcs, sums = explain.load(path)
+            self.assertEqual(explain.drifted(notes, funcs, sums), [], name + ": read its notes, then --confirm")
+
+
 if __name__ == "__main__":
     unittest.main()

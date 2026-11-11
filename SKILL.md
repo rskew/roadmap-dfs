@@ -182,7 +182,10 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 - **The same session writes the explanation, when the round changed code that has notes.**
   If a Python file you changed is named by a notes file in `docs/explain/*.json`
   (`docs/explain.md`), update those notes in the last node's commit so every sentence still
-  matches the code, run `python3 <scripts>/explain.py docs/explain/<subject>.json --out
+  matches the code: run `python3 <scripts>/explain.py docs/explain/<subject>.json --drift` to list the
+  noted functions whose source changed, read each one's new source and the sentences that name it,
+  correct those that no longer hold, then `--confirm` (it keeps the new checksums in `<subject>.sums`;
+  commit it). Run `python3 <scripts>/explain.py docs/explain/<subject>.json --out
   .dfs/artefacts/<uuid>.html` from the repo root (it fails if a note names a function the
   code lacks), and name the page in that node's Determination. A task whose Goal asks for an
   explanation of new code adds a notes file. The reviewer opens the page, marks the sentences
