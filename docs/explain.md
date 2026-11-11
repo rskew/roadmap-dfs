@@ -2,7 +2,17 @@
 
 `scripts/explain.py NOTES.json --out PAGE.html` writes one page that shows a piece of code from
 six angles: data flow, state, resources, failure, queue behaviour and errors handled. A page
-starts with the call tree (who calls whom), then the legend, then one section per lens.
+starts with the lens buttons, the call tree (who calls whom), the legend, then one section per lens.
+
+## Lens lights
+
+The lens buttons sit above the tree and stay at the top of the screen while the page scrolls. Tap a
+lens and every tree function with a note in that lens is lit (a thick border in the lens colour),
+the others fade, a line of words says how many of the tree's functions are lit, and only that lens's
+section is shown. "All" puts the page back. Each tree function carries the lenses it has a note in
+(`data-lenses`, read from the notes), so nothing new is written for this. A repeated function
+(marked ↺) is faded, since its notes are on the line above. Without JavaScript the page shows every
+section and no function is faded.
 
 ## What the machine does and what a person writes
 

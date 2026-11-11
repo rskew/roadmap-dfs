@@ -284,11 +284,11 @@ def tree_html(funcs, notes):
                        % (LENS[l][2], l, l, esc(LENS[l][0]), esc(LENS[l][0][0])) for l in marks.get(q, []))
         if q in seen or q in path:
             why = "calls itself again" if q in path else "shown above"
-            return '<li><span class="fn again" data-node="t-%s">↺ %s <small>%s</small></span></li>' % (esc(q), esc(q), why)
+            return '<li><span class="fn again" data-node="t-%s" data-lenses="">↺ %s <small>%s</small></span></li>' % (esc(q), esc(q), why)
         seen.add(q)
         kids = "".join(node(c, path + [q]) for c in f["calls"])
-        return ('<li><span class="fn" data-node="t-%s"><b>ƒ %s</b> <small>%s:%d</small> %s</span>%s</li>'
-                % (esc(q), esc(q), esc(os.path.basename(f["file"])), f["line"], dots,
+        return ('<li><span class="fn" data-node="t-%s" data-lenses="%s"><b>ƒ %s</b> <small>%s:%d</small> %s</span>%s</li>'
+                % (esc(q), " ".join(marks.get(q, [])), esc(q), esc(os.path.basename(f["file"])), f["line"], dots,
                    "<ul>%s</ul>" % kids if kids else ""))
     main = "".join(node(r, []) for r in roots)
     # A function a note marks that no entry reaches (a call the tree does not draw, such as one on an
@@ -361,7 +361,9 @@ body{margin:0;padding:16px;background:#fbfaf7;color:#1a1a1a;font:16px/1.5 -apple
 h1{font-size:20px;margin:0 0 4px}h2{font-size:18px;margin:0 0 2px}h3{font-size:15px;margin:12px 0 4px}
 .lede,.ask{max-width:62ch;color:#444;margin:0 0 12px}
 small{color:#666;font-size:12px}
-.tabs{display:flex;gap:6px;overflow-x:auto;margin:16px 0 8px;padding-bottom:4px}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:12px 0 8px;padding:6px 0 4px;position:sticky;top:0;z-index:2;background:#fbfaf7}
+.treehelp{margin:0 0 10px;max-width:62ch;color:#222;min-height:1.5em}
+.fn.dim{opacity:.4}.fn.lit{border-width:3px;padding:3px 7px;border-color:var(--lc);box-shadow:0 0 0 3px var(--lc)}
 .tabs button{flex:0 0 auto;min-height:44px;padding:0 12px;border:1.5px solid var(--c);border-radius:6px;background:#fff;color:#1a1a1a;font:inherit}
 .tabs button[aria-pressed=true]{background:var(--c);color:#fff}
 .tree,.tree ul{list-style:none;margin:0;padding-left:16px;border-left:2px solid #d8d4c8}
@@ -400,9 +402,18 @@ details{margin:12px 0;max-width:70ch}summary{min-height:44px;display:flex;align-
 """
 
 JS = """
-(function(){var secs=[].slice.call(document.querySelectorAll('section.lens')),bs=[].slice.call(document.querySelectorAll('.tabs button'));
+(function(){var secs=[].slice.call(document.querySelectorAll('section.lens')),bs=[].slice.call(document.querySelectorAll('.tabs button')),
+fns=[].slice.call(document.querySelectorAll('.tree .fn')),help=document.getElementById('treehelp'),
+none=help?help.textContent:'';
 if(!secs.length)return;
-function show(id){secs.forEach(function(s){s.hidden=id!=='all'&&s.dataset.lens!==id});bs.forEach(function(b){b.setAttribute('aria-pressed',b.dataset.lens===id)})}
+function show(id){secs.forEach(function(s){s.hidden=id!=='all'&&s.dataset.lens!==id});
+var btn=null;bs.forEach(function(b){var on=b.dataset.lens===id;b.setAttribute('aria-pressed',on);if(on)btn=b});
+var n=0,all=0;
+fns.forEach(function(f){var has=id!=='all'&&f.dataset.lenses.split(' ').indexOf(id)>=0;
+f.classList.toggle('lit',has);f.classList.toggle('dim',id!=='all'&&!has);
+if(id!=='all'&&!f.classList.contains('again')){all++;if(has)n++}});
+if(help)help.textContent=id==='all'?none:btn.textContent+': '+n+' of '+all+' functions in the tree have something to say here. The others are faded.';
+if(btn)fns.forEach(function(f){f.style.setProperty('--lc',btn.style.getPropertyValue('--c'))})}
 bs.forEach(function(b){b.onclick=function(){show(b.dataset.lens)}});
 [].forEach.call(document.querySelectorAll('a.dot'),function(a){a.onclick=function(){show(a.dataset.lens)}});
 show('all')})();
@@ -416,10 +427,12 @@ def page(notes, funcs):
     return ('<!doctype html>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             '<title>Explainer: %s</title>\n<style>%s</style>\n'
             '<h1>%s</h1>\n<p class="lede">%s</p>\n'
-            '<h2>The code at a glance</h2>\n<p class="ask">Who calls whom in %s. The coloured dots mark the functions each lens below has something to say about; tap one to see it. Every such function is in the tree.</p>\n%s\n'
-            '%s\n<div class="tabs" role="group" aria-label="Lenses">%s</div>\n%s\n<script>%s</script>\n'
+            '<h2>The code at a glance</h2>\n<p class="ask">Who calls whom in %s. The coloured dots mark the functions each lens below has something to say about; tap one to see it. Every such function is in the tree.</p>\n'
+            '<div class="tabs" role="group" aria-label="Lenses">%s</div>\n'
+            '<p class="treehelp" id="treehelp" aria-live="polite">Tap a lens to light the functions it has something to say about and fade the rest.</p>\n'
+            '%s\n%s\n%s\n<script>%s</script>\n'
             % (esc(notes["title"]), CSS, esc(notes["title"]), esc(notes.get("about", "")),
-               esc(", ".join(notes["files"])), tree_html(funcs, notes), legend_html(), tabs,
+               esc(", ".join(notes["files"])), tabs, tree_html(funcs, notes), legend_html(),
                "".join(lens_html(k, notes, funcs) for k, *_ in LENSES), JS))
 
 

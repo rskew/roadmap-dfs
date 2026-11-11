@@ -209,7 +209,9 @@ class Page(unittest.TestCase):
             for q in named:
                 self.assertIn("<b>ƒ %s</b>" % explain.esc(q), text, "%s: %s is not in the tree" % (name, q))
             for q, lenses in explain.lenses_at(notes).items():
-                span = text.split('data-node="t-%s"><b>' % explain.esc(q), 1)[1].split("</span>", 1)[0]
+                head, rest = text.split('data-node="t-%s" data-lenses="' % explain.esc(q), 1)
+                attr, span = rest.split('"', 1)[0], rest.split("</span>", 1)[0]
+                self.assertEqual(attr.split(), lenses, "%s: %s lights the wrong lenses" % (name, q))
                 for l in lenses:
                     self.assertIn('data-lens="%s"' % l, span, "%s: %s has no %s dot" % (name, q, l))
 
@@ -222,6 +224,31 @@ class NotedButUnreached(unittest.TestCase):
         text = explain.tree_html(funcs, notes)
         self.assertLess(text.index("<b>ƒ main</b>"), text.index("<b>ƒ alone</b>"))
         self.assertIn('data-lens="failure"', text.split("<b>ƒ alone</b>")[1])
+
+
+class LensLights(unittest.TestCase):
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        self.funcs = explain.read_code([write(d, "m.py", "def main():\n    a()\n    b()\n\ndef a():\n    b()\n\ndef b():\n    pass\n")])
+        self.notes = {"title": "t", "files": ["m.py"], "entries": ["main"], "edges": [
+            {"kind": "fails", "from": "a", "to": "main", "label": "x", "at": "a"},
+            {"kind": "puts", "from": "a", "to": "b", "label": "y", "at": "a"},
+            {"kind": "takes", "from": "b", "to": "main", "label": "z", "at": "b"}]}
+
+    def test_a_tree_function_lists_the_lenses_that_have_a_note_there(self):
+        text = explain.tree_html(self.funcs, self.notes)
+        self.assertIn('data-node="t-a" data-lenses="failure queue"', text)
+        self.assertIn('data-node="t-b" data-lenses="queue"', text)
+        self.assertIn('data-node="t-main" data-lenses=""', text)
+        self.assertIn('data-node="t-b" data-lenses="">↺ b', text)  # a repeat is never lit
+
+    def test_the_lens_buttons_come_before_the_tree_with_a_words_line_to_say_what_lit_up(self):
+        text = explain.page(self.notes, self.funcs)
+        self.assertLess(text.index('class="tabs"'), text.index('class="tree"'))
+        self.assertLess(text.index('id="treehelp"'), text.index('class="tree"'))
+        self.assertIn("f.classList.toggle('lit'", text)
+        self.assertIn(".fn.dim", text)
+        self.assertIn(".fn.lit", text)
 
 
 class NoRoots(unittest.TestCase):
