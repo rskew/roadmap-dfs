@@ -48,7 +48,7 @@ doing so only where nothing enforces it (see §3).
 Limits. The sessions are subagents, not `claude -p` with a real 100k-token context; each
 ran for about a minute and the trees came out mostly linear. Real long-running tasks will be
 messier, so the quality findings below are probably *optimistic*. Not exercised: live
-chains, `L`/`l` transcripts, the walk, `c` chat, `o` open, light terminals. The sandbox also
+chains, `L`/`l` transcripts, the work, `c` chat, `o` open, light terminals. The sandbox also
 pins a raw `dfs_agent: --update failed: {"message":…}` JSON blob on the message line from
 start-up, which says nothing and was not a TUI fault.
 

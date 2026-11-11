@@ -753,7 +753,7 @@ def branch_tag_or_none():
 def ignored() -> bool:
     """Whether git ignores the roadmap, so no task file is ever committed.
 
-    Supported, not a fault: `.dfs` is planning, and the tree walk is still in git
+    Supported, not a fault: `.dfs` is planning, and the work on the tree is still in git
     history, one commit per node, found by its subject (`dfs_tree.node_commits`). What
     changes is what can be asked of git: HEAD holds no task file, so `dfs_check` has
     no history to judge an edit against, a node's commit carries only its code (or

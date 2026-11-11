@@ -70,7 +70,7 @@ def free_port():
 
 def main():
     port = free_port()
-    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port)] + ([] if os.environ.get("WALK") else ["--no-walk"]),
+    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port)] + ([] if os.environ.get("WORK") else ["--no-work"]),
                               cwd=site, stdout=subprocess.DEVNULL, stderr=open(os.path.join(out, "server.err"), "w"))
     base = "http://127.0.0.1:%d" % port
     for _ in range(60):

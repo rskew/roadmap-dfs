@@ -89,7 +89,7 @@ class OrderFile(unittest.TestCase):
 class Tree(unittest.TestCase):
     """Indentation is the structure, and a node moves with its subtree.
 
-    Both halves are load-bearing for the walk: the shape decides what a blocked
+    Both halves are load-bearing for the work: the shape decides what a blocked
     branch takes down with it, and a move that dropped a child would silently
     re-parent work onto whatever happened to be above it.
     """
@@ -293,7 +293,7 @@ class Breaks(unittest.TestCase):
 
 
 class StopBreaks(unittest.TestCase):
-    """⚠️ `--- stop` is the same fence with a parameter the walk reads: it ends a walk.
+    """⚠️ `--- stop` is the same fence with a parameter the work reads: it ends a work.
 
     So the tests are that it is a fence everywhere a fence is (moves, folds, the file)
     and that nothing but its own key turns it back into a plain one.
@@ -350,20 +350,20 @@ class StopBreaks(unittest.TestCase):
                           (dfs_order.STOP, 0), ("W3", 0)])
 
 
-class Walking(unittest.TestCase):
-    """⚠️ A RAISE blocks the whole SUBTREE, and a walk steps onto the next branch.
+class Working(unittest.TestCase):
+    """⚠️ A RAISE blocks the whole SUBTREE, and a work steps onto the next branch.
 
     This is the rule the tool is named for, so it is checked here rather than left
-    to the screen: without it a blocked parent would stall a walk that has perfectly
+    to the screen: without it a blocked parent would stall a work that has perfectly
     good work sitting one branch over.
     """
 
     def tree(self, *rows):
-        return dfs_state.walk([dict(id=i, depth=d, status=s) for i, d, s in rows])
+        return dfs_state.work([dict(id=i, depth=d, status=s) for i, d, s in rows])
 
     def fenced(self, *rows):
         """The same, with each row's SEGMENT — how many fences are above it."""
-        return dfs_state.walk([dict(id=i, depth=d, status=s, segment=g)
+        return dfs_state.work([dict(id=i, depth=d, status=s, segment=g)
                                for i, d, s, g in rows])
 
     def test_a_blocked_item_takes_its_descendants_with_it(self):
@@ -405,7 +405,7 @@ class Walking(unittest.TestCase):
     def test_a_done_or_draft_parent_lets_its_child_run_beside_the_rest(self):
         t = self.tree(("A", 0, "done"), ("B", 1, "open"), ("C", 0, "open"))
         self.assertEqual(dfs_state.next_items(t, 2), ["B", "C"])
-        t = dfs_state.walk([dict(id="A", depth=0, status="open", draft=True),
+        t = dfs_state.work([dict(id="A", depth=0, status="open", draft=True),
                             dict(id="B", depth=1, status="open")])
         self.assertEqual(dfs_state.next_items(t, 2), ["B"])
 
@@ -417,7 +417,7 @@ class Walking(unittest.TestCase):
 
     def test_a_task_held_unmerged_for_its_pull_request_holds_its_children(self):
         def held(**kw):
-            return dfs_state.walk([dict(id="A", depth=0, status="done", **kw),
+            return dfs_state.work([dict(id="A", depth=0, status="done", **kw),
                                    dict(id="B", depth=1, status="open"),
                                    dict(id="C", depth=0, status="open")])
         for kw in (dict(pr_ready=1), dict(pr="https://github.com/o/r/pull/7")):
@@ -428,7 +428,7 @@ class Walking(unittest.TestCase):
         t = held()          # merged on GitHub: no pull request left, the child may start
         self.assertEqual(dfs_state.next_items(t, 2), ["B", "C"])
 
-    def test_the_walks_continuation_goes_first_unless_a_chain_is_on_it(self):
+    def test_the_works_continuation_goes_first_unless_a_chain_is_on_it(self):
         t = self.tree(("A", 0, "open"), ("B", 0, "open"), ("C", 0, "open"))
         self.assertEqual(dfs_state.next_items(t, 2, first="C"), ["C", "A"])
         self.assertEqual(dfs_state.next_items(t, 2, busy={"C"}, first="C"), ["A", "B"])
@@ -457,7 +457,7 @@ class Walking(unittest.TestCase):
         self.assertIsNone(dfs_state.next_item(t))
 
     def test_the_gate_is_the_first_unfinished_item_not_the_nearest(self):
-        # The first is the one a walk would pick up next, so it is the one worth
+        # The first is the one a work would pick up next, so it is the one worth
         # naming on a held row.
         t = self.fenced(("A", 0, "open", 0), ("B", 0, "open", 0), ("C", 0, "open", 1))
         self.assertEqual({i["id"]: i for i in t}["C"]["waiting_on"], "A")
@@ -467,21 +467,21 @@ class Walking(unittest.TestCase):
         self.assertEqual({i["id"]: i for i in t}["C"]["waiting_on"], "A")
 
     def test_a_draft_is_passed_over_and_its_subtree_is_not(self):
-        t = dfs_state.walk([dict(id="A", depth=0, status="open", draft=1),
+        t = dfs_state.work([dict(id="A", depth=0, status="open", draft=1),
                             dict(id="B", depth=1, status="open"),
                             dict(id="C", depth=0, status="open")])
         self.assertTrue(all(i["reachable"] for i in t))
         self.assertEqual(dfs_state.next_item(t), "B")
 
     def test_a_draft_holds_no_fence(self):
-        t = dfs_state.walk([dict(id="A", depth=0, status="done", segment=0),
+        t = dfs_state.work([dict(id="A", depth=0, status="done", segment=0),
                             dict(id="B", depth=0, status="open", segment=0, draft=1),
                             dict(id="C", depth=0, status="open", segment=1)])
         self.assertIsNone({i["id"]: i for i in t}["C"]["waiting_on"])
         self.assertEqual(dfs_state.next_item(t), "C")
 
-    def test_only_drafts_left_is_nothing_to_walk(self):
-        t = dfs_state.walk([dict(id="A", depth=0, status="open", draft=1)])
+    def test_only_drafts_left_is_nothing_to_work(self):
+        t = dfs_state.work([dict(id="A", depth=0, status="open", draft=1)])
         self.assertIsNone(dfs_state.next_item(t))
 
     def test_an_item_does_not_gate_its_own_segment(self):
@@ -628,14 +628,14 @@ class ThroughTheDerivation(InAWorkRoot):
 
 
 class ContinuingTheLastRun(InAWorkRoot):
-    """⚠️ A walk finishes what it started, so `next_item` is not the order's answer
+    """⚠️ A work finishes what it started, so `next_item` is not the order's answer
     alone (`dfs_state.continue_last`).
 
     What is guarded is the DIFFERENCE between the two: an item earlier in the order
     becoming workable — a raise answered, an item reopened, an item moved up — must
-    not take the walk off a tree it is in the middle of. And the other half: the
+    not take the work off a tree it is in the middle of. And the other half: the
     continuation is not a licence to stay, so an item that cannot be worked hands the
-    walk straight back to the order.
+    work straight back to the order.
     """
 
     def more_setup(self):
@@ -653,11 +653,11 @@ class ContinuingTheLastRun(InAWorkRoot):
 
     def nxt(self):
         d = dfs_state.full()
-        # The order's own answer, beside the walk's, so a test that passes for the
+        # The order's own answer, beside the work's, so a test that passes for the
         # wrong reason (both naming the same item) cannot hide here.
         return d["next_item"], dfs_state.next_item(d["items"])
 
-    def test_the_walk_continues_the_item_the_last_run_was_on(self):
+    def test_the_work_continues_the_item_the_last_run_was_on(self):
         self.session(2, "2026-09-25T10:00:00Z")
         self.assertEqual(self.nxt(), ("W2", "W1"))
 
@@ -669,8 +669,8 @@ class ContinuingTheLastRun(InAWorkRoot):
     def test_with_no_run_at_all_the_order_decides(self):
         self.assertEqual(self.nxt(), ("W1", "W1"))
 
-    def test_an_item_that_raised_hands_the_walk_back_to_the_order(self):
-        # The depth-first sidestep: a question on the item the walk was on is not a
+    def test_an_item_that_raised_hands_the_work_back_to_the_order(self):
+        # The depth-first sidestep: a question on the item the work was on is not a
         # reason to sit on it.
         self.task(2, log="- 2026-09-25T10:00:00Z · session · work · dfs_run_x/run-1\n"
                          "- 2026-09-25T10:30:00Z · raise · W2.1\n  which way?\n")
@@ -687,7 +687,7 @@ class ContinuingTheLastRun(InAWorkRoot):
     def test_s_on_the_screen_marks_a_draft_and_again_ready(self):
         ui = object.__new__(TUI.UI)
         ui.msg, ui.reload, ui.event = "", lambda note="": None, lambda kind, text: text
-        ui.walk_on = False
+        ui.work_on = False
         ui.toggle_draft("W1")
         self.assertIn("W1 is a draft", ui.msg)
         self.assertEqual(self.nxt(), ("W2", "W2"))
@@ -696,13 +696,13 @@ class ContinuingTheLastRun(InAWorkRoot):
         self.assertEqual([e["kind"] for e in dfs_tree.load("W1")["log"]], ["draft", "ready"])
         self.assertEqual(self.nxt(), ("W1", "W1"))
 
-    def test_a_draft_the_last_run_was_on_hands_the_walk_back_to_the_order(self):
-        # A pinned draft had its chain; the walk does not take it up again by itself.
+    def test_a_draft_the_last_run_was_on_hands_the_work_back_to_the_order(self):
+        # A pinned draft had its chain; the work does not take it up again by itself.
         self.task(2, log="- 2026-09-25T09:00:00Z · draft\n"
                          "- 2026-09-25T10:00:00Z · session · work · dfs_run_x/run-1\n")
         self.assertEqual(self.nxt(), ("W1", "W1"))
 
-    def test_a_finished_item_does_not_hold_the_walk(self):
+    def test_a_finished_item_does_not_hold_the_work(self):
         self.task(2, tree="### W2.1 · the only way\nStatus: confirmed\nApproach: it\n\n",
                   log="- 2026-09-25T10:00:00Z · session · work · dfs_run_x/run-1\n")
         self.assertEqual({i["id"]: i["status"] for i in dfs_state.full()["items"]}["W2"],
@@ -711,7 +711,7 @@ class ContinuingTheLastRun(InAWorkRoot):
 
     def test_a_fence_outranks_the_continuation(self):
         # The one claim the author makes over the whole forest: nothing past the fence
-        # is worth starting until everything before it is done. A walk already past it
+        # is worth starting until everything before it is done. A work already past it
         # does not get to stay there.
         dfs_order.write_order([("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])
         self.session(2, "2026-09-25T10:00:00Z")
@@ -739,7 +739,7 @@ class BreaksOnTheScreen(InAWorkRoot):
                               "status": "open", "stop": stop})
             # Through the real derivation, so the rows carry what the screen reads
             # off them — `parent` after a reparent, `waiting_on` after a fence.
-            self.ui.data = {"items": dfs_state.walk(items)}
+            self.ui.data = {"items": dfs_state.work(items)}
 
         self.ui.reload = reload
         dfs_order.write_order([("W1", 0), ("W2", 0), ("W3", 0)])
@@ -765,7 +765,7 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
                          [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), ("W3", 0)])
         self.assertEqual(self.ui.list_rows()[2], ("break", "W1", True))
-        self.assertIn("a walk ends there", self.ui.msg)
+        self.assertIn("a work ends there", self.ui.msg)
         self.ui.toggle_stop()
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
                          [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])

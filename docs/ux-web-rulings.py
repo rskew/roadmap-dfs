@@ -5,7 +5,7 @@
 
 W131.10 and W131.38 said "127 pages can post a ruling" from the presence of a form: the page was read, or drawn, and
 no button was pressed. This script presses them. It copies ARTEFACT_DIR (default: this repository's `.dfs/artefacts`)
-into a throw-away git site served by `SCRIPTS_DIR/web.py --no-walk`, and for each `.html` page makes TWO one-node
+into a throw-away git site served by `SCRIPTS_DIR/web.py --no-work`, and for each `.html` page makes TWO one-node
 tasks whose Hypothesis names that page (so the server's `deciding_node` finds the first, and once that is ruled on,
 the second). Then in headless chromium it:
 
@@ -116,7 +116,7 @@ def main():
         pages = [p for p in pages if p[:8] in only.split(",")]
     site = build_site(pages)
     port = free_port()
-    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-walk"], cwd=site,
+    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-work"], cwd=site,
                               stdout=subprocess.DEVNULL, stderr=open(os.path.join(out, "server.err"), "w"))
     base = "http://127.0.0.1:%d" % port
     for _ in range(80):

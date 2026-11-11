@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """Did this run hit a usage limit, and when does it reset?
 
-⚠️ THE ONE FACT THE WALK IS ALLOWED TO RETRY ON. `walk_decide` (tui.py) holds an
+⚠️ THE ONE FACT THE WORK IS ALLOWED TO RETRY ON. `work_decide` (tui.py) holds an
 hour for `limit` and STOPS for everything else, deliberately — a crash retried hourly
 is a subscription spent overnight. So the whole difference between "wait an hour" and
-"the walk is over until somebody looks" is this classification, and it used to be a
+"the work is over until somebody looks" is this classification, and it used to be a
 grep for a sentence:
 
     grep -qiE "hit your (weekly|usage) limit|rate.?limit"
 
 On 2026-09-16 at 12:37 a chain on W18 was answered `You've hit your session limit ·
 resets 3pm (UTC)` with `api_error_status: 429`. "session limit" is neither "weekly"
-nor "usage", the grep found nothing, the run was recorded `failed`, and the walk
+nor "usage", the grep found nothing, the run was recorded `failed`, and the work
 turned itself off two hours and twenty minutes before the limit it was waiting on
 would have lifted. That is this repo's own rule about reading a marker's definition
 before putting a conclusion on it, applied to a phrase the provider is free to
 reword.
 
-⚠ A walk begun with `stop` (`walk_begin(..., stop_on_limit=True)`) ends at this fact instead of
+⚠ A work begun with `stop` (`work_begin(..., stop_on_limit=True)`) ends at this fact instead of
 holding for it, for every kind of limit this module finds; it does not tell them apart.
 
 So the STRUCTURED field is read first and the prose is a fallback:
@@ -86,9 +86,9 @@ RESETS_RE = re.compile(r"resets [^\"\\\n]*")
 # to Pro (...), visit ... to purchase more credits or try again at 5:59 PM." and, for a
 # reset more than a day off, "try again at Oct 14th, 2026 4:01 AM." (read out of 39 limit
 # errors in ~/.codex/sessions). The clock time names no zone: it is codex's local one.
-# Missed by RESETS_RE, so a codex limit was recorded with no reset and the walk held the
+# Missed by RESETS_RE, so a codex limit was recorded with no reset and the work held the
 # flat hour instead of until the time codex gave.
-# A bare clock time is read when the walk reads the run's end (as for claude's "resets 8pm"),
+# A bare clock time is read when the work reads the run's end (as for claude's "resets 8pm"),
 # so one read after that time is taken for tomorrow's.
 TRY_AGAIN_RE = re.compile(r"try again at [^\"\\\n.]*?[AP]M", re.I)
 
@@ -103,7 +103,7 @@ def try_again_in(text):
     return m.group(0) if m else ""
 
 
-# ⚠️ WHEN IT LIFTS, AS AN INSTANT — because the walk held a flat hour and never read
+# ⚠️ WHEN IT LIFTS, AS AN INSTANT — because the work held a flat hour and never read
 # it. Measured over 09-19..25: 36 of 124 sessions were a 429 on their first turn, e.g.
 # twelve hourly starts from 08:22 to 19:23 against "resets 8pm (UTC)". The shapes seen:
 # "resets 8pm (UTC)", "resets 1:40pm (UTC)", "resets Sep 28, 8pm (UTC)". Anything else

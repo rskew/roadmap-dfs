@@ -223,7 +223,7 @@ is the raise above until the checkout is back on the default branch.
 
 ## When `.dfs/` is gitignored
 
-Supported: `.dfs/` is planning, and git history shows the walk. Your briefing says
+Supported: `.dfs/` is planning, and git history shows the work. Your briefing says
 when it is. Then:
 
 - **The worktree is cut all the same**, and the ignored planning files are in no commit,
@@ -239,7 +239,7 @@ when it is. Then:
   task's title, Summary and every node's status and Determination, once. **An item
   worked in place has no branch and so no merge commit**: its node commits' bodies
   carry the node's `Parent:`, `Status:` and `Determination:` lines verbatim, so the
-  walk reads from `git log` alone.
+  work reads from `git log` alone.
 - The rules on the task file are unchanged: a determined node is history, the log
   only grows, archive moves stay verbatim. Only nothing checks them against HEAD, so
   keep them yourself; "stage the archive" and "stage both files" have nothing to

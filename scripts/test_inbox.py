@@ -426,7 +426,7 @@ class EndToEnd(unittest.TestCase):
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             port = probe.getsockname()[1]
-        web = subprocess.Popen([sys.executable, str(HERE / "web.py"), "--no-walk", "--port", str(port)], cwd=root, env=env,
+        web = subprocess.Popen([sys.executable, str(HERE / "web.py"), "--no-work", "--port", str(port)], cwd=root, env=env,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(web.wait)
         self.addCleanup(web.kill)

@@ -424,7 +424,7 @@ class Pane(unittest.TestCase):
         ui.sel, ui.agent, ui._sel_row = 0, "claude", None
         ui.tree_sel, ui.tree_item = 0, None
         ui.tree_folded, ui.tree_open, ui.tree_flagged = set(), set(), False
-        ui.walk_on = False
+        ui.work_on = False
         ui.data = {"items": [dict(id="W1", goal="Make the thing.", status="blocked",
                                   why="open raise")]}
         t = tree()
@@ -611,7 +611,7 @@ class Pane(unittest.TestCase):
         ui.act(ord("H"))
         self.assertEqual(ui.asm_rows()[ui.asm_sel][0], 0)
 
-    def test_n_walks_the_raises_and_assumptions_and_wraps(self):
+    def test_n_works_the_raises_and_assumptions_and_wraps(self):
         ui = self.ui
         self.flagged_tree()
         ui.open_tree()
@@ -1016,7 +1016,7 @@ class Pane(unittest.TestCase):
         ended = []
 
         class FakeChats:
-            def __init__(s, walker=None): s.walker = walker
+            def __init__(s, worker=None): s.worker = worker
             def sid(s, scope): return "" if scope == "W9" else "sid-1"
             def end(s, scope): ended.append(scope)
         real = dfs_chat.Chats

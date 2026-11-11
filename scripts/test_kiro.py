@@ -173,7 +173,7 @@ class Chain(unittest.TestCase):
         self.assertNotIn("--model", (self.aside / "argv-1").read_text().splitlines(), out)
         self.assertEqual(meta.get("model"), "kiro default", out)
 
-    def test_kiro_gets_the_model_the_walk_chose(self):
+    def test_kiro_gets_the_model_the_work_chose(self):
         rc, meta, out = self.run_chain(cap=1, IMPLEMENT_MODEL="claude-opus-5.5")
         argv = (self.aside / "argv-1").read_text().splitlines()
         self.assertEqual(argv[argv.index("--model") + 1], "claude-opus-5.5", argv)

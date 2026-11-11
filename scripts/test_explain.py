@@ -321,7 +321,7 @@ class Drift(unittest.TestCase):
 
     def test_the_shipped_notes_are_confirmed_against_the_code(self):
         os.chdir(ROOT)
-        for name in ("inbox", "ptyrelay", "walk"):
+        for name in ("inbox", "ptyrelay", "work"):
             path = os.path.join(NOTES, name + ".json")
             notes, funcs, sums = explain.load(path)
             self.assertEqual(explain.drifted(notes, funcs, sums), [], name + ": read its notes, then --confirm")

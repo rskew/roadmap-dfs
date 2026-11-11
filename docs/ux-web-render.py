@@ -101,7 +101,7 @@ try:
     open(os.path.join(work, ".dfs", "ROADMAP.md"), "w").write("# Roadmap\n")   # web.py wants a roadmap in the work root
     subprocess.run(["git", "init", "-q", work], check=True)
     port = free_port()
-    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-walk"],
+    server = subprocess.Popen([sys.executable, os.path.join(scripts, "web.py"), "--port", str(port), "--no-work"],
                               cwd=work, stdout=subprocess.DEVNULL, stderr=open(os.path.join(work, "server.err"), "w"))
     base = "http://127.0.0.1:%d" % port
     for _ in range(50):
