@@ -2091,7 +2091,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
     const all = await ids();
     const [a, c, ...tail] = all;
-    // the ids are in screen order, the walk order upside down: the file lists them last first, with the break under the task it holds
+    // the ids are in screen order, the work order upside down: the file lists them last first, with the break under the task it holds
     fs.writeFileSync(path.join(DIR, ".dfs", "order.md"), `${tail.reverse().map(t => `- ${t}\n`).join("")}- ${c}\n\n---\n\n- ${a}\n`);
     await page.reload();
     await page.waitForSelector(".item");
@@ -2133,7 +2133,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     const { page, errors } = await open(b, { ...PHONE, viewport: { width: PHONE.viewport.width, height: 1400 } });
     const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
     const [a, c, d, e, ...tail] = await ids();
-    // the ids are in screen order, the walk order upside down: the file lists them last first
+    // the ids are in screen order, the work order upside down: the file lists them last first
     fs.writeFileSync(path.join(DIR, ".dfs", "order.md"), `${tail.reverse().map(t => `- ${t}\n`).join("")}- ${e}\n- ${d}\n\n---\n\n- ${c}\n- ${a}\n`);
     await page.reload();
     await page.waitForSelector(".item");

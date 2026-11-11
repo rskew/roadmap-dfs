@@ -2097,7 +2097,7 @@ class UI(WorkMixin):
             self.tree_sel = max(0, min(self.tree_sel + step, len(self.tree_rows()) - 1))
         else:
             # The list is drawn last item first (`list_rows`), so a step down the screen
-            # is a step toward the front of the walk order.
+            # is a step toward the front of the work order.
             if self.items:
                 self.sel = max(0, min(self.sel - step, len(self.items) - 1))
             self.scroll = 0         # a new item is read from its top
@@ -2107,17 +2107,17 @@ class UI(WorkMixin):
         return dfs_order.tree_of(self.items)
 
     def list_rows(self):
-        """The list as ROWS, drawn UPSIDE DOWN: the last item in the walk order is the
-        top row and the first is the bottom row, so the walk climbs the screen. A rule
+        """The list as ROWS, drawn UPSIDE DOWN: the last item in the work order is the
+        top row and the first is the bottom row, so the work climbs the screen. A rule
         is drawn wherever a fence sits, between the same two items as in `order.md`.
 
         A fence is DRAWN and not selectable. Everything this screen does to a row —
         run it, answer it, move it, stop its chain — needs an item, so a cursor that
         could land on a rule would make every one of those keys begin by asking
-        whether it had. `b` toggles the fence on the selected item's walk side instead
+        whether it had. `b` toggles the fence on the selected item's work side instead
         (below it on the screen), which is the whole of what a fence has to do from here.
 
-        ⚠ `self.items` stays in WALK order and `sel` indexes it; only the drawing is
+        ⚠ `self.items` stays in WORK order and `sel` indexes it; only the drawing is
         flipped (`move`, `reorder` and the fence keys turn their steps to match).
         """
         rows = []
@@ -2147,7 +2147,7 @@ class UI(WorkMixin):
         it = self.current()
         if it is None:
             return
-        # `step` is on the SCREEN, which draws the walk order upside down (`list_rows`),
+        # `step` is on the SCREEN, which draws the work order upside down (`list_rows`),
         # so up the screen is later in `order.md`.
         if self.retree(dfs_order.moved(self.nodes(), it["id"], -step),
                        it, "is already %s among its siblings"
@@ -2179,7 +2179,7 @@ class UI(WorkMixin):
                           else "moved to the root")
 
     def toggle_break(self):
-        """Put a fence below the selected item (the walk side: the list is drawn upside
+        """Put a fence below the selected item (the work side: the list is drawn upside
         down, see `list_rows`), or take away the one that is there.
 
         The third thing an author knows about their own plan, after "this comes

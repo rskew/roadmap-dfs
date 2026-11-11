@@ -16,7 +16,7 @@ gives the W9.3 raise an answer page (a copy of the answer template, named by an 
 
 Every view is drawn (png), measured with the CHECKS of docs/ux-web-playwright.py (sideways scroll, tap targets under
 44 px, unlabelled buttons, clipped text, contrast, console errors), and `flows.json` in OUT_DIR holds the lot.
-The walk controls and the run log are driven by docs/ux-web-work.py (this script serves with `--no-work`).
+The work controls and the run log are driven by docs/ux-web-work.py (this script serves with `--no-work`).
 """
 import json, os, re, shutil, socket, subprocess, sys, tempfile, time, urllib.request, uuid
 

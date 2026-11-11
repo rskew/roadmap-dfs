@@ -839,7 +839,7 @@ async function refreshNeeds() {
 function drawRail() {
   const rail = $("#rail"), r = route();
   if (r.view !== "task" || !S.state) return;
-  const html = S.state.items.slice().reverse().map(it => {      // last in the walk order on top, like the task list
+  const html = S.state.items.slice().reverse().map(it => {      // last in the work order on top, like the task list
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     return `<button class="railitem${blocks ? " blocks" : assumes ? " assumes" : ""}${it.status === "done" ? " done" : ""}" data-act="task" data-id="${esc(it.id)}" aria-current="${it.id === r.task}" title="${esc(it.goal)}"><span class="iid">${iidHtml(it.id)}</span>${tagHtml(it.id)}<span class="goal">${esc(it.goal)}</span></button>`;
   }).join("");
@@ -1175,9 +1175,9 @@ function drawTasks(push) {
   let html = held ? "" : workHtml();
   if (!S.reorder && tableWide()) html += `<div class="actions listopt"><button class="btn" data-act="liststyle" aria-pressed="${table}" title="One line per task, with columns for status, review, branch and run">Table</button></div>`;
   if (table) html += `<div class="tblhead" aria-hidden="true"><span>ID</span><span>Goal</span><span>Status</span><span>Review</span><span>Branch</span><span>Run</span></div>`;
-  // The list is drawn upside down: the last task in the walk order is the top row, so the walk climbs the page. A break
+  // The list is drawn upside down: the last task in the work order is the top row, so the work climbs the page. A break
   // keeps its place between the same two tasks, which puts it under the task it holds. The reorder view is drawn the same
-  // way, and its controls mean up and down on the screen: a task moved up the screen moves later in the walk order.
+  // way, and its controls mean up and down on the screen: a task moved up the screen moves later in the work order.
   for (const it of items.slice().reverse()) {
     const fenced = it.segment > (items.indexOf(it) ? items[items.indexOf(it) - 1].segment : 0);
     const fence = fenced ? `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "below is done"}</div>` : "";
@@ -1315,7 +1315,7 @@ const isFence = x => x[0] === "|";
 const slotOf = x => isFence(x) ? $(`[data-fence="${CSS.escape(x.slice(1))}"]`) : rowOf(x);
 // the ids from `id` to the end of its subtree, and the ids beside it under the same parent, with the breaks drawn between
 // them at the root: the gaps either side of a break are two places, the end of one segment and the start of the next.
-// The siblings come in screen order, last in the walk first, and a break after the task it holds. A task's subtree is
+// The siblings come in screen order, last in the work first, and a break after the task it holds. A task's subtree is
 // drawn upside down too: its last descendant is its top row and the task itself the bottom one.
 function spanOf(id) {
   const its = S.state.items, i = its.findIndex(x => x.id === id);
@@ -1344,7 +1344,7 @@ function dragUpdate() {
   D.drop = null;
   if (!others.length || idx === D.sibs.indexOf(D.id)) return;
   // the gap is above the task under it, else below the task over it: so with a break under the gap it lands above the break.
-  // The order file reads the other way up: above a task on the screen is after its subtree in the walk, below it is before it.
+  // The order file reads the other way up: above a task on the screen is after its subtree in the work, below it is before it.
   const under = others[idx], over = others[idx - 1];
   if (under !== undefined && !isFence(under)) { D.drop = { target: under, where: "after" }; rowOf(spanOf(under).pop()).classList.add("drop-before"); }
   else if (over !== undefined && !isFence(over)) { D.drop = { target: over, where: "before" }; rowOf(over).classList.add("drop-after"); }

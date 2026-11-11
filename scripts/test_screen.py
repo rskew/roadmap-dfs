@@ -1092,7 +1092,7 @@ class ADoneTaskRecedesInTheList(unittest.TestCase):
             TUI.LOOK.update(saved)
         at = lambda w: min(p[0] for p in ui.scr.puts if "goal of " + w in p[2])
         self.assertEqual([at("W3"), at("W2"), at("W1")], [0, 2, 3],
-                         "W3 on top, the walk starts at the bottom")
+                         "W3 on top, the work starts at the bottom")
         rule = [p[2] for p in ui.scr.puts if p[0] == 1][0]
         self.assertTrue(rule.startswith("── break · waiting on W2 "), rule)
 

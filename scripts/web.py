@@ -758,7 +758,7 @@ MOVES = {"up", "down", "out", "in", "break", "stop", "place"}
 
 # Why a move that cannot be made cannot: the terminal's own words (tui.py reorder,
 # reparent, toggle_break), since it is the same rule refusing. The list is drawn upside
-# down (the last task in the walk order is the top row), and up and down are on that
+# down (the last task in the work order is the top row), and up and down are on that
 # screen, as the terminal's keys are: up is later in order.md, and "first" is the top row.
 MOVE_REFUSAL = {
     "up": "is already first among its siblings", "down": "is already last among its siblings",

@@ -1,0 +1,20 @@
+{
+ "WorkMixin.raise_on": "e89abf5c7335",
+ "WorkMixin.start_chain": "8c8941e9018b",
+ "WorkMixin.work_begin": "78fcf54567cd",
+ "WorkMixin.work_carry_add": "103d5a12e634",
+ "WorkMixin.work_judge": "61e1df6e2f17",
+ "WorkMixin.work_lead": "d72f1183213d",
+ "WorkMixin.work_look_at_prs": "7c4f1230f53d",
+ "WorkMixin.work_lower": "5b2601055f61",
+ "WorkMixin.work_off": "6330d6d42a77",
+ "WorkMixin.work_poll_prs": "75d11c4d346e",
+ "WorkMixin.work_raise": "ee65fa7adbf7",
+ "WorkMixin.work_stop_at": "8302d60f9683",
+ "WorkMixin.work_target": "4a1092c46236",
+ "WorkMixin.work_tick": "87de81a5cbff",
+ "WorkMixin.work_used": "2568b886f776",
+ "chain_cause": "84520c6e46b5",
+ "work_decide": "6c847282b518",
+ "work_held_for": "d13ac981d82f"
+}
