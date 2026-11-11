@@ -32,7 +32,7 @@ section and no function is faded.
   With no `entries`, the tree starts from the functions no other function calls, or, when every
   function is called by another, from the first function of each file.
 - A note is checked for names, not for what it says. A task that changes `scripts/inbox.py`,
-  `scripts/ptyrelay.py` or `scripts/trek.py` must update `docs/explain/*.json` for them too: renaming
+  `scripts/ptyrelay.py` or `scripts/work.py` must update `docs/explain/*.json` for them too: renaming
   a noted function fails `scripts/test_explain.py`.
 - Changed behaviour under the same name is found by checksum. `docs/explain/<subject>.sums` keeps a
   checksum of each function the notes mark (its syntax tree written out by `explain.py` itself, so comments and spacing do not count and the Python version does not matter; a docstring is part of the tree, so editing one does count).

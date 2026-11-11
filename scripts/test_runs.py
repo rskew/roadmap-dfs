@@ -264,11 +264,11 @@ class CloseLost(unittest.TestCase):
         self.assertEqual(log.count("\tdied\t"), 1, log)
         self.assertEqual(self.meta("dead"), dead)
 
-    def test_the_standalone_page_closes_a_dead_chain_s_record_as_its_trek_starts(self):
-        import trek as dfs_trek
+    def test_the_standalone_page_closes_a_dead_chain_s_record_as_its_work_starts(self):
+        import work as dfs_work
         import web as WEB
-        saved = WEB.TREK["trekker"]
-        WEB.TREK["trekker"] = trekker = dfs_trek.HeadlessTrek()
+        saved = WEB.WORK["worker"]
+        WEB.WORK["worker"] = worker = dfs_work.HeadlessWork()
         handle = mock.Mock(url="http://127.0.0.1:1/", public=False)
         handle.thread.is_alive.return_value = False
         try:
@@ -277,10 +277,10 @@ class CloseLost(unittest.TestCase):
                 self.assertEqual(WEB.main(["--port", "0"]), 0)
             serve.assert_called_once()
         finally:
-            WEB.TREK["trekker"] = saved
+            WEB.WORK["worker"] = saved
         self.assertEqual(self.meta("dead")["stop"], "lost")
         self.assertEqual(self.meta("live"), self.metas["live"])
-        died = [text for _, kind, text in trekker.events if kind == "died"]
+        died = [text for _, kind, text in worker.events if kind == "died"]
         self.assertEqual(len(died), 1, died)
         self.assertIn("W2's chain died with its supervisor (dfs_run_dead, run 5)", died[0])
         self.assertEqual((self.rundir / "activity.log").read_text().count("\tdied\t"), 1)
@@ -317,9 +317,9 @@ class CloseLost(unittest.TestCase):
         self.assertEqual(self.meta("dead")["stop"], "lost")
         self.assertEqual(self.meta("live"), self.metas["live"])
 
-    def test_the_trek_reads_a_lost_chain_as_a_stop_with_its_reason(self):
-        import trek as dfs_trek
-        self.assertEqual(dfs_trek.trek_decide("lost", True, "W2"),
+    def test_the_work_reads_a_lost_chain_as_a_stop_with_its_reason(self):
+        import work as dfs_work
+        self.assertEqual(dfs_work.work_decide("lost", True, "W2"),
                          ("stop", "the chain died with its supervisor and never finished"))
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What `agent.py` says when nix cannot fetch nixpkgs.
 
-A trek started from the page runs `run.sh`, which asks `agent.py --rev` for the pinned
+A work started from the page runs `run.sh`, which asks `agent.py --rev` for the pinned
 revision; when nix failed, the only trace was the LAST line of its stderr, which for a
 GitHub failure is the end of the response body (`404: Not Found)`) and names neither the
 url nor the revision. The 404 below is nix 2.24.10's real output for a wrong revision,

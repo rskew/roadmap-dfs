@@ -34,7 +34,7 @@ class GithubError(Exception):
 
 
 # A `gh` call that has not answered in this many seconds is a stalled network: `open_pr` runs one
-# under the chains' lock, and the trek's poll thread would otherwise wait on it for good.
+# under the chains' lock, and the work's poll thread would otherwise wait on it for good.
 GH_TIMEOUT = 180
 
 
@@ -307,7 +307,7 @@ def _known_marks(t):
 
 def watch(task):
     """Turn each comment on `task`'s pull request that the tree does not hold yet into an open
-    node, at the root as a review's finding is, which reopens the task for the trek. A comment
+    node, at the root as a review's finding is, which reopens the task for the work. A comment
     is known by the `(github <kind> <id>)` its node's Approach ends with, in the tree or in the
     text of a node the author deleted (which dismisses it). Returns the new ids.
     A pull request merged on GitHub is landed locally (`land`) and one closed unmerged is a
@@ -368,7 +368,7 @@ def main(argv):
         import runs as dfs_runs
         rc = 0
         for task in argv[2:] or watched():
-            # As the trek's poll does: a chain on the task is writing its tree and standing in its
+            # As the work's poll does: a chain on the task is writing its tree and standing in its
             # worktree, which a landing would remove.
             if dfs_runs.live_for(task):
                 print("dfs_github: %s: a work chain is on it; watch again when it has finished" % task,

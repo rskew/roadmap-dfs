@@ -15,7 +15,7 @@ directory, `paths.py`). It creates only what is missing and never overwrites:
 
 `.dfs/` may be committed with the project or gitignored whole (`dfs_paths.ignored`):
 ignored, it is planning only, the hooks never fire, and git history is the record
-of the trek, one commit per node. Ignored by any other rule (a blanket `.*`, a `*.html`)
+of the work, one commit per node. Ignored by any other rule (a blanket `.*`, a `*.html`)
 or half force-added, it is said here, with the rule (`dfs_paths.hidden`).
 
 Adopting a `.dfs` that already holds tasks: commit its task files in one commit with

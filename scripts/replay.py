@@ -305,7 +305,7 @@ def nix_bin(attr, binary, given, repo):
     return os.path.join(_NIX_OUT[key], "bin", binary)
 
 
-AGENTS = ("claude", "codex", "kiro", "opencode")   # the agents run.sh can launch (trek.py's AGENTS)
+AGENTS = ("claude", "codex", "kiro", "opencode")   # the agents run.sh can launch (work.py's AGENTS)
 # per agent: nixpkgs attribute, the binary in it, the variable run.sh takes its command from, and the
 # variable that names a binary of your own
 AGENT_BIN = {"claude": ("claude-code", "claude", "CLAUDE_CMD", "REPLAY_CLAUDE_CODE"),
@@ -317,7 +317,7 @@ SCORABLE = ("claude", "kiro")   # the agents whose transcripts `score` reads (hi
 
 def configured_agent(repo=None, override=None):
     """The agent a replay runs under: `override` (`--agent`) if given, else the one the screen
-    keeps in `.dfs/runs/agent` (trek.py's `agent_file`; `$DFS_RUNS` first, then the checkout's own
+    keeps in `.dfs/runs/agent` (work.py's `agent_file`; `$DFS_RUNS` first, then the checkout's own
     runs), claude when there is no such file or it names nothing run.sh launches."""
     if override:
         if override not in AGENTS:

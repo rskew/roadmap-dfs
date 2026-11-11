@@ -176,8 +176,8 @@ class TheLogPaneKeepsUp(unittest.TestCase):
         ui.sel = ui.run_sel = ui.art_sel = ui.scroll = ui.list_scroll = 0
         ui.follow, ui.msg, ui.body_h, ui.agent = False, "", 1, "claude"
         ui._sel_row = None
-        ui.trek_on, ui.trek_note, ui.trek_next = False, "", None
-        ui.trek_until = ui.trek_budget = ui.trek_spent = 0
+        ui.work_on, ui.work_note, ui.work_next = False, "", None
+        ui.work_until = ui.work_budget = ui.work_spent = 0
         ui.sig = ()
         self.rescan(ui)
         return ui
@@ -211,7 +211,7 @@ class TheLogPaneKeepsUp(unittest.TestCase):
         return shown[-1] if shown else None
 
     def test_a_wide_screen_shows_the_live_chain_and_the_activity_beside_the_tree(self):
-        # The column is what makes the trek watchable without leaving the tree.
+        # The column is what makes the work watchable without leaving the tree.
         ui = self.ui
         ui.pane = "item"
         ui.tree_item, ui.tree_sel, ui.tree_folded, ui.tree_open = None, 0, set(), set()

@@ -59,7 +59,7 @@ icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes
 
 A pad's stick reaches the page as the wheel or the page keys, so scrolling selects: while the wheel, `Home`, `End`,
 `PageUp` / `PageDown` or the arrows scroll a list of tasks or a tree of nodes, the control nearest the middle of what is
-visible (between the bar, the pinned Trek box and the tabs) takes focus and `.mid`, a ring that shows without a keyboard,
+visible (between the bar, the pinned Work box and the tabs) takes focus and `.mid`, a ring that shows without a keyboard,
 and Enter presses it. `#view` keeps room above the first control and below the last (`--mid-top`, `--mid-bot`, set by
 `midLayout`) so each can be scrolled to the middle; a screen not seen before is first drawn scrolled past the room above.
 Tab and a click are left alone, and a screen with no hovering pointer has none of it.

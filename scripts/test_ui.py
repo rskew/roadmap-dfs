@@ -27,12 +27,12 @@ sys.path.insert(0, str(HERE))
 import paths as dfs_paths    # noqa: E402
 import tree as dfs_tree      # noqa: E402
 import web as dfs_web        # noqa: E402
-import test_trekker           # noqa: E402  (the recording trekker the trek controls talk to)
+import test_worker           # noqa: E402  (the recording worker the work controls talk to)
 
 EXAMPLE = HERE.parent / "docs" / "tui-ux-review" / "items"
 ARTEFACT = """<!doctype html><html><head><meta charset="utf-8"><title>Where the fsync lands</title></head>
 <body><p id="r">script ran</p>
-<script>fetch('/api/trek/start',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"budget":1}'})
+<script>fetch('/api/work/start',{method:'POST',headers:{'Content-Type':'application/json'},body:'{"budget":1}'})
 .then(r=>document.getElementById('r').textContent='reached '+r.status)
 .catch(()=>document.getElementById('r').textContent='blocked')</script></body></html>"""
 
@@ -112,13 +112,13 @@ class Flows(unittest.TestCase):
         dfs_paths.work_root = lambda: self.root
         dfs_paths._TAG_CACHE.clear()
         dfs_web._commit_cache.clear()
-        self.fake = test_trekker.FakeTrekker()
-        self.handle = dfs_web.serve("127.0.0.1", 0, trekker=self.fake)
+        self.fake = test_worker.FakeWorker()
+        self.handle = dfs_web.serve("127.0.0.1", 0, worker=self.fake)
 
     def tearDown(self):
         self.handle.stop()
         self.wait_for_requests()
-        dfs_web.TREK.update(enabled=True, trekker=None)
+        dfs_web.WORK.update(enabled=True, worker=None)
         dfs_web.CHAT["chats"] = None
         for k, v in self._saved.items():
             if v is None:
@@ -354,18 +354,18 @@ class Flows(unittest.TestCase):
         self.flow("accept")
         self.assertTrue(dfs_tree.accepted(dfs_tree.load("W4")))
 
-    def test_the_trek_controls(self):
-        self.flow("trek")
-        # The box's Budget 7 and Chains 2 both reach the trek, and the budget is split between the two chains. The flow
+    def test_the_work_controls(self):
+        self.flow("work")
+        # The box's Budget 7 and Chains 2 both reach the work, and the budget is split between the two chains. The flow
         # starts it three times, by Enter in each number field and by the button, none of them asking first.
         self.assertEqual(sorted(cap for _, cap in self.fake.started_chains), ["3", "3", "3", "4", "4", "4"])
         self.assertEqual(self.fake.chosen, "codex")
 
     def test_a_running_chain_shows_what_it_runs_on(self):
-        self.flow("trekchain")
+        self.flow("workchain")
 
-    def test_the_trek_controls_stay_under_the_bar_as_the_list_scrolls(self):
-        self.flow("trekpin")
+    def test_the_work_controls_stay_under_the_bar_as_the_list_scrolls(self):
+        self.flow("workpin")
 
     def test_esc_backs_out_of_a_node_then_the_task_and_closes_only_a_form(self):
         self.with_runs("escape")      # runs, so Esc on a run log can be tried too
@@ -432,7 +432,7 @@ class Flows(unittest.TestCase):
         self.flow("allleavesreorder")
 
     def test_a_task_says_if_a_chain_is_running_on_it_and_if_it_is_next(self):
-        self.flow("trektags")
+        self.flow("worktags")
 
     def test_the_lists_bar_buttons_work_from_chats(self):
         self.flow("barfromchats")

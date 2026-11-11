@@ -7,10 +7,10 @@ existed nothing anywhere recorded the difference: the screen sorted `W1 W2 W3` a
 author held the real sequence in their head.
 
 ⚠️ **It is a TREE, and the file's own order is the depth-first preorder.** A child is
-work that only makes sense under its parent, so the two facts a trekker needs — what to
+work that only makes sense under its parent, so the two facts a worker needs — what to
 do next, and what to abandon when something blocks — are both read straight off the
 page with no traversal to get wrong. An item that RAISES blocks its whole SUBTREE
-(`state.py` derives that), which is what lets a trek step sideways onto the next
+(`state.py` derives that), which is what lets a work step sideways onto the next
 branch instead of stopping: the "dfs" in the tool's name.
 
 Indentation is the structure and nothing else is: a node is nested under the nearest
@@ -24,14 +24,14 @@ knows — "none of the rest of this is worth starting until all of that is finis
 A break says it, in one line, over whatever shape the tree happens to have: a rule
 (`---`, markdown's own thematic break, so it is a fence when the file is read as
 markdown too) between two root branches. Items below it are held until every item
-above it is `done` — not merely unblocked — and `dfs_state.trek` derives that as
+above it is `done` — not merely unblocked — and `dfs_state.work` derives that as
 `waiting_on`, kept apart from `blocked_by` for the reason `blocked` and `blocked_by`
 are kept apart: "answer this", "answer something above this" and "finish something
 before this" are three different instructions.
 
 A break may carry one parameter, `--- stop` (`STOP`, below): the same fence, which a
-trek that waited at it also ENDS at, so the author reviews before going on (`trek.py`'s
-`trek_stop_at`).
+work that waited at it also ENDS at, so the author reviews before going on (`work.py`'s
+`work_stop_at`).
 
 ⚠️ **A break can never sit INSIDE a subtree**, and that is what makes it cheap: it
 ends every open branch, so the line after one is always a root, no span can contain
@@ -80,12 +80,12 @@ INDENT = "  "
 # wants letters then digits), so the two can share one list without a flag.
 BREAK = "---"
 
-# ⚠️ A STOP BREAK is a fence that also ENDS A TREK at it: `--- stop`. The fence holds
-# what is after it exactly as `---` does; what it adds is for the trek (`trek.py`), which
+# ⚠️ A STOP BREAK is a fence that also ENDS A WORK at it: `--- stop`. The fence holds
+# what is after it exactly as `---` does; what it adds is for the work (`work.py`), which
 # turns itself off once it has worked everything before one it had to wait for, so the
-# author reviews that work before a trek they start goes past it. It is the break's own
+# author reviews that work before a work they start goes past it. It is the break's own
 # parameter rather than a second kind of line because it is the same fence: moving,
-# folding and toggling it are the break's rules, and only the trek reads the difference.
+# folding and toggling it are the break's rules, and only the work reads the difference.
 STOP = "--- stop"
 
 # ⚠️ Counted only once the list has STARTED. A rule above the prose is decoration —
@@ -105,15 +105,15 @@ DEFAULT_HEADER = """# Implementation tree
 
 The order to work the items in, which is not the order they were scoped in, and the
 branches they hang off. The file's order is the depth-first preorder; indentation is
-the structure. An item that raises blocks its whole subtree, so a trek steps sideways
+the structure. An item that raises blocks its whole subtree, so a work steps sideways
 onto the next branch rather than stopping.
 
 A rule on its own line is a BREAK: everything after it waits until everything before
 it is done, which is the one thing nesting cannot say. A break separates whole
 branches — it never cuts one — and an item written after it is behind it, including
 one nobody has placed yet. A rule followed by the word `stop` is a STOP break: it
-also ends a trek that waited at it once everything before it is done, so the work can
-be reviewed, and the next trek goes past it.
+also ends a work that waited at it once everything before it is done, so the work can
+be reviewed, and the next work goes past it.
 
 Read by `<scripts>/tui.py` (`[`/`]` move the selected item among its
 siblings, `{`/`}` move it out of and into a branch, `b` puts a break above it or takes
@@ -157,7 +157,7 @@ def nodes_of(text: str):
             # Not before the first id (that rule is prose, or front matter), and not
             # twice running — a second fence over the same ground gates nothing the
             # first does not, and would leave an empty segment for the screen to draw.
-            # Folded, the fence stops a trek if either of them did.
+            # Folded, the fence stops a work if either of them did.
             kind = STOP if rule.group(1) else BREAK
             if out and not is_break(out[-1][0]):
                 out.append((kind, 0))
@@ -402,7 +402,7 @@ def has_break_above(nodes, item) -> bool:
 def stop_toggled(nodes, item):
     """`nodes` with the fence above `item` made a stop break, or made plain again.
 
-    With no fence above it, one is put there that stops a trek at once, under the
+    With no fence above it, one is put there that stops a work at once, under the
     same refusals as `break_toggled` (a nested item, the first item); taking a fence
     away altogether stays `break_toggled`'s, so this key never removes a fence.
     """

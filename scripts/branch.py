@@ -67,7 +67,7 @@ def _git_net(*args, cwd=None):
 
 # A git call to the remote that has not finished in this many seconds is a stalled network (a TCP
 # stall, an ssh with no keepalive): `_git_net` runs under the chains' lock, which every chain waits
-# on, and in the trek's poll thread, which would otherwise never poll again.
+# on, and in the work's poll thread, which would otherwise never poll again.
 GIT_NET_TIMEOUT = 300
 GIT_PIPE_GRACE = 5   # seconds to read what a killed git left in its pipes before letting them go
 
@@ -109,8 +109,8 @@ def _git_bytes(*args, cwd=None):
                           capture_output=True).stdout
 
 
-# ⚠️ ONE CHAIN AT A TIME ON THE MAIN CHECKOUT. A trek may run several chains at once
-# (`trek.py`, `parallel`), each in its own worktree, but cutting a worktree, merging a
+# ⚠️ ONE CHAIN AT A TIME ON THE MAIN CHECKOUT. A work may run several chains at once
+# (`work.py`, `parallel`), each in its own worktree, but cutting a worktree, merging a
 # finished branch and removing it all write the ONE main checkout and repository: two
 # merges at once meet on `index.lock`, and the loser's failed `git merge` reads in
 # `_unmerged` as the author's edits being in the way, a raise for nothing. So each runs
@@ -460,7 +460,7 @@ def catch_up(name, wt):
 # `Unable to create '.git/worktrees/<task>/index.lock': File exists`: a directory git had
 # made a few milliseconds before, so some other process took the lock in it, and by the time
 # anyone looked there was nothing stale left. The failed add leaves the branch it cut, which
-# is why a second try always worked, and the failure ended the whole trek for a race of
+# is why a second try always worked, and the failure ended the whole work for a race of
 # milliseconds. So a lock failure is cleaned up and tried again, and each failure writes down
 # who else was running git, to name the process when it next happens.
 ADD_ATTEMPTS = 5

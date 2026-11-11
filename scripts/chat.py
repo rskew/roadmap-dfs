@@ -31,7 +31,7 @@ the agent's next request. One the turn never read goes as the next turn, or is d
 Every agent's turn takes one (`STEERED` lists them): claude and codex through two hooks, opencode through a plugin, kiro through an agent of its own named by the chat's box.
 
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
-trek (`--no-trek`): a server that may not start agents does not chat either.
+work (`--no-work`): a server that may not start agents does not chat either.
 """
 import glob
 import json
@@ -54,7 +54,7 @@ import tree as dfs_tree      # noqa: E402
 import context as dfs_context   # noqa: E402
 import chatlog   # noqa: E402
 import uuid
-from trek import AGENTS, agent_file, read_agent   # noqa: E402
+from work import AGENTS, agent_file, read_agent   # noqa: E402
 
 
 def signal_turn(p, sig):
@@ -489,8 +489,8 @@ def running_elsewhere(sid, own=(), agent="claude"):
 
 
 class Chats:
-    def __init__(self, on_change=None, trekker=lambda: None):
-        self.trekker = trekker        # the screen's side of the chat, if there is a screen
+    def __init__(self, on_change=None, worker=lambda: None):
+        self.worker = worker        # the screen's side of the chat, if there is a screen
         self.lock = threading.RLock()
         self.on_change = on_change or (lambda: None)
         self.busy = {}      # scope -> when its turn started
@@ -572,7 +572,7 @@ class Chats:
         with self.lock:
             sid, agent = self.sid(scope), self.agent(scope)
             messages = transcript_messages(sid, agent)
-            w = self.trekker()
+            w = self.worker()
             failed = w and getattr(w, "chat_failure", lambda s: None)(scope)
             if failed:      # the screen's chat ended on its own (its opening turn failed): say why, and the message is not sent
                 chatlog.log(scope, "the screen's chat ended: %s" % failed)
@@ -636,7 +636,7 @@ class Chats:
         agent = self.agent(scope)
         if agent not in CHAT_AGENTS:
             raise ValueError("chat on the page runs under %s or %s; the agent is %s" % (", ".join(CHAT_AGENTS[:-1]), CHAT_AGENTS[-1], agent))
-        w = self.trekker()
+        w = self.worker()
         with self.lock:
             # A chat running on this screen has the session: type into it, as the keyboard does.
             if scope not in self.busy and w and w.chat_send(scope, message):
@@ -721,7 +721,7 @@ class Chats:
         chat (a background agent) is sent that agent's own interrupt keys (ptyrelay's INTERRUPT); a headless turn's process is ended
         as ctrl-c would, and the turn then says it was interrupted rather than that it failed."""
         self.check(scope)
-        w = self.trekker()
+        w = self.worker()
         with self.lock:
             if scope in self.busy:
                 p = self.procs.get(scope)
@@ -847,7 +847,7 @@ class Chats:
         opens with the summary: the agent the screen runs for it does (that is where the page's
         chats live), and with no screen the page runs the opening turn itself."""
         self.check(scope)
-        w = self.trekker()
+        w = self.worker()
         note = ""
         agent = self.agent(scope)
         if agent in CHAT_AGENTS:
@@ -873,7 +873,7 @@ class Chats:
     def list(self):
         """Every conversation there is, newest first: what the page's Chats section shows."""
         out = []
-        w = self.trekker()
+        w = self.worker()
         d = Path(dfs_runs.ensure_run_root()) / "chat"
         for p in sorted(d.glob("*.json")) if d.is_dir() else []:
             scope = p.stem
@@ -906,7 +906,7 @@ class Chats:
             rec = self.record(scope)
             if not rec.get("sid"):
                 raise ValueError("there is no conversation to end")
-            w = self.trekker()
+            w = self.worker()
             if w and w.chat_active(scope):
                 raise ValueError("it is still answering: stop it or wait for it")
             if not (w and w.chat_live(scope)) and running_elsewhere(rec["sid"], agent=self.agent(scope)):
@@ -928,7 +928,7 @@ class Chats:
         with self.lock:
             if scope in self.busy:
                 raise ValueError("it is still answering: wait for it")
-            w = self.trekker()
+            w = self.worker()
             chatlog.log(scope, "page: new chat, ending the old one (session %s)" % (self.sid(scope) or "none"))
             if w:
                 w.chat_close(scope)                  # the agent running on it goes with it

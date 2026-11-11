@@ -23,15 +23,15 @@ read by the directory's name and never by a path), and each session it captured 
 `?session=run-N`) condensed by the log pane's own renderers, so what the terminal's `l` shows is on the
 phone too, a codex session's commands and messages included.
 
-It also steers the trek (`trek.py`: one engine, the terminal's `w`, `n` and `K`): start it with a
+It also steers the work (`work.py`: one engine, the terminal's `w`, `n` and `K`): start it with a
 session budget, stop it, choose where it goes next, interrupt a chain.
 
 ⚠️ THERE IS NO LOGIN, so it listens on this machine only (127.0.0.1) unless you say
 otherwise. `--host 0.0.0.0` (or DFS_WEB_HOST) opens it to the network, and then anyone on
-that network can read the roadmap, answer, correct and accept, and, unless `--no-trek`,
-START AGENTS (the trek, the chat), which run with their permission prompts off: that is
+that network can read the roadmap, answer, correct and accept, and, unless `--no-work`,
+START AGENTS (the work, the chat), which run with their permission prompts off: that is
 remote code execution on this machine, for whoever can reach the port. The same goes for
-signing this machine's claude in to another account (the Claude account), which `--no-trek`
+signing this machine's claude in to another account (the Claude account), which `--no-work`
 also refuses. Do it on a network
 you trust. Bound to loopback, a request whose `Host` is not a loopback name is refused (a
 page on another site can point its own name at 127.0.0.1: DNS rebinding), a write from
@@ -63,14 +63,14 @@ TLS proxy such as `tailscale serve` (bind 127.0.0.1 and name the proxy's hostnam
 CHAT (`chat.py`, a button on a task and on the list) talks about a task or the project with claude,
 with full permissions (the screen's flags: Edit, Write and Bash all work) when the page runs the turn;
 when a screen serves the page the chats are agents that screen keeps running in the background. The
-Chats tab lists them all. It starts agents, so `--no-trek` turns it off.
+Chats tab lists them all. It starts agents, so `--no-work` turns it off.
 THE CLAUDE ACCOUNT (`login.py`, "Claude account…" in the project dialog) signs this machine's claude in to an
 Anthropic account when a login has expired or an account has hit its limit: `GET /api/login` says who is signed in
 and where a sign-in is, `POST /api/login/start` runs claude's own `auth login` (through `run.sh --claude-auth`, the
 claude the runs start) and returns the link to open, `/code` sends it the code that page shows, `/cancel` and
 `/check` end a sign-in or re-read the account. claude writes its own store, which every run and chat reads; nothing
-here keeps a secret. It changes what this machine's agents run as, so like the trek it is open to whoever can reach
-the port, and `--no-trek` refuses its writes (403; the account can still be read).
+here keeps a secret. It changes what this machine's agents run as, so like the work it is open to whoever can reach
+the port, and `--no-work` refuses its writes (403; the account can still be read).
 ARTEFACTS (`.dfs/artefacts`) are served sandboxed at `/artefacts/<name>` and linked from the
 text that names them. ATTACHMENTS are artefacts the author adds: POST /api/attach (base64 in JSON,
 8 MB at most, like the background picture) keeps a picture or a pdf, txt, md, csv, json or log file
@@ -105,7 +105,7 @@ import tree as dfs_tree     # noqa: E402
 import tui as dfs_tui       # noqa: E402  (its view functions; nothing here starts curses)
 import github as dfs_github   # noqa: E402
 import runs as dfs_runs     # noqa: E402
-import trek as dfs_trek      # noqa: E402
+import work as dfs_work      # noqa: E402
 import chat as dfs_chat      # noqa: E402
 import login as dfs_login    # noqa: E402
 
@@ -163,11 +163,11 @@ def needs_you(it):
                 or it.get("standing") or it.get("corrections"))
 
 
-def trek_marks(data):
-    """Which task a work chain is running on now (item -> its progress), and which the trek
+def work_marks(data):
+    """Which task a work chain is running on now (item -> its progress), and which the work
     takes next. What the rows say beside the terminal's running and next columns."""
-    if TREK["enabled"]:
-        snap = trekker().snapshot(data)
+    if WORK["enabled"]:
+        snap = worker().snapshot(data)
         return {c["item"]: c["progress"] for c in snap["live"]}, snap["next"]
     return ({r["item"]: dfs_runs.progress(r) for r in dfs_runs.live_runs("work")},
             data.get("next_item"))
@@ -175,8 +175,8 @@ def trek_marks(data):
 
 def archived_rows():
     """The tasks `archive_task` retired, as list rows after the live ones: `archived` is true,
-    and they carry none of the trek's marks. Read from `archived_dir()` and kept out of
-    `state.full()`, so the trek and the runner never see them."""
+    and they carry none of the work's marks. Read from `archived_dir()` and kept out of
+    `state.full()`, so the work and the runner never see them."""
     rows = []
     for task in dfs_tree.archived_task_ids():
         t = dfs_tree.load_archived(task)
@@ -203,7 +203,7 @@ FULL_TTL = 2.0
 
 
 def full_cached():
-    """`state.full()` for the page's reads. Every render asks for the list and the trek, and
+    """`state.full()` for the page's reads. Every render asks for the list and the work, and
     each builds the whole state (about half a second on a hundred tasks), so two threads
     built it at once and slowed each other. One build serves every read while the files the
     pages watch (`roadmap_signature`) are unchanged, for at most `FULL_TTL` seconds, which
@@ -225,7 +225,7 @@ def state_json():
     """The task list: the rows `state.py --json` gives the terminal, plus `rev` and how many
     tasks are archived (`archived_json` has those)."""
     data = full_cached()
-    running, nxt = trek_marks(data)
+    running, nxt = work_marks(data)
     items = []
     for it in data["items"]:
         items.append(dict(
@@ -490,7 +490,7 @@ MESSAGE_CHARS = 4000        # the page's box stops here (maxlength), and so does
 def run_message(body):
     """The author's message to a live chain's session, left in its inbox: the session
     reads it at its next tool call, or as it stops (inbox.py). It starts nothing, so it
-    is not off with the trek."""
+    is not off with the work."""
     name = need(body, "run", "a run")
     text = need(body, "message", "a message")
     if len(text) > MESSAGE_CHARS:
@@ -735,7 +735,7 @@ def set_theme(body):
 
 def new_task(body):
     """A new task, as `run --open` writes one: a name and the goal in the author's words, with
-    an empty tree (steps are added as nodes after); `draft` makes it one the trek passes
+    an empty tree (steps are added as nodes after); `draft` makes it one the work passes
     over."""
     name = need(body, "name", "a name")
     goal = body.get("goal") or ""
@@ -946,7 +946,7 @@ def act(name, body):
             except (ValueError, dfs_paths.NoBranch) as e:
                 raise Refused(str(e), 409)
         elif name == "draft":
-            # as the terminal's `s`: a log entry the trek's choice reads; asking for the state it is in writes nothing
+            # as the terminal's `s`: a log entry the work's choice reads; asking for the state it is in writes nothing
             want = body.get("draft")
             if not isinstance(want, bool):
                 raise Refused("draft is true or false")
@@ -955,9 +955,9 @@ def act(name, body):
                     dfs_tree.append_log(task, "draft" if want else "ready")
                 except (ValueError, dfs_paths.NoBranch) as e:
                     raise Refused(str(e), 409)
-                # a trek chain already on it would work it to the end
-                if want and TREK["trekker"] is not None:
-                    TREK["trekker"].draft_marked(task)
+                # a work chain already on it would work it to the end
+                if want and WORK["worker"] is not None:
+                    WORK["worker"].draft_marked(task)
         elif name == "delete_task":
             try:
                 dfs_tree.delete_task(task)
@@ -999,9 +999,9 @@ def act(name, body):
     return dict(task=task_json(task))
 
 
-# ── the trek ──────────────────────────────────────────────────────────────────
+# ── the work ──────────────────────────────────────────────────────────────────
 
-TREK = {"enabled": True, "trekker": None}
+WORK = {"enabled": True, "worker": None}
 
 
 LOGIN = dfs_login.Login()
@@ -1009,9 +1009,9 @@ LOGIN = dfs_login.Login()
 
 def login_act(name, body):
     """The page's "Claude account": sign this machine's claude in (login.py). It replaces the login
-    every run and chat uses, so it is off with the trek; reading the account is not."""
-    if not TREK["enabled"] and name != "login/check":
-        raise Refused("signing in is off: this server was started with --no-trek", 403)
+    every run and chat uses, so it is off with the work; reading the account is not."""
+    if not WORK["enabled"] and name != "login/check":
+        raise Refused("signing in is off: this server was started with --no-work", 403)
     try:
         if name == "login/start":
             LOGIN.start(console=bool(body.get("console")))
@@ -1029,17 +1029,17 @@ def login_act(name, body):
 
 
 def login_state():
-    return dict(LOGIN.state(), enabled=TREK["enabled"])
+    return dict(LOGIN.state(), enabled=WORK["enabled"])
 
 
-def trekker():
-    return _the_trekker()
+def worker():
+    return _the_worker()
 
 
-def _the_trekker():
-    if TREK["trekker"] is None:
-        TREK["trekker"] = dfs_trek.HeadlessTrek(on_change=lambda: HUB.notify())
-    return TREK["trekker"]
+def _the_worker():
+    if WORK["worker"] is None:
+        WORK["worker"] = dfs_work.HeadlessWork(on_change=lambda: HUB.notify())
+    return WORK["worker"]
 
 
 CHAT = {"chats": None}
@@ -1047,14 +1047,14 @@ CHAT = {"chats": None}
 
 def chats():
     if CHAT["chats"] is None:
-        CHAT["chats"] = dfs_chat.Chats(on_change=lambda: HUB.notify(), trekker=lambda: TREK["trekker"])
+        CHAT["chats"] = dfs_chat.Chats(on_change=lambda: HUB.notify(), worker=lambda: WORK["worker"])
     return CHAT["chats"]
 
 
 def chat_act(name, body=None, scope=None):
-    """A chat about a task or the project. It starts an agent, so it is off with the trek."""
-    if not TREK["enabled"]:
-        raise Refused("chat is off: this server was started with --no-trek", 403)
+    """A chat about a task or the project. It starts an agent, so it is off with the work."""
+    if not WORK["enabled"]:
+        raise Refused("chat is off: this server was started with --no-work", 403)
     try:
         if name == "chat/send":
             return chats().send(need(body, "scope", "a scope"), body.get("message"))
@@ -1075,29 +1075,29 @@ def chat_act(name, body=None, scope=None):
     raise Refused("no such action", 404)
 
 
-def trek_json():
-    if TREK["enabled"]:
-        return dict(trekker().snapshot(full_cached()), enabled=True)
+def work_json():
+    if WORK["enabled"]:
+        return dict(worker().snapshot(full_cached()), enabled=True)
     # Off, the page still shows which task a chain is on and which is next, from the files.
-    running, nxt = trek_marks(full_cached())
+    running, nxt = work_marks(full_cached())
     return dict(enabled=False, next=nxt, live=[dict(item=i, progress=p) for i, p in running.items()])
 
 
-def trek_act(name, body):
-    """Start, stop and steer the trek: what `w`, `n` and `K` do in the terminal."""
-    if not TREK["enabled"]:
-        raise Refused("the trek controls are off: this server was started with --no-trek", 403)
-    w = trekker()
+def work_act(name, body):
+    """Start, stop and steer the work: what `w`, `n` and `K` do in the terminal."""
+    if not WORK["enabled"]:
+        raise Refused("the work controls are off: this server was started with --no-work", 403)
+    w = worker()
     try:
-        if name == "trek/start":
+        if name == "work/start":
             w.start(body.get("budget"), body.get("parallel", 1), body.get("stop_on_limit", False))
-        elif name == "trek/stop":
+        elif name == "work/stop":
             w.stop()
-        elif name == "trek/pin":
+        elif name == "work/pin":
             w.pin(body.get("item") or None)
-        elif name == "trek/agent":
+        elif name == "work/agent":
             w.set_agent(body.get("agent"))
-        elif name == "trek/model":
+        elif name == "work/model":
             w.set_model(body.get("role"), body.get("model", ""))
         elif name == "chain/stop":
             w.stop_chain(need(body, "item", "the task"))
@@ -1106,7 +1106,7 @@ def trek_act(name, body):
     except ValueError as e:
         raise Refused(str(e), 409)
     HUB.notify()
-    return trek_json()
+    return work_json()
 
 
 # ── pushing changes ───────────────────────────────────────────────────────────
@@ -1165,7 +1165,7 @@ def changed_tasks(before, after):
         m = TASK_FILE.search(key)
         if m:
             tasks.add(m.group(1))
-        elif key not in ("order", "activity"):      # the order and the trek's log move the list and the trek, not a task
+        elif key not in ("order", "activity"):      # the order and the work's log move the list and the work, not a task
             return None
     return sorted(tasks)
 
@@ -1199,7 +1199,7 @@ def roadmap_signature():
         sig.append(("order", stamp(dfs_paths.order())))
     except OSError:
         pass
-    # What the trek did (and so who started, stopped or pinned it, from the screen or
+    # What the work did (and so who started, stopped or pinned it, from the screen or
     # the page): the activity log both write.
     try:
         sig.append(("activity", stamp(os.path.join(dfs_runs.run_root(), "activity.log"))))
@@ -1427,8 +1427,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(200, chat_act(name, body))
             if name.startswith("login/"):
                 return self.json(200, login_act(name, body))
-            if name.startswith(("trek/", "chain/")):
-                return self.json(200, trek_act(name, body))
+            if name.startswith(("work/", "chain/")):
+                return self.json(200, work_act(name, body))
             return self.json(200, act(name, body))
         except Refused as e:
             return self.json(e.status, dict(error=str(e)))
@@ -1449,8 +1449,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, index_html(), "text/html")
         if path == "/api/events":
             return self.events()
-        if path == "/api/trek":
-            return self.json(200, trek_json())
+        if path == "/api/work":
+            return self.json(200, work_json())
         if path == "/api/chats":
             return self.json(200, chat_act("chats"))
         if path.startswith("/api/chat/"):
@@ -1549,11 +1549,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--host", default=default_host(),
                     help="127.0.0.1 (this machine only, the default) or 0.0.0.0 (the network: "
-                         "no login, and the trek and the chat start agents, and the page can sign "
+                         "no login, and the work and the chat start agents, and the page can sign "
                          "this machine's claude in to another account)")
     ap.add_argument("--port", type=int, default=int(os.environ.get("DFS_WEB_PORT", 8765)))
-    ap.add_argument("--no-trek", "--no-walk", dest="no_trek", action="store_true",
-                    help="no trek controls: the page can read and write the roadmap but "
+    ap.add_argument("--no-work", "--no-walk", dest="no_work", action="store_true",
+                    help="no work controls: the page can read and write the roadmap but "
                          "cannot start an agent or sign claude in to another account (the chat is "
                          "off too); --no-walk is the old name, kept as an alias")
     ap.add_argument("--allow-host", action="append", default=[], metavar="NAME",
@@ -1569,8 +1569,8 @@ def main(argv=None):
     if not dfs_paths.has_roadmap():
         raise SystemExit("web: " + dfs_paths.missing_message())
     # the screen that comes back after a reboot closes what the reboot killed (tui.UI does the same)
-    _the_trekker().close_lost_runs()
-    handle = serve(args.host, args.port, trek_enabled=not args.no_trek,
+    _the_worker().close_lost_runs()
+    handle = serve(args.host, args.port, work_enabled=not args.no_work,
                    cert=args.cert, key=args.key, allow_hosts=args.allow_host)
     print("roadmap web: " + handle.url)
     if not handle.public:
@@ -1580,10 +1580,10 @@ def main(argv=None):
               "or see the README")
     if handle.public:
         print("  no login: anyone on this network can answer, correct and accept"
-              + (", and start agents (the trek, the chat), which run with their permission "
-                 "prompts off, or sign claude in to another account. --no-trek removes that; --host 127.0.0.1 keeps it to "
+              + (", and start agents (the work, the chat), which run with their permission "
+                 "prompts off, or sign claude in to another account. --no-work removes that; --host 127.0.0.1 keeps it to "
                  "this machine."
-                 if TREK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
+                 if WORK["enabled"] else ". --host 127.0.0.1 keeps it to this machine."))
     try:
         while handle.thread.is_alive():
             handle.thread.join(1)
@@ -1601,7 +1601,7 @@ class Handle:
 
     def notify(self):
         """Tell the pages to read again: for a change they cannot see in the files, as when
-        the terminal screen whose trek they read has caught up with them."""
+        the terminal screen whose work they read has caught up with them."""
         HUB.notify()
 
     def stop(self):
@@ -1610,20 +1610,20 @@ class Handle:
         self.server.server_close()
 
 
-def serve(host, port, trekker=None, trek_enabled=True, tries=1, cert=None, key=None, allow_hosts=()):
+def serve(host, port, worker=None, work_enabled=True, tries=1, cert=None, key=None, allow_hosts=()):
     """Start the page's server on threads of this process and return its `Handle`.
 
-    `trekker` is the trek the page controls: none, and it makes its own (`trekker.Trekker`);
-    the terminal screen passes its own, so the page and the screen share ONE trek.
+    `worker` is the work the page controls: none, and it makes its own (`worker.Worker`);
+    the terminal screen passes its own, so the page and the screen share ONE work.
     `tries` > 1 takes the next free port when `port` is in use (one screen per project).
     `allow_hosts` adds to DFS_WEB_ALLOW_HOST (comma-separated), which the terminal screen's page
     takes by that alone."""
-    TREK["enabled"] = trek_enabled
+    WORK["enabled"] = work_enabled
     ALLOW_HOSTS.clear()
     names = list(allow_hosts) + os.environ.get("DFS_WEB_ALLOW_HOST", "").split(",")
     ALLOW_HOSTS.update(n.strip().lower() for n in names if n.strip())
-    if trekker is not None:
-        TREK["trekker"] = trekker
+    if worker is not None:
+        WORK["worker"] = worker
     server, last = None, None
     for p in range(port, port + max(1, tries)) if port else [0]:
         try:
@@ -1640,8 +1640,8 @@ def serve(host, port, trekker=None, trek_enabled=True, tries=1, cert=None, key=N
         server.socket = ctx.wrap_socket(server.socket, server_side=True)
     stop = threading.Event()
     threading.Thread(target=watch, args=(stop,), daemon=True).start()
-    if trek_enabled:
-        threading.Thread(target=_the_trekker().loop, args=(stop,), daemon=True).start()
+    if work_enabled:
+        threading.Thread(target=_the_worker().loop, args=(stop,), daemon=True).start()
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     shown = lan_address() if host in ("0.0.0.0", "::") else host

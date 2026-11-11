@@ -356,7 +356,7 @@ class Chat(unittest.TestCase):
             def chat_active(s, scope): return True
             def chat_interrupt(s, scope): s.pressed.append(scope); return 0
         screen = Screen()
-        chats = dfs_chat.Chats(trekker=lambda: screen)
+        chats = dfs_chat.Chats(worker=lambda: screen)
         st = chats.interrupt("W1")
         self.assertEqual(screen.pressed, ["W1"])
         self.assertNotIn("note", [m["role"] for m in st["messages"]], "the screen's chat leaves its own mark in the transcript")
@@ -368,7 +368,7 @@ class Chat(unittest.TestCase):
             def chat_active(s, scope): return False
             def chat_send(s, scope, text): return True
             def chat_interrupt(s, scope): return 1      # one message was dropped untyped
-        chats = dfs_chat.Chats(trekker=lambda: Screen())
+        chats = dfs_chat.Chats(worker=lambda: Screen())
         chats.send("W1", "never typed")
         self.assertEqual([m["text"] for m in chats.state("W1")["messages"]], ["never typed"])
         st = chats.interrupt("W1")
@@ -1001,7 +1001,7 @@ class Chat(unittest.TestCase):
         self.assertEqual(env.get("CHAT_SID"), sid)           # the page's session, not a new one
         self.assertNotIn("CHAT_SHARE", env)
         # the page's message reaches that chat while the agents differ
-        self.assertTrue(tui.UiTrekker(ui).chat_send("W1", "hello"))
+        self.assertTrue(tui.UiWorker(ui).chat_send("W1", "hello"))
         self.assertEqual(started[-1], ("sent", "hello"))
         # and a codex conversation stays codex's when the screen's agent is claude
         self.chats.save_sid("W3", "thread-1", "codex")
@@ -1014,18 +1014,18 @@ class Chat(unittest.TestCase):
         """A page whose chats live on a screen (tui.UI with a real ChatHost, run.sh as the chat) under `agent`."""
         import importlib.util
         import ptyrelay
-        import trek
+        import work
         spec = importlib.util.spec_from_file_location("dfs_tui", HERE / "tui.py")
         tui = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(tui)
-        for mod, name, value in ((trek, "RUNNER", str(HERE / "run.sh")), (tui, "ROOT", str(self.root))):
+        for mod, name, value in ((work, "RUNNER", str(HERE / "run.sh")), (tui, "ROOT", str(self.root))):
             self.addCleanup(setattr, mod, name, getattr(mod, name))
             setattr(mod, name, value)
         ui = object.__new__(tui.UI)
         ui.agent = agent
         ui.chat_host = ptyrelay.ChatHost()
         self.hosts.append(ui.chat_host)
-        return dfs_chat.Chats(trekker=lambda: tui.UiTrekker(ui))
+        return dfs_chat.Chats(worker=lambda: tui.UiWorker(ui))
 
     def wait_for(self, chats, scope, ok, timeout=15):
         end = time.time() + timeout
@@ -1089,7 +1089,7 @@ class Chat(unittest.TestCase):
                 if not s.live: return False
                 s.typed.append((scope, text)); return True
         screen = Screen()
-        chats = dfs_chat.Chats(trekker=lambda: screen)
+        chats = dfs_chat.Chats(worker=lambda: screen)
         # opening on the page opens it on the screen
         st = chats.open("W1")
         self.assertEqual(screen.opened, ["W1"])
@@ -1126,7 +1126,7 @@ class Chat(unittest.TestCase):
             def chat_live(s, scope): return True
             def chat_active(s, scope): return False
             def chat_send(s, scope, text): return True
-        chats = dfs_chat.Chats(trekker=lambda: Screen())
+        chats = dfs_chat.Chats(worker=lambda: Screen())
         sid = "5e55a0b1-0000-4000-8000-000000000001"
         chats.save_sid("W1", sid, "claude")
         path = self.root / "home" / ".claude" / "projects" / "p" / (sid + ".jsonl")
@@ -1232,7 +1232,7 @@ class Chat(unittest.TestCase):
             def chat_active(s, scope): return False
             def chat_send(s, scope, text): return True
             def chat_interrupt(s, scope): return 1      # the second was never typed; the first was
-        chats = dfs_chat.Chats(trekker=lambda: Screen())
+        chats = dfs_chat.Chats(worker=lambda: Screen())
         chats.send("W1", "typed")
         chats.send("W1", "not typed")
         st = chats.interrupt("W1")
@@ -1250,7 +1250,7 @@ class Chat(unittest.TestCase):
             def chat_open(s, scope): return True
             def chat_send(s, scope, text): return False
         screen = Screen()
-        chats = dfs_chat.Chats(trekker=lambda: screen)
+        chats = dfs_chat.Chats(worker=lambda: screen)
         self.assertEqual(chats.list(), [])                      # nothing said, nothing running elsewhere
         (self.root / ".dfs" / "items" / "W2.md").write_text("# W2 · other\n\n## Goal\n\nMore.\n")
         subprocess.run("git add -A && git -c user.name=t -c user.email=t@t commit -qm y", shell=True, cwd=self.root, check=True)
@@ -1273,8 +1273,8 @@ class Chat(unittest.TestCase):
         self.assertEqual([r["scope"] for r in chats.list()], ["W2"])
 
     def test_a_new_chat_opens_with_the_summary_of_assumptions_and_raises_and_an_old_one_does_not(self):
-        import trek as dfs_trek
-        chats = dfs_chat.Chats(trekker=lambda: dfs_trek.HeadlessTrek())
+        import work as dfs_work
+        chats = dfs_chat.Chats(worker=lambda: dfs_work.HeadlessWork())
         st = chats.open("W1")
         self.assertFalse(st["screen"])
         self.settle_on(chats, "W1")
@@ -1299,8 +1299,8 @@ class Chat(unittest.TestCase):
         self.assertEqual(len(self.calls()), 3)
 
     def test_the_projects_chat_opens_with_the_roadmap_not_a_task_tree(self):
-        import trek as dfs_trek
-        chats = dfs_chat.Chats(trekker=lambda: dfs_trek.HeadlessTrek())
+        import work as dfs_work
+        chats = dfs_chat.Chats(worker=lambda: dfs_work.HeadlessWork())
         chats.open("project")
         self.settle_on(chats, "project")
         self.assertIn("summarising the roadmap", self.calls()[0])
@@ -1523,7 +1523,7 @@ class Chat(unittest.TestCase):
             def chat_active(s, scope): return False
             def chat_close(s, scope, why=""): s.closed.append(scope)
         screen = Screen()
-        chats = dfs_chat.Chats(trekker=lambda: screen)
+        chats = dfs_chat.Chats(worker=lambda: screen)
         chats.end("W1")
         self.assertEqual(screen.closed, ["W1"])
 
@@ -1582,7 +1582,7 @@ class Chat(unittest.TestCase):
             def chat_live(s, scope): return False
             def chat_active(s, scope): return False
             def chat_close(s, scope, why="new chat"): whys.append(why)
-        dfs_chat.Chats(trekker=lambda: Screen()).end("W1")
+        dfs_chat.Chats(worker=lambda: Screen()).end("W1")
         self.assertEqual(whys, ["ended"])
 
     def test_what_is_not_a_chat_is_refused(self):

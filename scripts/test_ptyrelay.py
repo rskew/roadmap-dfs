@@ -274,7 +274,7 @@ class Looking(unittest.TestCase):
 
     def test_attached_the_screen_goes_on_polling_while_keys_keep_coming(self):
         """The screen's thread is in `attach` for as long as the chat is looked at, so its poll
-        (the page's trek Start, the trek's tick) runs from here, and a steady stream of keys
+        (the page's work Start, the work's tick) runs from here, and a steady stream of keys
         must not starve it."""
         polls = []
         self.t = threading.Thread(target=lambda: self.result.append(

@@ -117,7 +117,7 @@ RENAMED = {"Plan": "Approach"}
 # The critic's cadence. The environment override exists for trial runs, where waiting
 # five sessions to see the critic once is most of the cost of trying it. Neither review
 # rounds nor work sessions without the author have a limit of their own: some tasks
-# need extensive review, and the sessions a chain or trek is given (its cap) are the
+# need extensive review, and the sessions a chain or work is given (its cap) are the
 # backstop for a loop, since every fix to a review's findings is a session.
 CRITIC_EVERY = int(os.environ.get("DFS_CRITIC_EVERY", 5))     # work sessions between critic reviews
 
@@ -910,7 +910,7 @@ def next_task_id():
 def create_task(name, goal="", task=None, draft=False):
     """Write a new task file: the author's words unchanged and an empty tree (the author adds
     nodes for explicit steps, and the sessions plan, branch and back up from there). `task`
-    is an id the author chose (letters then a number, tagged here), else the next one. `draft` logs it a draft, which the trek passes
+    is an id the author chose (letters then a number, tagged here), else the next one. `draft` logs it a draft, which the work passes
     over until a `ready` entry (`is_draft`). Returns the id; ValueError says what is wrong."""
     tag = dfs_paths.branch_tag()
     suffix = "@" + tag if tag else ""
@@ -1468,7 +1468,7 @@ def answer_for(t, ts):
 
 def is_draft(t):
     """Whether the author has marked the task a draft: its later `draft` or `ready` entry
-    says, and neither means it is not one. A draft is still an open task; only the trek's
+    says, and neither means it is not one. A draft is still an open task; only the work's
     own choice passes it over (`dfs_state.next_item`, `continue_last`)."""
     marks = [e for e in t["log"] if e["kind"] in ("draft", "ready")]
     return bool(marks) and marks[-1]["kind"] == "draft"
@@ -2058,7 +2058,7 @@ def outline(t):
         depth[nd["id"]] = depth.get(p, -1) + 1 if p in nodes else 0
     lines = []
 
-    def trek(parent, d):
+    def work(parent, d):
         for nd in sorted((n for n in t["nodes"]
                           if (n["parent"] if n["parent"] in nodes else None) == parent),
                          key=order_key):
@@ -2068,8 +2068,8 @@ def outline(t):
             det = nd["fields"].get("Determination", "")
             lines.append("%s%s [%s] %s%s" % ("  " * d, nd["id"], st, nd["title"],
                                              (" — " + det) if det else ""))
-            trek(nd["id"], d + 1)
-    trek(None, 0)
+            work(nd["id"], d + 1)
+    work(None, 0)
     return lines
 
 

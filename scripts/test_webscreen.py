@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The terminal screen and the web page share ONE trek: the page's controls are run on
+"""The terminal screen and the web page share ONE work: the page's controls are run on
 the screen's own thread, and what the page shows is read from the screen's own state.
 
 Run:  python3 roadmap-dfs/scripts/test_webscreen.py
@@ -34,21 +34,21 @@ def item(i, status="open", goal=None):
 
 
 def a_screen(items):
-    """A screen as the tests elsewhere build one: no curses, the trek's state set by hand."""
+    """A screen as the tests elsewhere build one: no curses, the work's state set by hand."""
     ui = object.__new__(TUI.UI)
     ui.real = False
     ui.msg = ""
     ui.commands = queue.Queue()
     ui.events = collections.deque(maxlen=50)
     ui.agent = "claude"
-    ui.trek_on, ui.trek_budget, ui.trek_spent, ui.trek_until = False, 20, 0, 0.0
-    ui.trek_note = ""
-    ui.trek_next, ui.trek_pending = None, False
+    ui.work_on, ui.work_budget, ui.work_spent, ui.work_until = False, 20, 0, 0.0
+    ui.work_note = ""
+    ui.work_next, ui.work_pending = None, False
     ui.chains = []
     ui.data = dict(next_item=items[0]["id"] if items else None)
     ui._items = items
     TUI.UI.items = property(lambda self: self._items)       # the tests' own items
-    ui.trek_tick = lambda: None                              # the policy has its own tests
+    ui.work_tick = lambda: None                              # the policy has its own tests
     ui.reload = lambda: None
     return ui
 
@@ -78,19 +78,19 @@ class Controls(unittest.TestCase):
     def setUp(self):
         self._items = TUI.UI.__dict__.get("items")
         self.ui = a_screen([item("W1"), item("W2"), item("W3", "done")])
-        self.w = TUI.UiTrekker(self.ui)
+        self.w = TUI.UiWorker(self.ui)
 
     def tearDown(self):
         TUI.UI.items = self._items
 
-    def test_the_page_starts_the_screens_own_trek(self):
+    def test_the_page_starts_the_screens_own_work(self):
         with Screening(self.ui):
             self.w.start(7)
-        self.assertTrue(self.ui.trek_on)
-        self.assertEqual(self.ui.trek_budget, 7)
-        self.assertIn("trek on, 7 sessions", [t for _, _, t in self.ui.events])
+        self.assertTrue(self.ui.work_on)
+        self.assertEqual(self.ui.work_budget, 7)
+        self.assertIn("work on, 7 sessions", [t for _, _, t in self.ui.events])
 
-    def test_a_second_start_and_a_budget_that_is_not_a_trek_are_refused(self):
+    def test_a_second_start_and_a_budget_that_is_not_a_work_are_refused(self):
         with Screening(self.ui):
             self.w.start(3)
             with self.assertRaises(ValueError):
@@ -103,18 +103,18 @@ class Controls(unittest.TestCase):
         with Screening(self.ui):
             self.w.start(3)
             self.w.stop()
-        self.assertFalse(self.ui.trek_on)
-        self.assertEqual(self.ui.trek_note, "stopped by hand")
+        self.assertFalse(self.ui.work_on)
+        self.assertEqual(self.ui.work_note, "stopped by hand")
 
     def test_pins_are_the_screens_pins(self):
         with Screening(self.ui):
             self.w.pin("W2")
-            self.assertEqual(self.ui.trek_next, "W2")
+            self.assertEqual(self.ui.work_next, "W2")
             self.w.pin("W2")                                  # again: the pin goes
-            self.assertIsNone(self.ui.trek_next)
+            self.assertIsNone(self.ui.work_next)
             self.w.pin("W1")
             self.w.pin(None)
-            self.assertIsNone(self.ui.trek_next)
+            self.assertIsNone(self.ui.work_next)
             for bad in ("W3", "W9"):
                 with self.assertRaises(ValueError):
                     self.w.pin(bad)
@@ -131,13 +131,13 @@ class Controls(unittest.TestCase):
         # The box shows the agent, the kind of session and the model the chain recorded, not the
         # settings for the next chain.
         ui = self.ui
-        ui.trek_parallel, ui.trek_stop_on_limit, ui.trek_carry, ui.trek_stops = 1, False, [], frozenset()
+        ui.work_parallel, ui.work_stop_on_limit, ui.work_carry, ui.work_stops = 1, False, [], frozenset()
         run = dict(dir="/runs/mine", item="W1", run="2", cap="5", live=True, pid=1, agent="claude",
                    kind="work", model="sonnet", mode="work")
-        ui.trek_chains, ui.chains = [dict(dir="/runs/mine", item="W1", started=0.0, content=set(), pin=False, cap=5)], [run]
+        ui.work_chains, ui.chains = [dict(dir="/runs/mine", item="W1", started=0.0, content=set(), pin=False, cap=5)], [run]
         ui.live = lambda: [run]
         ui.agent = "codex"                                   # chosen since: for the next chain
-        got = ui.trek_snapshot()["chains"]
+        got = ui.work_snapshot()["chains"]
         self.assertEqual([(c["agent"], c["kind"], c["model"]) for c in got], [("claude", "work", "sonnet")])
 
     def test_a_screen_with_a_prompt_open_says_so_rather_than_hanging(self):
@@ -168,7 +168,7 @@ class Controls(unittest.TestCase):
 
     def test_a_command_the_screen_has_begun_is_waited_for_not_called_busy(self):
         # The screen takes the command before the caller's timeout, then spends longer than
-        # the timeout inside it (a trek's Start spawns the runner and reloads the roadmap).
+        # the timeout inside it (a work's Start spawns the runner and reloads the roadmap).
         ran = []
         began = threading.Event()
         release = threading.Event()
@@ -230,7 +230,7 @@ class Controls(unittest.TestCase):
                          (True, 5, "W2", "claude"))
         self.assertEqual([c["id"] for c in snap["candidates"]], ["W1", "W2"])
         self.assertEqual(snap["auto"], "W1")
-        self.assertEqual(snap["events"][0]["kind"], "trek")   # newest first
+        self.assertEqual(snap["events"][0]["kind"], "work")   # newest first
 
 
 class OverHttp(unittest.TestCase):
@@ -245,7 +245,7 @@ class OverHttp(unittest.TestCase):
         dfs_paths._TAG_CACHE.clear()
         self._items = TUI.UI.__dict__.get("items")
         self.ui = a_screen([item("W1"), item("W2")])
-        self.handle = dfs_web.serve("127.0.0.1", 0, trekker=TUI.UiTrekker(self.ui))
+        self.handle = dfs_web.serve("127.0.0.1", 0, worker=TUI.UiWorker(self.ui))
         self.port = int(self.handle.url.rsplit(":", 1)[1].strip("/"))
         self.screen = Screening(self.ui)
         self.screen.__enter__()
@@ -253,7 +253,7 @@ class OverHttp(unittest.TestCase):
     def tearDown(self):
         self.screen.__exit__()
         self.handle.stop()
-        dfs_web.TREK.update(enabled=True, trekker=None)
+        dfs_web.WORK.update(enabled=True, worker=None)
         TUI.UI.items = self._items
         dfs_paths.work_root = self._wr
         dfs_paths._TAG_CACHE.clear()
@@ -266,40 +266,40 @@ class OverHttp(unittest.TestCase):
         r = conn.getresponse()
         return r.status, json.loads(r.read())
 
-    def test_the_page_controls_the_screens_trek_and_reads_its_state(self):
-        status, snap = self.call("GET", "/api/trek")
+    def test_the_page_controls_the_screens_work_and_reads_its_state(self):
+        status, snap = self.call("GET", "/api/work")
         self.assertEqual((status, snap["on"], snap["enabled"]), (200, False, True))
-        self.assertEqual(self.call("POST", "/api/trek/start", dict(budget=4))[0], 200)
-        self.assertTrue(self.ui.trek_on)                        # the SCREEN's state moved
-        self.assertEqual(self.call("GET", "/api/trek")[1]["budget"], 4)
-        self.assertEqual(self.call("POST", "/api/trek/pin", dict(item="W2"))[1]["pinned"], "W2")
-        self.assertEqual(self.ui.trek_next, "W2")
-        self.assertEqual(self.call("POST", "/api/trek/agent", dict(agent="kiro"))[1]["agent"], "kiro")
+        self.assertEqual(self.call("POST", "/api/work/start", dict(budget=4))[0], 200)
+        self.assertTrue(self.ui.work_on)                        # the SCREEN's state moved
+        self.assertEqual(self.call("GET", "/api/work")[1]["budget"], 4)
+        self.assertEqual(self.call("POST", "/api/work/pin", dict(item="W2"))[1]["pinned"], "W2")
+        self.assertEqual(self.ui.work_next, "W2")
+        self.assertEqual(self.call("POST", "/api/work/agent", dict(agent="kiro"))[1]["agent"], "kiro")
         self.assertEqual(self.ui.agent, "kiro")
-        self.assertEqual(self.call("POST", "/api/trek/stop", {})[0], 200)
-        self.assertFalse(self.ui.trek_on)
-        self.assertEqual(self.call("GET", "/api/trek")[1]["note"], "stopped by hand")
+        self.assertEqual(self.call("POST", "/api/work/stop", {})[0], 200)
+        self.assertFalse(self.ui.work_on)
+        self.assertEqual(self.call("GET", "/api/work")[1]["note"], "stopped by hand")
 
     def test_the_page_chooses_the_screens_models_and_never_gets_a_dropped_connection(self):
         # The terminal-hosted server once had no model action: the request raised AttributeError and the socket
         # closed with no reply, which a proxy in front shows as 502.
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
-            status, snap = self.call("POST", "/api/trek/model", dict(role="implement", model="opus"))
+            status, snap = self.call("POST", "/api/work/model", dict(role="implement", model="opus"))
             self.assertEqual((status, snap["models"]["implement"]), (200, "opus"))
             self.assertEqual(self.ui.models()["implement"], "opus")          # the SCREEN's choice moved
-            self.assertEqual(self.call("POST", "/api/trek/model", dict(role="review", model="opus"))[0], 409)
-            with mock.patch.object(TUI.UiTrekker, "set_model", side_effect=RuntimeError("boom")):
-                status, body = self.call("POST", "/api/trek/model", dict(role="implement", model="opus"))
+            self.assertEqual(self.call("POST", "/api/work/model", dict(role="review", model="opus"))[0], 409)
+            with mock.patch.object(TUI.UiWorker, "set_model", side_effect=RuntimeError("boom")):
+                status, body = self.call("POST", "/api/work/model", dict(role="implement", model="opus"))
             self.assertEqual((status, "boom" in body["error"]), (500, True))   # any failure is answered, in JSON
 
-    def test_the_page_starts_the_screens_trek_with_parallel_chains(self):
-        self.assertEqual(self.call("POST", "/api/trek/start", dict(budget=6, parallel=2))[0], 200)
-        self.assertEqual(self.ui.trek_parallel, 2)
-        self.assertEqual(self.call("GET", "/api/trek")[1]["parallel"], 2)
+    def test_the_page_starts_the_screens_work_with_parallel_chains(self):
+        self.assertEqual(self.call("POST", "/api/work/start", dict(budget=6, parallel=2))[0], 200)
+        self.assertEqual(self.ui.work_parallel, 2)
+        self.assertEqual(self.call("GET", "/api/work")[1]["parallel"], 2)
 
     def test_what_the_screen_does_shows_on_the_page(self):
-        self.ui.trek_begin(6)                                   # the `w` key's path
-        snap = self.call("GET", "/api/trek")[1]
+        self.ui.work_begin(6)                                   # the `w` key's path
+        snap = self.call("GET", "/api/work")[1]
         self.assertEqual((snap["on"], snap["budget"]), (True, 6))
 
     def test_a_busy_screen_is_a_conflict_not_a_hang(self):
@@ -308,7 +308,7 @@ class OverHttp(unittest.TestCase):
         orig = TUI.UI.call_soon
         TUI.UI.call_soon = lambda self, fn, timeout=5.0: orig(self, fn, timeout=0.2)
         try:
-            status, body = self.call("POST", "/api/trek/start", dict(budget=3))
+            status, body = self.call("POST", "/api/work/start", dict(budget=3))
         finally:
             TUI.UI.call_soon = orig
         self.assertEqual(status, 409)
@@ -319,7 +319,7 @@ class OverHttp(unittest.TestCase):
 
 
 class InAChat(unittest.TestCase):
-    """The screen's thread is in a chat (`c`): the page's Start still starts the trek."""
+    """The screen's thread is in a chat (`c`): the page's Start still starts the work."""
 
     call = OverHttp.call
 
@@ -363,20 +363,20 @@ class InAChat(unittest.TestCase):
         self.screen = types.SimpleNamespace(__exit__=lambda: None)
         OverHttp.tearDown(self)
 
-    def test_the_page_starts_the_trek_while_the_screen_is_in_a_chat(self):
-        status, body = self.call("POST", "/api/trek/start", dict(budget=3))
+    def test_the_page_starts_the_work_while_the_screen_is_in_a_chat(self):
+        status, body = self.call("POST", "/api/work/start", dict(budget=3))
         self.assertEqual(status, 200, body)
-        self.assertTrue(self.ui.trek_on)
+        self.assertTrue(self.ui.work_on)
         self.assertTrue(self.chat.is_alive())                   # still in the chat
 
     # and every other control the page has, as from a screen not in a chat
-    test_the_page_controls_the_screens_trek_and_reads_its_state = \
-        OverHttp.test_the_page_controls_the_screens_trek_and_reads_its_state
+    test_the_page_controls_the_screens_work_and_reads_its_state = \
+        OverHttp.test_the_page_controls_the_screens_work_and_reads_its_state
 
 
 class Reopening(unittest.TestCase):
-    """A node added on the page to a finished task reopens it, and the page's "Trek here
-    next" reads the trek from the screen: once the screen has reloaded, the page is told."""
+    """A node added on the page to a finished task reopens it, and the page's "Work here
+    next" reads the work from the screen: once the screen has reloaded, the page is told."""
 
     DONE = ("# W1 · one\n\n## Goal\n\none\n\n## Tree\n\n### W1.1 · did it\nStatus: confirmed\n"
             "Approach: x\nDetermination: done\n\n## Log\n\n"
@@ -410,17 +410,17 @@ class Reopening(unittest.TestCase):
         shutil.rmtree(self.root, ignore_errors=True)
 
     def candidates(self):
-        return [c["id"] for c in self.ui.trek_snapshot()["candidates"]]
+        return [c["id"] for c in self.ui.work_snapshot()["candidates"]]
 
     def test_a_reload_that_reopens_a_task_tells_the_page(self):
         self.assertEqual(self.candidates(), ["W2"])
         self.ui.reload()
-        self.assertEqual(self.told, [], "nothing the trek shows changed")
+        self.assertEqual(self.told, [], "nothing the work shows changed")
         dfs_tree.add_node("W1", "more work")
         self.assertEqual(self.candidates(), ["W2"], "the screen has not read the file yet")
         self.ui.reload()
         self.assertEqual(self.candidates(), ["W1", "W2"])
-        self.assertEqual(self.told, [1], "the page reads the trek again once the screen has it")
+        self.assertEqual(self.told, [1], "the page reads the work again once the screen has it")
 
 
 class Serving(unittest.TestCase):
@@ -431,9 +431,9 @@ class Serving(unittest.TestCase):
         wr = dfs_paths.work_root
         dfs_paths.work_root = lambda: root
         try:
-            first = dfs_web.serve("127.0.0.1", 0, trek_enabled=False)
+            first = dfs_web.serve("127.0.0.1", 0, work_enabled=False)
             port = int(first.url.rsplit(":", 1)[1].strip("/"))
-            second = dfs_web.serve("127.0.0.1", port, trek_enabled=False, tries=5)
+            second = dfs_web.serve("127.0.0.1", port, work_enabled=False, tries=5)
             try:
                 self.assertGreater(int(second.url.rsplit(":", 1)[1].strip("/")), port)
             finally:
