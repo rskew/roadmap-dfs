@@ -1492,7 +1492,7 @@ class Chat(unittest.TestCase):
         self.assertTrue(self.chats.list()[0]["ended"])
         self.assertEqual(self.chats.sid("W1"), old, "the session stays, so it can be read and resumed")
         self.assertTrue([m for m in st["messages"] if m["role"] == "agent"])
-        self.assertIn("page: chat ended", self.record("W1"))
+        self.assertIn("page: chat archived", self.record("W1"))
 
     def test_a_message_after_the_end_puts_the_chat_back_in_progress(self):
         self.chats.send("W1", "hello")
@@ -1539,7 +1539,7 @@ class Chat(unittest.TestCase):
                 self.chats.end("W1")
             self.assertIn("another terminal has this conversation open", str(cm.exception))
             self.assertNotIn("ended", self.chats.record("W1"))
-            self.assertIn("page: end refused, another terminal has session", self.record("W1"))
+            self.assertIn("page: archive refused, another terminal has session", self.record("W1"))
         finally:
             other.kill()
             other.wait()

@@ -1010,7 +1010,7 @@ class Pane(unittest.TestCase):
         ui.act(ord("E"))
         self.assertEqual(ran, ["W1"])
 
-    def test_ending_a_chat_from_the_screen_asks_first_and_marks_it_ended(self):
+    def test_archiving_a_chat_from_the_screen_asks_first_and_marks_it_archived(self):
         import chat as dfs_chat
         ui = self.ui
         ended = []
@@ -1027,10 +1027,10 @@ class Pane(unittest.TestCase):
         ui.end_chat("W1")
         self.assertEqual((ended, ui.msg), ([], "chat on W1 kept"))
         ui.end_chat("W9")
-        self.assertEqual((ended, ui.msg), ([], "W9 has no chat to end"))
+        self.assertEqual((ended, ui.msg), ([], "W9 has no chat to archive"))
         ui.prompted = "y"
         ui.end_chat("W1")
-        self.assertEqual((ended, ui.msg), (["W1"], "chat W1 ended"))
+        self.assertEqual((ended, ui.msg), (["W1"], "chat W1 archived"))
 
     def test_f_outside_the_tree_corrects_nothing_and_says_where_to_go(self):
         ui = self.ui

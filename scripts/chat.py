@@ -22,7 +22,7 @@ Each scope keeps a log, `<run root>/chat/<scope>.log` (chatlog.py): what the pag
 it, each headless turn and why one failed, and, for a background chat, its start, its exit with the agent's
 last screen, who closed it and a note when it went quiet after a message (DFS_CHAT_STALL).
 
-A chat can be ended (`Chats.end`): its agent is stopped and it is marked, so the Chats list keeps what is in
+A chat can be archived (`Chats.end`; the saved mark is `ended`): its agent is stopped and it is marked, so the Chats list keeps what is in
 progress apart from what is over. The conversation stays, and a message sent to it later makes it in progress again.
 
 A message sent on the page while a headless turn is answering STEERS it: it is left in the scope's inbox
@@ -895,7 +895,7 @@ class Chats:
         return sorted(out, key=lambda c: -c["updated"])
 
     def end(self, scope):
-        """Done with this chat: its agent is stopped and it is marked ended, so the Chats list can keep
+        """Done with this chat: its agent is stopped and it is marked archived, so the Chats list can keep
         what is in progress apart from what is over. The conversation stays and can be read; a message
         sent to it later (here or at the screen) makes it in progress again. A chat with no
         conversation has nothing to mark: use "New chat"."""
@@ -905,14 +905,14 @@ class Chats:
                 raise ValueError("it is still answering: stop it or wait for it")
             rec = self.record(scope)
             if not rec.get("sid"):
-                raise ValueError("there is no conversation to end")
+                raise ValueError("there is no conversation to archive")
             w = self.worker()
             if w and w.chat_active(scope):
                 raise ValueError("it is still answering: stop it or wait for it")
             if not (w and w.chat_live(scope)) and running_elsewhere(rec["sid"], agent=self.agent(scope)):
-                chatlog.log(scope, "page: end refused, another terminal has session %s open" % rec["sid"])
-                raise ValueError("another terminal has this conversation open: close it there, then end it")
-            chatlog.log(scope, "page: chat ended (session %s)" % rec["sid"])
+                chatlog.log(scope, "page: archive refused, another terminal has session %s open" % rec["sid"])
+                raise ValueError("another terminal has this conversation open: close it there, then archive it")
+            chatlog.log(scope, "page: chat archived (session %s)" % rec["sid"])
             if w:
                 w.chat_close(scope, why="ended")
             rec["ended"] = time.time()

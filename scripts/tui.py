@@ -825,7 +825,7 @@ KEYS = [
     ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (run.sh --review)"),
     ("items", "c", ord("c"), "chat", "chat about this item (run.sh --chat); ctrl-] comes back and leaves it running"),
     ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (run.sh --chat project)"),
-    ("items", "E", ord("E"), "end-chat", "end this item's chat: its agent is stopped and the Chats list moves it to Ended; a later message reopens it (asks first)"),
+    ("items", "E", ord("E"), "archive-chat", "archive this item's chat: its agent is stopped and the Chats list moves it to Archived; a later message reopens it (asks first)"),
     ("items", "o", ord("o"), "open", "open a new task (run.sh --open)"),
     ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
     ("items", "[  -", ord("["), "up", "move up among its siblings"),
@@ -4469,24 +4469,24 @@ class UI(WorkMixin):
         self.reload()
 
     def end_chat(self, scope):
-        """What `E` does: end this scope's chat as the page's End button does (`Chats.end`): its
-        agent here is stopped and the chat is marked ended, so the Chats list keeps it apart from
+        """What `E` does: archive this scope's chat as the page's Archive button does (`Chats.end`): its
+        agent here is stopped and the chat is marked archived, so the Chats list keeps it apart from
         those in progress. The conversation stays, and a later message makes it in progress again."""
         import chat as dfs_chat
         chats = dfs_chat.Chats(worker=lambda: UiWorker(self))
         if not chats.sid(scope):
-            self.msg = "%s has no chat to end" % scope
+            self.msg = "%s has no chat to archive" % scope
             return
-        if self.prompt("end the chat on %s? Its agent is stopped; the conversation is kept [y/N]:"
+        if self.prompt("archive the chat on %s? Its agent is stopped; the conversation is kept [y/N]:"
                        % scope)[:1].lower() != "y":
             self.msg = "chat on %s kept" % scope
             return
         try:
             chats.end(scope)
         except (ValueError, OSError) as e:
-            self.msg = "not ended: %s" % e
+            self.msg = "not archived: %s" % e
             return
-        self.msg = self.event("run", "chat %s ended" % scope)
+        self.msg = self.event("run", "chat %s archived" % scope)
 
     def shell(self, argv, pause=True, env=None):
         """Hand the real terminal over. Sessions are interactive and stream output."""
