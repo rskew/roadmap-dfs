@@ -1059,7 +1059,7 @@ def chat_act(name, body=None, scope=None):
         if name == "chat/send":
             return chats().send(need(body, "scope", "a scope"), body.get("message"))
         if name == "chat/open":
-            return chats().open(need(body, "scope", "a scope"))
+            return chats().open(need(body, "scope", "a scope"), fresh=bool(body.get("fresh")))
         if name == "chat/interrupt":
             return chats().interrupt(need(body, "scope", "a scope"))
         if name == "chat/end":

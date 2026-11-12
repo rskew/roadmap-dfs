@@ -1032,6 +1032,29 @@ class Pane(unittest.TestCase):
         ui.end_chat("W1")
         self.assertEqual((ended, ui.msg), (["W1"], "chat W1 archived"))
 
+    def test_c_on_the_project_chat_renews_an_ended_one_first_and_a_task_chat_is_left(self):
+        import chat as dfs_chat
+        ui = self.ui
+        renewed = []
+
+        class FakeChats:
+            def __init__(s, worker=None): pass
+            def renew_ended(s, scope): renewed.append(scope)
+
+        class Stop(Exception):
+            pass
+
+        def start(scope):
+            raise Stop()
+        real = dfs_chat.Chats
+        dfs_chat.Chats = FakeChats
+        self.addCleanup(setattr, dfs_chat, "Chats", real)
+        ui.start_chat = start
+        for scope in ("W1", "project"):
+            with self.assertRaises(Stop):
+                ui.open_chat(scope)
+        self.assertEqual(renewed, ["project"], "only the project chat is started over after an end")
+
     def test_f_outside_the_tree_corrects_nothing_and_says_where_to_go(self):
         ui = self.ui
         ran = []
