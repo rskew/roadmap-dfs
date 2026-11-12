@@ -514,7 +514,7 @@ const FLOWS = {
     same(posted - sends, 1, "a send the server did not answer is sent once, not again");
   },
 
-  // End chat marks a conversation done: the list of chats keeps what is going apart from what is over.
+  // Archive marks a conversation done: the list of chats keeps what is going apart from what is over.
   async chat_end(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 640 }, hasTouch: true });
     const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: "W81.10 is open." }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "claude", ended: false };
@@ -530,18 +530,18 @@ const FLOWS = {
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
     await page.click("#chat [data-act=chatend]");
-    await page.waitForFunction(() => /Ended\./.test(document.querySelector("#chat-log").textContent));
-    same(ended, 1, "End asks the server to end the chat");
-    assert(await page.$eval("#chat [data-act=chatend]", e => e.disabled), "an ended chat cannot be ended again");
+    await page.waitForFunction(() => /Archived\./.test(document.querySelector("#chat-log").textContent));
+    same(ended, 1, "Archive asks the server to archive the chat");
+    assert(await page.$eval("#chat [data-act=chatend]", e => e.disabled), "an archived chat cannot be archived again");
     await page.click("[data-act=chatclose]");
     await page.evaluate(() => { location.hash = "#/chats"; });
     await page.waitForSelector(".endedchats");
-    same(await page.$$eval("#view > .crow", e => e.length), 0, "nothing in progress is left above the Ended group");
-    same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Ended (2)", "the Ended group counts the ended chats");
+    same(await page.$$eval("#view > .crow", e => e.length), 0, "nothing in progress is left above the Archived group");
+    same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Archived (2)", "the Archived group counts the archived chats");
     assert((await page.$eval("#title", e => e.textContent)).includes("0 going"), "the title counts only the chats in progress");
     await page.click(".endedchats summary"); await page.waitForTimeout(4500);
-    assert(await page.$eval(".endedchats", e => e.open), "an open Ended group stays open through the list's redraws");
-    same(await page.$$eval(".endedchats .chatrow", e => e.length), 2, "the ended chats are inside it");
+    assert(await page.$eval(".endedchats", e => e.open), "an open Archived group stays open through the list's redraws");
+    same(await page.$$eval(".endedchats .chatrow", e => e.length), 2, "the archived chats are inside it");
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
     // each line links the item its chat is about; the project chat is about none
     same(await page.$$eval(".chatitem", e => e.map(x => [x.getAttribute("href"), x.textContent.trim()])), [["#/t/W9", "W9"]], "only the item's chat has a link, to that item");

@@ -207,7 +207,7 @@ class Flows(unittest.TestCase):
     def test_a_chat_keeps_its_log_and_asks_again_when_the_server_cannot_be_reached(self):
         self.flow("chat_lost")
 
-    def test_end_chat_moves_a_chat_out_of_the_in_progress_list_into_ended(self):
+    def test_archive_chat_moves_a_chat_out_of_the_in_progress_list_into_archived(self):
         self.flow("chat_end")
 
     def test_the_chat_follows_a_reader_near_its_end_or_just_after_sending_and_no_one_else(self):
