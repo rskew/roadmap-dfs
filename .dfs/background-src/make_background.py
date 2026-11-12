@@ -12,7 +12,7 @@ portrait phone, which shows only its middle columns, sees the trunk and the crow
 it, and a landscape screen, which shows its middle rows, sees the crown across its width.
 
 Run, from this directory (writes background-light.svg and -dark.svg; seed default SEED):
-  python3 make_background.py /tmp/bg [seed [icon seed]]
+  python3 make_background.py /tmp/bg [seed]
   for m in light dark; do bash render.sh /tmp/bg/background-$m.svg ../background-image-$m; done
   bash render.sh /tmp/bg/icon.svg ../icon        # the app icon, 1024px
 """
@@ -49,7 +49,7 @@ def _cross(p, q, r, s, gap):
 def grow(seed: int, size: int = W, depth_max: int = DEPTH, trunk: float = TRUNK, width0: float = WIDTH,
          margin: float = MARGIN, floor: float = 40, minw: float = 8):
     """Grow the tree in a square of `size`; returns its branches, each (start, end, width, how it
-    ends), and the root. The defaults draw the background; the icon passes its own.
+    ends), and the root. The defaults draw the background, and the icon is a closer view of it.
 
     A branch ends "fork" where it splits, "stop" where it was cut short and "arrive" at its
     last depth. Branches are grown breadth first, so a short one near the trunk is never
@@ -94,7 +94,7 @@ def grow(seed: int, size: int = W, depth_max: int = DEPTH, trunk: float = TRUNK,
 
 def picture(mode: str, seed: int, size: int = W, k: float = 1, **tree) -> str:
     """The tree as an svg of `size` square. `k` scales the marks (root square, forks, ends,
-    stop bars) and `tree` is passed to grow(): the background uses neither, the icon both."""
+    stop bars) and `tree` is passed to grow(); the background and the icon use neither."""
     c = PALETTE[mode]
     branches, root = grow(seed, size, **tree)
     out = []
@@ -119,16 +119,18 @@ def picture(mode: str, seed: int, size: int = W, k: float = 1, **tree) -> str:
     )
 
 
-# The app icon: the same tree, simpler and with heavier marks so it reads at 192px, in the light
-# palette (an icon is one picture, not one for each mode), kept inside the middle 80% of the
-# square so a rounded or circular home-screen mask does not cut it.
+# The app icon: the background's own tree (same seed, light palette, same line weights and marks),
+# cut to a square around its trunk and crown. An icon is one picture, not one for each mode, so it
+# is the light one. The picture is not redrawn simpler: it is the background, seen closer.
 ICON_SIZE = 1024
-ICON_SEED = 0                    # of seeds 0-7, a crown that is balanced, clear of its own branches and has a stopped bar
-ICON = dict(depth_max=4, trunk=220, width0=64, margin=165, floor=190, minw=22)
+ICON_VIEW = (220, 300, 1240)     # x, y and side, in the background's own pixels: the trunk's foot to the middle of the crown
 
 
-def icon(seed: int = ICON_SEED) -> str:
-    return picture("light", seed, ICON_SIZE, 1.35, **ICON)
+def icon() -> str:
+    x, y, side = ICON_VIEW
+    inner = picture("light", SEED).split(">", 1)[1]          # everything after the opening <svg ...> tag
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="%d %d %d %d">%s'
+            % (ICON_SIZE, ICON_SIZE, x, y, side, side, inner))
 
 
 if __name__ == "__main__":
@@ -137,4 +139,4 @@ if __name__ == "__main__":
     out.mkdir(parents=True, exist_ok=True)
     for m in PALETTE:
         (out / ("background-%s.svg" % m)).write_text(picture(m, seed))
-    (out / "icon.svg").write_text(icon(int(sys.argv[3])) if len(sys.argv) > 3 else icon())
+    (out / "icon.svg").write_text(icon())
