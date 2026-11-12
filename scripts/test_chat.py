@@ -1494,6 +1494,34 @@ class Chat(unittest.TestCase):
         self.assertTrue([m for m in st["messages"] if m["role"] == "agent"])
         self.assertIn("page: chat archived", self.record("W1"))
 
+    def test_chat_about_the_project_after_an_end_starts_a_new_chat(self):
+        self.chats.send("project", "hello")
+        self.settle("project")
+        old = self.chats.sid("project")
+        self.chats.end("project")
+        self.chats.open("project")      # the ended row in the Chats list: the conversation is still there to read
+        self.assertEqual(self.chats.sid("project"), old, "opening it without `fresh` leaves the ended conversation")
+        self.assertTrue(self.chats.state("project")["ended"])
+        self.chats.open("project", fresh=True)
+        self.settle("project")
+        self.assertNotEqual(self.chats.sid("project"), old, "the project button after an end starts over")
+        self.assertFalse(self.chats.state("project")["ended"])
+        self.assertIn("a new one starts", self.record("project"))
+
+    def test_chat_about_the_project_keeps_a_chat_that_was_not_ended_and_a_tasks_chat_after_an_end(self):
+        self.chats.send("project", "hello")
+        self.settle("project")
+        old = self.chats.sid("project")
+        self.assertFalse(self.chats.renew_ended("project"), "in progress: nothing to renew")
+        self.assertEqual(self.chats.sid("project"), old)
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        task = self.chats.sid("W1")
+        self.chats.end("W1")
+        self.assertFalse(self.chats.renew_ended("W1"))
+        self.chats.open("W1", fresh=True)
+        self.assertEqual(self.chats.sid("W1"), task, "a task's ended chat is resumed")
+
     def test_a_message_after_the_end_puts_the_chat_back_in_progress(self):
         self.chats.send("W1", "hello")
         self.settle("W1")

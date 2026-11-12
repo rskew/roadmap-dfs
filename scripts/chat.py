@@ -24,6 +24,8 @@ last screen, who closed it and a note when it went quiet after a message (DFS_CH
 
 A chat can be archived (`Chats.end`; the saved mark is `ended`): its agent is stopped and it is marked, so the Chats list keeps what is in
 progress apart from what is over. The conversation stays, and a message sent to it later makes it in progress again.
+Except that pressing "chat about the project" (the page's button, the screen's `C`) after the project chat was
+ended starts a new chat (`Chats.renew_ended`): the ended one is cleared.
 
 A message sent on the page while a headless turn is answering STEERS it: it is left in the scope's inbox
 (`<run root>/chat/<scope>/inbox`), and the hooks the turn runs under (inbox.py, as a chain session has them) hand it to
@@ -842,11 +844,28 @@ class Chats:
         if follow:
             threading.Thread(target=self.turn, args=(scope, follow, new_sid or sid, False, agent), daemon=True).start()
 
-    def open(self, scope):
+    def renew_ended(self, scope):
+        """Pressing "chat about the project" after the project chat was ended starts a new one: the ended
+        conversation is cleared (`clear`), so what opens next is a new session. Only the project chat: a
+        task's chat keeps its conversation, which a later message picks up. True if it was renewed."""
+        if scope != "project":
+            return False
+        self.check(scope)
+        with self.lock:
+            if not self.state(scope)["ended"]:
+                return False
+            chatlog.log(scope, "the project chat was ended: a new one starts")
+            self.clear(scope)
+        return True
+
+    def open(self, scope, fresh=False):
         """The page opened this chat. A conversation that has begun is left as it is; a new one
         opens with the summary: the agent the screen runs for it does (that is where the page's
-        chats live), and with no screen the page runs the opening turn itself."""
+        chats live), and with no screen the page runs the opening turn itself. `fresh` is the
+        page's "Chat about the project" button: an ended project chat is not resumed (`renew_ended`)."""
         self.check(scope)
+        if fresh:
+            self.renew_ended(scope)
         w = self.worker()
         note = ""
         agent = self.agent(scope)

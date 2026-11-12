@@ -4448,7 +4448,14 @@ class UI(WorkMixin):
     def open_chat(self, scope):
         """What `c` and `C` do: look at this scope's chat, running it first if it is not.
         ctrl-] comes back to the roadmap and leaves it running. The screen goes on polling
-        meanwhile (it draws nothing), so the page's work Start is run and a work goes on ticking."""
+        meanwhile (it draws nothing), so the page's work Start is run and a work goes on ticking.
+        `C` on a project chat that was ended starts a new one (`Chats.renew_ended`)."""
+        if scope == "project":
+            import chat as dfs_chat
+            try:
+                dfs_chat.Chats(worker=lambda: UiWorker(self)).renew_ended(scope)
+            except (ValueError, OSError) as e:
+                self.msg = "the ended project chat was not cleared: %s" % e
         relay = self.start_chat(scope)
         self.event("run", "chat %s" % scope)
         curses.def_prog_mode()

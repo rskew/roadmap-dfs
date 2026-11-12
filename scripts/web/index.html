@@ -1144,7 +1144,7 @@ function drawChats() {
   const going = S.chats.filter(c => !c.ended), ended = S.chats.filter(c => c.ended);
   const rows = going.map(row).join("");
   $("#view").className = "col";
-  $("#view").innerHTML = `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project">Chat about the project</button></div>`
+  $("#view").innerHTML = `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project" data-fresh="1">Chat about the project</button></div>`
     + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up.</p>`
     + (rows || `<p class="hint">${ended.length ? "Nothing in progress." : "No conversations yet."}</p>`)
     + (ended.length ? `<details class="endedchats"${S.endedOpen ? " open" : ""}><summary>Archived (${ended.length})</summary>${ended.map(row).join("")}</details>` : "");
@@ -1840,19 +1840,20 @@ async function chatLoad() {
     $("#chat-log").innerHTML = `<div class="msg error"><span class="who cap">Not available</span><div class="what">${esc(e.message)}</div></div>`;
   }
 }
-// a new conversation opens with the summary; one that has begun is left as it is
-async function chatBegin(scope) {
-  try { const st = await api("/api/chat/open", { scope }); if (CHAT.scope === scope && $("#chat").open) chatDraw(st); } catch (e) { /* the log shows what there is */ }
+// a new conversation opens with the summary; one that has begun is left as it is. `fresh` (the "Chat about the project" button)
+// has an ended project chat cleared first, so it is a new one.
+async function chatBegin(scope, fresh) {
+  try { const st = await api("/api/chat/open", fresh ? { scope, fresh: true } : { scope }); if (CHAT.scope === scope && $("#chat").open) chatDraw(st); } catch (e) { /* the log shows what there is */ }
   chatLoad();
 }
-function chatOpen(scope) {
+function chatOpen(scope, fresh) {
   CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false);
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
   $("#chat-log").innerHTML = ""; $("#chat-input").value = chatDraft(scope); $("#chat-agent").hidden = true;
   // The last chat's buttons are not this one's: Send waits for the first draw, which says whether a turn is running.
   $("#chat-stop").hidden = true; $("#chat-send").hidden = false; $("#chat-send").disabled = true;
   $("#chat").showModal(); chatGrow(); $("#chat-input").focus();
-  chatBegin(scope);
+  chatBegin(scope, fresh);
 }
 $("#chat-form").addEventListener("submit", async ev => {
   ev.preventDefault();
@@ -2145,7 +2146,7 @@ document.addEventListener("click", e => {
     answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm,
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
-    chat: () => chatOpen(d.scope), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
+    chat: () => chatOpen(d.scope, !!d.fresh), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: () => { $("#chat").close(); go("chats"); },
     chatend: async () => { try { CHAT.last = ""; chatDraw(await api("/api/chat/end", { scope: CHAT.scope })); toast("Chat archived."); } catch (e) { toast(e.message, true); } },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,

@@ -632,6 +632,16 @@ class Web(unittest.TestCase):
         self.assertIn('r.raises.some(answerPage) ? `<span class="tag page"', src)
         self.assertIn('${answerPage(r) ? ` <span class="tag page">answer page</span>` : ""}</h4>', src)
 
+    def test_only_the_chat_about_the_project_button_asks_for_a_fresh_chat(self):
+        """Read from the page's source: the project button carries data-fresh, the chat action passes it to chatOpen and
+        chatBegin, and /api/chat/open gets it, so an ended project chat starts over; the Chats list rows do not carry it."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertIn('data-act="chat" data-scope="project" data-fresh="1">Chat about the project', src)
+        self.assertEqual(src.count('data-fresh="1"'), 1)
+        self.assertIn("chat: () => chatOpen(d.scope, !!d.fresh)", src)
+        self.assertIn('api("/api/chat/open", fresh ? { scope, fresh: true } : { scope })', src)
+        self.assertIn('chats().open(need(body, "scope", "a scope"), fresh=bool(body.get("fresh")))', (HERE / "web.py").read_text())
+
     def test_an_answered_message_from_the_viewer_frame_returns_to_the_task(self):
         """Read from the page's source: the listener for the full-screen viewer's frame ignores any other sender,
         then clears the task signature and redraws, so the closed raise is read again."""
