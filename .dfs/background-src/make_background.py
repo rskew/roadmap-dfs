@@ -120,8 +120,9 @@ def picture(mode: str, seed: int, size: int = W, k: float = 1, **tree) -> str:
 
 
 # The app icon: the background's own tree (same seed, light palette, same line weights and marks),
-# cut to a square around its trunk and crown. An icon is one picture, not one for each mode, so it
-# is the light one. The picture is not redrawn simpler: it is the background, seen closer.
+# cut to a square around its trunk and crown, then to the disc inside that square (the corners are
+# transparent). An icon is one picture, not one for each mode, so it is the light one. The picture is
+# not redrawn simpler: it is the background, seen closer.
 ICON_SIZE = 1024
 ICON_VIEW = (220, 300, 1240)     # x, y and side, in the background's own pixels: the trunk's foot to the middle of the crown
 
@@ -129,8 +130,9 @@ ICON_VIEW = (220, 300, 1240)     # x, y and side, in the background's own pixels
 def icon() -> str:
     x, y, side = ICON_VIEW
     inner = picture("light", SEED).split(">", 1)[1]          # everything after the opening <svg ...> tag
-    return ('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="%d %d %d %d">%s'
-            % (ICON_SIZE, ICON_SIZE, x, y, side, side, inner))
+    return ('<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="%d %d %d %d">'
+            '<clipPath id="disc"><circle cx="%g" cy="%g" r="%g"/></clipPath><g clip-path="url(#disc)">%s</g></svg>\n'
+            % (ICON_SIZE, ICON_SIZE, x, y, side, side, x + side / 2, y + side / 2, side / 2, inner.rsplit("</svg>", 1)[0]))
 
 
 if __name__ == "__main__":
