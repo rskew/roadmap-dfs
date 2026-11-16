@@ -1002,6 +1002,15 @@ class TheChatsMenu(unittest.TestCase):
             ui.act(10)
         self.assertEqual(cleared, [], "Enter opens the archived project chat; only C starts a new one")
 
+    def test_e_on_an_archived_chat_says_so_and_does_not_ask(self):
+        ui = self.screen([a_chat("W1", ended=True)])
+        asked = []
+        ui.prompt = lambda *a: asked.append(a) or "y"
+        ui.act(ord("T"))
+        ui.act(ord("E"))
+        self.assertEqual(asked, [])
+        self.assertIn("already archived", ui.msg)
+
     def test_e_archives_the_chat_under_the_cursor_not_the_item(self):
         ui = self.screen([a_chat("W2"), a_chat("W1")], sel=0)
         ended = []

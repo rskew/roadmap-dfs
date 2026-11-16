@@ -856,7 +856,7 @@ KEYS = [
     ("panes", "3", ord("3"), "log", "the task's log"),
     ("panes", "l", ord("l"), "lastlog", "the log of the selected item's most recent run"),
     ("panes", "L", ord("L"), "runs", "agent runs: the live chains and the finished ones, newest first"),
-    ("panes", "T", ord("T"), "chats", "chats: every conversation, in progress first, then archived; ⏎ opens one"),
+    ("panes", "T", ord("T"), "chats", "chats: every conversation, in progress first, then archived; ⏎ opens one (an archived task chat is in progress again once opened)"),
     ("panes", "v", ord("v"), "art", "artefacts: the pictures its raises name"),
     ("panes", "t", ord("t"), "todo", "the epic's todo"),
     ("panes", "H", ord("H"), "assumptions", "every open assumption, across the tasks"),
@@ -3100,7 +3100,7 @@ class UI(WorkMixin):
         self.chat_sel = max(0, min(self.chat_sel, len(rows) - 1))
         archived = sum(1 for c in rows if c["ended"])
         out.append(("chats — %d in progress, %d archived" % (len(rows) - archived, archived), curses.A_BOLD))
-        out.append(("  enter opens one · E archives it · ↑↓/jk moves · esc back", look("chrome")))
+        out.append(("  enter opens one (an archived one resumes) · E archives it · ↑↓/jk moves · esc back", look("chrome")))
         out.append(("", 0))
         self._sel_row = None
         if not rows:
@@ -3140,8 +3140,11 @@ class UI(WorkMixin):
         if not rows:
             self.msg = "no chat to archive"
             return
-        scope = rows[max(0, min(self.chat_sel, len(rows) - 1))]["scope"]
-        self.end_chat(scope)
+        row = rows[max(0, min(self.chat_sel, len(rows) - 1))]
+        if row["ended"]:
+            self.msg = "%s is already archived" % row["scope"]
+            return
+        self.end_chat(row["scope"])
         self.chat_rows(fresh=True)
 
     def lines_console(self, width, run):
