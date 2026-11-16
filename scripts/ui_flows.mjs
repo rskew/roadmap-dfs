@@ -482,6 +482,26 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A usage limit is drawn as its own line above the box, with when it lifts, and goes when the state no longer has it.
+  async chat_backend(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "error", text: "You've hit your session limit · resets 3pm (UTC)" }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "claude",
+                    backend: { limit: true, resets: "resets 3pm (UTC)", reset_at: Date.now() / 1000 + 3600, agent: "claude" } };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    const line = await page.$eval("#chat-backend", e => ({ hidden: e.hidden, text: e.textContent, below: e.getBoundingClientRect().top >= document.querySelector("#chat-log").getBoundingClientRect().bottom - 1, above: e.getBoundingClientRect().bottom <= document.querySelector("#chat-form").getBoundingClientRect().top + 1 }));
+    assert(!line.hidden && line.text.includes("usage limit") && line.text.includes("resets 3pm (UTC)"), "the page says the backend is at its usage limit and when it resets: " + line.text);
+    assert(line.below && line.above, "the line sits between the log and the box");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    state.backend = null; state.messages = state.messages.slice(0, 1).concat([{ role: "agent", text: "W81.10 is open." }]);
+    await page.click("[data-act=chatclose]"); await page.click("#tabs [data-act=chat]");
+    await page.waitForFunction(() => document.querySelector("#chat-log").textContent.includes("W81.10"));
+    assert(await page.$eval("#chat-backend", e => e.hidden), "the line goes when the state has no limit");
+    same(errors, [], "no page errors");
+  },
+
   // A request that never gets an answer (a phone's browser after another app was on top) must not wipe the chat or
   // stop its poll: the conversation stays under a notice, the page asks again, and it reads at once on coming back.
   async chat_lost(b) {
