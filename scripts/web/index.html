@@ -1786,7 +1786,7 @@ function chatDraw(st) {
   // The backend's own state, apart from the messages: a usage limit stays until it lifts or a turn is answered.
   const be = st.backend && st.backend.limit ? st.backend : null;
   $("#chat-backend").hidden = !be;
-  $("#chat-backend").textContent = be ? `The ${be.agent || st.agent || "agent"} has hit its usage limit${be.resets ? " (" + be.resets + ")" : ""}. A message sent before it lifts may not be answered.` : "";
+  $("#chat-backend").textContent = be ? `${be.agent || st.agent || "The agent"} has hit its usage limit${be.resets ? " (" + be.resets + ")" : ""}. A message sent before it lifts may not be answered.` : "";
   $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.length;
   log.innerHTML = (st.ended ? `<p class="muted">Archived. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")

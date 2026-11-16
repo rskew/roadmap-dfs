@@ -68,7 +68,16 @@ def turn_limit(agent, stdout, error):
     read as limit.py reads prose, and kiro's monthly and overage limits by their own wording."""
     if agent == "claude":
         lines = (stdout or "").strip().splitlines()
-        return dfs_limit.classify(lines[-1] if lines else "", "claude")
+        result = ""
+        for line in reversed(lines):        # the result line is not always last: a log line may follow it
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("type") == "result":
+                result = line
+                break
+        return dfs_limit.classify(result or (lines[-1] if lines else ""), "claude")
     if agent == "kiro" and dfs_limit.KIRO_LIMIT_RE.search(error or ""):
         return True, dfs_limit.resets_in(error)
     return dfs_limit.classify(error or "", "codex")
@@ -967,7 +976,7 @@ class Chats:
             last = messages[-1] if messages else dict(role="", text="")
             updated = transcript_mtime(sid, agent) or p.stat().st_mtime
             out.append(dict(scope=scope, count=len(messages), role=last["role"], last=last["text"][:160],
-                            updated=updated, live=live, busy=busy, agent=agent,
+                            updated=updated, live=live, busy=busy, agent=agent, backend=self.backend(scope),
                             ended=self.is_ended(scope, live, busy or elsewhere)))
         return sorted(out, key=lambda c: -c["updated"])
 

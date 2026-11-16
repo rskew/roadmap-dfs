@@ -92,6 +92,7 @@ echo "$@" >> "$CHAT_STUB_LOG"
 [ "$1" = run ] || exit 0
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo '{"type":"error","sessionID":"ses_x","error":{"name":"APIError","data":{"message":"not logged in","statusCode":401}}}'; exit 1; }
+[ -n "${CHAT_STUB_LIMIT:-}" ] && { echo "{\"type\":\"error\",\"sessionID\":\"ses_x\",\"error\":{\"name\":\"APIError\",\"data\":{\"message\":\"$CHAT_STUB_LIMIT\",\"statusCode\":429}}}"; exit 1; }
 shift
 [ -n "${CHAT_STUB_NOT_READY_ONCE:-}" ] && [ ! -e "$CHAT_STUB_NOT_READY_ONCE" ] && { touch "$CHAT_STUB_NOT_READY_ONCE"; echo "Error: Standalone server exited before reporting readiness" >&2; exit 1; }
 [ -n "${CHAT_STUB_CRASH_ONCE:-}" ] && [ ! -e "$CHAT_STUB_CRASH_ONCE" ] && { touch "$CHAT_STUB_CRASH_ONCE"; echo '{"type":"error","sessionID":"ses_x","error":{"name":"UnknownError","data":{"message":"Transport: Unable to connect. Is the computer able to access the url?"}}}'; exit 1; }
@@ -147,6 +148,10 @@ echo "$@" >> "$CHAT_STUB_LOG"
 [ -z "${CHAT_INBOX+x}" ] || echo "CHAT_INBOX=$CHAT_INBOX" >> "$CHAT_STUB_LOG.env"
 case "$*" in *--output-format*) ;; *) exit 0 ;; esac
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
+if [ -n "${CHAT_STUB_LIMIT:-}" ]; then
+  echo "{\"type\":\"runError\",\"data\":{\"sessionId\":null,\"stage\":\"run\",\"message\":\"$CHAT_STUB_LIMIT\"}}"
+  exit 0
+fi
 if [ -n "${CHAT_STUB_FAIL:-}" ]; then
   echo '{"type":"runError","data":{"sessionId":null,"stage":"auth","message":"Not logged in. Set the KIRO_API_KEY environment variable or run `kiro-cli login` first."}}'
   exit 0
@@ -1377,6 +1382,26 @@ class Chat(unittest.TestCase):
         self.assertIsNone(self.chats.state("W1")["backend"])
         self.chats.set_backend("W1", dict(limit=True, resets="resets 3pm (UTC)", reset_at=time.time() + 600, agent="claude", at=0))
         self.assertEqual(self.chats.state("W1")["backend"]["agent"], "claude")     # a limit of the agent now in use still shows
+
+    def page_turn_at_a_limit(self, use, agent, said):
+        os.environ["CHAT_STUB_LIMIT"] = said
+        self.addCleanup(os.environ.pop, "CHAT_STUB_LIMIT", None)
+        use()
+        self.chats.send("W1", "hi")
+        st = self.settle("W1")
+        self.assertTrue(st["backend"]["limit"])
+        self.assertEqual(st["backend"]["agent"], agent)
+
+    def test_an_opencode_page_turn_that_hits_a_usage_limit_sets_the_backend(self):
+        self.page_turn_at_a_limit(self.use_opencode, "opencode", "You've hit your usage limit. Try again at 5:59 PM.")
+
+    def test_a_kiro_page_turn_that_hits_a_usage_limit_sets_the_backend(self):
+        self.page_turn_at_a_limit(self.use_kiro, "kiro", "The monthly usage limit has been reached")
+
+    def test_claudes_result_line_is_read_for_a_limit_when_a_log_line_follows_it(self):
+        result = '{"type":"result","is_error":true,"api_error_status":429,"result":"You\'ve hit your session limit \u00b7 resets 3pm (UTC)"}'
+        self.assertEqual(dfs_chat.turn_limit("claude", result + "\nsome trailing log line\n", ""), (True, "resets 3pm (UTC)"))
+        self.assertEqual(dfs_chat.turn_limit("claude", result, ""), (True, "resets 3pm (UTC)"))
 
     def test_a_codex_turn_that_hits_a_usage_limit_says_so(self):
         self.assertEqual(dfs_chat.turn_limit("codex", "", "You've hit your usage limit. Try again at 5:59 PM."), (True, "Try again at 5:59 PM"))
