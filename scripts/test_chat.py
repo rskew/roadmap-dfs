@@ -1368,6 +1368,16 @@ class Chat(unittest.TestCase):
         self.assertEqual(st["messages"][-1]["role"], "error")
         self.assertIsNone(st["backend"], "a turn that failed for another reason says the limit is not why")
 
+    def test_a_limit_kept_for_one_agent_is_not_shown_once_the_chat_runs_under_another(self):
+        self.use_codex()
+        self.chats.set_backend("W1", dict(limit=True, resets="Try again at 5:59 PM", reset_at=time.time() + 600, agent="codex", at=0))
+        self.assertEqual(self.chats.state("W1")["backend"]["agent"], "codex")      # no session yet: the screen's choice is codex
+        Path(dfs_chat.agent_file()).write_text("claude\n")                         # the author switches (`x`)
+        self.assertEqual(self.chats.agent("W1"), "claude")
+        self.assertIsNone(self.chats.state("W1")["backend"])
+        self.chats.set_backend("W1", dict(limit=True, resets="resets 3pm (UTC)", reset_at=time.time() + 600, agent="claude", at=0))
+        self.assertEqual(self.chats.state("W1")["backend"]["agent"], "claude")     # a limit of the agent now in use still shows
+
     def test_a_codex_turn_that_hits_a_usage_limit_says_so(self):
         self.assertEqual(dfs_chat.turn_limit("codex", "", "You've hit your usage limit. Try again at 5:59 PM."), (True, "Try again at 5:59 PM"))
         self.assertTrue(dfs_chat.turn_limit("kiro", "", "The monthly usage limit has been reached")[0])

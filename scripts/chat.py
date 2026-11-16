@@ -585,6 +585,8 @@ class Chats:
         at = b.get("reset_at")
         if isinstance(at, (int, float)) and at <= time.time():
             return None
+        if b.get("agent") != self.agent(scope):     # a chat with no session yet follows the screen's choice (`x`): another agent's limit says nothing of this one
+            return None
         return b
 
     def set_backend(self, scope, backend):
@@ -881,6 +883,9 @@ class Chats:
                 self.notes[scope] = [x for x in (error, lost) if x]
             if stopped:
                 self.stops[scope] = True
+                saved = self.record(scope).get("backend")
+                if isinstance(saved, dict) and saved.get("agent") != agent:     # a turn under another agent went by: the old limit is not this one's
+                    self.set_backend(scope, None)
             elif error:     # a turn that failed says whether it was the limit; one that answered, or failed otherwise, lifts it
                 hit, resets = turn_limit(agent, stdout, error)
                 self.set_backend(scope, dict(limit=True, resets=resets, reset_at=dfs_limit.reset_at(resets, time.time()),
