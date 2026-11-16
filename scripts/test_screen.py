@@ -933,6 +933,125 @@ class LOpensTheLastRunAtItsEnd(unittest.TestCase):
         self.assertEqual(ui.pane, "runs")
 
 
+def a_chat(scope, ended=False, **kw):
+    return dict(dict(scope=scope, count=2, role="agent", last="hello", updated=1, live=False,
+                     busy=False, agent="claude", ended=ended), **kw)
+
+
+class TheChatsMenu(unittest.TestCase):
+    def screen(self, chats, **kw):
+        import chat as dfs_chat
+        patch = mock.patch.object(dfs_chat.Chats, "list", lambda self: list(chats))
+        patch.start()
+        self.addCleanup(patch.stop)
+        ui = a_screen([item("W1"), item("W2")], **kw)
+        ui.chat_cache = (0, [])
+        return ui
+
+    def test_t_opens_the_pane_and_esc_closes_it(self):
+        ui = self.screen([a_chat("W1")])
+        ui.act(ord("T"))
+        self.assertEqual(ui.pane, "chats")
+        ui.act(27)
+        self.assertEqual(ui.pane, "item")
+
+    def test_the_chats_in_progress_come_before_the_archived_ones(self):
+        ui = self.screen([a_chat("W1", ended=True), a_chat("project"), a_chat("W2")])
+        self.assertEqual([c["scope"] for c in ui.chat_rows()], ["project", "W2", "W1"])
+        text = [t for t, _ in ui.lines_chats(80)]
+        self.assertIn("chats — 2 in progress, 1 archived", text[0])
+        self.assertLess(text.index("archived"), next(i for i, t in enumerate(text) if " W1 " in t))
+
+    def test_a_row_says_the_chats_state_and_its_last_message(self):
+        ui = self.screen([a_chat("W2", live=True, last="the plan"), a_chat("W1", busy=True, role="you", last="go")])
+        rows = [t for t, _ in ui.lines_chats(80)]
+        self.assertTrue(any("W2" in t and "● open" in t and "the plan" in t for t in rows))
+        self.assertTrue(any("W1" in t and "answering" in t and "you: go" in t for t in rows))
+
+    def test_an_empty_list_says_how_to_start_a_chat(self):
+        ui = self.screen([])
+        self.assertTrue(any("no conversation yet" in t for t, _ in ui.lines_chats(80)))
+        ui.pane = "chats"
+        ui.act(10)
+        self.assertIn("no conversation", ui.msg)
+
+    def test_enter_opens_the_chat_under_the_cursor(self):
+        ui = self.screen([a_chat("W1"), a_chat("W2")])
+        opened = []
+        ui.open_chat = lambda scope, **kw: opened.append(scope)
+        ui.act(ord("T"))
+        ui.act(ord("j"))
+        ui.act(10)
+        self.assertEqual(opened, ["W2"])
+        self.assertEqual(ui.pane, "chats", "back from the chat, the menu is still where it was")
+
+    def test_enter_on_an_archived_project_chat_does_not_clear_it(self):
+        import chat as dfs_chat
+        ui = self.screen([a_chat("project", ended=True)])
+        cleared = []
+        ui.start_chat = lambda scope: mock.Mock(attach=lambda idle=None: True)
+        ui.reload = lambda: None
+        ui.scr = mock.Mock()
+        with mock.patch.object(dfs_chat.Chats, "state", lambda self, scope: {"ended": True}), \
+                mock.patch.object(dfs_chat.Chats, "check", lambda self, scope: None), \
+                mock.patch.object(dfs_chat.Chats, "clear", lambda self, scope: cleared.append(scope)), \
+                mock.patch.object(TUI.curses, "def_prog_mode", create=True), \
+                mock.patch.object(TUI.curses, "endwin", create=True), \
+                mock.patch.object(TUI.curses, "reset_prog_mode", create=True):
+            ui.act(ord("T"))
+            ui.act(10)
+        self.assertEqual(cleared, [], "Enter opens the archived project chat; only C starts a new one")
+
+    def test_e_on_an_archived_chat_says_so_and_does_not_ask(self):
+        ui = self.screen([a_chat("W1", ended=True)])
+        asked = []
+        ui.prompt = lambda *a: asked.append(a) or "y"
+        ui.act(ord("T"))
+        ui.act(ord("E"))
+        self.assertEqual(asked, [])
+        self.assertIn("already archived", ui.msg)
+
+    def test_e_archives_the_chat_under_the_cursor_not_the_item(self):
+        ui = self.screen([a_chat("W2"), a_chat("W1")], sel=0)
+        ended = []
+        ui.end_chat = ended.append
+        ui.act(ord("T"))
+        ui.act(ord("j"))
+        ui.act(ord("E"))
+        self.assertEqual(ended, ["W1"])
+
+    def test_the_cursor_stays_on_its_chat_when_the_list_moves(self):
+        chats = [a_chat("W1"), a_chat("W2")]
+        ui = self.screen(chats)
+        ui.chat_rows(fresh=True)
+        ui.chat_sel = 1
+        chats.insert(0, a_chat("project"))
+        ui.chat_rows(fresh=True)
+        self.assertEqual(ui.chat_rows()[ui.chat_sel]["scope"], "W2")
+
+    def test_slash_searches_the_chats(self):
+        ui = self.screen([a_chat("W1", last="apple"), a_chat("W2", last="pear")], pane="chats")
+        rows, at, land = ui.search_space()
+        self.assertEqual(at, 0)
+        self.assertIn("pear", rows[1])
+        land(1)
+        self.assertEqual(ui.chat_sel, 1)
+
+    def test_the_footer_names_the_menus_keys(self):
+        ui = self.screen([a_chat("W1")], pane="chats")
+        ui.next_action = lambda it: "work"
+        ui.live = lambda mode="work": []
+        ui.work_on = False
+        self.assertIn("E archive", ui.footer(200))
+
+    def test_the_chats_key_is_listed_under_where_it_applies(self):
+        names = {k[3]: k[0] for k in TUI.KEYS}
+        self.assertEqual(names["chats"], "panes")
+        self.assertEqual(names["chat-open"], "chats")
+        ui = self.screen([a_chat("W1")], keys_from=("chats", "list"))
+        self.assertEqual(ui.key_rows()[0][0], "chats")
+
+
 class AnAssumptionStandsOut(unittest.TestCase):
     """Most nodes say something was done; one that states a Hypothesis is marked, in
     its own colour, with the assumption under it where it is read without opening."""
