@@ -1659,12 +1659,14 @@ function attachTo(box) {
   box.addEventListener("dragover", ev => { if ([...(ev.dataTransfer?.types || [])].includes("Files")) ev.preventDefault(); });
   box.addEventListener("drop", ev => { const fs = [...(ev.dataTransfer?.files || [])]; if (fs.length) { ev.preventDefault(); put(fs); } });
 }
+// While the chat's Top button scrolls the log, nothing may pin the log to its end (see chatTop).
+const TOP_SCROLL = { on: false, timer: null };
 (function () {                          // the visual viewport is what the keyboard leaves
   const vv = window.visualViewport; if (!vv) return;
   const fit = () => {
     const log = $("#chat-log"), end = log && log.scrollHeight - log.scrollTop - log.clientHeight < 40;
     const s = document.documentElement.style; s.setProperty("--vvh", vv.height + "px"); s.setProperty("--vvt", vv.offsetTop + "px");
-    if (end) log.scrollTop = log.scrollHeight;       // the newest message stays in view above the input
+    if (end && !TOP_SCROLL.on) log.scrollTop = log.scrollHeight;       // the newest message stays in view above the input (but not over a Top scroll)
     const at = document.activeElement;                // the field being typed in stays above the keyboard
     if (at && at.closest && at.closest("#form") && at.matches("textarea, input")) at.scrollIntoView({ block: "nearest" });
   };
@@ -1789,7 +1791,7 @@ function chatDraw(st) {
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
   CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
-  else if (atEnd || follow) log.scrollTop = log.scrollHeight;
+  else if ((atEnd && !TOP_SCROLL.on) || follow) log.scrollTop = log.scrollHeight;
   chatNewest();
 }
 // The Newest button shows while the reader is more than a screen's edge away from the end of the log.
@@ -1808,6 +1810,11 @@ function chatTop() {
   // a last message shorter than the view starts below the scroll position (the log cannot scroll to it): go on to the one before
   while (tops[i] > at - 4 && i > 0) i--;
   // none starts above the view (a note sits above the first message and the reader is in it): the top of the log
+  // Until this scroll ends, nothing may pin the log to its end: the keyboard closing as the button is tapped resizes the
+  // viewport, and a poll redraws, while the log is still within reach of the end, and either would cancel the scroll.
+  TOP_SCROLL.on = true; clearTimeout(TOP_SCROLL.timer);
+  const release = () => { TOP_SCROLL.on = false; clearTimeout(TOP_SCROLL.timer); log.removeEventListener("scrollend", release); };
+  log.addEventListener("scrollend", release); TOP_SCROLL.timer = setTimeout(release, 1500);
   log.scrollTo({ top: tops[i] > at - 4 ? 0 : tops[i], behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 }
 /* The notice under the log when the server cannot be reached: the conversation stays as it was, since the failure is

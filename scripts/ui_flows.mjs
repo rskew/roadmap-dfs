@@ -573,8 +573,10 @@ const FLOWS = {
     });
     let s = await at();
     assert(s.tops[3] > 200, "the last answer is far down the log");
-    await page.click("[data-act=chattop]"); await settle();
-    same((await at()).y, s.tops[3], "at its end, Top goes to the top of the last message");
+    // the input is focused when the chat opens, so the first tap on Top closes the keyboard: the visual viewport resizes
+    // in the same breath, and must not pin the log back to its end
+    await page.$eval("[data-act=chattop]", b => { b.click(); window.visualViewport.dispatchEvent(new Event("resize")); }); await settle();
+    same((await at()).y, s.tops[3], "at its end, Top goes to the top of the last message, though the viewport resizes as it is pressed");
     await page.click("[data-act=chattop]"); await settle();
     same((await at()).y, s.tops[2], "already there, Top goes to the message before");
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y + 120); }, s.tops[1]); await settle();
