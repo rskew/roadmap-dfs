@@ -810,6 +810,7 @@ def fuzzy(needle, hay):
 # is used decides the pane `?`'s Enter and `:` put back before pressing it (`key_run`).
 KEY_PLACES = [("items", "on the item list"), ("tree", "in the tree — tab"),
               ("runs", "in agent runs — L"), ("agentlog", "reading a run"),
+              ("chats", "in chats — T"),
               ("artefact", "in artefacts — v"), ("panes", "panes"),
               ("any", "anywhere")]
 KEYS = [
@@ -825,7 +826,7 @@ KEYS = [
     ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (run.sh --review)"),
     ("items", "c", ord("c"), "chat", "chat about this item (run.sh --chat); ctrl-] comes back and leaves it running"),
     ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (run.sh --chat project)"),
-    ("items", "E", ord("E"), "archive-chat", "archive this item's chat: its agent is stopped and the Chats list moves it to Archived; a later message reopens it (asks first)"),
+    ("items", "E", ord("E"), "archive-chat", "archive this item's chat: its agent is stopped and the Chats list moves it to Archived; a later message reopens it (asks first). In the chats pane (T) it is the chat under the cursor"),
     ("items", "o", ord("o"), "open", "open a new task (run.sh --open)"),
     ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
     ("items", "[  -", ord("["), "up", "move up among its siblings"),
@@ -848,12 +849,14 @@ KEYS = [
     ("tree", "D", ord("D"), "delete-node", "delete the node under the cursor and all below it; the log keeps their text (asks first)"),
     ("tree", "tab", 9, "list", "back to the item list"),
     ("runs", "⏎", 10, "read", "read this run"),
+    ("chats", "⏎", 10, "chat-open", "open this chat (as c does); ctrl-] comes back and leaves it running"),
     ("agentlog", "G", ord("G"), "follow", "to the end, and follow it while it grows"),
     ("agentlog", "M", ord("M"), "message", "send the running session a message: it reads it at its next tool call"),
     ("artefact", "⏎", 10, "browse", "open this artefact in a browser"),
     ("panes", "3", ord("3"), "log", "the task's log"),
     ("panes", "l", ord("l"), "lastlog", "the log of the selected item's most recent run"),
     ("panes", "L", ord("L"), "runs", "agent runs: the live chains and the finished ones, newest first"),
+    ("panes", "T", ord("T"), "chats", "chats: every conversation, in progress first, then archived; ⏎ opens one"),
     ("panes", "v", ord("v"), "art", "artefacts: the pictures its raises name"),
     ("panes", "t", ord("t"), "todo", "the epic's todo"),
     ("panes", "H", ord("H"), "assumptions", "every open assumption, across the tasks"),
@@ -1921,6 +1924,8 @@ class UI(WorkMixin):
     card_panel = False   # the selected node is drawn at the right (set by `draw`)
     card_scroll = 0      # how far down that panel is read (^d ^u)
     asm_sel = 0          # the assumptions pane's cursor
+    chat_sel = 0         # the chats pane's cursor, into `chat_rows`
+    chat_cache = (0, [])    # when `chat_rows` last read the conversations, and what it found
 
     def __init__(self, stdscr):
         self.scr = stdscr
@@ -2091,6 +2096,8 @@ class UI(WorkMixin):
             self.run_sel = max(0, min(self.run_sel + step, len(self.runs) - 1))
         elif self.pane == "keys":
             self.key_sel = max(0, min(self.key_sel + step, len(self.key_rows()) - 1))
+        elif self.pane == "chats":
+            self.chat_sel = max(0, min(self.chat_sel + step, len(self.chat_rows()) - 1))
         elif self.pane == "assumptions":
             self.asm_sel = max(0, min(self.asm_sel + step, len(self.asm_rows()) - 1))
         elif self.tree_focused():
@@ -3068,6 +3075,75 @@ class UI(WorkMixin):
             out.append((label, curses.A_REVERSE if i == self.run_sel else attr))
         return out
 
+    def chat_rows(self, fresh=False):
+        """Every conversation (`Chats.list`), the ones in progress first and the archived after
+        them, newest first in each. Read from the transcripts, so it is kept for two seconds
+        unless `fresh`; the cursor stays on the chat it was on when the list moves."""
+        at, rows = self.chat_cache
+        if fresh or time.time() - at > 2:
+            import chat as dfs_chat
+            was = rows[self.chat_sel]["scope"] if 0 <= self.chat_sel < len(rows) else None
+            try:
+                found = dfs_chat.Chats(worker=lambda: UiWorker(self)).list()
+            except (OSError, ValueError) as e:
+                self.msg = "the chats were not read: %s" % e
+                found = rows
+            rows = [c for c in found if not c["ended"]] + [c for c in found if c["ended"]]
+            self.chat_cache = (time.time(), rows)
+            self.chat_sel = reselect([c["scope"] for c in rows], was, self.chat_sel)
+        return rows
+
+    def lines_chats(self, width):
+        """The chats menu: which conversation to open. The web page's Chats tab, in the terminal."""
+        out, para = self.wrapper(width)
+        rows = self.chat_rows()
+        self.chat_sel = max(0, min(self.chat_sel, len(rows) - 1))
+        archived = sum(1 for c in rows if c["ended"])
+        out.append(("chats — %d in progress, %d archived" % (len(rows) - archived, archived), curses.A_BOLD))
+        out.append(("  enter opens one · E archives it · ↑↓/jk moves · esc back", look("chrome")))
+        out.append(("", 0))
+        self._sel_row = None
+        if not rows:
+            out.append(("  no conversation yet — c chats about the item, C about the project", look("chrome")))
+            return out
+        part = None
+        for i, c in enumerate(rows):
+            if c["ended"] != part:
+                part = c["ended"]
+                if part:        # the in-progress ones need no heading: the title says them
+                    out.append(("", 0))
+                    out.append(("archived", look("chrome") | curses.A_BOLD))
+            sel = i == self.chat_sel
+            if sel:
+                self._sel_row = len(out)
+            if c["busy"]:
+                state, attr = "answering", curses.color_pair(2)
+            elif c["live"]:
+                state, attr = "● open", curses.color_pair(2)
+            else:
+                state, attr = "", 0
+            head = "%s %-8s %-8s %-10s %3d  " % (">" if sel else " ", c["scope"], c["agent"], state, c["count"])
+            who = {"you": "you: ", "agent": "", "error": "error: "}.get(c["role"], "")
+            room = max(8, width - len(head) - 1)
+            last = " ".join((who + c["last"]).split())
+            out.append((head + (last if len(last) <= room else last[:room - 1] + "…"),
+                        curses.A_REVERSE if sel else attr))
+        return out
+
+    def open_chats(self):
+        self.chat_rows(fresh=True)
+        self.pane = "chats"
+
+    def end_chat_row(self):
+        """What `E` does in the chats pane: archive the chat under the cursor."""
+        rows = self.chat_rows()
+        if not rows:
+            self.msg = "no chat to archive"
+            return
+        scope = rows[max(0, min(self.chat_sel, len(rows) - 1))]["scope"]
+        self.end_chat(scope)
+        self.chat_rows(fresh=True)
+
     def lines_console(self, width, run):
         """A chain's own output, as it is being written.
 
@@ -3445,6 +3521,8 @@ class UI(WorkMixin):
             return self.lines_runs(width)
         if self.pane == "artefact":
             return self.lines_artefacts(width)
+        if self.pane == "chats":
+            return self.lines_chats(width)
         if self.pane == "keys":
             return self.lines_keys(width)
         if self.pane == "activity":
@@ -3556,7 +3634,7 @@ class UI(WorkMixin):
         pane, focus = self.keys_from
         if pane == "item":
             return "tree" if focus == "tree" else "items"
-        return pane if pane in ("runs", "agentlog", "artefact") else "panes"
+        return pane if pane in ("runs", "agentlog", "artefact", "chats") else "panes"
 
     def key_rows(self):
         """`KEYS`, the part for where you were FIRST: the rest is still there below
@@ -3612,7 +3690,7 @@ class UI(WorkMixin):
             self.pane, self.focus = "item", "list"
         elif place == "tree":
             self.open_tree()
-        elif place in ("runs", "artefact"):
+        elif place in ("runs", "artefact", "chats"):
             self.pane = place
         elif place == "agentlog" and self.open_run is not None:
             self.pane = "agentlog"
@@ -3766,7 +3844,8 @@ class UI(WorkMixin):
 
     def cursors(self):
         return dict(sel=self.sel, tree_sel=self.tree_sel, run_sel=self.run_sel,
-                    key_sel=self.key_sel, art_sel=self.art_sel, scroll=self.scroll)
+                    key_sel=self.key_sel, art_sel=self.art_sel, chat_sel=self.chat_sel,
+                    scroll=self.scroll)
 
     def search_space(self):
         """What `/` looks through here, where the cursor is in it, and how to land on
@@ -3779,6 +3858,9 @@ class UI(WorkMixin):
             return (["%s %s %s" % (r["item"], r["name"], os.path.basename(r["dir"]))
                      for r in self.runs], self.run_sel,
                     lambda i: setattr(self, "run_sel", i))
+        if self.pane == "chats":
+            return (["%s %s %s" % (c["scope"], c["agent"], c["last"]) for c in self.chat_rows()],
+                    self.chat_sel, lambda i: setattr(self, "chat_sel", i))
         if self.pane == "artefact":
             return ([a["name"] for a in self.artefacts()], self.art_sel,
                     lambda i: setattr(self, "art_sel", i))
@@ -4102,6 +4184,8 @@ class UI(WorkMixin):
             actions, nav = ["⏎ open in browser", "esc back"], ["↑↓/jk artefact"]
         elif self.pane == "runs":
             actions, nav = ["⏎ open", "esc back"], ["↑↓/jk run"]
+        elif self.pane == "chats":
+            actions, nav = ["⏎ open", "E archive", "esc back"], ["↑↓/jk chat"]
         elif self.tree_focused():
             actions = ["⏎ open", "n next ⚑", "p flagged", "space fold", "i add", "a answer"]
             row = self.tree_row()
@@ -4175,7 +4259,7 @@ class UI(WorkMixin):
         name = {"item": "item", "reglog": "task log", "runs": "agent runs",
                 "agentlog": "agent log", "todo": "epic todo",
                 "artefact": "artefacts", "keys": "keys", "activity": "activity",
-                "plan": "work plan", "assumptions": "assumptions"}[self.pane]
+                "plan": "work plan", "assumptions": "assumptions", "chats": "chats"}[self.pane]
         if self.pane == "item":
             cur = self.current()
             # ⚠ The rule is the one row of the pane that never scrolls, so it carries
@@ -5132,7 +5216,7 @@ class UI(WorkMixin):
                 self.pane = getattr(self, "run_back", "runs")   # where it was opened from
             elif self.tree_focused():
                 self.focus = "list"      # out of the tree, back to the items
-            elif self.pane in ("runs", "reglog", "todo", "artefact", "activity", "assumptions"):
+            elif self.pane in ("runs", "reglog", "todo", "artefact", "activity", "assumptions", "chats"):
                 self.pane = "item"
             self.scroll = 0
         elif ch in (ord("j"), curses.KEY_DOWN):
@@ -5216,6 +5300,12 @@ class UI(WorkMixin):
             self.runs = discover_runs()
             self.pane = "runs"
             self.scroll = 0
+        elif ch == ord("T"):
+            if self.pane == "chats":
+                self.pane = "item"
+            else:
+                self.open_chats()
+            self.scroll = 0
         elif ch == ord("v"):
             # The raise says to look at a picture, and until now the screen showing
             # the raise was the one place you could not get to it.
@@ -5235,6 +5325,13 @@ class UI(WorkMixin):
                     self.open_tree()
                     keys = [r["key"] for r in self.tree_rows()]
                     self.tree_sel = keys.index(nd["id"]) if nd["id"] in keys else 0
+            elif self.pane == "chats":
+                rows = self.chat_rows()
+                if rows:
+                    self.open_chat(rows[max(0, min(self.chat_sel, len(rows) - 1))]["scope"])
+                    self.chat_rows(fresh=True)
+                else:
+                    self.msg = "no conversation yet — c chats about the item"
             elif self.pane == "artefact":
                 arts = self.artefacts()
                 if arts:
@@ -5299,7 +5396,10 @@ class UI(WorkMixin):
             self.open_chat("project")
         elif ch == ord("E"):
             # Capital, and it asks, like `K`: it stops the chat's agent. The conversation stays.
-            self.end_chat(item)
+            if self.pane == "chats":
+                self.end_chat_row()
+            else:
+                self.end_chat(item)
         elif ch == ord("D"):
             # Capital, and it asks, for the same reason as `K`: nothing in the screen
             # puts a deleted item back (its files wait under .dfs/archive/deleted).
