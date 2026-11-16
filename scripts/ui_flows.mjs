@@ -621,10 +621,13 @@ const FLOWS = {
     await page.$eval("#chat-log", (e, y) => { e.scrollTo(0, y); }, Math.round(first / 2)); await settle();
     same((await press())[0], 0, "inside a note above the first message, Top goes up to the top of the log");
     // five buttons in a 320px-wide chat: each is tap-sized, inside the screen and shows its whole label
-    await page.setViewportSize({ width: 320, height: 520 }); await settle();
-    const nav = await page.$$eval(".chat-nav button", bs => bs.map(e => { const r = e.getBoundingClientRect(); return { act: e.dataset.act, x: r.x, w: r.width, clipped: e.scrollWidth > e.clientWidth || (() => { const g = document.createRange(); g.selectNodeContents(e); return g.getClientRects().length > 1; })() }; }));
-    same(nav.map(n => n.act), ["chattop", "chatend", "chatclear", "chatlist", "chatclose"], "the chat's nav has its five buttons at 320px");
-    for (const n of nav) assert(n.w >= 44 && n.x >= 0 && n.x + n.w <= 320 && !n.clipped, `320px: ${n.act} is at least 44px wide, inside the screen and its label is on one line, not clipped (x ${Math.round(n.x)}, ${Math.round(n.w)}px, clipped ${n.clipped})`);
+    // (and the same at two wider phone widths, since the nav's padding and no-wrap rule hold at every width)
+    for (const width of [320, 360, 414]) {
+      await page.setViewportSize({ width, height: 520 }); await settle();
+      const nav = await page.$$eval(".chat-nav button", bs => bs.map(e => { const r = e.getBoundingClientRect(); return { act: e.dataset.act, x: r.x, w: r.width, clipped: e.scrollWidth > e.clientWidth || (() => { const g = document.createRange(); g.selectNodeContents(e); return g.getClientRects().length > 1; })() }; }));
+      same(nav.map(n => n.act), ["chattop", "chatend", "chatclear", "chatlist", "chatclose"], `the chat's nav has its five buttons at ${width}px`);
+      for (const n of nav) assert(n.w >= 44 && n.x >= 0 && n.x + n.w <= width && !n.clipped, `${width}px: ${n.act} is at least 44px wide, inside the screen and its label is on one line, not clipped (x ${Math.round(n.x)}, ${Math.round(n.w)}px, clipped ${n.clipped})`);
+    }
     // Back to four messages, at the end, with the keyboard open: the viewport is shorter. The tap on Top blurs the field
     // and the keyboard goes, so the browser itself grows the viewport (a real resize, not a hand-made event) while Top's
     // smooth scroll is still running. The log must not be pinned back to its end.
@@ -648,6 +651,14 @@ const FLOWS = {
     state.busy_for = 6; await page.evaluate(() => chatLoad());
     await page.waitForFunction(() => /Working on it \(6 seconds\)/.test(document.querySelector("#chat-log .wait").textContent)); await settle();
     assert((await page.$eval("#chat-log", e => e.scrollHeight - e.scrollTop - e.clientHeight)) < 4, "after Top's scroll has ended, a reader at the end is carried along by a redraw again");
+    // two quick presses of Top: the second takes over the hold, and the scroll's end still lifts it
+    await page.setViewportSize({ width: 360, height: 520 }); await toEnd(); await settle();
+    await page.click("[data-act=chattop]"); await page.waitForTimeout(100); await page.click("[data-act=chattop]"); await settle();
+    assert((await page.$eval("#chat-log", e => e.scrollHeight - e.scrollTop - e.clientHeight)) > 100, "two quick presses of Top leave the end");
+    await toEnd(); await settle();
+    state.busy_for = 7; await page.evaluate(() => chatLoad());
+    await page.waitForFunction(() => /Working on it \(7 seconds\)/.test(document.querySelector("#chat-log .wait").textContent)); await settle();
+    assert((await page.$eval("#chat-log", e => e.scrollHeight - e.scrollTop - e.clientHeight)) < 4, "after two quick presses and the scroll's end, a redraw at the end follows it again");
     same(errors, [], "no page errors");
   },
 

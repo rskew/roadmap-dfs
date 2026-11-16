@@ -1662,7 +1662,7 @@ function attachTo(box) {
   box.addEventListener("drop", ev => { const fs = [...(ev.dataTransfer?.files || [])]; if (fs.length) { ev.preventDefault(); put(fs); } });
 }
 // While the chat's Top button scrolls the log, nothing may pin the log to its end (see chatTop).
-const TOP_SCROLL = { on: false, timer: null };
+const TOP_SCROLL = { on: false, timer: null, release: null };
 (function () {                          // the visual viewport is what the keyboard leaves
   const vv = window.visualViewport; if (!vv) return;
   const fit = () => {
@@ -1814,8 +1814,11 @@ function chatTop() {
   // none starts above the view (a note sits above the first message and the reader is in it): the top of the log
   // Until this scroll ends, nothing may pin the log to its end: the keyboard closing as the button is tapped resizes the
   // viewport, and a poll redraws, while the log is still within reach of the end, and either would cancel the scroll.
-  TOP_SCROLL.on = true; clearTimeout(TOP_SCROLL.timer);
-  const release = () => { TOP_SCROLL.on = false; clearTimeout(TOP_SCROLL.timer); log.removeEventListener("scrollend", release); };
+  // One hold at a time: a press takes the last press's timer and `scrollend` listener away first, so none is left behind and
+  // only the newest scroll's end (or the 1500ms fallback, for a browser with no `scrollend`) lifts it.
+  if (TOP_SCROLL.release) TOP_SCROLL.release();
+  const release = () => { TOP_SCROLL.on = false; TOP_SCROLL.release = null; clearTimeout(TOP_SCROLL.timer); log.removeEventListener("scrollend", release); };
+  TOP_SCROLL.on = true; TOP_SCROLL.release = release;
   log.addEventListener("scrollend", release); TOP_SCROLL.timer = setTimeout(release, 1500);
   log.scrollTo({ top: tops[i] > at - 4 ? 0 : tops[i], behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
 }
