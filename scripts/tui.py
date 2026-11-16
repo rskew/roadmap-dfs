@@ -4529,12 +4529,14 @@ class UI(WorkMixin):
         argv = self.runner("--chat", scope, agent=agent)
         return self.chats_running().ensure(scope, lambda: (argv, self.chat_env(scope, agent) or dict(os.environ), ROOT), agent=agent)
 
-    def open_chat(self, scope):
+    def open_chat(self, scope, renew=True):
         """What `c` and `C` do: look at this scope's chat, running it first if it is not.
         ctrl-] comes back to the roadmap and leaves it running. The screen goes on polling
         meanwhile (it draws nothing), so the page's work Start is run and a work goes on ticking.
-        `C` on a project chat that was ended starts a new one (`Chats.renew_ended`)."""
-        if scope == "project":
+        `C` on a project chat that was ended starts a new one (`Chats.renew_ended`). The chats pane
+        passes `renew=False`: Enter there opens the conversation under the cursor, so an archived
+        project chat is read and resumed, never cleared."""
+        if scope == "project" and renew:
             import chat as dfs_chat
             try:
                 dfs_chat.Chats(worker=lambda: UiWorker(self)).renew_ended(scope)
@@ -5328,7 +5330,7 @@ class UI(WorkMixin):
             elif self.pane == "chats":
                 rows = self.chat_rows()
                 if rows:
-                    self.open_chat(rows[max(0, min(self.chat_sel, len(rows) - 1))]["scope"])
+                    self.open_chat(rows[max(0, min(self.chat_sel, len(rows) - 1))]["scope"], renew=False)
                     self.chat_rows(fresh=True)
                 else:
                     self.msg = "no conversation yet — c chats about the item"

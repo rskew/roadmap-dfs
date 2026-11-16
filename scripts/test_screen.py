@@ -978,12 +978,29 @@ class TheChatsMenu(unittest.TestCase):
     def test_enter_opens_the_chat_under_the_cursor(self):
         ui = self.screen([a_chat("W1"), a_chat("W2")])
         opened = []
-        ui.open_chat = opened.append
+        ui.open_chat = lambda scope, **kw: opened.append(scope)
         ui.act(ord("T"))
         ui.act(ord("j"))
         ui.act(10)
         self.assertEqual(opened, ["W2"])
         self.assertEqual(ui.pane, "chats", "back from the chat, the menu is still where it was")
+
+    def test_enter_on_an_archived_project_chat_does_not_clear_it(self):
+        import chat as dfs_chat
+        ui = self.screen([a_chat("project", ended=True)])
+        cleared = []
+        ui.start_chat = lambda scope: mock.Mock(attach=lambda idle=None: True)
+        ui.reload = lambda: None
+        ui.scr = mock.Mock()
+        with mock.patch.object(dfs_chat.Chats, "state", lambda self, scope: {"ended": True}), \
+                mock.patch.object(dfs_chat.Chats, "check", lambda self, scope: None), \
+                mock.patch.object(dfs_chat.Chats, "clear", lambda self, scope: cleared.append(scope)), \
+                mock.patch.object(TUI.curses, "def_prog_mode", create=True), \
+                mock.patch.object(TUI.curses, "endwin", create=True), \
+                mock.patch.object(TUI.curses, "reset_prog_mode", create=True):
+            ui.act(ord("T"))
+            ui.act(10)
+        self.assertEqual(cleared, [], "Enter opens the archived project chat; only C starts a new one")
 
     def test_e_archives_the_chat_under_the_cursor_not_the_item(self):
         ui = self.screen([a_chat("W2"), a_chat("W1")], sel=0)
