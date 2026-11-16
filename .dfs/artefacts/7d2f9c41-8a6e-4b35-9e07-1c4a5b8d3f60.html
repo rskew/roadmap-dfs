@@ -63,6 +63,7 @@
   <li>Circle mask (Android): both end up a circle. The round one is already cut to it, so nothing more is lost.</li>
   <li>Rounded square (iOS): iOS paints transparent corners black, so the round icon sits as a disc on a black square. The square one fills the tile.</li>
 </ul>
+<p><strong>Wrong if</strong> you want the square kept and left to the phone to mask, with the art held inside a safe zone, or the black corners on iOS are not acceptable. Then refute the node.</p>
 <script>
   var masks = { none: ['Corners are the picture\u2019s own.', 'A disc with transparent corners.'],
                 squircle: ['Fills the tile.', 'A disc on a black square (iOS fills transparent corners black).'],
