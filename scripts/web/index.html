@@ -1899,7 +1899,7 @@ function chatGrow() {
   const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 4;   // a reader at the end stays there as the box takes the log's room
   el.style.height = "auto";
   el.style.height = el.scrollHeight + (el.offsetHeight - el.clientHeight) + "px";
-  if (atEnd) log.scrollTop = log.scrollHeight;
+  if (atEnd && !TOP_SCROLL.on) log.scrollTop = log.scrollHeight;   // (but not over a Top scroll: a window resize calls this too)
   chatNewest();
 }
 // A width change (rotation, a resized window) rewraps the draft, so the height is measured again.

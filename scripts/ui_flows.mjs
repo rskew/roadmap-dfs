@@ -572,7 +572,7 @@ const FLOWS = {
       return { y: Math.round(log.scrollTop), tops: [...log.querySelectorAll(".msg:not(.wait)")].map(m => Math.round(m.getBoundingClientRect().top - box + log.scrollTop - pad)) };
     });
     let s = await at();
-    assert(s.tops[3] > 200, "the last answer is far down the log");
+    assert(s.tops[3] > 200, "the last answer is far down the log " + JSON.stringify(s));
     // the input is focused when the chat opens, so the first tap on Top closes the keyboard: the visual viewport resizes
     // in the same breath, and must not pin the log back to its end
     await page.$eval("[data-act=chattop]", b => { b.click(); window.visualViewport.dispatchEvent(new Event("resize")); }); await settle();
@@ -625,6 +625,29 @@ const FLOWS = {
     const nav = await page.$$eval(".chat-nav button", bs => bs.map(e => { const r = e.getBoundingClientRect(); return { act: e.dataset.act, x: r.x, w: r.width, clipped: e.scrollWidth > e.clientWidth || (() => { const g = document.createRange(); g.selectNodeContents(e); return g.getClientRects().length > 1; })() }; }));
     same(nav.map(n => n.act), ["chattop", "chatend", "chatclear", "chatlist", "chatclose"], "the chat's nav has its five buttons at 320px");
     for (const n of nav) assert(n.w >= 44 && n.x >= 0 && n.x + n.w <= 320 && !n.clipped, `320px: ${n.act} is at least 44px wide, inside the screen and its label is on one line, not clipped (x ${Math.round(n.x)}, ${Math.round(n.w)}px, clipped ${n.clipped})`);
+    // Back to four messages, at the end, with the keyboard open: the viewport is shorter. The tap on Top blurs the field
+    // and the keyboard goes, so the browser itself grows the viewport (a real resize, not a hand-made event) while Top's
+    // smooth scroll is still running. The log must not be pinned back to its end.
+    state.note = ""; state.busy = false; state.messages = [{ role: "you", text: "first" }, { role: "agent", text: long(60) }, { role: "you", text: "second" }, { role: "agent", text: long(60) }];
+    await page.setViewportSize({ width: 360, height: 520 });
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg:not(.wait)").length === 4); await settle();
+    const k = await at();
+    await page.focus("#chat-input"); await page.setViewportSize({ width: 360, height: 300 }); await settle(); await toEnd(); await settle();
+    assert((await page.$eval("#chat-log", e => e.scrollHeight - e.scrollTop - e.clientHeight)) < 4, "the log is at its end with the keyboard open");
+    await page.$eval("[data-act=chattop]", b => { document.activeElement.blur(); b.click(); });
+    await page.setViewportSize({ width: 360, height: 520 }); await settle();
+    same((await at()).y, k.tops[3], "with the keyboard closing as Top is pressed (a real viewport resize), Top goes to the top of the last message");
+    // a poll that redraws the log while Top is still scrolling must not pin it to the end either
+    await page.setViewportSize({ width: 360, height: 520 }); await toEnd(); await settle();
+    state.busy = true; state.busy_for = 5;
+    await page.$eval("[data-act=chattop]", b => { b.click(); chatLoad(); });
+    await page.waitForFunction(() => /Working on it \(5 seconds\)/.test(document.querySelector("#chat-log .wait")?.textContent || "")); await settle();
+    same((await at()).y, k.tops[3], "a poll redraw drawn while Top is scrolling does not pin the log to its end");
+    // once the scroll has ended the hold is gone: a redraw at the end follows it again
+    await toEnd(); await settle();
+    state.busy_for = 6; await page.evaluate(() => chatLoad());
+    await page.waitForFunction(() => /Working on it \(6 seconds\)/.test(document.querySelector("#chat-log .wait").textContent)); await settle();
+    assert((await page.$eval("#chat-log", e => e.scrollHeight - e.scrollTop - e.clientHeight)) < 4, "after Top's scroll has ended, a reader at the end is carried along by a redraw again");
     same(errors, [], "no page errors");
   },
 
