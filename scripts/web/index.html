@@ -365,6 +365,8 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .chat-top .tag { margin-left: var(--s2); }
 .chat-nav { grid-template-columns: repeat(5, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .chat-nav button[data-act=chatclose] { font-weight: 700; }
+/* five buttons share a 320px bar (64px each): less tracking and padding so "New chat" stays on one line */
+.chat-nav button { padding: 0 2px; letter-spacing: 0; white-space: nowrap; }
 #chat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4); overscroll-behavior: contain; }
 .msg { margin: 0 0 var(--s3); max-width: var(--measure); }
 .msg .who { display: block; margin-bottom: 2px; }
