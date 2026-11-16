@@ -374,6 +374,8 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 .msg.you { padding: var(--s2) var(--s3); background: var(--sel); border-left: var(--rule-status) solid var(--ink); }
 #chat-lost { flex: none; margin: 0; }
 #chat-lost[hidden] { display: none; }
+#chat-backend { flex: none; margin: 0; }
+#chat-backend[hidden] { display: none; }
 .msg.error { padding: var(--s2) var(--s3); background: var(--attention-wash); border-left: var(--rule-status) solid var(--attention); }
 .msg.wait, .msg.note, .msg.prompt { color: var(--muted); }
 pre { margin: var(--s2) 0; padding: var(--s2) var(--s3); background: var(--paper); border: var(--rule) solid var(--line); overflow-x: auto; font-size: var(--fs-small); white-space: pre; }
@@ -472,6 +474,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 <dialog id="chat" aria-label="Chat">
   <div class="chat-top"><span class="cap" id="chat-title"></span><span class="tag" id="chat-agent" hidden></span></div>
   <div id="chat-log" role="log" aria-live="polite"></div>
+  <p id="chat-backend" class="msg error" role="status" hidden></p>
   <p id="chat-lost" class="msg error" role="status" hidden></p>
   <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn" id="chat-stop" type="button" hidden>Stop</button><button class="btn primary" id="chat-send" type="submit">Send</button></form>
   <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chattop" aria-label="Scroll to the top of this message" title="Scroll to the top of this message">↑</button><button data-act="chatend">Archive</button><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
@@ -1776,10 +1779,14 @@ function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
-  const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer]);
+  const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
   if (sig === CHAT.last) return;
   CHAT.last = sig;
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
+  // The backend's own state, apart from the messages: a usage limit stays until it lifts or a turn is answered.
+  const be = st.backend && st.backend.limit ? st.backend : null;
+  $("#chat-backend").hidden = !be;
+  $("#chat-backend").textContent = be ? `The ${be.agent || st.agent || "agent"} has hit its usage limit${be.resets ? " (" + be.resets + ")" : ""}. A message sent before it lifts may not be answered.` : "";
   $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.length;
   log.innerHTML = (st.ended ? `<p class="muted">Archived. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")

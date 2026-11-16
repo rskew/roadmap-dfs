@@ -55,8 +55,23 @@ import inbox as dfs_inbox   # noqa: E402
 import tree as dfs_tree      # noqa: E402
 import context as dfs_context   # noqa: E402
 import chatlog   # noqa: E402
+import limit as dfs_limit   # noqa: E402
 import uuid
 from work import AGENTS, agent_file, read_agent   # noqa: E402
+
+
+def turn_limit(agent, stdout, error):
+    """(limit, resets) for a headless turn that failed: did the agent stop on a usage limit, and what does it say
+    about when it lifts. claude's turn is its own JSON line, so limit.py reads its `api_error_status` (429) first and
+    the words second. The others' turns are read down to {is_error, result} (codex_result and the rest), which keeps the
+    error's words and not its status, so for them the words are all there is: the message of a failed turn,
+    read as limit.py reads prose, and kiro's monthly and overage limits by their own wording."""
+    if agent == "claude":
+        lines = (stdout or "").strip().splitlines()
+        return dfs_limit.classify(lines[-1] if lines else "", "claude")
+    if agent == "kiro" and dfs_limit.KIRO_LIMIT_RE.search(error or ""):
+        return True, dfs_limit.resets_in(error)
+    return dfs_limit.classify(error or "", "codex")
 
 
 def signal_turn(p, sig):
@@ -553,8 +568,37 @@ class Chats:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".tmp")
         rec = dict(sid=sid, agent=agent)
-        if "ended" in self.record(scope):       # ending a chat is kept when its session id is rewritten
-            rec["ended"] = self.record(scope)["ended"]
+        for kept in ("ended", "backend"):       # ending a chat, and the limit its backend is under, are kept when its session id is rewritten
+            if kept in self.record(scope):
+                rec[kept] = self.record(scope)[kept]
+        tmp.write_text(json.dumps(rec))
+        os.replace(tmp, p)
+
+    def backend(self, scope):
+        """What the agent behind this chat last said about itself, as a fact apart from the messages: a usage
+        limit (`{limit, resets, reset_at, agent, at}`), kept in the scope's record so a restart keeps it. None
+        once the time it lifts has passed (when that was known), or once a later turn went by without hitting a
+        limit (`turn` clears it)."""
+        b = self.record(scope).get("backend")
+        if not isinstance(b, dict) or not b.get("limit"):
+            return None
+        at = b.get("reset_at")
+        if isinstance(at, (int, float)) and at <= time.time():
+            return None
+        return b
+
+    def set_backend(self, scope, backend):
+        """Keep (or, with None, take off) the scope's backend state in its record. The caller holds the lock."""
+        rec = self.record(scope)
+        if backend is None and "backend" not in rec:
+            return
+        if backend is None:
+            del rec["backend"]
+        else:
+            rec["backend"] = backend
+        p = self.path(scope)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".tmp")
         tmp.write_text(json.dumps(rec))
         os.replace(tmp, p)
 
@@ -605,7 +649,7 @@ class Chats:
                         ended=self.is_ended(scope, live, bool(started) or talking or elsewhere),
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
-                        elsewhere=elsewhere, agent=agent,
+                        elsewhere=elsewhere, agent=agent, backend=self.backend(scope),
                         steer=bool(started) and agent in STEERED)    # steer: a message sent now reaches the turn answering
 
     def reopen(self, scope):
@@ -772,7 +816,7 @@ class Chats:
         return [str(dfs_paths.SCRIPTS / "run.sh")]
 
     def turn(self, scope, message, sid, opening=False, agent="claude"):
-        error, new_sid, began, said = "", sid, time.time(), ""
+        error, new_sid, began, said, stdout = "", sid, time.time(), "", ""
         chatlog.log(scope, "turn: %s, %d characters, session %s" % (
             "opening" if opening else "message", len(message), sid or "(new)"))
         rc = None
@@ -799,6 +843,7 @@ class Chats:
             r = run_turn(self.argv() + ["--" + agent] * (agent != "claude") + ["--chat-turn", scope], message, dfs_paths.work_root(), env,
                          on_start=lambda p: self.started(scope, p))
             rc = r.returncode
+            stdout = r.stdout or ""
             out = {}
             try:
                 out = json.loads(r.stdout.strip().splitlines()[-1]) if r.stdout.strip() else {}
@@ -836,6 +881,14 @@ class Chats:
                 self.notes[scope] = [x for x in (error, lost) if x]
             if stopped:
                 self.stops[scope] = True
+            elif error:     # a turn that failed says whether it was the limit; one that answered, or failed otherwise, lifts it
+                hit, resets = turn_limit(agent, stdout, error)
+                self.set_backend(scope, dict(limit=True, resets=resets, reset_at=dfs_limit.reset_at(resets, time.time()),
+                                             agent=agent, at=time.time()) if hit else None)
+                if hit:
+                    chatlog.log(scope, "turn: the agent hit a usage limit%s" % (", " + resets if resets else ""))
+            else:
+                self.set_backend(scope, None)
             self.stopped.discard(scope)
             self.procs.pop(scope, None)
             self.busy.pop(scope, None)

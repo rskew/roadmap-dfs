@@ -30,6 +30,7 @@ echo "$@" >> "$CHAT_STUB_LOG"
 [ -z "${CHAT_INBOX+x}" ] || echo "CHAT_INBOX=$CHAT_INBOX" >> "$CHAT_STUB_LOG.env"
 [ -n "${CHAT_STUB_SLEEP:-}" ] && { echo started >> "$CHAT_STUB_LOG"; sleep "$CHAT_STUB_SLEEP"; }
 [ -n "${CHAT_STUB_FAIL:-}" ] && { echo "boom: not logged in" >&2; exit 1; }
+[ -n "${CHAT_STUB_LIMIT:-}" ] && { echo "{\"type\":\"result\",\"is_error\":true,\"api_error_status\":429,\"result\":\"$CHAT_STUB_LIMIT\",\"session_id\":\"s\"}"; exit 1; }
 sid=""; prev=""; prompt=""
 for a in "$@"; do
   case "$prev" in --session-id|--resume) sid="$a" ;; -p) prompt="$a" ;; esac
@@ -1329,6 +1330,49 @@ class Chat(unittest.TestCase):
         st = self.settle("W1")
         self.assertEqual(st["messages"][-1]["role"], "agent")
         self.assertNotIn("error", [m["role"] for m in st["messages"]], "the error goes once the chat moves on")
+
+    def test_a_turn_that_hits_a_usage_limit_says_so_as_the_backends_state_until_a_turn_is_answered(self):
+        os.environ["CHAT_STUB_LIMIT"] = "You've hit your session limit · resets 3pm (UTC)"
+        self.addCleanup(os.environ.pop, "CHAT_STUB_LIMIT", None)
+        self.assertIsNone(self.chats.state("W1")["backend"])
+        self.chats.send("W1", "hello")
+        st = self.settle("W1")
+        b = st["backend"]
+        self.assertTrue(b["limit"])
+        self.assertEqual((b["resets"], b["agent"]), ("resets 3pm (UTC)", "claude"))
+        self.assertGreater(b["reset_at"], time.time())
+        self.assertEqual(st["messages"][-1]["role"], "error")       # the agent's own words stay, beside the fact
+        self.assertEqual(dfs_chat.Chats().state("W1")["backend"], b, "a restart keeps it")
+        self.assertIn("hit a usage limit, resets 3pm (UTC)", self.record("W1"))
+        # a message sent while it holds does not lift it: only an answer does
+        self.chats.send("W1", "still there?")
+        self.assertEqual(self.settle("W1")["backend"]["resets"], "resets 3pm (UTC)")
+        os.environ.pop("CHAT_STUB_LIMIT")
+        self.chats.send("W1", "again")
+        st = self.settle("W1")
+        self.assertIsNone(st["backend"])
+        self.assertIn("agent", [m["role"] for m in st["messages"]])
+        self.assertNotIn("error", [m["role"] for m in st["messages"]])
+        self.assertIsNone(dfs_chat.Chats().state("W1")["backend"])
+
+    def test_a_limit_is_dropped_once_its_reset_time_has_passed_and_another_failure_is_not_a_limit(self):
+        self.chats.save_sid("W1", "s1", "claude")
+        self.chats.set_backend("W1", dict(limit=True, resets="resets 3pm (UTC)", reset_at=time.time() - 1, agent="claude", at=0))
+        self.assertIsNone(self.chats.state("W1")["backend"])
+        self.chats.set_backend("W1", dict(limit=True, resets="", reset_at=None, agent="claude", at=0))
+        self.assertTrue(self.chats.state("W1")["backend"]["limit"], "a reset not known stays until a turn goes by")
+        self.assertEqual(self.chats.record("W1")["sid"], "s1")
+        os.environ["CHAT_STUB_FAIL"] = "1"
+        self.chats.send("W1", "hello")
+        st = self.settle("W1")
+        self.assertEqual(st["messages"][-1]["role"], "error")
+        self.assertIsNone(st["backend"], "a turn that failed for another reason says the limit is not why")
+
+    def test_a_codex_turn_that_hits_a_usage_limit_says_so(self):
+        self.assertEqual(dfs_chat.turn_limit("codex", "", "You've hit your usage limit. Try again at 5:59 PM."), (True, "Try again at 5:59 PM"))
+        self.assertTrue(dfs_chat.turn_limit("kiro", "", "The monthly usage limit has been reached")[0])
+        self.assertFalse(dfs_chat.turn_limit("opencode", "", "Transport: Unable to connect")[0])
+        self.assertFalse(dfs_chat.turn_limit("claude", "", "")[0])
 
     def record(self, scope):
         return (self.chats.path(scope).with_suffix(".log")).read_text()
