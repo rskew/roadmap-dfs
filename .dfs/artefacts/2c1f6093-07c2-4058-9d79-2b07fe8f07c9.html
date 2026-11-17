@@ -53,6 +53,7 @@
     <div class="cap" id="cap">The disc is smaller than the bubble, so a white ring shows round it.</div></div>
 </div>
 <p>The fix makes <code>.dfs/icon</code> an opaque square in the background's own ground colour, and lists it in the manifest as maskable as well, so Android fills the whole bubble with it instead of padding it on white. I could not run it on a phone.</p>
+<p>Wrong if: the ring is still there after you install the new icon, or the ring is drawn in the picture itself rather than round it.</p>
 <script>
   document.querySelectorAll('#modes button').forEach(function (b) {
     b.addEventListener('click', function () {
