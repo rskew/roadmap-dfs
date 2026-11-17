@@ -525,6 +525,7 @@ class Chats:
         self.procs = {}     # scope -> the process of its headless turn, while it runs
         self.stopped = set()    # scopes whose running turn the author has just stopped
         self.stops = {}     # scope -> the message whose turn was stopped, until the conversation moves on
+        self.kept = {}      # scope -> [(a message whose turn was stopped or failed before the transcript recorded it, how many transcript messages came before it)]
 
     # ── the record: just the session id ────────────────────────────────────────────────
     def path(self, scope):
@@ -645,6 +646,8 @@ class Chats:
                 messages += [dict(role="you", text=text) for text, _, _ in unrecorded]
             else:
                 self.pending.pop(scope, None)
+            for text, at in reversed(self.kept.get(scope, [])):     # last first, so an earlier `at` is not moved by a later insert
+                messages.insert(min(at, len(messages)), dict(role="you", text=text))
             waiting_names = {m["name"] for m in dfs_runs.messages(str(self.dir(scope))) if m["state"] == "waiting"}
             for r in reversed(self.steers(scope)):      # last first, so an earlier `at` is not moved by a later insert
                 messages.insert(min(r.get("at", len(messages)), len(messages)),
@@ -767,6 +770,23 @@ class Chats:
         self.expect(scope, text, agent, sid)
         self.busy[scope] = time.time()
         return text
+
+    def keep_unrecorded(self, scope, sid, agent):
+        """A turn that was stopped or failed ended without the agent recording some message sent to it, so
+        `pending` would wait for a transcript message that never comes, and drop the message once a later one
+        is recorded. Move each such message to `kept`, where it stays in the conversation at the place it was
+        sent. The caller holds the lock."""
+        waiting = self.pending.get(scope, [])
+        messages = transcript_messages(sid, agent)
+        gone = recorded_apart(waiting, [m["text"] for m in messages if m["role"] == "you"])
+        if not gone:
+            return
+        self.kept[scope] = self.kept.get(scope, []) + [(text, len(messages)) for text, _, _ in gone]
+        left = [e for e in waiting if not any(e is g for g in gone)]
+        if left:
+            self.pending[scope] = left
+        else:
+            self.pending.pop(scope, None)
 
     def held(self, scope):
         """How many messages the conversation shows now, the author's sent ones not yet recorded among
@@ -903,6 +923,8 @@ class Chats:
                     chatlog.log(scope, "turn: the agent hit a usage limit%s" % (", " + resets if resets else ""))
             else:
                 self.set_backend(scope, None)
+            if stopped or error or lost:
+                self.keep_unrecorded(scope, new_sid or sid, agent)
             self.stopped.discard(scope)
             self.procs.pop(scope, None)
             self.busy.pop(scope, None)
@@ -1023,6 +1045,7 @@ class Chats:
             except OSError:
                 pass
             self.pending.pop(scope, None)
+            self.kept.pop(scope, None)
             self.notes.pop(scope, None)
             self.stops.pop(scope, None)
             dfs_inbox.remove_kiro_agent(str(dfs_paths.work_root()), dfs_inbox.kiro_agent_for(self.box(scope)))   # kiro's agent over its box

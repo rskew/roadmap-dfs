@@ -326,6 +326,23 @@ class Chat(unittest.TestCase):
         self.assertEqual([m["role"] for m in st["messages"]][-2:], ["you", "agent"])
         self.assertNotIn("note", [m["role"] for m in st["messages"]], "the note goes once it moves on")
 
+    def test_a_message_stopped_before_it_was_recorded_stays_shown_when_the_next_is_sent(self):
+        os.environ["CHAT_STUB_SLEEP"] = "60"
+        self.chats.send("W1", "first, stopped")
+        end = time.time() + 10
+        while not (self.log.exists() and "started" in self.log.read_text()) and time.time() < end:
+            time.sleep(0.05)
+        self.chats.interrupt("W1")
+        self.settle("W1")
+        os.environ.pop("CHAT_STUB_SLEEP")
+        self.chats.send("W1", "second")
+        st = self.settle("W1")
+        shown = [(m["role"], m["text"]) for m in st["messages"] if m["role"] in ("you", "agent")]
+        self.assertEqual(shown[:2], [("you", "first, stopped"), ("you", "second")], st["messages"])
+        self.assertEqual(shown[2][0], "agent")
+        self.chats.clear("W1")
+        self.assertNotIn("first, stopped", [m["text"] for m in self.chats.state("W1")["messages"]], "a new chat forgets it")
+
     def test_stopping_a_first_codex_opencode_or_kiro_turn_says_the_message_was_not_kept(self):
         for agent in ("codex", "opencode", "kiro"):
             with self.subTest(agent=agent):
