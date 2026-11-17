@@ -1252,6 +1252,7 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         icons = self.call("GET", "/manifest.json")[1]["icons"]
         self.assertEqual({(i["src"], i["type"]) for i in icons}, {("/icon?v=" + ver, "image/png")})
         self.assertTrue({"192x192", "512x512"} <= {i["sizes"] for i in icons}, "Chromium installs only with a 192 and a 512 icon")
+        self.assertTrue(any(i.get("purpose") == "maskable" for i in icons), "a custom icon is offered as maskable, or Android puts a white ring round it")
         self.assertEqual(self.call("GET", "/api/state")[1]["icon"], ver)
         page = self.call("GET", "/")[1].decode()
         self.assertIn("ICON = " + json.dumps(ver), page)

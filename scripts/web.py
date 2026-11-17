@@ -50,8 +50,8 @@ mode that has none of its own): a png, jpeg, webp or gif of 8 MB or less, set at
 contrast on any picture.
 THE INSTALLED APP'S ICON is `.dfs/icon`, one picture of the same kinds and size (not one for each mode), set at
 POST /api/icon (base64 in JSON; empty goes back to the built-in icons) and served at GET /icon and at every
-`/icon-*.png` and `/apple-touch-icon.png` while it exists. The manifest lists it, and the page's links carry
-its version. The project dialog cuts the chosen picture square and posts a 1024 px png.
+`/icon-*.png` and `/apple-touch-icon.png` while it exists. The manifest lists it, as an "any" icon and a
+maskable one, and the page's links carry its version. The project dialog cuts the chosen picture square and posts a 1024 px png.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the
@@ -1487,7 +1487,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, (HERE / "web" / (path[1:] + (".html" if path == "/design" else ""))).read_bytes(), STATIC[path])
         if path == "/manifest.json":
             custom = dfs_paths.read_icon()
-            icons = [dict(src="/icon" + icon_query(), sizes=z + "x" + z, type=custom[1]) for z in ("192", "512", "1024")] if custom else [
+            # the picture fills its square, so it is offered as maskable too: without that Android sets it on a white
+            # backing inside its bubble, which shows as a white ring
+            icons = [dict(src="/icon" + icon_query(), sizes=z + "x" + z, type=custom[1], **kw)
+                     for z, kw in (("192", {}), ("512", {}), ("1024", {}), ("512", dict(purpose="maskable")),
+                                   ("1024", dict(purpose="maskable")))] if custom else [
                      dict(src="/icon-192.png", sizes="192x192", type="image/png"),
                      dict(src="/icon-512.png", sizes="512x512", type="image/png"),
                      dict(src="/icon-1024.png", sizes="1024x1024", type="image/png"),

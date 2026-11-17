@@ -8,5 +8,5 @@ const svg = readFileSync(src, "utf8");
 const size = Number(/<svg[^>]* width="(\d+)"/.exec(svg)[1]);          // the picture's own size: 1680 for a background, 1024 for the icon
 const p = await b.newPage({ viewport: { width: size, height: size } });
 await p.setContent("<body style='margin:0'>" + svg);
-await p.screenshot({ path: out, type: "png", omitBackground: true });   // an svg with no fill (the icon's corners) stays transparent
+await p.screenshot({ path: out, type: "png", omitBackground: true });   // an svg with no fill would stay transparent; the pictures here fill their whole square
 await b.close();
