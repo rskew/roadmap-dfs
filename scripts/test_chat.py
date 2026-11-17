@@ -326,7 +326,44 @@ class Chat(unittest.TestCase):
         self.assertEqual([m["role"] for m in st["messages"]][-2:], ["you", "agent"])
         self.assertNotIn("note", [m["role"] for m in st["messages"]], "the note goes once it moves on")
 
-    def test_stopping_a_first_codex_opencode_or_kiro_turn_says_the_message_was_not_kept(self):
+    def test_a_message_stopped_before_it_was_recorded_stays_shown_when_the_next_is_sent(self):
+        os.environ["CHAT_STUB_SLEEP"] = "60"
+        self.chats.send("W1", "first, stopped")
+        end = time.time() + 10
+        while not (self.log.exists() and "started" in self.log.read_text()) and time.time() < end:
+            time.sleep(0.05)
+        self.chats.interrupt("W1")
+        self.settle("W1")
+        os.environ.pop("CHAT_STUB_SLEEP")
+        self.chats.send("W1", "second")
+        st = self.settle("W1")
+        shown = [(m["role"], m["text"]) for m in st["messages"] if m["role"] in ("you", "agent")]
+        self.assertEqual(shown[:2], [("you", "first, stopped"), ("you", "second")], st["messages"])
+        self.assertEqual(shown[2][0], "agent")
+        self.chats.clear("W1")
+        self.assertNotIn("first, stopped", [m["text"] for m in self.chats.state("W1")["messages"]], "a new chat forgets it")
+
+    def test_a_message_whose_turn_failed_stays_shown_when_the_next_is_sent(self):
+        os.environ["CHAT_STUB_FAIL"] = "1"
+        self.chats.send("W1", "first, failed")
+        self.settle("W1")
+        os.environ.pop("CHAT_STUB_FAIL")
+        self.chats.send("W1", "second")
+        st = self.settle("W1")
+        shown = [(m["role"], m["text"]) for m in st["messages"] if m["role"] in ("you", "agent")]
+        self.assertEqual(shown[:2], [("you", "first, failed"), ("you", "second")], st["messages"])
+
+    def test_a_message_the_agent_recorded_under_other_text_is_not_kept_a_second_time(self):
+        self.chats.send("W1", "first")
+        self.settle("W1")
+        sid, agent = self.chats.sid("W1"), self.chats.agent("W1")
+        # the transcript holds the author's one message, but not by this text: the count says it is recorded
+        with self.chats.lock:
+            self.chats.pending["W1"] = [("first, as typed", 1, 0)]
+            self.chats.keep_unrecorded("W1", sid, agent)
+        self.assertEqual(self.chats.kept.get("W1", []), [])
+
+    def test_stopping_a_first_codex_opencode_or_kiro_turn_says_the_agent_has_no_record_of_the_message(self):
         for agent in ("codex", "opencode", "kiro"):
             with self.subTest(agent=agent):
                 getattr(self, "use_" + agent)()
@@ -340,7 +377,7 @@ class Chat(unittest.TestCase):
                 self.chats.interrupt("W1")
                 st = self.settle("W1")
                 self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "note"], st["messages"])
-                self.assertIn("message was not kept", st["messages"][1]["text"])      # nothing was recorded to hold it
+                self.assertIn("no record of the message", st["messages"][1]["text"])      # nothing was recorded to hold it
                 self.assertFalse(self.chats.path("W1").exists())
                 os.environ.pop("CHAT_STUB_SLEEP")
                 self.chats.clear("W1")
@@ -352,7 +389,7 @@ class Chat(unittest.TestCase):
         st = self.settle("W1")
         self.assertEqual([m["role"] for m in st["messages"]], ["error", "error"])
         self.assertIn("the chat did not open", st["messages"][-1]["text"])
-        self.assertNotIn("message was not kept", st["messages"][-1]["text"])
+        self.assertNotIn("no record of the message", st["messages"][-1]["text"])
 
     def test_stop_is_pressed_in_the_screens_chat_when_it_is_the_one_answering(self):
         class Screen:
@@ -579,7 +616,7 @@ class Chat(unittest.TestCase):
         st = self.settle("W1")
         self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
         self.assertIn("not logged in", st["messages"][1]["text"])
-        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
+        self.assertIn("no record of the message", st["messages"][-1]["text"])      # no session was recorded to hold it
         self.assertFalse(self.chats.path("W1").exists())
 
     def test_the_screens_codex_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
@@ -907,7 +944,7 @@ class Chat(unittest.TestCase):
         st = self.settle("W1")
         self.assertEqual([m["role"] for m in st["messages"]], ["you", "error", "error"])
         self.assertIn("Not logged in", st["messages"][1]["text"])
-        self.assertIn("message was not kept", st["messages"][-1]["text"])      # no session was recorded to hold it
+        self.assertIn("no record of the message", st["messages"][-1]["text"])      # no session was recorded to hold it
         self.assertFalse(self.chats.path("W1").exists())
 
     def test_the_screens_kiro_chat_makes_its_opening_turn_then_resumes_the_session_the_page_reads(self):
