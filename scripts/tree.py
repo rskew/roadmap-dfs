@@ -785,11 +785,21 @@ def has_placeholder_option(page):
     return bool(PLACEHOLDER_OPTION.search(page))
 
 
+# The button that sends the answer: a text box and a handler alone leave the author nothing to press.
+SUBMIT_BUTTON = re.compile(r"<button\b|<input\b[^>]*\btype\s*=\s*[\"']?(?:submit|button)\b"
+                           r"|createElement\(\s*['\"]button['\"]", re.I)
+
+
+def has_submit_button(page):
+    return bool(SUBMIT_BUTTON.search(page))
+
+
 def can_answer(page):
     """Whether a page has a form that records an answer to a raise: a control, a handler,
-    and the route and field the answer is posted with."""
+    a submit button, and the route and field the answer is posted with."""
     return ("/artefact-state/" in page and bool(re.search(r"\banswer\b", page))
-            and bool(CONTROL.search(page)) and bool(HANDLER.search(page)))
+            and bool(CONTROL.search(page)) and bool(HANDLER.search(page))
+            and has_submit_button(page))
 
 
 # ⚠ In the logs of 2026-10-09 to 2026-10-28, 25 of 97 `review · issues` and 4 of 14
@@ -821,7 +831,7 @@ def append_log(task, kind, args=(), body=""):
                          "decisions the author chooses between" % page)
     if page and not can_answer(dfs_paths.artefact_file(page).read_text(errors="replace")):
         raise ValueError("the raise says to answer with %s, which cannot answer: the page needs a form, "
-                         "a control and a handler that POSTs {answer: <text>} to "
+                         "a control, a submit button and a handler that POSTs {answer: <text>} to "
                          "/artefact-state/<its file name> (templates/_TEMPLATE_ANSWER.html's "
                          "answer form does)" % page)
     if kind == "review" and args[:1] == ["issues"]:
