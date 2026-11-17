@@ -778,7 +778,10 @@ class Chats:
         sent. The caller holds the lock."""
         waiting = self.pending.get(scope, [])
         messages = transcript_messages(sid, agent)
-        gone = recorded_apart(waiting, [m["text"] for m in messages if m["role"] == "you"])
+        held = authors(messages)
+        # as `state` counts: one the transcript holds enough of the author's messages for is recorded, under
+        # whatever text, and showing it again from `kept` would show it twice
+        gone = [e for e in recorded_apart(waiting, [m["text"] for m in messages if m["role"] == "you"]) if held < e[1]]
         if not gone:
             return
         self.kept[scope] = self.kept.get(scope, []) + [(text, len(messages)) for text, _, _ in gone]
@@ -900,7 +903,7 @@ class Chats:
             error = ""      # ended on purpose: not a failure, whatever the killed agent left behind
         # a first turn that codex, opencode or kiro did not finish names no session to record, so
         # the message is in one of the agent's own that nothing here knows: say so
-        lost = ("%s: %s had not recorded a session to continue" % ("the chat did not open" if opening else "the message was not kept", agent)
+        lost = ("%s: %s had not recorded a session to continue" % ("the chat did not open" if opening else "the agent has no record of the message", agent)
                 if agent != "claude" and not new_sid and (error or stopped) else "")
         chatlog.log(scope, "turn: %s after %ds, rc=%s, session %s" % (
             "STOPPED" if stopped else "FAILED" if error else "answered", time.time() - began, rc, new_sid or "(none)"),
