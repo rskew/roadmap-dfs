@@ -493,6 +493,12 @@ class Web(unittest.TestCase):
             "<p>hello</p><script>fetch('/artefact-state/noform.html', {body: JSON.stringify({answer: 'x'})})</script>")
         with self.assertRaisesRegex(ValueError, "needs a form"):
             dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/noform.html")
+        # A text box and a handler are a form with no way to send it: the page needs a submit button.
+        (self.root / ".dfs" / "artefacts" / "nobutton.html").write_text(
+            "<!-- answer /artefact-state/nobutton.html --><textarea id=a></textarea>"
+            "<script>document.getElementById('a').addEventListener('input', function () {})</script>")
+        with self.assertRaisesRegex(ValueError, "submit button"):
+            dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/nobutton.html")
         dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/0a1b2c.html")
         # The template's own options are placeholders: the author would send one as their answer.
         shutil.copy(Path(__file__).resolve().parent.parent / "templates" / "_TEMPLATE_ANSWER.html",
