@@ -840,7 +840,7 @@ def original_lines(repo, task):
     node's title and the head of its Determination, and the lines of each review and critic
     entry in its log (the findings: `W55.2 added: ...`), from the task file and its archive."""
     lines = set()
-    for rel in (f".dfs/items/{task}.md", f".dfs/archive/items/{task}.md"):
+    for rel in (f".dfs/items/{task}.md", f".dfs/items/{task}.log.md", f".dfs/archive/items/{task}.md"):
         try:
             text = (Path(repo) / rel).read_text()
         except OSError:

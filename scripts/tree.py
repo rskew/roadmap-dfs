@@ -1053,7 +1053,8 @@ def _retire(task, dest, verb):
     for base_state in ([wt / dfs_paths.STATE_DIR_NAME] if wt else []) + [state]:
         for sub in ("items", "archive/items"):
             base = base_state / sub
-            for src in [base / ("%s.md" % task), base / task]:
+            for src in [base / ("%s.md" % task), base / task] \
+                    + ([base / ("%s.log.md" % task)] if sub == "items" else []):
                 if src.exists() and src.resolve() not in seen:   # a gitignored roadmap's worktree links to ours
                     seen.add(src.resolve())
                     dst = dest / ("items" if sub == "items" else "archive") / src.relative_to(base)
@@ -1996,6 +1997,14 @@ def _edit_kind(old, new):
     return "log" if any(e["kind"] not in RUNNER_KINDS for e in a + b if e["text"] in seen) else ""
 
 
+def _log_edit_kind(old, new):
+    """What a log file's change from `old` to `new` holds, as `_edit_kind` says it of a
+    task file: "log" when an entry other than the runner's came or went, else ""."""
+    a, b = parse_log(old), parse_log(new)
+    seen = {e["text"] for e in a} ^ {e["text"] for e in b}
+    return "log" if any(e["kind"] not in RUNNER_KINDS for e in a + b if e["text"] in seen) else ""
+
+
 def uncommitted(cwd=None, ttl=5.0):
     """{task: what}: the tasks whose files under `items/` have edits `git` has not
     committed (modified, staged or new), work that is on no branch yet, so on origin/main
@@ -2022,11 +2031,19 @@ def uncommitted(cwd=None, ttl=5.0):
                            capture_output=True, text=True, cwd=key)
         if r.returncode == 0:
             for entry in r.stdout.split("\0"):
-                m = re.search(r"(?:^|/)items/(%s)(?:\.md|/)" % TASK_RE, entry[3:])
+                m = re.search(r"(?:^|/)items/(%s)(?:\.log\.md|\.md|/)" % TASK_RE, entry[3:])
                 if not m:
                     continue
                 what = "edits"
-                if entry[:2] in (" M", "M ", "MM"):
+                if entry[3:].endswith(".log.md"):   # a log file holds entries and nothing else
+                    old = subprocess.run(["git", "show", "HEAD:" + entry[3:]],
+                                         capture_output=True, text=True, cwd=key)
+                    try:
+                        what = _log_edit_kind(old.stdout if old.returncode == 0 else "",
+                                              (Path(key) / entry[3:]).read_text())
+                    except OSError:
+                        what = "log"
+                elif entry[:2] in (" M", "M ", "MM"):
                     old = subprocess.run(["git", "show", "HEAD:" + entry[3:]],
                                          capture_output=True, text=True, cwd=key)
                     try:

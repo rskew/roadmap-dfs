@@ -43,7 +43,8 @@ def task_files(repo):
 
 
 def load_tasks(repo):
-    return {k: tree.combine(k, [("", a, b)]) for k, (a, b) in task_files(repo).items()}
+    return {k: tree.combine(k, [("", a, b, read(os.path.join(repo, ".dfs", "items", k + ".log.md")))])
+            for k, (a, b) in task_files(repo).items()}
 
 
 # ---------------------------------------------------------------- nodes

@@ -359,6 +359,9 @@ def check_shape(task, text, archive="", tag="", whole=None, logtext=""):
             bad.append("%s says Corrects %s, and no correction or backtrack has that timestamp"
                        % (nd["id"], c))
     raises = {e["ts"] for e in w["log"] if e["kind"] == "raise"}
+    for line in logtext.splitlines():   # a node or section here would be read by nobody
+        if line.startswith("#") and not line.startswith("# "):
+            bad.append("the log file holds the heading %r: it is entries only" % line[:40])
     for line in (t["sections"].get("Log", "") + "\n" + logtext).splitlines():
         if line.startswith("- ") and not dfs_tree.LOG_HEAD.match(line):
             bad.append("log line %r is not `- <ts> · <kind> · <args>`" % line[:60])
