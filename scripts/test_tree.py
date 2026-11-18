@@ -1421,6 +1421,58 @@ class Check(InARepo):
         self.commit()
         self.assertEqual(dfs_tree.compact("W1"), 0)
 
+    def test_splitlog_moves_the_whole_log_to_the_log_file_and_load_is_unchanged(self):
+        self.write(task(node(1), self.LOG))
+        self.commit()
+        before = self.counts()
+        self.assertEqual(dfs_tree.split_log("W1"), 6)
+        self.assertEqual(self.counts(), before)
+        text = (self.root / ".dfs/items/W1.md").read_text()
+        self.assertNotIn("## Log", text)
+        self.assertNotIn("session", text)
+        moved = dfs_tree.log_part("W1").read_text()
+        self.assertIn("  **this** or that", moved, "an entry moves verbatim, body and all")
+        self.assertEqual(len(dfs_tree.parse_log(moved)), 6)
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.commit()
+        self.assertEqual(dfs_tree.split_log("W1"), 0)
+        dfs_tree.append_log("W1", "session", ["work"])
+        self.assertEqual(len(dfs_tree.parse_log(dfs_tree.log_part("W1").read_text())), 7)
+
+    def test_a_half_done_splitlog_is_finished_by_the_next_without_a_duplicate(self):
+        self.write(task(node(1), self.LOG))
+        dfs_tree.log_part("W1").write_text("# W1 · log\n\n" + self.LOG)   # killed after the file
+        before = self.counts()
+        dfs_tree.split_log("W1")
+        self.assertEqual(self.counts(), before)
+        self.assertEqual(len(dfs_tree.parse_log(dfs_tree.log_part("W1").read_text())), 6)
+
+    def test_compact_moves_the_log_files_past_to_the_archive(self):
+        self.write(task(node(1)))
+        dfs_tree.log_part("W1").write_text("# W1 · log\n\n" + self.LOG)
+        self.commit()
+        before = self.counts()
+        self.assertEqual(dfs_tree.compact("W1"), 4)
+        self.assertEqual(self.counts(), before)
+        kept = dfs_tree.parse_log(dfs_tree.log_part("W1").read_text())
+        self.assertEqual([e["kind"] for e in kept], ["answer", "session"])
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+
+    def test_the_briefing_names_the_log_file_and_its_size_and_says_to_open_it_only_for_an_entry(self):
+        self.write(task(node(1), self.LOG))
+        old = dfs_state.brief("W1")
+        self.assertIn("its Log what everyone has said about it", old)
+        dfs_tree.split_log("W1")
+        new = dfs_state.brief("W1")
+        self.assertIn("`.dfs/items/W1.log.md` (~", new)
+        self.assertIn("for an entry's full text", new)
+        self.assertNotIn("its Log what everyone has said", new)
+        self.assertNotIn("session · work", new, "the log's text is not loaded into the briefing")
+
     def test_shelve_moves_determined_plans_and_every_reader_sees_them_as_before(self):
         self.write(task(node(1, "confirmed", extra="Approach: cut it\n  thin\nHypothesis: it holds\n"
                                                    "Evidence:\n- for: it ran\nDetermination: yes\n")

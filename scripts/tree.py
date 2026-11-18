@@ -24,11 +24,17 @@ Each task is one file, `.dfs/items/<task>.md`:
     Determination: <what was concluded, and so where the work goes next>
     Corrects: <the ts of the author's `correct` entry this node carries out>
 
-    ## Log
+The log is not in that file. Its entries are in `.dfs/items/<task>.log.md` (a branch's
+part: `<task>/<tag>.log.md`), a title line and then entries only:
 
     - 2026-09-25T09:00:00Z · session · work
     - 2026-09-25T09:40:00Z · raise · W13.2
       <the question, indented two spaces>
+
+A session reads the task file and the briefing, and opens the log file only for an
+entry's full text; `load` merges it back, so every derived answer is the same as when the
+entries were in the task file under a `## Log` heading, which an older task still has
+(`tree.py splitlog <task>` moves it across).
 
 Node ids are `<task>.<n>`, numbered in creation order, and the tree is the `Parent:`
 pointers. On a branch other than main or master every id carries the branch's tag
@@ -52,7 +58,7 @@ keyed by its timestamp, so two branches' logs merge by union, and an answer or a
 correction names what it settles by that timestamp.
 
 The log is bounded by moving its past, never by editing it: `compact` moves every
-entry older than the author's last word (answer, correct or accept), verbatim, to the
+entry, in the task file or the log file, older than the author's last word (answer, correct or accept), verbatim, to the
 END of the task's archive (`.dfs/archive/items/<task>.md`) under a `**Log**:` line,
 and `load` merges them back. So every count read off `load` (sessions since the
 author, the critic's cadence, open raises) is the same after a move as before it; a
@@ -80,6 +86,7 @@ Usage:
     tree.py add <task> <parent|-> <title> [< approach]   add an open node
     tree.py start <task> <node>                  mark an open node started (uncommitted)
     tree.py compact <task>                       move the log's past to the archive
+    tree.py splitlog <task>                      move the task file's whole `## Log` to its log file
     tree.py shelve <task> [<ids>]                move determined nodes' Approach,
                                                      Hypothesis and Determination to the archive
 """
@@ -596,27 +603,71 @@ def log_cutoff(log):
                default="")
 
 
+def _this_part_log(task):
+    """(task file path, its parsed text, log file path, the log file's text) for this
+    branch's part of `task`."""
+    p = path_for(task)
+    tag = "" if dfs_paths.worktree(task) else dfs_paths.branch_tag()
+    lp = log_part(task, tag)
+    return p, parse(p.read_text(), task), lp, (lp.read_text() if lp.exists() else "")
+
+
+def _log_file_text(task, entries):
+    """A log file: its title line, then the entries as they are, each after a blank line."""
+    return "# %s · log\n" % task + "".join("\n" + e["text"].rstrip() + "\n" for e in entries)
+
+
 def compact(task):
-    """Move every file log entry older than the author's last word to the END of the
-    archive, verbatim, under a new `**Log**:` line. Returns how many moved."""
-    p, a = path_for(task), archive_path(task)
+    """Move every entry of this branch's part's log, whether still in the task file or in
+    its log file, that is older than the author's last word to the END of the archive,
+    verbatim, under a new `**Log**:` line. Returns how many moved."""
+    p, t, lp, ltext = _this_part_log(task)
+    a = archive_path(task)
     if not p.exists():
         return 0
-    t = parse(p.read_text(), task)
     arc = a.read_text() if a.exists() else ""
     cut = log_cutoff(load(task)["log"])
-    move = [e for e in t["log"] if e["ts"] < cut]
+    in_log = parse_log(ltext)
+    move = sorted((e for e in t["log"] + in_log if e["ts"] < cut), key=lambda e: e["ts"])
     if not move:
         return 0
     t["log"] = [e for e in t["log"] if e["ts"] >= cut]
     a.parent.mkdir(parents=True, exist_ok=True)
-    # ⚠️ The archive first, the task file second: a kill between the two leaves the moved
+    # ⚠ The archive first, the files second: a kill between them leaves the moved
     # entries in both, and the next call moves them again (duplicated, never lost).
     dfs_paths.write_atomically(a, arc.rstrip("\n") + ("\n\n" if arc.strip() else "")
                                + ARCHIVE_LOG + "\n"
                                + "\n".join(e["text"].rstrip() for e in move) + "\n")
+    if in_log:
+        dfs_paths.write_atomically(lp, _log_file_text(task, [e for e in in_log if e["ts"] >= cut]))
     dfs_paths.write_atomically(p, render(t))
     return len(move)
+
+
+def split_log(task):
+    """Move the whole `## Log` of this branch's part of `task`, verbatim, to its log file
+    (`log_part`), and drop the section from the task file. Returns how many entries moved.
+    `load` reads the same entries before and after. A Log with text that is no entry has
+    nowhere to go in the file, so it is refused."""
+    p, t, lp, ltext = _this_part_log(task)
+    if not p.exists() or "Log" not in t["order"]:
+        return 0
+    body = t["sections"].get("Log", "")
+    if len(body.strip()) and not t["log"]:
+        raise ValueError("the Log of %s holds text that is no entry; move it by hand" % p.name)
+    have = {e["text"].rstrip() for e in parse_log(ltext)}
+    entries = sorted(parse_log(ltext) + [e for e in t["log"] if e["text"].rstrip() not in have],
+                     key=lambda e: e["ts"])
+    if entries:
+        lp.parent.mkdir(parents=True, exist_ok=True)
+        # ⚠ The log file first, the task file second: a kill between the two leaves the
+        # entries in both, which `load` counts once, and the next call finishes the move.
+        dfs_paths.write_atomically(lp, _log_file_text(task, entries))
+    n = len(t["log"])
+    t["order"] = [name for name in t["order"] if name != "Log"]
+    t["log"] = []
+    dfs_paths.write_atomically(p, render(t))
+    return n
 
 
 def _unfield(raw, key, stub=SHELF_STUB):
@@ -691,6 +742,9 @@ def shelve_report(task):
     if old:
         lines.append("`tree.py compact %s` would move ~%s tokens of old log entries."
                      % (task, f"{tok(old):,}"))
+    if t["log"]:
+        lines.append("`tree.py splitlog %s` would move all ~%s tokens of its Log to its log file."
+                     % (task, f"{tok(sum(len(e['text']) for e in t['log'])):,}"))
     bg = len(t["sections"].get("Background", ""))
     if bg:
         lines.append("The Background is ~%s tokens." % f"{tok(bg):,}")
@@ -2155,6 +2209,10 @@ def _main(argv):
     if len(argv) == 3 and argv[1] == "compact":
         print("dfs_tree: moved %d log entries to %s"
               % (compact(argv[2]), dfs_paths.rel(archive_path(argv[2]))))
+        return 0
+    if len(argv) == 3 and argv[1] == "splitlog":
+        print("dfs_tree: moved %d log entries to %s"
+              % (split_log(argv[2]), dfs_paths.rel(log_part(argv[2], "" if dfs_paths.worktree(argv[2]) else dfs_paths.branch_tag()))))
         return 0
     if len(argv) >= 3 and argv[1] == "shelve":
         n = shelve(argv[2], tuple(argv[3:]))
