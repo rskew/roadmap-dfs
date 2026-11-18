@@ -107,6 +107,12 @@ import tree as dfs_tree   # noqa: E402
 COORD = re.compile(r"\b[\w./-]+\.(?:js|mjs|ts|tsx|py|hs|sql|l|css|html|sh|md):\d+")
 
 
+def log_rel(rel):
+    """A part's log file, relative to `items/`, as `dfs_tree.log_part` names it:
+    `W13.md` -> `W13.log.md`, `W13/fx.md` -> `W13/fx.log.md`."""
+    return str(rel)[:-3] + ".log.md"
+
+
 def at_head(path: Path):
     """HEAD's copy, or None when the file is not in HEAD yet.
 
@@ -217,13 +223,14 @@ def replayed_copy(path: Path):
     return r.stdout if r.returncode == 0 else None
 
 
-def check_writer(task, tag, here, text, head):
+def check_writer(task, tag, here, text, head, logtext="", head_log=""):
     """What this commit ADDED to a part that is not this branch's: the one rule that
     keeps two branches from writing the same file. `here` is None on a detached HEAD,
     where nothing may be added at all."""
     if here == tag:
         return []
-    now, was = dfs_tree.parse(text or "", task), dfs_tree.parse(head or "", task)
+    now = dfs_tree.with_log_file(dfs_tree.parse(text or "", task), logtext)
+    was = dfs_tree.with_log_file(dfs_tree.parse(head or "", task), head_log)
     had_nodes = {nd["id"] for nd in was["nodes"]}
     had_log = {e["text"].rstrip() for e in was["log"]}
     added = [nd["id"] for nd in now["nodes"] if nd["id"] not in had_nodes]
@@ -316,13 +323,13 @@ def handoff_verdict(now_tok: int, was_tok: int, budget: int):
     return None
 
 
-def check_shape(task, text, archive="", tag="", whole=None):
+def check_shape(task, text, archive="", tag="", whole=None, logtext=""):
     """What is wrong with one part of a task, as a list of sentences. What an entry
     names (an answer's raise, a Corrects' correction, a Parent) is looked up in
     `whole`, the task with every part combined (`dfs_tree.combine`), since it may be in
     another branch's part; alone, the part is the whole task."""
     bad = []
-    t = dfs_tree.with_archive(dfs_tree.parse(text, task), archive)
+    t = dfs_tree.with_log_file(dfs_tree.with_archive(dfs_tree.parse(text, task), archive), logtext)
     w = whole or t
     if not re.match(r"^# %s(?![\w@.-])" % re.escape(task), t["title"] or ""):
         bad.append("its heading is %r, which does not name %s" % (t["title"], task))
@@ -352,7 +359,7 @@ def check_shape(task, text, archive="", tag="", whole=None):
             bad.append("%s says Corrects %s, and no correction or backtrack has that timestamp"
                        % (nd["id"], c))
     raises = {e["ts"] for e in w["log"] if e["kind"] == "raise"}
-    for line in t["sections"].get("Log", "").splitlines():
+    for line in (t["sections"].get("Log", "") + "\n" + logtext).splitlines():
         if line.startswith("- ") and not dfs_tree.LOG_HEAD.match(line):
             bad.append("log line %r is not `- <ts> · <kind> · <args>`" % line[:60])
     for e in t["log"]:
@@ -400,7 +407,7 @@ def archived_evidence(archive):
             for n, items in held.items()}
 
 
-def check_history(task, text, head, archive=""):
+def check_history(task, text, head, archive="", logtext="", head_log=""):
     """What this commit rewrote that it may only have added to.
 
     `archive` is the task's `.dfs/archive/items/<task>.md`. A determined node's
@@ -421,14 +428,15 @@ def check_history(task, text, head, archive=""):
     either is an edit of history."""
     bad = []
     held = archived_evidence(archive)
-    now, was = dfs_tree.parse(text, task), dfs_tree.parse(head, task)
+    now = dfs_tree.with_log_file(dfs_tree.parse(text, task), logtext)
+    was = dfs_tree.with_log_file(dfs_tree.parse(head, task), head_log)
     now_log = {e["text"].rstrip() for e in now["log"]}
     moved = {e["text"].rstrip() for e in dfs_tree.archived_log(archive)}
     # A fresh parse, not `dict(now)`: `with_archive` writes shelved Approaches
     # and Hypotheses back into the nodes it is given, and a shallow copy shares them with
     # `now`, which then reads as a commit that un-shelved every one of them.
-    cut = dfs_tree.log_cutoff(dfs_tree.with_archive(dfs_tree.parse(text, task),
-                                                    archive)["log"])
+    cut = dfs_tree.log_cutoff(dfs_tree.with_log_file(
+        dfs_tree.with_archive(dfs_tree.parse(text, task), archive), logtext)["log"])
     for e in was["log"]:
         key = e["text"].rstrip()
         if key in now_log or (key in moved and e["ts"] < cut):
@@ -743,24 +751,27 @@ def main() -> int:
         task, tag = dfs_tree.part_of(rel)
         tasks.setdefault(task, {})[tag] = rel
     for task in sorted(tasks):
-        parts = {tag: (read(items_dir / rel) or "", read(arc_dir / rel) or "")
+        parts = {tag: (read(items_dir / rel) or "", read(arc_dir / rel) or "",
+                       read(items_dir / log_rel(rel)) or "")
                  for tag, rel in tasks[task].items()}
-        whole = dfs_tree.combine(task, [(g, x, a) for g, (x, a) in parts.items()])
+        whole = dfs_tree.combine(task, [(g, x, a, lg) for g, (x, a, lg) in parts.items()])
         # what HEAD held of the task, to judge its copy by the rules of its own whole
         old_parts = [(g, at_head(items_dir / tasks[task][g]),
-                      at_head(arc_dir / tasks[task][g]) or "") for g in parts]
-        head_whole = dfs_tree.combine(task, [(g, x, a) for g, x, a in old_parts if x is not None])
-        for tag, (text, arc) in sorted(parts.items()):
+                      at_head(arc_dir / tasks[task][g]) or "",
+                      at_head(items_dir / log_rel(tasks[task][g])) or "") for g in parts]
+        head_whole = dfs_tree.combine(task, [(g, x, a, lg) for g, x, a, lg in old_parts if x is not None])
+        for tag, (text, arc, logtext) in sorted(parts.items()):
             held = len(fatal), len(bad)
             path = items_dir / tasks[task][tag]
             rel = dfs_paths.rel(path)
             head = at_head(path)
             head_arc = at_head(arc_dir / tasks[task][tag]) or ""
+            head_log = at_head(items_dir / log_rel(tasks[task][tag])) or ""
             adopting = declared and head is None
             adds_new = adds_new or (from_index and head is None)
-            shape = check_shape(task, text, arc, tag, whole)
+            shape = check_shape(task, text, arc, tag, whole, logtext)
             if head is not None:   # a fault HEAD already had is not this commit's
-                had = collections.Counter(check_shape(task, head, head_arc, tag, head_whole))
+                had = collections.Counter(check_shape(task, head, head_arc, tag, head_whole, head_log))
                 fresh = []
                 for b in shape:   # counted: a second fault with the same text is new
                     if had[b] > 0:
@@ -770,9 +781,10 @@ def main() -> int:
                 shape = fresh
             fatal += ["%s: %s" % (rel, b) for b in shape]
             fatal += ["%s %s" % (rel, b) for b in check_attachments(
-                text + "\n" + arc, None if head is None else head + "\n" + head_arc)]
+                text + "\n" + arc + "\n" + logtext,
+                None if head is None else head + "\n" + head_arc + "\n" + head_log)]
             if head is not None:
-                fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc)]
+                fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc, logtext, head_log)]
             wbase = replayed_base(task, head, replayed_copy(path)) if in_rebase else head
             if judge_writer:   # a merge brings in nodes judged on their own branch
                 fatal += ["%s: %s" % (rel, b)
@@ -780,7 +792,7 @@ def main() -> int:
             if judge_writer:
                 fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, wbase)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
-                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase)]
+                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase, logtext, head_log)]
             now_tok = len(text) // 4
             was_tok = (len(head) // 4) if head is not None else 0
             budget = dfs_state.HANDOFF_BUDGET

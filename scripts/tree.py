@@ -166,6 +166,12 @@ def archive_part(task, tag=""):
     return base / (("%s.md" % task) if not tag else "%s/%s.md" % (task, tag))
 
 
+def log_part(task, tag=""):
+    """The file a branch with `tag` writes the log of `task` to, beside its part: a plain
+    read of the part does not show the log, and `load` merges it back."""
+    return dfs_paths.task_items(task) / (("%s.log.md" % task) if not tag else "%s/%s.log.md" % (task, tag))
+
+
 def part_of(rel):
     """(task, tag) for a path relative to `items/` or `archive/items/`, or None:
     `W13.md` -> (W13, ""), `W13/fx.md` -> (W13, fx). A name starting `_` is a
@@ -481,14 +487,29 @@ def with_archive(t, archive):
     return t
 
 
+def with_log_file(t, text):
+    """`t` with the entries of its log file (`log_part`) merged into its log by time, each
+    once: an entry the part still holds, or the archive moved, is not counted twice."""
+    if text and text.strip():
+        have = {e["text"].rstrip() for e in t["log"]}
+        new = []
+        for e in parse_log(text):
+            if e["text"].rstrip() not in have:
+                have.add(e["text"].rstrip())
+                new.append(dict(e, logged=True))
+        t["log"] = sorted(t["log"] + new, key=lambda e: e["ts"])
+    return t
+
+
 def combine(task, parts, here=None):
     """One task from its parts, `[(tag, text, archive text)]`: every part's nodes, the
     logs merged by time, and the Goal and sections from the default part if it has a
     Goal, else from the first part that does. `here` is the reading branch's tag, which
     the frontier puts first; `t["parts"]` keeps each part as parsed."""
     parsed = {}
-    for tag, text, arc in parts:
-        parsed[tag] = with_archive(parse(text or "", task), arc or "")
+    for tag, text, arc, *more in parts:
+        parsed[tag] = with_log_file(with_archive(parse(text or "", task), arc or ""),
+                                    more[0] if more else "")
         parsed[tag]["part"] = tag
     tags = sorted(parsed, key=lambda g: (g != "", g))
     home = next((g for g in tags if parsed[g]["goal"]), tags[0] if tags else None)
@@ -532,8 +553,8 @@ def load(task, here=None):
     if memo is not None and (task, here) in memo:
         return memo[(task, here)]
     tags = part_tags(task)
-    t = combine(task, [(g, read(part_path(task, g)), read(archive_part(task, g)))
-                       for g in tags], here)
+    t = combine(task, [(g, read(part_path(task, g)), read(archive_part(task, g)),
+                        read(log_part(task, g))) for g in tags], here)
     if memo is not None:
         memo[(task, here)] = t
     return t
@@ -542,7 +563,7 @@ def load(task, here=None):
 def new_part(task, name=""):
     """A part for a branch that has not written to `task` yet: nodes and log only, the
     Goal stays in the part that has it."""
-    return "# %s%s\n\n## Tree\n\n## Log\n" % (task, " · " + name if name else "")
+    return "# %s%s\n\n## Tree\n" % (task, " · " + name if name else "")
 
 
 def ensure_part(task):
@@ -719,7 +740,8 @@ def render(t):
     out = [t["title"] or "# %s" % t["task"], ""]
     names = list(t["order"])
     # Goal only where it already is: a branch's part carries nodes and log alone.
-    for must in (("Goal",) if not t["order"] else ()) + ("Tree", "Log"):
+    # No `## Log` unless the file has one: new entries go to the log file (`log_part`).
+    for must in (("Goal",) if not t["order"] else ()) + ("Tree",):
         if must not in names:
             names.append(must)
     for name in names:
@@ -811,6 +833,15 @@ def finding_id(task):
     return re.compile(r"\b%s(?:@[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?\.\d+\b" % re.escape(task))
 
 
+def write_log_entry(task, entry):
+    """Append one parsed entry to this branch's log file, at its end, creating it with a
+    title line. The log only grows, so nothing already in the file is rewritten."""
+    p = log_part(task, "" if dfs_paths.worktree(task) else dfs_paths.branch_tag())
+    old = p.read_text() if p.exists() else "# %s · log\n" % task
+    p.parent.mkdir(parents=True, exist_ok=True)
+    dfs_paths.write_atomically(p, old.rstrip("\n") + "\n\n" + entry["text"].rstrip() + "\n")
+
+
 def append_log(task, kind, args=(), body=""):
     """Append one entry, keyed by a timestamp later than every other in this file,
     and re-render: the Log section is found by name, wherever it is."""
@@ -841,16 +872,14 @@ def append_log(task, kind, args=(), body=""):
                              "raised, and %s has neither: log `ok` once, with the minor findings in its "
                              "body, or add the node first" % task)
     carry_attachments(task, body)
-    p = ensure_part(task)
-    t = parse(p.read_text(), task)
+    ensure_part(task)
     ts = now_ts()
     # Later than every entry of the TASK, not just of this part: an answer or a
     # correction names what it settles by timestamp, across parts.
     latest = max((e["ts"] for e in load(task)["log"]), default="")
     if ts <= latest:
         ts = _ts_after(latest)
-    t["log"].append(make_entry(ts, kind, args, body))
-    dfs_paths.write_atomically(p, render(t))
+    write_log_entry(task, make_entry(ts, kind, args, body))
     if kind == "accept":
         # The author taking the finished tree is as good as a passing review: the item's
         # branch, if it has one, goes into the default branch. A merge that cannot go
@@ -937,7 +966,7 @@ def create_task(name, goal="", task=None, draft=False):
         raise ValueError("%s already exists: pick another id" % task)
     path = part_path(task, tag)
     body = ["# %s · %s" % (task, name), "", "## Goal", "", (goal or "").strip() or name, "",
-            "## Tree", "", "## Log", ""]
+            "## Tree", ""]
     path.parent.mkdir(parents=True, exist_ok=True)
     dfs_paths.write_atomically(path, "\n".join(body).rstrip() + "\n")
     if draft:
@@ -1164,7 +1193,9 @@ def delete_node(task, nid):
     ts = now_ts()
     if ts <= latest:
         ts = _ts_after(latest)
-    t["log"].append(make_entry(ts, "delete", cut, body))
+    # The entry first: a kill between the two leaves the node and its `delete` entry, which
+    # the next delete finds and writes over.
+    write_log_entry(task, make_entry(ts, "delete", cut, body))
     dfs_paths.write_atomically(p, render(t))
     return cut
 
