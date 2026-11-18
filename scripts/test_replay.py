@@ -1152,6 +1152,32 @@ class KiroStreamTest(unittest.TestCase):
         self.assertEqual(history.stream_session(str(self.d / "run-2.json"), kinds)["kind"], "other")
 
 
+class TaskLogsTest(unittest.TestCase):
+    """`replay.task_logs` reads the runner's log where it is: the log file beside each part."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.d = Path(self.tmp.name)
+        items = self.d / ".dfs" / "items"
+        (items / "W1").mkdir(parents=True)
+        (items / "W1.md").write_text("# W1 · t\n\n## Goal\n\nx\n")
+        (items / "W1.log.md").write_text("# W1 \u00b7 log\n\n- 2026-10-28T15:33:36Z \u00b7 session \u00b7 review \u00b7 dfs_run_a/run-1\n")
+        (items / "W1" / "fx.log.md").write_text("- 2026-10-28T15:40:00Z \u00b7 session \u00b7 critic \u00b7 dfs_run_a/run-2\n")
+        for args in (["init", "-q", "-b", "main"], ["add", "-A"],
+                     ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x"]):
+            subprocess.run(["git", *args], cwd=self.d, check=True, capture_output=True)
+
+    def test_the_session_lines_in_the_log_files_name_the_kinds(self):
+        kinds = history.session_kinds(*replay.task_logs(self.d, "W1"))
+        self.assertEqual(kinds, {"dfs_run_a/run-1": "review", "dfs_run_a/run-2": "critic"})
+        (self.d / ".dfs" / "items" / "W1.log.md").unlink()
+        (self.d / ".dfs" / "items" / "W1" / "fx.log.md").unlink()
+        self.assertEqual(history.session_kinds(*replay.task_logs(self.d, "W1")),
+                         {"dfs_run_a/run-1": "review", "dfs_run_a/run-2": "critic"},
+                         "and what main committed is read too")
+
+
 class KiroScoreTest(unittest.TestCase):
     """`replay.py score` on a replay run under kiro: the same table from the run logs."""
 
