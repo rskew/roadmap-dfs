@@ -215,6 +215,17 @@ def replayed_base(task, head, replayed):
     return dfs_tree.render(base)
 
 
+def replayed_log(head_log, replayed):
+    """The log file a hand-made commit at a rebase stop is judged against: HEAD's copy
+    plus the entries of the commit being replayed (`replayed`, REBASE_HEAD's copy of the
+    log file, or None) that HEAD lacks, as `replayed_base` does for the task file."""
+    if not replayed or not replayed.strip():
+        return head_log
+    had = {e["text"].rstrip() for e in dfs_tree.parse_log(head_log)}
+    new = [e["text"] for e in dfs_tree.parse_log(replayed) if e["text"].rstrip() not in had]
+    return "\n".join([head_log.rstrip()] * bool(head_log.strip()) + new) + "\n" if new else head_log
+
+
 def replayed_copy(path: Path):
     """REBASE_HEAD's copy of `path`: the commit a rebase stopped on, or None."""
     state = dfs_paths.state()
@@ -789,13 +800,15 @@ def main() -> int:
             if head is not None:
                 fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc, logtext, head_log)]
             wbase = replayed_base(task, head, replayed_copy(path)) if in_rebase else head
+            wlog = (replayed_log(head_log, replayed_copy(items_dir / log_rel(tasks[task][tag])))
+                    if in_rebase else head_log)
             if judge_writer:   # a merge brings in nodes judged on their own branch
                 fatal += ["%s: %s" % (rel, b)
                           for b in check_assumptions(task, text, wbase, read, arc, head_arc)]
             if judge_writer:
                 fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, wbase)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
-                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase, logtext, head_log)]
+                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase, logtext, wlog)]
             now_tok = len(text) // 4
             was_tok = (len(head) // 4) if head is not None else 0
             budget = dfs_state.HANDOFF_BUDGET

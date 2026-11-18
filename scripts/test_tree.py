@@ -2311,12 +2311,16 @@ class Branches(InARepo):
         (hooks / name).symlink_to(HERE / "hook.sh")
         self.git("config core.hooksPath %s" % hooks)
 
-    def conflicted_rebase(self):
+    def conflicted_rebase(self, log_file=False):
         """dfs/w1 adds a node and edits `f`; master edits `f` the other way: rebasing the
-        branch stops on a conflict, and `git rebase --continue` makes the commit."""
+        branch stops on a conflict, and `git rebase --continue` makes the commit. With
+        `log_file` the branch also logs an entry in the log file."""
         self.switch("checkout -qb dfs/w1")
-        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2),
-                        "- 2026-09-25T09:00:00Z · session · work\n"))
+        entry = "- 2026-09-25T09:00:00Z · session · work\n"
+        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2), entry))
+        if log_file:   # one more entry, in the log file, which the base commit lacks
+            (self.root / ".dfs/items/W1.log.md").write_text(
+                entry.replace("09:00:00", "09:10:00"))
         (self.root / "f").write_text("branch\n")
         self.commit()   # no hook yet: the commit was judged where it was made
         self.switch("checkout -q master")
@@ -2342,6 +2346,22 @@ class Branches(InARepo):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("W1.3", (self.root / ".dfs/items/W1.md").read_text())
+
+    def test_a_rebase_stop_does_not_refuse_the_log_entries_the_replayed_commit_made(self):
+        """The replayed commit's entries are in the log file, which HEAD lacks: they were
+        judged where they were made, as the entries in the task file are."""
+        self.conflicted_rebase(log_file=True)
+        r = self.git("commit -qm 'resolved'")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_a_log_entry_added_by_hand_at_a_rebase_stop_is_still_judged(self):
+        self.conflicted_rebase(log_file=True)
+        with open(self.root / ".dfs/items/W1.log.md", "a") as f:
+            f.write("- 2026-09-25T09:30:00Z · session · work\n")
+        self.git("add -A")
+        r = self.git("commit -qm 'resolved'")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("2026-09-25T09:30:00Z", r.stdout + r.stderr)
 
     def test_a_commit_in_an_apply_rebase_is_not_judged_by_the_writer_rule(self):
         """The same stop under `git rebase --apply`, which marks it with rebase-apply."""
