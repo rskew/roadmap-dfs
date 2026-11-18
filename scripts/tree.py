@@ -503,7 +503,7 @@ def with_log_file(t, text):
         for e in parse_log(text):
             if e["text"].rstrip() not in have:
                 have.add(e["text"].rstrip())
-                new.append(dict(e, logged=True))
+                new.append(e)
         t["log"] = sorted(t["log"] + new, key=lambda e: e["ts"])
     return t
 
@@ -1250,8 +1250,8 @@ def delete_node(task, nid):
     ts = now_ts()
     if ts <= latest:
         ts = _ts_after(latest)
-    # The entry first: a kill between the two leaves the node and its `delete` entry, which
-    # the next delete finds and writes over.
+    # The entry first: a kill between the two leaves the node and its `delete` entry, and
+    # the next delete of it writes a second `delete` entry.
     write_log_entry(task, make_entry(ts, "delete", cut, body))
     dfs_paths.write_atomically(p, render(t))
     return cut

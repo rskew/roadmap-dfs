@@ -347,6 +347,8 @@ def metrics(trees):
                 m["%s_sessions" % (a[0] if a[:1] in (["critic"], ["review"]) else "work")] += 1
         m["open_raises"] += len(dfs_tree.open_raises(t))
         m["entries"] += progress(t)
+        # What a session reads by default: the parts. The log file is opened only by name, so
+        # it is not counted in `chars` and `tokens`.
         m["chars"] += sum(len(p.read_text()) for p in dfs_tree.part_files(t["task"]))
     m["chars"] += len(read_roadmap())
     m["tokens"] = m["chars"] // 4

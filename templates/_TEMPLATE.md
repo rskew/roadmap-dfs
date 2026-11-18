@@ -17,5 +17,3 @@ is a node added here, in the web page or the screen, or by hand:>
 ### W<n>.1 · <a step>
 Status: open
 Approach: <what this node does>
-
-## Log

@@ -220,7 +220,8 @@ merge, cherry-pick, revert or rebase of theirs left unfinished in the checkout i
 branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
 by a hash that would dangle once the branch is merged and deleted. Until then a task in
 flight has its current file only on its branch: the default branch's copy is stale or
-empty, so to read another task's tree or log use `git show dfs/<task>:.dfs/items/<task>.md`.
+empty, so to read another task's tree use `git show dfs/<task>:.dfs/items/<task>.md`, and its log, which new
+entries keep in a file beside it, `git show dfs/<task>:.dfs/items/<task>.log.md`.
 
 Two cases have no branch: a first run while the checkout is off `main`/`master`, and a repo
 with no commit yet. Then the item is worked in place, on whatever is checked out, and
