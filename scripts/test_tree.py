@@ -1066,6 +1066,7 @@ class Check(InARepo):
         log = self.logged_task()
         for bad, said in (("- not a log line " + "x" * 60 + "\n", "is not `- <ts> · <kind> · <args>`"),
                           ("## Tree\n", "holds the heading"),
+                          ("# W1 · log\n", "holds the heading"),   # only the first line is the title
                           ("- 2026-09-25T09:05:00Z · answer · 2026-09-25T09:04:00Z\n", "names no raise")):
             log.write_text(log.read_text() + bad)
             subprocess.run(["git", "add", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
@@ -1490,6 +1491,14 @@ class Check(InARepo):
         self.assertIn("for an entry's full text", new)
         self.assertNotIn("its Log what everyone has said", new)
         self.assertNotIn("session · work", new, "the log's text is not loaded into the briefing")
+
+    def test_the_briefing_does_not_say_the_log_is_all_in_the_file_while_the_task_still_has_a_log(self):
+        self.write(task(node(1), self.LOG))
+        dfs_tree.append_log("W1", "answer", "x")        # a new entry goes to the log file
+        note = dfs_state.brief("W1")
+        self.assertIn("`.dfs/items/W1.log.md` (~", note)
+        self.assertIn("older ones are in its `## Log`", note)
+        self.assertNotIn("its log is not in it", note)
 
     def test_shelve_moves_determined_plans_and_every_reader_sees_them_as_before(self):
         self.write(task(node(1, "confirmed", extra="Approach: cut it\n  thin\nHypothesis: it holds\n"

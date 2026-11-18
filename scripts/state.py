@@ -575,10 +575,12 @@ def _log_note(task, path) -> str:
     if not files:
         return "its Log what everyone has said about it."
     own = [(dfs_paths.rel(lp), len(lp.read_text()) // 4) for lp in files]
-    return ("its log is not in it but in %s. Open that only for an entry's full text "
-            "(a raise, an answer, a correction), as it is long and the briefing already "
-            "says where the task stands."
-            % " and ".join("`%s` (~%s tokens)" % (r, f"{n:,}") for r, n in own))
+    where = " and ".join("`%s` (~%s tokens)" % (r, f"{n:,}") for r, n in own)
+    held = ("its newer log entries are not in it but in %s, and its older ones are in its "
+            "`## Log`, which you read with it. " if "Log" in dfs_tree.load(task)["sections"]
+            else "its log is not in it but in %s. ") % where
+    return (held + "Open the log file only for an entry's full text (a raise, an answer, "
+            "a correction), as it is long and the briefing already says where the task stands.")
 
 
 def _parts_note(task, path):
