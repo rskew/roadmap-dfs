@@ -1345,6 +1345,24 @@ class Check(InARepo):
         with self.assertRaises(ValueError):
             dfs_tree.create_task("again", task="W1")
 
+    def test_an_archived_task_keeps_the_log_it_held_in_its_log_file(self):
+        self.write(task(node(1, "confirmed", extra="Determination: yes\n")))
+        dfs_tree.append_log("W1", "session", ["work"])
+        dfs_tree.append_log("W1", "end", ["work", "ok"])
+        dfs_tree.append_log("W1", "review", ["ok"])
+        dfs_tree.append_log("W1", "raise", ["W1.1"], "q")
+        before = dfs_tree.load("W1")
+        self.assertEqual(len(before["log"]), 4)
+        dfs_tree._retire("W1", dfs_tree.archived_dir(), "archived")
+        self.assertTrue((dfs_tree.archived_dir() / "items" / "W1.log.md").is_file())
+        self.assertEqual(dfs_tree.archived_task_ids(), ["W1"])   # the log file is not a task
+        self.assertEqual(dfs_tree.retired_ids(), {"W1"})
+        after = dfs_tree.load_archived("W1")
+        self.assertEqual([(e["ts"], e["kind"]) for e in after["log"]],
+                         [(e["ts"], e["kind"]) for e in before["log"]])
+        self.assertEqual(dfs_tree.status_of(after), dfs_tree.status_of(before))
+        self.assertEqual(len(dfs_tree.open_raises(after)), len(dfs_tree.open_raises(before)))
+
     def test_a_deleted_node_takes_its_subtree_and_leaves_a_delete_entry_the_guard_accepts(self):
         log = ("- 2026-09-25T09:00:00Z · session · work\n"
                "- 2026-09-25T09:01:00Z · correct · W1.2 · refuted\n  wrong\n")

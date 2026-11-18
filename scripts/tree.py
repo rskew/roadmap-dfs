@@ -1174,7 +1174,9 @@ def load_archived(task):
         return p.read_text() if p.exists() else ""
     def at(base, g):
         return base / (("%s.md" % task) if not g else "%s/%s.md" % (task, g))
-    return combine(task, [(g, read(at(items, g)), read(at(arc, g))) for g in tags], None)
+    def log_at(g):
+        return items / (("%s.log.md" % task) if not g else "%s/%s.log.md" % (task, g))
+    return combine(task, [(g, read(at(items, g)), read(at(arc, g)), read(log_at(g))) for g in tags], None)
 
 
 def archive_blocker(task):
