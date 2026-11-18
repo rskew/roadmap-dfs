@@ -631,11 +631,14 @@ const FLOWS = {
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
     await page.click("#chat [data-act=chatend]");
     await page.waitForFunction(() => !document.querySelector("#chat[open]"));
+    same(ended, 1, "Archive from the list asks the server to archive the chat once");
     // no wait for the 4-second poll
     await page.waitForFunction(() => document.querySelectorAll("#view > .crow").length === 0, null, { timeout: 2000 });
     same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Archived (2)", "from the list too, the archived chat is counted under Archived at once");
     // an archived chat opened again cannot be archived again
-    await page.click(".endedchats summary"); await page.click(".endedchats .chatrow[data-scope=W9]"); await page.waitForSelector("#chat[open]");
+    // the Archived group was opened earlier in this flow and the page keeps it open, so press its summary only when it is shut
+    if (!(await page.$eval(".endedchats", e => e.open))) await page.click(".endedchats summary");
+    await page.click(".endedchats .chatrow[data-scope=W9]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
     assert(await page.$eval("#chat [data-act=chatend]", e => e.disabled), "an archived chat's Archive button is disabled");
     same(errors, [], "no page errors");
