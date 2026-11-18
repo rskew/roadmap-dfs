@@ -482,6 +482,61 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A picture attached in the chat box: the button, a paste and a drop each upload it (a file that is not a picture is
+  // refused), its reference goes in the message, and the sent message draws the picture, in the project chat too.
+  async chat_attach(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
+    const png = await page.screenshot({ clip: { x: 0, y: 0, width: 120, height: 80 } });
+    const state = { messages: [], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "claude" };
+    let sent = null;
+    await page.route("**/api/chat/**", r => {
+      if (r.request().method() === "POST" && /\/api\/chat\/send$/.test(r.request().url())) {
+        sent = JSON.parse(r.request().postData()).message;
+        state.messages = [{ role: "you", text: sent }, { role: "agent", text: "I see it." }];
+      }
+      r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await page.evaluate(() => { location.hash = "#/chats"; });
+    await page.waitForSelector("[data-act=chat][data-scope=project]");
+    await page.click("[data-act=chat][data-scope=project]"); await page.waitForSelector("#chat[open]");
+    assert(await page.isVisible("#chat-form .attach button"), "the chat box has an Attach button");
+    const box = () => page.inputValue("#chat-input");
+    const refs = () => box().then(v => (v.match(/!\[[^\]]*\]\(\.dfs\/artefacts\/[0-9a-f-]+\.png\)/g) || []).length);
+    await page.fill("#chat-input", "Look at this:");
+    await page.setInputFiles("#chat-form .attach input[type=file]", { name: "the bar.png", mimeType: "image/png", buffer: png });
+    await page.waitForFunction(() => /!\[the bar\.png\]\(\.dfs\/artefacts\/[0-9a-f-]+\.png\)$/.test(document.querySelector("#chat-input").value));
+    assert((await box()).startsWith("Look at this: ![the bar.png]("), "the reference follows the text, a space between");
+    for (const kind of ["paste", "drop"]) {
+      const before = await refs();
+      await page.evaluate(([kind, b64]) => {
+        const dt = new DataTransfer();
+        dt.items.add(new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], "image.png", { type: "image/png" }));
+        const init = { bubbles: true, cancelable: true };
+        const el = document.querySelector("#chat-input");
+        el.dispatchEvent(kind === "paste" ? new ClipboardEvent("paste", { ...init, clipboardData: dt }) : new DragEvent("drop", { ...init, dataTransfer: dt }));
+      }, [kind, png.toString("base64")]);
+      await page.waitForFunction(n => (document.querySelector("#chat-input").value.match(/\]\(\.dfs\/artefacts\//g) || []).length > n, before);
+    }
+    same(await refs(), 3, "the button, a paste and a drop each added a picture");
+    const before = await box();
+    await page.evaluate(() => {
+      const dt = new DataTransfer(); dt.items.add(new File(["hello"], "notes.txt", { type: "text/plain" }));
+      document.querySelector("#chat-input").dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt }));
+    });
+    await page.waitForFunction(() => /is not a picture/.test(document.querySelector("#toast").textContent));
+    same(await box(), before, "a file that is not a picture is not attached");
+    const room = await page.evaluate(() => { const f = document.querySelector("#chat-form").getBoundingClientRect(); return f.bottom <= innerHeight + 1 && f.width <= innerWidth + 1; });
+    assert(room, "the box with its Attach bar fits the phone's screen");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    await page.click("#chat-send");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.you a.chatimg img").length === 3);
+    await page.waitForFunction(() => [...document.querySelectorAll("#chat-log .msg.you img")].every(i => i.complete && i.naturalWidth > 0));
+    assert(sent && sent.startsWith("Look at this:"), "the message that was sent carries the references");
+    same(await page.$eval("#chat-log .msg.you .what", e => e.textContent.trim()), "Look at this:", "the references are drawn as pictures, not shown as text");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT.replace(/\.png$/, "-drawn.png") });
+    same(errors, [], "no page errors");
+  },
+
   // A usage limit is drawn as its own line above the box, with when it lifts, and goes when the state no longer has it.
   async chat_backend(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });

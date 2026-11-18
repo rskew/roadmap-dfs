@@ -201,6 +201,10 @@ class Flows(unittest.TestCase):
     def test_the_chats_top_button_goes_to_the_top_of_the_message_being_read(self):
         self.flow("chat_top")
 
+    def test_a_picture_attached_in_the_chat_is_kept_sent_and_drawn(self):
+        self.flow("chat_attach")
+        self.assertEqual(len(list((self.root / ".dfs" / "artefacts").glob("*.png"))), 3)
+
     def test_a_chat_names_the_agent_it_runs_under_in_its_header_and_in_the_list(self):
         self.flow("chat_agent")
 
