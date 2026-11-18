@@ -3556,7 +3556,7 @@ class UI(WorkMixin):
         return self.lines_tree(width)
 
     def tree_of(self, task):
-        """`(tree, archive text, commits)` for a task, re-read when either file moves.
+        """`(tree, archive text, commits)` for a task, re-read when a part, its archive or its log file moves.
 
         Commits come from `git log`, which is too slow for every draw; a node's commit
         lands with an edit to its task file, so the file's mtime is a fair key."""
@@ -3567,6 +3567,15 @@ class UI(WorkMixin):
         for p in paths:
             try:
                 key.append(p.stat().st_mtime_ns)
+            except OSError:
+                key.append(0)
+        # A new log entry goes to the log file and leaves the part alone, so the log files
+        # are in the key too: mtime and size, since an append within one clock tick of the
+        # last keeps the mtime.
+        for g in tags:
+            try:
+                st = dfs_tree.log_part(task, g).stat()
+                key.append((st.st_mtime_ns, st.st_size))
             except OSError:
                 key.append(0)
         hit = self._tree_cache.get(task)
