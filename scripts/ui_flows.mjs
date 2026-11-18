@@ -605,11 +605,9 @@ const FLOWS = {
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
     await page.click("#chat [data-act=chatend]");
-    await page.waitForFunction(() => /Archived\./.test(document.querySelector("#chat-log").textContent));
+    // ending a chat returns to the list of chats: the dialog closes and the Chats tab is current
+    await page.waitForFunction(() => !document.querySelector("#chat[open]") && document.querySelector("#tabs [data-tab=chats][aria-current=page]"));
     same(ended, 1, "Archive asks the server to archive the chat");
-    assert(await page.$eval("#chat [data-act=chatend]", e => e.disabled), "an archived chat cannot be archived again");
-    await page.click("[data-act=chatclose]");
-    await page.evaluate(() => { location.hash = "#/chats"; });
     await page.waitForSelector(".endedchats");
     same(await page.$$eval("#view > .crow", e => e.length), 0, "nothing in progress is left above the Archived group");
     same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Archived (2)", "the Archived group counts the archived chats");
@@ -626,6 +624,23 @@ const FLOWS = {
     await page.waitForFunction(() => location.hash === "#/t/W9");
     await page.waitForSelector("#tabs [data-act=chat]");
     assert(!(await page.$("#chat[open]")), "the link opens the item, not the chat");
+    // a chat opened from the Chats list is archived on a page already at #/chats: no hashchange follows, so the list is redrawn at once
+    state.ended = false; chats[0].ended = false; ended = 0;
+    await page.click("#tabs [data-tab=chats]"); await page.waitForSelector(".chatrow");
+    await page.click("#view > .crow .chatrow[data-scope=W9]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    await page.click("#chat [data-act=chatend]");
+    await page.waitForFunction(() => !document.querySelector("#chat[open]"));
+    same(ended, 1, "Archive from the list asks the server to archive the chat once");
+    // no wait for the 4-second poll
+    await page.waitForFunction(() => document.querySelectorAll("#view > .crow").length === 0, null, { timeout: 2000 });
+    same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Archived (2)", "from the list too, the archived chat is counted under Archived at once");
+    // an archived chat opened again cannot be archived again
+    // the Archived group was opened earlier in this flow and the page keeps it open, so press its summary only when it is shut
+    if (!(await page.$eval(".endedchats", e => e.open))) await page.click(".endedchats summary");
+    await page.click(".endedchats .chatrow[data-scope=W9]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    assert(await page.$eval("#chat [data-act=chatend]", e => e.disabled), "an archived chat's Archive button is disabled");
     same(errors, [], "no page errors");
   },
 
