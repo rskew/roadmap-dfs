@@ -385,9 +385,13 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 .chat-newest { position: sticky; bottom: 0; height: 0; text-align: center; pointer-events: none; }
 .chat-newest .btn { display: none; position: absolute; left: 50%; bottom: var(--s2); transform: translateX(-50%); pointer-events: auto; background: var(--panel); }
 .chat-newest.on .btn { display: inline-block; }
-#chat-form { flex: none; display: flex; flex-direction: row; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
+#chat-form { flex: none; display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--s2); align-items: flex-end; padding: var(--s3) var(--s4); border-top: var(--rule) solid var(--line); }
 #chat-form textarea { flex: 1; width: auto; min-height: var(--hit); max-height: calc(var(--vvh, 100dvh) * .3); resize: none; }
 #chat-form .btn { flex: none; }
+/* the Attach bar sits on a line of its own under the box, order after the Stop and Send buttons */
+#chat-form .attach { order: 1; flex: 1 0 100%; display: flex; align-items: center; gap: var(--s2); margin: 0; }
+#chat-form .attach .hint { color: var(--muted); }
+.msg .chatimg { display: block; margin: var(--s2) 0; } .msg .chatimg img { display: block; max-width: min(100%, 320px); max-height: 240px; height: auto; border: var(--rule) solid var(--line); }
 /* Stop takes Send's place while a turn runs (Send waits then anyway), so the text box keeps its width. */
 #chat-stop[hidden], #chat-send[hidden] { display: none; }
 #chat-send, #chat-stop { min-width: calc(72px * var(--z)); }
@@ -1634,15 +1638,18 @@ function form(html, onsubmit) {
    node, drawn in place here, and the agent, which reads the path. */
 const ATTACH_TYPES = ".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.md,.csv,.json,.log,image/*";
 const ATTACH_MAX = 8 * 1024 * 1024;
-function attachTo(box) {
-  const bar = document.createElement("div");
+const PICTURE_TYPES = ".png,.jpg,.jpeg,.gif,.webp,image/*";
+// `pictures` limits the box to pictures (the chat's): the picker offers only those, and a file pasted or dropped that is not one is refused.
+function attachTo(box, pictures) {
+  const bar = document.createElement("div"), what = pictures ? "a picture" : "a picture or file";
   bar.className = "attach";
-  bar.innerHTML = `<button class="btn" type="button">Attach</button><span class="hint">a picture or file, or paste one</span><input type="file" multiple hidden accept="${ATTACH_TYPES}" aria-label="Attach a picture or file">`;
+  bar.innerHTML = `<button class="btn" type="button">Attach</button><span class="hint">${what}, or paste one</span><input type="file" multiple hidden accept="${pictures ? PICTURE_TYPES : ATTACH_TYPES}" aria-label="Attach ${what}">`;
   box.after(bar);
   const pick = $("input", bar), hint = $(".hint", bar);
   $("button", bar).addEventListener("click", () => pick.click());
   const put = async files => {
     for (const file of files) {
+      if (pictures && !/^image\//.test(file.type)) { toast(`${file.name || "that file"} is not a picture`, true); continue; }
       if (file.size > ATTACH_MAX) { toast(`${file.name} is over 8 MB`, true); continue; }
       hint.textContent = `attaching ${file.name || "a picture"}…`;
       try {
@@ -1656,7 +1663,7 @@ function attachTo(box) {
         box.dispatchEvent(new Event("input"));
       } catch (e) { toast(e.message, true); }
     }
-    hint.textContent = "a picture or file, or paste one";
+    hint.textContent = `${what}, or paste one`;
     pick.value = "";
   };
   pick.addEventListener("change", () => put([...pick.files]));
@@ -1774,7 +1781,13 @@ const chatDraft = (scope, text) => {
 function chatButtons(st) {
   $("#chat-stop").hidden = !st.busy; $("#chat-send").hidden = !!st.busy && !st.steer;   // Stop alone for a turn that cannot take a message
   $("#chat-send").disabled = (st.busy && !st.steer) || st.elsewhere; $("#chat-send").textContent = st.busy && st.steer ? "Steer" : "Send"; $("#chat-input").disabled = !!st.elsewhere;
+  $("#chat-form .attach button").disabled = !!st.elsewhere;
 }
+/* What the author sent, as text with each attached picture drawn: the reference `![name](.dfs/artefacts/<uuid>.png)` the
+   Attach button put in the message becomes a small picture that opens in full in a tab of its own. It reads the
+   reference alone and no task, so the project chat draws them too; the text is escaped first. */
+const CHAT_PICTURE = /!\[([^\]\n]*)\]\(\.dfs\/artefacts\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.(?:png|jpg|gif|webp))\)/g;
+const chatText = text => esc(text).replace(CHAT_PICTURE, (m, alt, file) => `<a class="chatimg" href="artefacts/${file}" target="_blank" rel="noopener"><img src="artefacts/${file}" alt="${alt}" loading="lazy"></a>`);
 function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -1791,7 +1804,7 @@ function chatDraw(st) {
   log.innerHTML = (st.ended ? `<p class="muted">Archived. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
-    + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span><div class="what">${m.role === "agent" ? md(m.text) : esc(m.text)}</div></div>`).join("")
+    + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span><div class="what">${m.role === "agent" ? md(m.text) : m.role === "you" ? chatText(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
     + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
   chatButtons(st);
@@ -1902,6 +1915,7 @@ $("#chat-stop").addEventListener("click", async () => {
   catch (e) { toast(e.message, true); }
   finally { $("#chat-stop").disabled = false; }
 });
+attachTo($("#chat-input"), true);
 $("#chat-input").addEventListener("input", ev => { chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
 // The text box grows with what is typed, up to its CSS max-height (then it scrolls), and shrinks back when cleared.
 function chatGrow() {
