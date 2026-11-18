@@ -30,6 +30,7 @@ ended starts a new chat (`Chats.renew_ended`): the ended one is cleared.
 A message sent on the page while a headless turn is answering STEERS it: it is left in the scope's inbox
 (`<run root>/chat/<scope>/inbox`), and the hooks the turn runs under (inbox.py, as a chain session has them) hand it to
 the agent's next request. One the turn never read goes as the next turn, or is dropped if the turn was stopped or failed.
+A message sent while the screen's background chat is answering is typed into that agent at once (ptyrelay), and the page offers Steer for it too.
 Every agent's turn takes one (`STEERED` lists them): claude and codex through two hooks, opencode through a plugin, kiro through an agent of its own named by the chat's box.
 
 It spends a subscription, as a chain does, so the page gates it behind the same switch as the
@@ -664,7 +665,7 @@ class Chats:
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
                         elsewhere=elsewhere, agent=agent, backend=self.backend(scope),
-                        steer=bool(started) and agent in STEERED)    # steer: a message sent now reaches the turn answering
+                        steer=bool(started or talking) and agent in STEERED)    # steer: a message sent now reaches the turn answering (a headless one through its inbox, a background chat typed into)
 
     def reopen(self, scope):
         """A message is sent to the chat: take off its end mark, so the chat is in progress even

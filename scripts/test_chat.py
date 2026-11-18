@@ -1161,6 +1161,24 @@ class Chat(unittest.TestCase):
             proc.kill()
             proc.wait()
 
+    def test_a_message_can_steer_the_screens_chat_while_it_answers(self):
+        class Screen:
+            has_screen = True
+            def __init__(s): s.typed, s.talking = [], False
+            def chat_live(s, scope): return True
+            def chat_active(s, scope): return s.talking
+            def chat_send(s, scope, text): s.typed.append((scope, text)); return True
+        screen = Screen()
+        chats = dfs_chat.Chats(worker=lambda: screen)
+        st = chats.state("W1")
+        self.assertEqual((st["busy"], st["steer"]), (False, False), "idle: an ordinary send")
+        screen.talking = True
+        st = chats.state("W1")
+        self.assertEqual((st["busy"], st["steer"]), (True, True), "answering in the background: the page may steer it")
+        st = chats.send("W1", "use the other file")
+        self.assertEqual(screen.typed, [("W1", "use the other file")], "typed into the agent that is answering")
+        self.assertEqual(st["messages"][-1], dict(role="you", text="use the other file"))
+
     def screens_live_chat(self, said=()):
         """A conversation the screen's chat has open, with `said` already in its claude transcript;
         what the page sends is typed in, and the test writes what claude records."""
