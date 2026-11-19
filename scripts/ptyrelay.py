@@ -115,6 +115,7 @@ class Relay:
         self.out_fd = None          # where the terminal is, while attached
         self.modes = set()          # the private modes (?1049 alt screen, mouse, paste ...) the agent has switched on
         self._mode_carry = b""
+        self._erase_carry = b""                 # the start of an ESC[3J cut by a read, held back
 
     # ── life ───────────────────────────────────────────────────────────────────────────
     @property
@@ -157,6 +158,20 @@ class Relay:
                     (self.modes.add if m.group(2) == b"h" else self.modes.discard)(int(n))
         self._mode_carry = buf[-32:]
 
+    def _without_scrollback_erase(self, data):
+        """What goes to the terminal: `data` without ESC[3J, which erases the terminal's scrollback. kiro
+        sends it with every redraw and `attach` forces one, so the shell history above the roadmap would
+        be gone after `c`. ESC[2J (clear the screen) stays. A sequence cut between two reads is held back
+        until the next, so a prefix of it at the end of `data` is not written yet."""
+        buf = self._erase_carry + data
+        buf = buf.replace(b"\x1b[3J", b"")
+        self._erase_carry = b""
+        for n in (3, 2, 1):                     # ESC [ 3 J cut after 3, 2 or 1 bytes
+            if buf.endswith(b"\x1b[3J"[:n]):
+                self._erase_carry, buf = buf[-n:], buf[:-n]
+                break
+        return buf
+
     def _mode_bytes(self, on):
         """Switch the terminal to the modes the agent has on (`on`), or back off."""
         return b"".join(b"\x1b[?%d%s" % (n, b"h" if on else b"l") for n in MODES if n in self.modes)
@@ -179,7 +194,7 @@ class Relay:
             self._follow_modes(data)
             self._follow_opening(data)
             if self.attached and self.out_fd is not None:
-                _try(os.write, self.out_fd, data)
+                _try(os.write, self.out_fd, self._without_scrollback_erase(data))
         with self.lock:
             self.fd = None
         _try(os.close, master)
@@ -448,6 +463,7 @@ class Relay:
             old = None
         _try(os.write, stdout, self._mode_bytes(True))      # what it switched on while nobody looked
         self.out_fd = stdout
+        self._erase_carry = b""
         self.attached = True
         fit(redraw=True)
         detached = False

@@ -341,6 +341,21 @@ class Looking(unittest.TestCase):
         self.assertTrue(polled.wait(30), "attach had not finished fitting the agent in 30s")
         self.assertEqual(struct.unpack("HHHH", real(self.relay.fd))[:2], (33, 73))
 
+    def test_the_scrollback_erase_is_not_shown_but_the_text_around_it_is(self):
+        """kiro sends ESC[3J with every redraw, which would erase the shell history above the roadmap."""
+        self.looking()
+        self.assertTrue(self.relay.send("a\x1b[3Jb"))
+        self.assertTrue(self.seen(b"heard: ab"))
+
+    def test_a_scrollback_erase_cut_between_two_reads_is_held_back_and_nothing_else_is(self):
+        r = ptyrelay.Relay()
+        for cut in range(1, 4):
+            whole = b"one\x1b[3Jtwo"
+            first = r._without_scrollback_erase(whole[:3 + cut])
+            self.assertEqual(first + r._without_scrollback_erase(whole[3 + cut:]), b"onetwo", cut)
+        self.assertEqual(r._without_scrollback_erase(b"\x1b[2J\x1b[H\x1b[3"), b"\x1b[2J\x1b[H")
+        self.assertEqual(r._without_scrollback_erase(b"4m"), b"\x1b[34m")      # not an erase: given back whole
+
     def written_sizes(self, chat_size):
         """The sizes `attach` writes to the chat's pty when the terminal is 33x74 and the chat starts at
         `chat_size`: fcntl.ioctl is recorded and still done."""

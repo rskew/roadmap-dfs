@@ -1,0 +1,27 @@
+W48.16 · kiro-cli 2.35.1 (chat --v3 --trust-all-tools, fake KIRO_API_KEY, scratch HOME and TMPDIR on an exec mount) in a tmux 3.8 pane of 24x80 after 60 lines of shell output, through Relay.start (10 s in the background) then attach, with and without Relay._without_scrollback_erase on what _pump forwards.
+Screen reached: kiro's workspace trust dialog ("Trust, continue / Don't trust, exit"); the chat screen itself was not reached (a first Enter led to another dialog, "Yes, I accept"), so this is not the screen W48.13 measured.
+  direct in the pane:               history 2, "history line 1" gone (kiro erased the scrollback itself at this screen)
+  relay, ESC[3J forwarded (before): history 2, line 1 gone
+  relay, ESC[3J dropped (now):      history 62, line 1 kept; the visible dialog is the same in all three
+Unit tests: test_ptyrelay.py 41 tests OK; the new Looking test is red with the filter removed.
+=================== kdrive.py
+import os, sys, time
+sys.path.insert(0, "/workspace/roadmap-dfs/.dfs/worktrees/W48/scripts")
+import ptyrelay
+env = {"PATH": os.environ["PATH"], "HOME": "SCRATCH/home", "TMPDIR": "SCRATCH/tmp", "TERM": "xterm-256color", "KIRO_API_KEY": "ksk-fakefakefakefakefakefake"}
+for i in range(1, 61): print("history line %d" % i)
+sys.stdout.flush()
+r = ptyrelay.Relay().start(["kiro-cli", "chat", "--v3", "--trust-all-tools"], env=env, cwd="SCRATCH/home", size=None)
+time.sleep(10)
+r.attach(); time.sleep(600)
+
+=================== kcmp.sh
+T="/nix/store/7v8w4qyz2wsr251nkxzbcmhbrwlylg7f-tmux-3.8/bin/tmux -L w48k -f /dev/null"
+$T kill-server 2>/dev/null; sleep 1
+if [ "$1" = direct ]; then
+ $T new-session -d -s o -x 80 -y 24 'for i in $(seq 1 60); do echo history line $i; done; cd SCRATCH/home; env -i PATH=$PATH HOME=SCRATCH/home TMPDIR=SCRATCH/tmp TERM=xterm-256color KIRO_API_KEY=ksk-fakefakefakefakefakefake kiro-cli chat --v3 --trust-all-tools; sleep 600'
+else
+ $T new-session -d -s o -x 80 -y 24 "PATH=$PATH python3 /tmp/w48b/kdrive.py; sleep 600"
+fi
+sleep 24
+$T display -p -t o 'hist=#{history_size}'; $T capture-pane -p -t o -S - | grep -c "history line 1$"; $T capture-pane -p -t o | tail -6
