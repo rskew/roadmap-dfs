@@ -1,0 +1,79 @@
+W48.14 · claude 2.1.325 (/nix/store/3r7q2hj4y7lm0vx3bcnx8ncx7m7pk7qz-claude-code-2.1.325) in tmux 3.8, resumed hand-made transcript with CJK, emoji (ZWJ family, flag, VS16), a table with wide cells and a box
+Setup: HOME=/tmp/w48b/home (.claude.json onboarding done, fake ANTHROPIC_API_KEY approved, trust accepted); direct = claude in the pane, relay = Relay.start (background 8 s) then attach, in a pane of ROWSxCOLS; steps: initial, resize to +6 rows +24 cols, -4 rows -20 cols, back; each settled 4 s; compared by tmux capture-pane.
+Result: visible screen SAME direct vs relay at every step in all 6 runs: fullscreen 24x80 start=terminal, inline (CLAUDE_CODE_NO_FLICKER=0) 24x80 start=terminal, fullscreen and inline 24x80 start=40x120, fullscreen and inline 30x104 start=40x120. The wide table, CJK lines and emoji wrap at the pane width and the same cells in both.
+Not covered: a terminal other than tmux, a real model turn, a terminal that does not answer queries (tmux does).
+
+=================== setup
+import json, os, uuid
+H="/tmp/w48b/home"; W=H+"/work"; KEY="sk-ant-xxxxxxxxxxabcdefghijklmnopqrst"
+json.dump({"hasCompletedOnboarding":True,"theme":"dark","numStartups":9,"customApiKeyResponses":{"approved":[KEY[-20:]],"rejected":[]},
+ "bypassPermissionsModeAccepted":True,
+ "projects":{W:{"hasTrustDialogAccepted":True,"hasCompletedProjectOnboarding":True,"allowedTools":[]}}}, open(H+"/.claude.json","w"))
+os.makedirs(H+"/.claude",exist_ok=True)
+json.dump({"skipDangerousModePermissionPrompt":True}, open(H+"/.claude/settings.json","w"))
+d=H+"/.claude/projects/"+W.replace("/","-"); os.makedirs(d,exist_ok=True)
+SID="aaaaaaaa-0000-4000-8000-000000000002"
+wide = ("日本語の長い文章がここに入ります。端末の幅で折り返されるはずです。中文也一样，这一行很长，需要在终端宽度处换行。한국어 문장도 여기에 있습니다. "*2)
+emoji = "Status ✅ done 🚀 shipped 👨‍👩‍👧‍👦 family 🇯🇵 flag ❤️ heart ⚠️ warn 🧑🏽‍💻 dev — " * 4
+table = "\n".join(["| Task | 状態 | Owner | Notes |","|---|---|---|---|",
+  "| W48 | ✅ 完了 | 山田 | line wrapping in the chat after background sessions were added |",
+  "| W49 | 🚧 進行中 | Åsa | 長いメモ with mixed 幅 text that is wider than the terminal on purpose |"])
+box = "┌────────────────────────────────────────────────────────────┐\n│ box drawing line that is exactly sixty-two columns wide  │\n└────────────────────────────────────────────────────────────┘"
+reply = "Here is the summary.\n\n"+wide+"\n\n"+emoji+"\n\n"+table+"\n\n"+box+"\n\n- "+wide[:60]+"\n- "+emoji[:70]+"\n\n```\n"+("x"*100)+"\n```\n"
+lines=[]; parent=None
+def add(role,content):
+    global parent
+    u=str(uuid.uuid4())
+    m={"role":role,"content":content}
+    if role=="assistant": m.update({"id":"msg_"+u[:20],"type":"message","model":"claude-sonnet-4-5","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":10}})
+    lines.append({"parentUuid":parent,"isSidechain":False,"userType":"external","cwd":W,"sessionId":SID,"version":"2.1.325","type":role,"message":m,"uuid":u,"timestamp":"2026-11-19T10:00:0%dZ"%len(lines)})
+    parent=u
+add("user","Summarise the roadmap in a table, with emoji, 日本語 and a box.")
+add("assistant",[{"type":"text","text":reply}])
+open(d+"/"+SID+".jsonl","w").write("\n".join(json.dumps(l,ensure_ascii=False) for l in lines)+"\n")
+
+=================== drive
+import os, sys, time
+sys.path.insert(0, "/workspace/roadmap-dfs/.dfs/worktrees/W48/scripts")
+import ptyrelay
+ptyrelay.TAIL = 10**8
+opts = dict(a.split("=") for a in sys.argv[1:])
+CL = "/nix/store/3r7q2hj4y7lm0vx3bcnx8ncx7m7pk7qz-claude-code-2.1.325/bin/claude"
+env = {"PATH": "/usr/bin:/bin", "HOME": "/tmp/w48b/home", "TERM": "xterm-256color", "ANTHROPIC_API_KEY": "sk-ant-xxxxxxxxxxabcdefghijklmnopqrst"}
+if opts.get("inline"): env["CLAUDE_CODE_NO_FLICKER"] = "0"
+size = (40, 120) if opts.get("start") == "default" else None
+r = ptyrelay.Relay().start([CL, "--resume", "aaaaaaaa-0000-4000-8000-000000000002", "--dangerously-skip-permissions"], env=env, cwd="/tmp/w48b/home/work", size=size)
+time.sleep(8)
+for i in range(6): print("shell line %d" % i)
+sys.stdout.flush()
+r.attach(); time.sleep(600)
+
+=================== cmp
+import subprocess, sys, time, difflib
+T = ["/nix/store/7v8w4qyz2wsr251nkxzbcmhbrwlylg7f-tmux-3.8/bin/tmux", "-L", "w48b", "-f", "/dev/null"]
+CL = "/nix/store/3r7q2hj4y7lm0vx3bcnx8ncx7m7pk7qz-claude-code-2.1.325/bin/claude"
+def t(*a): return subprocess.run(T + list(a), capture_output=True, text=True).stdout
+rows, cols, mode, start = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4]
+xe = "CLAUDE_CODE_NO_FLICKER=0" if mode == "inline" else ""
+def run(kind):
+    t("kill-server"); time.sleep(1)
+    if kind == "direct":
+        cmd = ("cd /tmp/w48b/home/work && env -i PATH=/usr/bin:/bin HOME=/tmp/w48b/home TERM=xterm-256color %s "
+               "ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxabcdefghijklmnopqrst %s --resume aaaaaaaa-0000-4000-8000-000000000002 --dangerously-skip-permissions; sleep 600" % (xe, CL))
+    else:
+        cmd = "python3 /tmp/w48b/drive.py start=%s %s; sleep 600" % (start, "inline=1" if xe else "")
+    t("new-session", "-d", "-s", "o", "-x", str(cols), "-y", str(rows), cmd)
+    time.sleep(16)
+    shots = {"initial": t("capture-pane", "-p", "-t", "o")}
+    for name, (r2, c2) in [("wide", (rows + 6, cols + 24)), ("narrow", (rows - 4, cols - 20)), ("back", (rows, cols))]:
+        t("resize-window", "-t", "o", "-x", str(c2), "-y", str(r2)); time.sleep(4)
+        shots[name] = t("capture-pane", "-p", "-t", "o")
+    return shots
+d, r = run("direct"), run("relay")
+print(mode, "%dx%d" % (rows, cols), "start=" + start)
+for k in d:
+    if d[k] == r[k]: print(" ", k, "SAME"); continue
+    print(" ", k, "DIFFERENT")
+    print("".join(difflib.unified_diff(d[k].splitlines(1), r[k].splitlines(1), "direct", "relay", n=0)))
+if len(sys.argv) > 5:
+    print(d[sys.argv[5]]); print("-----relay"); print(r[sys.argv[5]])
