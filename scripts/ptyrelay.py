@@ -410,7 +410,9 @@ class Relay:
     def attach(self, idle=None, every=0.3):
         """Wire the real terminal to it until it ends or ctrl-] is pressed. Returns True if it
         was detached (still running), False if it ended. `idle()` runs about every `every` seconds
-        meanwhile, typing or not, on this thread: the screen's poll, which a chat would block."""
+        meanwhile, typing or not, on this thread: the screen's poll, which a chat would block.
+        The terminal is put in the modes the chat has set (alt screen, mouse, bracketed paste, focus)
+        and back to the roadmap's own when this returns, so after a detach the screen is as it was."""
         if not self.live:                       # it ended before anyone looked: `fit` has no pty to size
             return False
         stdin, stdout = sys.stdin.fileno(), sys.stdout.fileno()
@@ -420,6 +422,8 @@ class Relay:
 
         def fit(redraw=False):
             fd = self.fd                        # `_pump` sets it to None when the agent ends, even mid-attach
+            # `_pump` may also close it between this read and the ioctls below: `_try` hides the error, and
+            # only a descriptor number reused in that instant could be hit, which nothing here opens
             if fd is None:
                 return
             rows, cols, x, y = struct.unpack("HHHH", _winsize(stdout))
