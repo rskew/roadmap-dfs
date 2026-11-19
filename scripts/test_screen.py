@@ -1182,7 +1182,7 @@ class AFreshScreenOpensAtTheTopOfTheList(unittest.TestCase):
         ui.scr = ADoneTaskRecedesInTheList.Rec()
         ui.run_tag = lambda iid: ("", 0)
         ui.status_attr = lambda status: 0
-        ui.list_scroll = 0
+        self.assertEqual(ui.list_scroll, 0, "a fresh screen opens with its window at the top")
         saved_look = dict(TUI.LOOK)
         TUI.LOOK.update(chrome=curses.A_DIM)
         try:
