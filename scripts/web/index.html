@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="{{project}}">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png{{icon_query}}">
-<link rel="manifest" href="/manifest.json{{icon_query}}">
+<link rel="manifest" crossorigin="use-credentials" href="/manifest.json{{icon_query}}">
 <link rel="icon" href="data:,">
 <title>{{project}}</title>
 <link rel="stylesheet" href="/design.css">
@@ -2443,7 +2443,7 @@ function listen() {
   es.onerror = () => { $("#live").hidden = false; };     // the browser reconnects by itself
 }
 if ("serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => {});
-const NO_INSTALL = "Chrome on Android installs this page only over https (or on localhost), and this address is plain http. See the README, “The web page on a phone”.";
+const NO_INSTALL = "Chrome on Android installs this page only over https (or on localhost), and this address is plain http. The https routes are in `python3 scripts/web.py --help`.";
 if (!isSecureContext && /Android/.test(navigator.userAgent) && !sessionStorage.getItem("noInstall")) {
   sessionStorage.setItem("noInstall", "1"); toast(NO_INSTALL, true);
 }

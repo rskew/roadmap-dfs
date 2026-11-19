@@ -52,6 +52,8 @@ THE INSTALLED APP'S ICON is `.dfs/icon`, one picture of the same kinds and size 
 POST /api/icon (base64 in JSON; empty goes back to the built-in icons) and served at GET /icon and at every
 `/icon-*.png` and `/apple-touch-icon.png` while it exists. The manifest lists it, as an "any" icon and a
 maskable one, and the page's links carry its version. The project dialog cuts the chosen picture square and posts a 1024 px png.
+The built-in icon is drawn in `web/icon.svg`; the 192, 512 and 180 px PNGs (`icon-192`, `icon-512`, `apple-touch-icon`) are
+its render in headless Chromium at those sizes, so redraw the svg and render again to change it.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the
@@ -1549,8 +1551,26 @@ def lan_address():
         return "127.0.0.1"
 
 
+HTTPS_ROUTES = """\
+The page on a phone: Chrome on Android offers Install only over https (or on localhost).
+
+  # a TLS proxy on the tailnet: the server stays on loopback, the proxy forwards its own name
+  python3 scripts/web.py --allow-host <machine>.<tailnet>.ts.net
+  tailscale serve --bg <port>   # the port --port gives (DFS_WEB_PORT, 8765 if unset)
+
+  # or serve https yourself, with a certificate the phone trusts (mkcert, a real domain)
+  python3 scripts/web.py --host 0.0.0.0 --cert cert.pem --key key.pem
+
+A self-signed certificate the phone does not trust will not do: Chrome refuses to install
+from it. --allow-host can be given more than once, or as DFS_WEB_ALLOW_HOST, comma-separated;
+the page the terminal screen serves takes it only as DFS_WEB_ALLOW_HOST.
+"""
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
+                                 formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 epilog=HTTPS_ROUTES)
     ap.add_argument("--host", default=default_host(),
                     help="127.0.0.1 (this machine only, the default) or 0.0.0.0 (the network: "
                          "no login, and the work and the chat start agents, and the page can sign "
@@ -1581,7 +1601,7 @@ def main(argv=None):
         print("  this machine only; --host 0.0.0.0 opens it to the network")
     if handle.url.startswith("http:") and handle.public:
         print("  to install it as an app, a browser wants https (or localhost): --cert/--key, "
-              "or see the README")
+              "or see web.py --help")
     if handle.public:
         print("  no login: anyone on this network can answer, correct and accept"
               + (", and start agents (the work, the chat), which run with their permission "
