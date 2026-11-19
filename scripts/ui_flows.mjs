@@ -1579,6 +1579,50 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     same(errors, [], "no page errors");
   },
 
+  // Up and Down in the chat box step through the messages sent in that chat, and give the draft back after the newest.
+  // Keys are sent as synthetic keydowns and the caret is set by hand (this chromium's keyboard moves no caret): the page
+  // cancels the key's default only when it steps, so `defaultPrevented` says whether it did.
+  async chat_recall(b) {
+    const { page, errors } = await open(b, DESKTOP);
+    const state = { scope: "W9", messages: [{ role: "agent", text: "hello" }, { role: "you", text: "first question" }, { role: "agent", text: "answer" }, { role: "you", text: "second\nquestion" }, { role: "agent", text: "more" }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    await task(page, "W9");
+    await page.click("button.desk[data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length >= 5);
+    const box = () => page.inputValue("#chat-input");
+    const caret = n => page.$eval("#chat-input", (e, n) => { const at = n === "end" ? e.value.length : n; e.setSelectionRange(at, at); }, n);
+    const key = (k, init = {}) => page.$eval("#chat-input", (e, [k, init]) => { const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init }); e.dispatchEvent(ev); return ev.defaultPrevented; }, [k, init]);
+    await page.fill("#chat-input", "my draft");
+    await caret("end");
+    assert(!(await key("ArrowUp")), "Up with the caret at the end of a draft is left to move the caret");
+    same(await box(), "my draft", "and the draft stays");
+    await caret(0);
+    assert(await key("ArrowUp", { shiftKey: true }) === false, "Shift+Up is left to select");
+    assert(await key("ArrowUp"), "Up at the start of a draft steps");
+    same(await box(), "second\nquestion", "to the last message sent");
+    same(await page.$eval("#chat-input", e => e.selectionStart), "second\nquestion".length, "with the caret at its end");
+    assert(!(await key("ArrowUp")), "Up on the last line of a two-line message is left to move the caret");
+    await caret(3);
+    assert(await key("ArrowUp"), "Up on its first line steps back");
+    same(await box(), "first question", "to the one before");
+    assert(await key("ArrowUp"), "Up at the oldest is held");
+    same(await box(), "first question", "and shows the same");
+    assert(await key("ArrowDown"), "Down steps forward");
+    same(await box(), "second\nquestion", "to the newer one");
+    await caret(3);
+    assert(!(await key("ArrowDown")), "Down on the first line of a two-line message is left to move the caret");
+    await caret("end");
+    assert(await key("ArrowDown"), "Down past the newest steps");
+    same(await box(), "my draft", "and gives the draft back");
+    assert(!(await key("ArrowDown")), "Down with nothing recalled is a plain key");
+    await page.fill("#chat-input", ""); await caret(0);
+    assert(await key("ArrowUp"), "Up in an empty box steps");
+    same(await box(), "second\nquestion", "to the last message");
+    await page.fill("#chat-input", "second\nquestion!"); await caret("end");
+    assert(!(await key("ArrowDown")), "an edited message is a draft again: Down no longer steps");
+    same(errors, [], "no page errors");
+  },
+
   // The chat box on a touch screen: Enter is a new line, the input row keeps its width when Stop shows, and Newest returns a scrolled-up log to its end.
   async chat_touch(b) {
     const { page, errors } = await open(b, { ...PHONE, viewport: { width: 360, height: 640 } });

@@ -398,6 +398,9 @@ class Flows(unittest.TestCase):
     def test_the_chat_box_takes_enter_shift_enter_and_a_draft_on_a_desktop_keyboard(self):
         self.flow("chat_keys")
 
+    def test_up_and_down_in_the_chat_box_step_through_the_messages_sent(self):
+        self.flow("chat_recall")
+
     def test_the_chat_box_on_a_touch_screen_keeps_enter_a_new_line_and_has_a_newest_button(self):
         self.flow("chat_touch")
 

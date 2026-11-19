@@ -1773,6 +1773,11 @@ function correctForm(id) {
 /* ── chat: basic, one agent turn at a time ─────────────────────────────────── */
 const chatOn = () => !!(S.work && S.work.enabled);
 const CHAT = { scope: null, busyT: null, last: "", fresh: false, follow: false };
+// Up and Down in the box step through what was sent in this chat, as a shell does. `sent` is the `you` messages, oldest first;
+// `at` is the one showing (-1: none, the box is the reader's own); `shown` is its text, so an edit is known; `draft` is what
+// was typed before the first Up and comes back when Down passes the newest.
+const RECALL = { sent: [], at: -1, shown: "", draft: "" };
+const recallEnd = () => { RECALL.at = -1; RECALL.shown = ""; RECALL.draft = ""; };
 const chatKey = () => "chat:" + CHAT.scope;
 // What was typed and not sent is kept for the tab, per chat, so closing the dialog by accident (or Back) loses nothing.
 const chatDraft = (scope, text) => {
@@ -1798,6 +1803,7 @@ function chatDraw(st) {
   const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
   if (sig === CHAT.last) return;
   CHAT.last = sig;
+  RECALL.sent = st.messages.filter(m => m.role === "you" && m.text).map(m => m.text).filter((t, i, a) => i === 0 || t !== a[i - 1]);
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
   // The backend's own state, apart from the messages: a usage limit stays until it lifts or a turn is answered.
   const be = st.backend && st.backend.limit ? st.backend : null;
@@ -1882,7 +1888,7 @@ async function chatBegin(scope, fresh) {
   chatLoad();
 }
 function chatOpen(scope, fresh) {
-  CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false);
+  CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false); RECALL.sent = []; recallEnd();
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
   $("#chat-log").innerHTML = ""; $("#chat-input").value = chatDraft(scope); $("#chat-agent").hidden = true;
   // The last chat's buttons are not this one's: Send waits for the first draw, which says whether a turn is running.
@@ -1900,6 +1906,7 @@ $("#chat-form").addEventListener("submit", async ev => {
   try { const st = await api("/api/chat/send", { scope: CHAT.scope, message }); chatDraw(st); chatButtons(st);
     // what was typed while the request was in flight stays; only the sent text is cleared
     if (input.value.trim() === message) { input.value = ""; chatGrow(); chatDraft(CHAT.scope, ""); }
+    recallEnd();
     chatLoad();
   }
   catch (e) {
@@ -1919,7 +1926,7 @@ $("#chat-stop").addEventListener("click", async () => {
   finally { $("#chat-stop").disabled = false; }
 });
 attachTo($("#chat-input"), true);
-$("#chat-input").addEventListener("input", ev => { chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); });
+$("#chat-input").addEventListener("input", ev => { chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, ev.target.value); if (ev.target.value !== RECALL.shown) recallEnd(); });
 // The text box grows with what is typed, up to its CSS max-height (then it scrolls), and shrinks back when cleared.
 function chatGrow() {
   const el = $("#chat-input"), log = $("#chat-log");
@@ -1938,6 +1945,31 @@ $("#chat-input").placeholder = chatEnterSends() ? "Ask about this. Enter sends, 
 $("#chat-input").addEventListener("keydown", ev => {
   if (ev.key !== "Enter" || imeEnter(ev)) return;
   if (ev.metaKey || ev.ctrlKey || (chatEnterSends() && !ev.shiftKey)) { ev.preventDefault(); $("#chat-form").requestSubmit(); }
+});
+// Up recalls the last message sent when the box is empty or the caret is at its very start (so a draft's own lines still
+// move the caret), and goes on to older ones while a recalled message is showing and unedited, from its first line. Down goes
+// back toward the newest from its last line, and past it restores the draft. Shift, Alt, Ctrl and Cmd keep their own meaning.
+$("#chat-input").addEventListener("keydown", ev => {
+  if ((ev.key !== "ArrowUp" && ev.key !== "ArrowDown") || ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey || imeEnter(ev)) return;
+  const box = ev.currentTarget, v = box.value, from = box.selectionStart;
+  if (from !== box.selectionEnd) return;
+  const showing = RECALL.at >= 0 && v === RECALL.shown;
+  let to;
+  if (ev.key === "ArrowUp") {
+    if (v.lastIndexOf("\n", from - 1) >= 0 && from > 0) return;                  // not on the first line
+    if (!showing && v !== "" && from !== 0) return;                                // a draft keeps Up for its caret
+    to = showing ? RECALL.at - 1 : RECALL.sent.length - 1;
+    if (to < 0) { ev.preventDefault(); return; }                                    // already the oldest
+    if (!showing) RECALL.draft = v;
+  } else {
+    if (!showing || v.indexOf("\n", from) >= 0) return;                            // nothing recalled, or not on the last line
+    to = RECALL.at + 1;
+  }
+  ev.preventDefault();
+  if (to >= RECALL.sent.length) { box.value = RECALL.draft; recallEnd(); }
+  else { RECALL.at = to; RECALL.shown = box.value = RECALL.sent[to]; }
+  box.setSelectionRange(box.value.length, box.value.length);
+  chatGrow(); if (CHAT.scope) chatDraft(CHAT.scope, box.value === RECALL.shown ? RECALL.draft : box.value);
 });
 // The colour can change under an open page (another tab, `.dfs/theme` by hand, a rename
 // that moves the one made from the name): the state says what it is now.
