@@ -52,6 +52,8 @@ THE INSTALLED APP'S ICON is `.dfs/icon`, one picture of the same kinds and size 
 POST /api/icon (base64 in JSON; empty goes back to the built-in icons) and served at GET /icon and at every
 `/icon-*.png` and `/apple-touch-icon.png` while it exists. The manifest lists it, as an "any" icon and a
 maskable one, and the page's links carry its version. The project dialog cuts the chosen picture square and posts a 1024 px png.
+The built-in icon is drawn in `web/icon.svg`; the 192, 512 and 180 px PNGs (`icon-192`, `icon-512`, `apple-touch-icon`) are
+its render in headless Chromium at those sizes, so redraw the svg and render again to change it.
 
 THE PROJECT'S NAME is `.dfs/title`, made from git (the `origin` remote's name, else the
 directory's) the first time it is asked for and the name from then on; it is edited on the
@@ -1554,7 +1556,7 @@ The page on a phone: Chrome on Android offers Install only over https (or on loc
 
   # a TLS proxy on the tailnet: the server stays on loopback, the proxy forwards its own name
   python3 scripts/web.py --allow-host <machine>.<tailnet>.ts.net
-  tailscale serve --bg 8765
+  tailscale serve --bg <port>   # the port --port gives (DFS_WEB_PORT, 8765 if unset)
 
   # or serve https yourself, with a certificate the phone trusts (mkcert, a real domain)
   python3 scripts/web.py --host 0.0.0.0 --cert cert.pem --key key.pem

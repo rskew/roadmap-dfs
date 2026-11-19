@@ -35,7 +35,7 @@ is in, fixed behind the page under a 90% veil of `--paper`, so the picture shows
 The installed app's **icon** is likewise the project's own: `.dfs/icon` (one picture, not one for each mode) replaces the
 built-in icons in the manifest and the home-screen link, chosen in the same dialog.
 Everything else is paper, panel, ink, muted and two rules. Square corners, no shadows, no
-icons but the theme switch and the dfs mark (`.mark`, the app icon's four shapes in ink, top left of the bar). The one flourish is the two-pixel line of the three, under the bar.
+icons but the theme switch and the dfs mark (`.mark`, the app icon's drawing in ink: a stepped path with a node, a stopped branch and an end, top left of the bar). The one flourish is the two-pixel line of the three, under the bar.
 
 ## Tokens
 

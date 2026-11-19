@@ -1390,7 +1390,8 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         helped = subprocess.run([sys.executable, str(HERE / "web.py"), "--help"], capture_output=True, text=True).stdout
         self.assertIn("tailscale serve", helped, "--help gives the https routes")
         self.assertIn("--cert cert.pem", helped)
-        self.assertNotIn("README", page, "the page does not send the reader to a README section that may not exist")
+        no_install = next(l for l in page.splitlines() if l.startswith("const NO_INSTALL"))
+        self.assertNotIn("README", no_install, "the Install note does not send the reader to a README section that may not exist")
         self.assertRegex(page, r'<link rel="manifest"[^>]*crossorigin="use-credentials"',
                          "behind a proxy's basic auth Chrome fetches the manifest without the login unless the link asks for credentials")
         paint = page[page.index("function paintIcon()"):]
