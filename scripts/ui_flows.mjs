@@ -1591,6 +1591,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length >= 5);
     const box = () => page.inputValue("#chat-input");
     const caret = n => page.$eval("#chat-input", (e, n) => { const at = n === "end" ? e.value.length : n; e.setSelectionRange(at, at); }, n);
+    // An edit as the page sees it: the new text and an input event (the typing of this chromium is not steady after a recall).
+    const edit = text => page.$eval("#chat-input", (e, text) => { e.value = text; e.dispatchEvent(new Event("input", { bubbles: true })); }, text);
     const key = (k, init = {}) => page.$eval("#chat-input", (e, [k, init]) => { const ev = new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true, ...init }); e.dispatchEvent(ev); return ev.defaultPrevented; }, [k, init]);
     await page.fill("#chat-input", "my draft");
     await caret("end");
@@ -1618,8 +1620,20 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await page.fill("#chat-input", ""); await caret(0);
     assert(await key("ArrowUp"), "Up in an empty box steps");
     same(await box(), "second\nquestion", "to the last message");
-    await page.fill("#chat-input", "second\nquestion!"); await caret("end");
+    // A message that arrives before the one showing (a steer is put into the middle of the log) must not shift the place.
+    state.messages.unshift({ role: "you", text: "oldest steer" });
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length >= 6, null, { timeout: 10000 });
+    same(await box(), "second\nquestion", "a redraw leaves the recalled message in the box");
+    await caret(0);
+    assert(await key("ArrowUp"), "Up after the redraw steps");
+    same(await box(), "first question", "to the message before the one showing, not past it");
+    await edit("second\nquestion!"); await caret("end");
     assert(!(await key("ArrowDown")), "an edited message is a draft again: Down no longer steps");
+    await edit(""); await caret(0);
+    state.messages = [{ role: "agent", text: "hello" }];
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 1, null, { timeout: 10000 });
+    assert(await key("ArrowUp"), "Up in a chat with nothing sent is held");
+    same(await box(), "", "and the box stays empty");
     same(errors, [], "no page errors");
   },
 

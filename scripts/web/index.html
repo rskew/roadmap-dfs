@@ -1803,7 +1803,13 @@ function chatDraw(st) {
   const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
   if (sig === CHAT.last) return;
   CHAT.last = sig;
+  const recalled = RECALL.at;
   RECALL.sent = st.messages.filter(m => m.role === "you" && m.text).map(m => m.text).filter((t, i, a) => i === 0 || t !== a[i - 1]);
+  // A message that came in before the one showing moves its place: find it again by its text (the nearest if it is there twice).
+  if (recalled >= 0) {
+    const at = RECALL.sent.map((t, i) => t === RECALL.shown ? i : -1).filter(i => i >= 0).sort((a, b) => Math.abs(a - recalled) - Math.abs(b - recalled))[0];
+    if (at === undefined) recallEnd(); else RECALL.at = at;
+  }
   $("#chat-agent").textContent = st.agent || ""; $("#chat-agent").hidden = !st.agent;
   // The backend's own state, apart from the messages: a usage limit stays until it lifts or a turn is answered.
   const be = st.backend && st.backend.limit ? st.backend : null;
