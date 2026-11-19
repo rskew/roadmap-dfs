@@ -1146,6 +1146,34 @@ class ANodeSaysHowFarItIs(unittest.TestCase):
                          "◇ confirmed by you, not built · under W1.1")
 
 
+class AFreshScreenOpensAtTheTopOfTheList(unittest.TestCase):
+    """The list is drawn upside down, so a cursor on item 0 put a long list's window at its bottom."""
+
+    def test_a_long_list_starts_with_its_window_and_cursor_on_the_top_row(self):
+        items = [item("W%d" % n) for n in range(1, 41)]
+        saved = TUI.load
+        TUI.load = lambda: {"items": list(items)}
+        try:
+            ui = TUI.UI(None)
+        finally:
+            TUI.load = saved
+        rows = ui.list_rows()
+        self.assertEqual(rows[0], ("item", ui.sel), "the cursor is on the top row")
+        self.assertEqual(ui.current()["id"], "W40")
+        ui.scr = ADoneTaskRecedesInTheList.Rec()
+        ui.run_tag = lambda iid: ("", 0)
+        ui.status_attr = lambda status: 0
+        ui.list_scroll = 0
+        saved_look = dict(TUI.LOOK)
+        TUI.LOOK.update(chrome=curses.A_DIM)
+        try:
+            ui.draw_list(0, 10)
+        finally:
+            TUI.LOOK.clear()
+            TUI.LOOK.update(saved_look)
+        self.assertEqual(ui.list_scroll, 0, "the window stays at the top")
+
+
 class ADoneTaskRecedesInTheList(unittest.TestCase):
     """The list told a finished task from an open one by the colour of one word."""
 
