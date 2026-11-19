@@ -1387,7 +1387,10 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         page = self.call("GET", "/")[1].decode()
         self.assertIn("!isSecureContext && /Android/", page, "an Android page on plain http says why Install is missing")
         self.assertIn("isSecureContext ? \"\" : `<p class=\"muted\" style=\"margin:0\">${esc(NO_INSTALL)}</p>`", page, "the project-name dialog repeats the note")
-        self.assertIn("--allow-host", (HERE.parent / "README.md").read_text(), "the README names the https route")
+        helped = subprocess.run([sys.executable, str(HERE / "web.py"), "--help"], capture_output=True, text=True).stdout
+        self.assertIn("tailscale serve", helped, "--help gives the https routes")
+        self.assertIn("--cert cert.pem", helped)
+        self.assertNotIn("README", page, "the page does not send the reader to a README section that may not exist")
 
     def task(self):
         return self.call("GET", "/api/task/W1")[1]

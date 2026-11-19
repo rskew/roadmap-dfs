@@ -1549,8 +1549,26 @@ def lan_address():
         return "127.0.0.1"
 
 
+HTTPS_ROUTES = """\
+The page on a phone: Chrome on Android offers Install only over https (or on localhost).
+
+  # a TLS proxy on the tailnet: the server stays on loopback, the proxy forwards its own name
+  python3 scripts/web.py --allow-host <machine>.<tailnet>.ts.net
+  tailscale serve --bg 8765
+
+  # or serve https yourself, with a certificate the phone trusts (mkcert, a real domain)
+  python3 scripts/web.py --host 0.0.0.0 --cert cert.pem --key key.pem
+
+A self-signed certificate the phone does not trust will not do: Chrome refuses to install
+from it. --allow-host can be given more than once, or as DFS_WEB_ALLOW_HOST, comma-separated;
+the page the terminal screen serves takes it only as DFS_WEB_ALLOW_HOST.
+"""
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
+                                 formatter_class=argparse.RawDescriptionHelpFormatter,
+                                 epilog=HTTPS_ROUTES)
     ap.add_argument("--host", default=default_host(),
                     help="127.0.0.1 (this machine only, the default) or 0.0.0.0 (the network: "
                          "no login, and the work and the chat start agents, and the page can sign "
@@ -1581,7 +1599,7 @@ def main(argv=None):
         print("  this machine only; --host 0.0.0.0 opens it to the network")
     if handle.url.startswith("http:") and handle.public:
         print("  to install it as an app, a browser wants https (or localhost): --cert/--key, "
-              "or see the README")
+              "or see web.py --help")
     if handle.public:
         print("  no login: anyone on this network can answer, correct and accept"
               + (", and start agents (the work, the chat), which run with their permission "
