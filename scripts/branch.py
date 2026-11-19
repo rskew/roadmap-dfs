@@ -144,10 +144,11 @@ def _has_branch(name):
 
 
 def task_paths(task):
-    """The files that are a task's own, as repo-relative paths: its file, its parts and
-    its archive and the archive's parts."""
+    """The files that are a task's own, as repo-relative paths: its file, its log file, its
+    parts (whose log files sit beside them) and its archive and the archive's parts."""
     s = dfs_paths.STATE_DIR_NAME
-    return ["%s/items/%s.md" % (s, task), "%s/items/%s" % (s, task),
+    return ["%s/items/%s.md" % (s, task), "%s/items/%s.log.md" % (s, task),
+            "%s/items/%s" % (s, task),
             "%s/archive/items/%s.md" % (s, task), "%s/archive/items/%s" % (s, task)]
 
 

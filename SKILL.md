@@ -17,7 +17,10 @@ session carries it out.
    It names the tool's scripts directory: `<scripts>` in this file means that
    directory, wherever roadmap-dfs is installed.
 2. Read the task file, `.dfs/items/<task>.md`, whole: `## Goal`, `## Background` if
-   present, `## Tree`, `## Log`.
+   present, `## Tree`. Its log is in `.dfs/items/<task>.log.md`, which the briefing names
+   with its size: open it only for an entry's full text (a raise, an answer, a
+   correction), since the briefing already says where the task stands. A task older than
+   that still has a `## Log` in the file; `tree.py splitlog <task>` moves it across.
 3. **The author first, then the critic.** An answer to a raise, a correction at a
    node, or a critic's backtrack is the first work; the briefing lists each with what
    it prunes. A picture or file the author attached is named in their words as
@@ -52,7 +55,7 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   pointers: a chain of steps names the one before; alternatives name the same parent.
   No `Parent:` means a child of the task.
 - **On a branch other than main or master**, your briefing names the tag and the one
-  part you write (`.dfs/items/<task>/<tag>.md`) and the next id (`W13.1@<tag>`). Every
+  part you write (`.dfs/items/<task>/<tag>.md`, and its log file `.dfs/items/<task>/<tag>.log.md`) and the next id (`W13.1@<tag>`). Every
   node you add and every log entry goes there; read every other part of the task too,
   since the task is all of them. You may edit a node in another part to determine it,
   never add to one. Commit subjects start with the tagged id (`W13.1@<tag>: <what it did>`).
@@ -123,9 +126,9 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
 - Add nodes freely and keep them small. After each node, re-plan the open nodes ahead:
   edit, add or refute them. Backing up is normal.
 - **`tree.py start` is a hint kept in the working copy, and a restore of the task file
-  drops it.** `git checkout -- .dfs/items/<task>.md` puts `Status: open` back, and it
-  takes any log line written since with it, since the log is in the same file; only
-  `git stash` then `pop` brings it back. That is accepted, not guarded. Nothing decides
+  drops it.** `git checkout -- .dfs/items/<task>.md` puts `Status: open` back; only
+  `git stash` then `pop` brings it back. A log line written since is in the log file,
+  which a restore of the task file leaves. That is accepted, not guarded. Nothing decides
   on `started` (every derivation reads it as `open`); it shows as a mark on the screens
   and makes the author confirm before a correction prunes a sibling that holds work. A
   session cut off mid-node is still told by the uncommitted code in the briefing and its
@@ -141,10 +144,14 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   `tree.py shelve <task> [<ids>]`, leaving `Approach: archived.` (a Determination keeps
   its first clause). `dfs_tree.load` and the TUI put the words back. Status and Parent
   never move.
-- **The log only grows, but its past may move.** `tree.py compact <task>` moves
-  every entry older than the author's last answer, correction or accept, verbatim, to
-  the archive's end under `**Log**:`. Every count is read through `dfs_tree.load`,
-  which merges them back, so nothing the briefing says changes. Stage both files.
+- **The log only grows, but its past may move.** New entries go to the log file,
+  `.dfs/items/<task>.log.md` (`<task>/<tag>.log.md` on a branch), through `tree.py log`;
+  edit it by hand never. `tree.py compact <task>` moves every entry of the file, or of
+  an old task's `## Log`, older than the author's last answer, correction or accept,
+  verbatim, to the archive's end under `**Log**:`. `tree.py splitlog <task>` moves an old
+  task's whole `## Log` to the log file. Every count is read through `dfs_tree.load`,
+  which merges them back, so nothing the briefing says changes. Stage every file the
+  command changed.
 
 ## Ending a node
 
@@ -213,7 +220,8 @@ merge, cherry-pick, revert or rebase of theirs left unfinished in the checkout i
 branch's commits, so cite a node by its id or a commit by its subject in Evidence, never
 by a hash that would dangle once the branch is merged and deleted. Until then a task in
 flight has its current file only on its branch: the default branch's copy is stale or
-empty, so to read another task's tree or log use `git show dfs/<task>:.dfs/items/<task>.md`.
+empty, so to read another task's tree use `git show dfs/<task>:.dfs/items/<task>.md`, and its log, which new
+entries keep in a file beside it, `git show dfs/<task>:.dfs/items/<task>.log.md`.
 
 Two cases have no branch: a first run while the checkout is off `main`/`master`, and a repo
 with no commit yet. Then the item is worked in place, on whatever is checked out, and

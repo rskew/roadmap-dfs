@@ -347,6 +347,8 @@ def metrics(trees):
                 m["%s_sessions" % (a[0] if a[:1] in (["critic"], ["review"]) else "work")] += 1
         m["open_raises"] += len(dfs_tree.open_raises(t))
         m["entries"] += progress(t)
+        # What a session reads by default: the parts. The log file is opened only by name, so
+        # it is not counted in `chars` and `tokens`.
         m["chars"] += sum(len(p.read_text()) for p in dfs_tree.part_files(t["task"]))
     m["chars"] += len(read_roadmap())
     m["tokens"] = m["chars"] // 4
@@ -556,12 +558,29 @@ COMPACT_NOTE_TOKENS = 1_000
 def _compact_note(task) -> str:
     t = dfs_tree.load(task)
     cut = dfs_tree.log_cutoff(t["log"])
-    n = sum(len(e["text"]) for e in t["log"] if e["ts"] < cut) // 4
+    n = sum(len(e["text"]) for e in t["log"] if e["ts"] < cut and not e.get("archived")) // 4
     if n < COMPACT_NOTE_TOKENS:
         return ""
     return (" — ~%s tokens of its Log are older than the author's last word: "
             "`tree.py compact %s` moves them to the archive, and the archive goes in "
             "the same commit" % (f"{n:,}", task))
+
+
+def _log_note(task, path) -> str:
+    """The sentence that says where the log is, in the briefing's line about the task file:
+    in its own file when the task has one (named with its size, never loaded here), else
+    in the task file itself."""
+    files = [lp for lp in (dfs_tree.log_part(task, g) for g in dfs_tree.part_tags(task))
+             if lp.exists()]
+    if not files:
+        return "its Log what everyone has said about it."
+    own = [(dfs_paths.rel(lp), len(lp.read_text()) // 4) for lp in files]
+    where = " and ".join("`%s` (~%s tokens)" % (r, f"{n:,}") for r, n in own)
+    held = ("its newer log entries are not in it but in %s, and its older ones are in its "
+            "`## Log`, which you read with it. " if "Log" in dfs_tree.load(task)["sections"]
+            else "its log is not in it but in %s. ") % where
+    return (held + "Open the log file only for an entry's full text (a raise, an answer, "
+            "a correction), as it is long and the briefing already says where the task stands.")
 
 
 def _parts_note(task, path):
@@ -622,7 +641,7 @@ def brief(task: str) -> str:
            "## Your briefing — %s" % task, "",
            "- **Status**: %s — %s" % (st["status"], st["why"]),
            "- **Your task file is `%s`** (%s). Read it next: its Tree is the state of the "
-           "work, its Log what everyone has said about it." % (rel, _size_note(task, path)),
+           "work, %s" % (rel, _size_note(task, path), _log_note(task, path)),
            ] + _parts_note(task, path) + [
            "- **The tool's scripts are in `%s`**: `<scripts>` in the skill means that "
            "directory." % dfs_paths.rel(dfs_paths.SCRIPTS),
@@ -731,8 +750,10 @@ def brief(task: str) -> str:
     for p in dfs_tree.part_files(task):   # carried is not refused, so is not listed
         rel = p.relative_to(items_dir)
         arc = arc_dir / rel
-        mine = p.read_text() + "\n" + (arc.read_text() if arc.is_file() else "")
-        held = set(dfs_tree.ATTACHED_REF.findall(_at_head(p) + "\n" + _at_head(arc)))
+        lg = dfs_tree.log_part(task, dfs_tree.part_of(str(rel))[1])   # the log file names attachments too
+        mine = p.read_text() + "\n" + (arc.read_text() if arc.is_file() else "") \
+            + "\n" + (lg.read_text() if lg.is_file() else "")
+        held = set(dfs_tree.ATTACHED_REF.findall(_at_head(p) + "\n" + _at_head(arc) + "\n" + _at_head(lg)))
         loose += [n for n in dfs_tree.untracked_artefacts(mine) if n not in held and n not in loose]
     if loose:
         out += ["### Attachments to commit", "",

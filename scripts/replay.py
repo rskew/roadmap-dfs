@@ -840,7 +840,7 @@ def original_lines(repo, task):
     node's title and the head of its Determination, and the lines of each review and critic
     entry in its log (the findings: `W55.2 added: ...`), from the task file and its archive."""
     lines = set()
-    for rel in (f".dfs/items/{task}.md", f".dfs/archive/items/{task}.md"):
+    for rel in (f".dfs/items/{task}.md", f".dfs/items/{task}.log.md", f".dfs/archive/items/{task}.md"):
         try:
             text = (Path(repo) / rel).read_text()
         except OSError:
@@ -931,17 +931,25 @@ def score(dest, task, repo=None):
 
 
 def task_logs(dest, task):
-    """The texts of a replay's task file that hold the runner's log: the clone's, its worktree's
+    """The texts of a replay's task that hold the runner's log: the clone's, its worktree's
     and what `main` and the item's branch committed (a replay's run directories have no console.log,
-    and the log is what says which session was a work, a review or a critic)."""
-    dest, rel = Path(dest), f".dfs/items/{task}.md"
+    and the log is what says which session was a work, a review or a critic). The log is in the
+    log file beside each part (`<task>.log.md`, `<task>/<tag>.log.md`), and an older task still has
+    it in the task file, so both are read."""
+    dest, items = Path(dest), ".dfs/items"
+    rels = [f"{items}/{task}.md", f"{items}/{task}.log.md"]
     texts = []
-    for f in [dest / rel, *dest.glob(f".dfs/worktrees/*/{rel}")]:
-        try:
-            texts.append(f.read_text(errors="replace"))
-        except OSError:
-            pass
-    return texts + [git(dest, "show", f"{ref}:{rel}", check=False) for ref in ("main", f"dfs/{task}")]
+    for root in [dest, *dest.glob(".dfs/worktrees/*")]:
+        for f in [root / r for r in rels] + sorted((root / items / task).glob("*.log.md")):
+            try:
+                texts.append(f.read_text(errors="replace"))
+            except OSError:
+                pass
+    for ref in ("main", f"dfs/{task}"):
+        tagged = git(dest, "ls-tree", "--name-only", ref, f"{items}/{task}/", check=False).split()
+        for rel in rels + [t for t in tagged if t.endswith(".log.md")]:
+            texts.append(git(dest, "show", f"{ref}:{rel}", check=False))
+    return texts
 
 
 def merged(dest, task):

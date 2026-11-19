@@ -437,6 +437,30 @@ class AppendLog(InARepo):
         with self.assertRaises(ValueError):
             dfs_tree.append_log("W1", "assume")
 
+    def test_a_new_entry_goes_to_the_log_file_and_load_still_counts_it_with_the_old_ones(self):
+        old = ("- 2026-09-25T09:00:00Z · session · work\n"
+               "- 2026-09-25T09:03:00Z · raise · W1.1\n  which?\n")
+        self.write(task(node(1), old))
+        part = self.root / ".dfs/items/W1.md"
+        before = part.read_text()
+        ts = dfs_tree.append_log("W1", "answer", ["2026-09-25T09:03:00Z"], "this")
+        self.assertEqual(part.read_text(), before)   # a plain read of the task shows no new entry
+        log = (self.root / ".dfs/items/W1.log.md").read_text()
+        self.assertIn("%s · answer" % ts, log)
+        self.assertNotIn("09:00:00Z", log)            # the old entries stay where they were
+        t = dfs_tree.load("W1")
+        self.assertEqual([e["kind"] for e in t["log"]], ["session", "raise", "answer"])
+        self.assertEqual(dfs_tree.open_raises(t), [])
+        self.assertEqual(dfs_tree.part_of("W1.log.md"), None)   # not a task part
+        self.assertEqual(dfs_tree.part_tags("W1"), [""])
+
+    def test_a_task_with_no_log_file_reads_as_before_and_a_new_part_has_no_log_section(self):
+        self.write(task(node(1), "- 2026-09-25T09:00:00Z · session · work\n"))
+        self.assertEqual(len(dfs_tree.load("W1")["log"]), 1)
+        self.assertNotIn("## Log", dfs_tree.new_part("W1", "fx"))
+        got = dfs_tree.create_task("fresh")
+        self.assertNotIn("## Log", (self.root / ".dfs/items" / (got + ".md")).read_text())
+
 
 class IssuesNameAFinding(InARepo):
     """25 of 97 `review · issues` and 4 of 14 `critic · issues` entries in the real logs
@@ -489,8 +513,8 @@ class AtomicWrites(InARepo):
     def test_a_temp_file_a_killed_write_left_is_swept_by_the_next_write_once_it_is_stale(self):
         self.write(task(node(1, "open", extra="Approach: go on\n"), self.LOG))
         items = self.root / ".dfs" / "items"
-        old, fresh = items / ".W1.md.abcd1234", items / ".W1.md.wxyz5678"
-        other = items / ".W2.md.abcd1234"
+        old, fresh = items / ".W1.log.md.abcd1234", items / ".W1.log.md.wxyz5678"
+        other = items / ".W2.log.md.abcd1234"
         for f in (old, fresh, other):
             f.write_text("half")
         long_ago = time.time() - 2 * dfs_paths.STALE_TEMP
@@ -526,9 +550,9 @@ class AtomicWrites(InARepo):
         p = self.root / ".dfs" / "items" / "W1.md"
         self.write(task(node(1)))
         p.chmod(0o640)
-        dfs_tree.append_log("W1", "critic", ["ok"])
+        dfs_tree.add_node("W1", "one more")
         self.assertEqual(p.stat().st_mode & 0o777, 0o640)
-        self.assertIn("critic", p.read_text())
+        self.assertIn("one more", p.read_text())
         made = dfs_tree.create_task("fresh")
         umask = os.umask(0)
         os.umask(umask)
@@ -837,21 +861,21 @@ class Check(InARepo):
 
     def test_the_guard_refuses_a_task_naming_an_attachment_that_is_not_staged(self):
         name = self.attached_picture()
-        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 1, out)
         self.assertIn(".dfs/artefacts/%s, which is on disk but not staged" % name, out)
         self.assertEqual(dfs_tree.untracked_artefacts(
-            (self.root / ".dfs/items/W1.md").read_text()), [name])
+            (self.root / ".dfs/items/W1.log.md").read_text()), [name])
 
     def test_the_guard_passes_once_the_attachment_is_staged_with_the_task_file(self):
         name = self.attached_picture()
-        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/artefacts/" + name],
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/items/W1.log.md", ".dfs/artefacts/" + name],
                        cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
         self.assertEqual(dfs_tree.untracked_artefacts(
-            (self.root / ".dfs/items/W1.md").read_text()), [])
+            (self.root / ".dfs/items/W1.log.md").read_text()), [])
 
     def git_commit(self, *paths):
         subprocess.run(["git", "add", *paths], cwd=self.root, check=True)
@@ -860,21 +884,21 @@ class Check(InARepo):
 
     def test_an_unstaged_attachment_head_already_named_does_not_refuse_a_later_commit(self):
         name = self.attached_picture()
-        self.git_commit(".dfs/items/W1.md")   # past the guard, as an adopted roadmap was
+        self.git_commit(".dfs/items/W1.md", ".dfs/items/W1.log.md")   # past the guard, as an adopted roadmap was
         dfs_tree.append_log("W1", "session", ["work"])
-        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
         # naming it again in this commit is this commit's to carry
         dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"],
                             "still cut off: ![bar](.dfs/artefacts/%s)" % name)
-        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)   # the name is the same file HEAD's text named
         other = "1f1e2d3c-4b5a-4968-8776-655443322110.png"
         (self.root / ".dfs/artefacts" / other).write_bytes(b"\x89PNG\r\n\x1a\n")
         dfs_tree.append_log("W1", "correct", ["W1.1", "refuted"], "![b](.dfs/artefacts/%s)" % other)
-        subprocess.run(["git", "add", ".dfs/items/W1.md"], cwd=self.root, check=True)
+        subprocess.run(["git", "add", ".dfs/items/W1.md", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 1, out)
         self.assertIn(other, out)
@@ -1012,9 +1036,72 @@ class Check(InARepo):
         self.assertEqual(code, 1, out)
         self.assertIn("is not `- <ts> · <kind> · <args>`", out)
 
+    def logged_task(self):
+        """W1 committed with a log file of two entries."""
+        self.write(task(node(1)))
+        (self.root / ".dfs/items/W1.log.md").write_text(
+            "# W1 · log\n\n- 2026-09-25T09:00:00Z · critic · ok\n  fine\n"
+            "- 2026-09-25T09:01:00Z · critic · ok\n")
+        self.git_commit(".dfs/items/W1.md", ".dfs/items/W1.log.md")
+        return self.root / ".dfs/items/W1.log.md"
+
+    def test_an_entry_added_to_the_log_file_passes_and_one_cut_or_edited_is_refused(self):
+        log = self.logged_task()
+        log.write_text(log.read_text() + "- 2026-09-25T09:02:00Z · critic · ok\n")
+        subprocess.run(["git", "add", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.git_commit(".dfs/items/W1.log.md")
+        for edit in (lambda t: t.replace("  fine\n", ""), lambda t: t.replace("fine", "good"),
+                     lambda t: t.replace("- 2026-09-25T09:01:00Z · critic · ok\n", "")):
+            log.write_text(edit(log.read_text()))
+            subprocess.run(["git", "add", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
+            code, out = self.run_check("--staged")
+            self.assertEqual(code, 1, out)
+            self.assertIn("was removed or edited", out)
+            subprocess.run(["git", "checkout", "HEAD", "--", ".dfs/items/W1.log.md"],
+                           cwd=self.root, check=True)
+
+    def test_a_log_file_with_a_malformed_line_a_heading_or_a_dangling_answer_is_refused(self):
+        log = self.logged_task()
+        for bad, said in (("- not a log line " + "x" * 60 + "\n", "is not `- <ts> · <kind> · <args>`"),
+                          ("## Tree\n", "holds the heading"),
+                          ("# W1 · log\n", "holds the heading"),   # only the first line is the title
+                          ("- 2026-09-25T09:05:00Z · answer · 2026-09-25T09:04:00Z\n", "names no raise")):
+            log.write_text(log.read_text() + bad)
+            subprocess.run(["git", "add", ".dfs/items/W1.log.md"], cwd=self.root, check=True)
+            code, out = self.run_check("--staged")
+            self.assertEqual(code, 1, out)
+            self.assertIn(said, out)
+            subprocess.run(["git", "checkout", "HEAD", "--", ".dfs/items/W1.log.md"],
+                           cwd=self.root, check=True)
+
+    def test_a_log_file_change_is_unfinished_work_only_when_it_is_not_the_runners(self):
+        log = self.logged_task()
+        dfs_tree._uncommitted_seen.clear()
+        self.assertEqual(dfs_tree.uncommitted(ttl=0), {})
+        log.write_text(log.read_text() + "- 2026-09-25T09:02:00Z · session · work\n"
+                       "- 2026-09-25T09:03:00Z · end · work · ok\n")
+        dfs_tree._uncommitted_seen.clear()
+        self.assertEqual(dfs_tree.uncommitted(ttl=0), {})
+        log.write_text(log.read_text() + "- 2026-09-25T09:04:00Z · critic · ok\n")
+        dfs_tree._uncommitted_seen.clear()
+        self.assertEqual(dfs_tree.uncommitted(ttl=0), {"W1": "log"})
+        self.git_commit(".dfs/items/W1.log.md")
+        (self.root / ".dfs/items/W1.md").write_text(task(node(1)).replace("step 1", "step one"))
+        dfs_tree._uncommitted_seen.clear()
+        self.assertEqual(dfs_tree.uncommitted(ttl=0), {"W1": "edits"})
+
+    def test_deleting_a_task_takes_its_log_file_and_a_carried_task_brings_it(self):
+        self.logged_task()
+        import branch as dfs_branch
+        self.assertIn(".dfs/items/W1.log.md", dfs_branch.task_paths("W1"))
+        self.assertEqual(sorted(dfs_tree.delete_task("W1")), ["items/W1.log.md", "items/W1.md"])
+        self.assertFalse((self.root / ".dfs/items/W1.log.md").exists())
+
     def test_the_briefing_lists_only_the_attachments_the_guard_would_refuse(self):
         name = self.attached_picture()
-        self.git_commit(".dfs/items/W1.md")   # HEAD's text now names it
+        self.git_commit(".dfs/items/W1.md", ".dfs/items/W1.log.md")   # HEAD's text now names it
         self.assertNotIn("Attachments to commit", dfs_state.brief("W1"))
         other = "1f1e2d3c-4b5a-4968-8776-655443322110.png"
         (self.root / ".dfs/artefacts" / other).write_bytes(b"\x89PNG\r\n\x1a\n")
@@ -1025,7 +1112,7 @@ class Check(InARepo):
 
     def test_the_briefing_compares_each_part_with_its_own_copy_at_head(self):
         name = self.attached_picture()
-        self.git_commit(".dfs/items/W1.md")   # the default part's copy at HEAD names it
+        self.git_commit(".dfs/items/W1.md", ".dfs/items/W1.log.md")   # the default part's copy at HEAD names it
         part = self.root / ".dfs/items/W1/fx.md"
         part.parent.mkdir()
         part.write_text("- 2026-09-25T09:00:00Z · correct · W1.1 · refuted\n"
@@ -1259,6 +1346,24 @@ class Check(InARepo):
         with self.assertRaises(ValueError):
             dfs_tree.create_task("again", task="W1")
 
+    def test_an_archived_task_keeps_the_log_it_held_in_its_log_file(self):
+        self.write(task(node(1, "confirmed", extra="Determination: yes\n")))
+        dfs_tree.append_log("W1", "session", ["work"])
+        dfs_tree.append_log("W1", "end", ["work", "ok"])
+        dfs_tree.append_log("W1", "review", ["ok"])
+        dfs_tree.append_log("W1", "raise", ["W1.1"], "q")
+        before = dfs_tree.load("W1")
+        self.assertEqual(len(before["log"]), 4)
+        dfs_tree._retire("W1", dfs_tree.archived_dir(), "archived")
+        self.assertTrue((dfs_tree.archived_dir() / "items" / "W1.log.md").is_file())
+        self.assertEqual(dfs_tree.archived_task_ids(), ["W1"])   # the log file is not a task
+        self.assertEqual(dfs_tree.retired_ids(), {"W1"})
+        after = dfs_tree.load_archived("W1")
+        self.assertEqual([(e["ts"], e["kind"]) for e in after["log"]],
+                         [(e["ts"], e["kind"]) for e in before["log"]])
+        self.assertEqual(dfs_tree.status_of(after), dfs_tree.status_of(before))
+        self.assertEqual(len(dfs_tree.open_raises(after)), len(dfs_tree.open_raises(before)))
+
     def test_a_deleted_node_takes_its_subtree_and_leaves_a_delete_entry_the_guard_accepts(self):
         log = ("- 2026-09-25T09:00:00Z · session · work\n"
                "- 2026-09-25T09:01:00Z · correct · W1.2 · refuted\n  wrong\n")
@@ -1334,6 +1439,66 @@ class Check(InARepo):
         self.assertEqual(code, 0, out)
         self.commit()
         self.assertEqual(dfs_tree.compact("W1"), 0)
+
+    def test_splitlog_moves_the_whole_log_to_the_log_file_and_load_is_unchanged(self):
+        self.write(task(node(1), self.LOG))
+        self.commit()
+        before = self.counts()
+        self.assertEqual(dfs_tree.split_log("W1"), 6)
+        self.assertEqual(self.counts(), before)
+        text = (self.root / ".dfs/items/W1.md").read_text()
+        self.assertNotIn("## Log", text)
+        self.assertNotIn("session", text)
+        moved = dfs_tree.log_part("W1").read_text()
+        self.assertIn("  **this** or that", moved, "an entry moves verbatim, body and all")
+        self.assertEqual(len(dfs_tree.parse_log(moved)), 6)
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+        self.commit()
+        self.assertEqual(dfs_tree.split_log("W1"), 0)
+        dfs_tree.append_log("W1", "session", ["work"])
+        self.assertEqual(len(dfs_tree.parse_log(dfs_tree.log_part("W1").read_text())), 7)
+
+    def test_a_half_done_splitlog_is_finished_by_the_next_without_a_duplicate(self):
+        self.write(task(node(1), self.LOG))
+        dfs_tree.log_part("W1").write_text("# W1 · log\n\n" + self.LOG)   # killed after the file
+        before = self.counts()
+        dfs_tree.split_log("W1")
+        self.assertEqual(self.counts(), before)
+        self.assertEqual(len(dfs_tree.parse_log(dfs_tree.log_part("W1").read_text())), 6)
+
+    def test_compact_moves_the_log_files_past_to_the_archive(self):
+        self.write(task(node(1)))
+        dfs_tree.log_part("W1").write_text("# W1 · log\n\n" + self.LOG)
+        self.commit()
+        before = self.counts()
+        self.assertEqual(dfs_tree.compact("W1"), 4)
+        self.assertEqual(self.counts(), before)
+        kept = dfs_tree.parse_log(dfs_tree.log_part("W1").read_text())
+        self.assertEqual([e["kind"] for e in kept], ["answer", "session"])
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+
+    def test_the_briefing_names_the_log_file_and_its_size_and_says_to_open_it_only_for_an_entry(self):
+        self.write(task(node(1), self.LOG))
+        old = dfs_state.brief("W1")
+        self.assertIn("its Log what everyone has said about it", old)
+        dfs_tree.split_log("W1")
+        new = dfs_state.brief("W1")
+        self.assertIn("`.dfs/items/W1.log.md` (~", new)
+        self.assertIn("for an entry's full text", new)
+        self.assertNotIn("its Log what everyone has said", new)
+        self.assertNotIn("session · work", new, "the log's text is not loaded into the briefing")
+
+    def test_the_briefing_does_not_say_the_log_is_all_in_the_file_while_the_task_still_has_a_log(self):
+        self.write(task(node(1), self.LOG))
+        dfs_tree.append_log("W1", "answer", "x")        # a new entry goes to the log file
+        note = dfs_state.brief("W1")
+        self.assertIn("`.dfs/items/W1.log.md` (~", note)
+        self.assertIn("older ones are in its `## Log`", note)
+        self.assertNotIn("its log is not in it", note)
 
     def test_shelve_moves_determined_plans_and_every_reader_sees_them_as_before(self):
         self.write(task(node(1, "confirmed", extra="Approach: cut it\n  thin\nHypothesis: it holds\n"
@@ -1803,7 +1968,8 @@ class Branches(InARepo):
         self.assertEqual(dfs_tree.next_node_id(dfs_tree.load("W1")), "W1.1@fx")
         self.add_fx_node()
         dfs_tree.append_log("W1", "session", ["work"])
-        self.assertIn("· session · work", self.fx_part().read_text())
+        self.assertIn("· session · work", dfs_tree.log_part("W1", "fx").read_text())
+        self.assertNotIn("· session · work", self.fx_part().read_text())
         self.assertNotIn("W1.1@fx", (self.root / ".dfs/items/W1.md").read_text())
         t = dfs_tree.load("W1")
         self.assertEqual(dfs_tree.frontier(t)[0]["id"], "W1.1@fx")
@@ -2020,7 +2186,9 @@ class Branches(InARepo):
         self.assertEqual([n["id"] for n in dfs_tree.load("W1")["nodes"]], ["W1.1", "W1.2", "W1.3"])
         before = (self.root / ".dfs/items/W1.md").read_text()
         dfs_tree.append_log("W1", "session", ["work"])
-        self.assertEqual((wt / ".dfs/items/W1.md").read_text().count("· session · work"), 1)
+        self.assertEqual((wt / ".dfs/items/W1.log.md").read_text().count("· session · work"), 1)
+        self.assertNotIn("· session · work", (wt / ".dfs/items/W1.md").read_text())
+        self.assertFalse((self.root / ".dfs/items/W1.log.md").exists())
         self.assertEqual((self.root / ".dfs/items/W1.md").read_text(), before)
         self.assertEqual(dfs_tree.node_commits("W1"), {})
 
@@ -2053,7 +2221,8 @@ class Branches(InARepo):
         self.assertTrue((self.root / ".dfs/artefacts" / other).exists())   # not named: stays
         self._wr_inner, dfs_paths.work_root = dfs_paths.work_root, lambda: wt
         self.addCleanup(setattr, dfs_paths, "work_root", self._wr_inner)
-        text = "\n".join(p.read_text() for p in dfs_tree.part_files("W1"))
+        text = "\n".join(p.read_text() for p in dfs_tree.part_files("W1")
+                         + [dfs_tree.log_part("W1")])
         self.assertEqual(dfs_tree.untracked_artefacts(text), [name])
 
     def test_a_file_attached_to_a_goal_or_a_node_of_a_worked_task_goes_to_its_worktree_too(self):
@@ -2151,12 +2320,16 @@ class Branches(InARepo):
         (hooks / name).symlink_to(HERE / "hook.sh")
         self.git("config core.hooksPath %s" % hooks)
 
-    def conflicted_rebase(self):
+    def conflicted_rebase(self, log_file=False):
         """dfs/w1 adds a node and edits `f`; master edits `f` the other way: rebasing the
-        branch stops on a conflict, and `git rebase --continue` makes the commit."""
+        branch stops on a conflict, and `git rebase --continue` makes the commit. With
+        `log_file` the branch also logs an entry in the log file."""
         self.switch("checkout -qb dfs/w1")
-        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2),
-                        "- 2026-09-25T09:00:00Z · session · work\n"))
+        entry = "- 2026-09-25T09:00:00Z · session · work\n"
+        self.write(task(node(1, "confirmed") + node(2, parent=1) + node(3, parent=2), entry))
+        if log_file:   # one more entry, in the log file, which the base commit lacks
+            (self.root / ".dfs/items/W1.log.md").write_text(
+                entry.replace("09:00:00", "09:10:00"))
         (self.root / "f").write_text("branch\n")
         self.commit()   # no hook yet: the commit was judged where it was made
         self.switch("checkout -q master")
@@ -2182,6 +2355,22 @@ class Branches(InARepo):
                            capture_output=True, text=True)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("W1.3", (self.root / ".dfs/items/W1.md").read_text())
+
+    def test_a_rebase_stop_does_not_refuse_the_log_entries_the_replayed_commit_made(self):
+        """The replayed commit's entries are in the log file, which HEAD lacks: they were
+        judged where they were made, as the entries in the task file are."""
+        self.conflicted_rebase(log_file=True)
+        r = self.git("commit -qm 'resolved'")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_a_log_entry_added_by_hand_at_a_rebase_stop_is_still_judged(self):
+        self.conflicted_rebase(log_file=True)
+        with open(self.root / ".dfs/items/W1.log.md", "a") as f:
+            f.write("- 2026-09-25T09:30:00Z · session · work\n")
+        self.git("add -A")
+        r = self.git("commit -qm 'resolved'")
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("2026-09-25T09:30:00Z", r.stdout + r.stderr)
 
     def test_a_commit_in_an_apply_rebase_is_not_judged_by_the_writer_rule(self):
         """The same stop under `git rebase --apply`, which marks it with rebase-apply."""

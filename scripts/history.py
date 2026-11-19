@@ -369,7 +369,7 @@ def author_log(repo):
     out = collections.defaultdict(collections.Counter)
     for f in glob.glob(os.path.join(repo, ".dfs", "items", "*.md")) + \
             glob.glob(os.path.join(repo, ".dfs", "archive", "items", "*.md")):
-        task = os.path.basename(f)[:-3]
+        task = re.sub(r"\.log$", "", os.path.basename(f)[:-3])   # a log file counts for its task
         with open(f, errors="replace") as fh:
             text = fh.read()
         for m in re.finditer(r"^- \d{4}-[\dT:-]+Z · (\w+)(?: · (\w+))?(?: · (\w+))?", text, re.M):

@@ -461,6 +461,7 @@ class Chat(unittest.TestCase):
         self.chats.send("W1", "first")
         self.settle("W1")
         self.assertIn(top, self.calls()[0], "a task with no worktree is read where it is")
+        self.assertIn(".dfs/items/W1.log.md", self.calls()[0], "the log, where the raises and answers are, is named")
         self.assertNotIn(" " + wt, self.calls()[0])
         self.assertIn("whenever .dfs/worktrees/W1/.dfs/items exists it holds the task's current files", self.calls()[0],
                       "a chat begun before the worktree is cut is told where the task will be")
@@ -476,6 +477,7 @@ class Chat(unittest.TestCase):
         page = self.calls()[0]
         self.assertIn(wt, page)
         self.assertIn(".dfs/worktrees/W1/.dfs/items/W1/", page, "and its parts directory")
+        self.assertIn(".dfs/worktrees/W1/.dfs/items/W1.log.md", page, "and its log file")
         self.assertNotIn(" " + top, page, "not the checkout's copy")
         # the screen's own chat opens with the same pointer
         self.log.unlink()

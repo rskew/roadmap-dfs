@@ -13,6 +13,7 @@ import importlib.util
 import inspect
 import re
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -391,6 +392,33 @@ class HiddenFromGit(unittest.TestCase):
             TUI.look = look
         self.assertIn("hidden from git", text)
         self.assertIn(".gitignore:1  .*   hides .dfs/", text)
+
+
+class TheTreeCacheSeesANewLogEntry(unittest.TestCase):
+    """A log entry goes to `<task>.log.md` and leaves the task file alone, so the cached tree
+    must be keyed on the log file too, or the item pane keeps its old raises."""
+
+    def test_an_entry_appended_to_the_log_file_shows_at_the_next_read(self):
+        root = Path(tempfile.mkdtemp())
+        (root / ".dfs" / "items").mkdir(parents=True)
+        (root / ".dfs" / "ROADMAP.md").write_text("# Roadmap\n")
+        (root / ".dfs" / "items" / "W1.md").write_text(
+            "# W1 · sample\n\n## Goal\n\nMake it work.\n\n## Tree\n\n"
+            "### W1.1 · step 1\nStatus: open\nApproach: a\n")
+        work_root = TUI.dfs_paths.work_root
+        TUI.dfs_paths.work_root = lambda: root
+        try:
+            ui = a_screen([item("W1")], _tree_cache={})
+            first = ui.tree_of("W1")[0]
+            self.assertEqual(first["log"], [])
+            TUI.dfs_tree.append_log("W1", "raise", ["W1.1"], "which one?")
+            self.assertNotIn("which one?", (root / ".dfs" / "items" / "W1.md").read_text())
+            again = ui.tree_of("W1")[0]
+            self.assertEqual([e["kind"] for e in again["log"]], ["raise"])
+            self.assertEqual(len(TUI.dfs_tree.open_raises(again)), 1)
+        finally:
+            TUI.dfs_paths.work_root = work_root
+            shutil.rmtree(root, ignore_errors=True)
 
 
 class TheTaskLogPane(unittest.TestCase):
