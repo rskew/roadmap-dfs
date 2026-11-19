@@ -1955,6 +1955,10 @@ class UI(WorkMixin):
         self.msg = ""
         self.agent_update = None    # the process start_agent_update began, from main
         self.data = load()
+        # The list is drawn upside down (`list_rows`), so item 0 is its BOTTOM row and a
+        # cursor there scrolled a long list to its bottom on the first draw. The screen
+        # opens on the top row, the last item in the work order, with the window at the top.
+        self.sel = max(0, len(self.items) - 1)
         self.dirty = roadmap_dirty()
         self.hidden = dfs_paths.hidden()
         self.runs = discover_runs()

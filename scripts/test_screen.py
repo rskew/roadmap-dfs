@@ -1146,6 +1146,53 @@ class ANodeSaysHowFarItIs(unittest.TestCase):
                          "◇ confirmed by you, not built · under W1.1")
 
 
+class AFreshScreenOpensAtTheTopOfTheList(unittest.TestCase):
+    """The list is drawn upside down, so a cursor on item 0 put a long list's window at its bottom."""
+
+    def test_a_long_list_starts_with_its_window_and_cursor_on_the_top_row(self):
+        items = [item("W%d" % n) for n in range(1, 41)]
+        names = ("load", "roadmap_dirty", "discover_runs", "watch_signature",
+                 "read_activity", "activity_file", "read_agent", "agent_file")
+        saved = {n: getattr(TUI, n) for n in names}
+        saved_hidden = TUI.dfs_paths.hidden
+        saved_run_dirs = TUI.dfs_runs.run_dirs
+        saved_lost = TUI.UI.close_lost_runs
+        TUI.load = lambda: {"items": list(items)}
+        TUI.roadmap_dirty = lambda: (0, 0)
+        TUI.discover_runs = lambda: []
+        TUI.watch_signature = lambda: ()
+        TUI.read_activity = lambda path: []
+        TUI.activity_file = lambda: None
+        TUI.read_agent = lambda path: TUI.AGENTS[0]
+        TUI.agent_file = lambda: None
+        TUI.dfs_paths.hidden = lambda: set()
+        TUI.dfs_runs.run_dirs = lambda: []
+        TUI.UI.close_lost_runs = lambda self: None
+        try:
+            ui = TUI.UI(None)
+        finally:
+            for n, f in saved.items():
+                setattr(TUI, n, f)
+            TUI.dfs_paths.hidden = saved_hidden
+            TUI.dfs_runs.run_dirs = saved_run_dirs
+            TUI.UI.close_lost_runs = saved_lost
+        rows = ui.list_rows()
+        self.assertEqual(rows[0], ("item", ui.sel), "the cursor is on the top row")
+        self.assertEqual(ui.current()["id"], "W40")
+        ui.scr = ADoneTaskRecedesInTheList.Rec()
+        ui.run_tag = lambda iid: ("", 0)
+        ui.status_attr = lambda status: 0
+        self.assertEqual(ui.list_scroll, 0, "a fresh screen opens with its window at the top")
+        saved_look = dict(TUI.LOOK)
+        TUI.LOOK.update(chrome=curses.A_DIM)
+        try:
+            ui.draw_list(0, 10)
+        finally:
+            TUI.LOOK.clear()
+            TUI.LOOK.update(saved_look)
+        self.assertEqual(ui.list_scroll, 0, "the window stays at the top")
+
+
 class ADoneTaskRecedesInTheList(unittest.TestCase):
     """The list told a finished task from an open one by the colour of one word."""
 
