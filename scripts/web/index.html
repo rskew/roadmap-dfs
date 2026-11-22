@@ -226,7 +226,7 @@ body.dragging { user-select: none; -webkit-user-select: none; }
 p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
 /* Add a task is a plus button floating at the bottom right, clear of the tab bar, on every screen size; the gap keeps the last row from hiding under it. The "+" is a symbol, so the button is named by its aria-label "Add task" and not by its text */
 .fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; width: calc(52px * var(--z)); min-height: calc(52px * var(--z)); padding: 0; font-size: calc(28px * var(--z)); line-height: 1; letter-spacing: 0; }
-.fab-gap { height: 72px; }
+.fab-gap { height: calc(72px * var(--z)); }
 .top-actions { margin: var(--s2) 0 0; }
 /* The search field heads the list and a task's tree: `/` focuses it, Esc clears it. */
 #find { display: flex; align-items: center; gap: var(--s3); margin: 0 0 var(--s3); }
