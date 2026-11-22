@@ -94,6 +94,7 @@ import calendar
 import contextlib
 import os
 import re
+import select
 import shutil
 import subprocess
 import sys
@@ -2205,6 +2206,52 @@ def outline(t):
     return lines
 
 
+BODY_WAIT = 1.0     # seconds to wait for a body to start, and for a quiet writer to go on
+
+
+def body_wait(env=None):
+    """The wait: DFS_BODY_WAIT (seconds) if it is a number above zero, else BODY_WAIT."""
+    env = os.environ if env is None else env
+    try:
+        seconds = float(env.get("DFS_BODY_WAIT", ""))
+    except ValueError:
+        return BODY_WAIT
+    return seconds if seconds > 0 else BODY_WAIT
+
+
+def read_body(stream=None, wait=None):
+    """The text sent on stdin, or "" when none is sent.
+
+    A terminal sends none. An agent's shell hands over a pipe that stays open and is never
+    written, so a plain `read()` waits for ever. This waits `wait` seconds (DFS_BODY_WAIT,
+    else BODY_WAIT) for the first bytes, then reads to the end of input, and stops early if
+    the writer goes quiet for that long. A heredoc, a file redirect and `echo ... |` arrive
+    well inside it. When it stops with the writer still open, it says so on stderr, so a slow
+    piped body is not lost without a word."""
+    stream = sys.stdin if stream is None else stream
+    wait = body_wait() if wait is None else wait
+    try:
+        if stream.isatty():
+            return ""
+        fd = stream.fileno()
+    except (AttributeError, ValueError, OSError):
+        return stream.read()            # not a real file (a test's stand-in): read it
+    chunks = []
+    ended = False
+    while select.select([fd], [], [], wait)[0]:
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            ended = True
+            break
+        chunks.append(chunk)
+    if not ended:
+        print("dfs_tree: stdin was still open after %gs; read %d byte%s and went on. "
+              "Set DFS_BODY_WAIT (seconds) to wait longer for a slow writer."
+              % (wait, sum(map(len, chunks)), "" if sum(map(len, chunks)) == 1 else "s"),
+              file=sys.stderr)
+    return b"".join(chunks).decode("utf-8", errors="replace")
+
+
 def main(argv):
     try:
         return _main(argv)
@@ -2216,11 +2263,11 @@ def main(argv):
 def _main(argv):
     if len(argv) >= 3 and argv[1] == "log":
         task, kind, args = argv[2], argv[3] if len(argv) > 3 else "", argv[4:]
-        body = "" if sys.stdin.isatty() else sys.stdin.read()
+        body = read_body()
         print(append_log(task, kind, args, body))
         return 0
     if len(argv) >= 5 and argv[1] == "add":
-        approach = "" if sys.stdin.isatty() else sys.stdin.read()
+        approach = read_body()
         print(add_node(argv[2], " ".join(argv[4:]), None if argv[3] == "-" else argv[3], approach))
         return 0
     if len(argv) == 4 and argv[1] == "start":
