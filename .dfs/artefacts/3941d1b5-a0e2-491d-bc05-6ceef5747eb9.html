@@ -21,6 +21,7 @@
 <p class="lede">opencode writes <code>ESC[?2027h</code> as it starts: "measure an emoji family, a flag or a
   combined letter as one cell group". A chat starts in the background, where nothing is forwarded to the real
   terminal, so the terminal never gets it. Pick how the chat reaches the terminal.</p>
+<p><strong>Wrong if</strong> a terminal that supports the mode (kitty, WezTerm, foot, Ghostty, iTerm2) shows the same rows of an opencode chat with the mode on and off, with emoji families, flags or combined letters on screen.</p>
 <div class="tabs" role="group" aria-label="How the chat reaches the terminal">
   <button type="button" data-o="direct" aria-pressed="true">Run directly (before)</button>
   <button type="button" data-o="bg" aria-pressed="false">Relay as it was</button>
