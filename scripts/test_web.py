@@ -636,13 +636,15 @@ class Web(unittest.TestCase):
 
     def test_the_phone_page_keeps_its_small_faults_fixed(self):
         """Read from the page's source: a --no-work server's Chats route says chat is off, the fold button is 44px, the phone
-        adds a task from a tab and not from a button over the rows, and a scrolling note box shows a shadow."""
+        adds a task from a plus button at the bottom right on every width, not from a tab, and a scrolling note box shows a shadow."""
         src = (HERE / "web" / "index.html").read_text()
         css = (HERE / "web" / "design.css").read_text()
         self.assertIn("drawChatsOff(list.off)", src)
         self.assertRegex(src, r"\.row \.fold \{ flex: 0 0 calc\(44px")
-        self.assertIn('class="tab-add" data-act="newtask"', src)
-        self.assertRegex(src, r"max-width: 899\.98px\) \{ \.fab, \.fab-gap \{ display: none")
+        self.assertIn('class="btn primary fab" data-act="newtask" aria-label="Add task">+</button>', src)
+        self.assertIn('if (!S.reorder) html += `<div class="fab-gap"></div><button class="btn primary fab"', src)
+        self.assertNotIn("tab-add", src)
+        self.assertNotRegex(src, r"\.fab, \.fab-gap \{ display: none")
         quote = css[css.index("dialog .quote {"):]
         self.assertIn("no-repeat local", quote[:quote.index("}")])
         # The form is a flex column that scrolls: without `flex: none` the box shrank to its padding (20px) in the

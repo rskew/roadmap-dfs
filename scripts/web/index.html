@@ -224,12 +224,9 @@ body.dragging { user-select: none; -webkit-user-select: none; }
 .break.stop::after { border-top-style: double; border-top-width: 4px; }
 .hint { color: var(--muted); padding: 28px 0; }
 p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
-/* Add a task floats at the bottom right, clear of the tab bar; the gap keeps the last row from hiding under it */
-.fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; min-height: calc(52px * var(--z)); padding: 0 var(--s5); }
-.fab-gap { height: 72px; }
-.tab-add { color: var(--ink); }
-@media (max-width: 899.98px) { .fab, .fab-gap { display: none; } }
-@media (min-width: 900px) { .tab-add { display: none !important; } }
+/* Add a task is a plus button floating at the bottom right, clear of the tab bar, on every screen size; the gap keeps the last row from hiding under it. The "+" is a symbol, so the button is named by its aria-label "Add task" and not by its text */
+.fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; width: calc(52px * var(--z)); min-height: calc(52px * var(--z)); padding: 0; font-size: calc(28px * var(--z)); line-height: 1; letter-spacing: 0; }
+.fab-gap { height: calc(72px * var(--z)); }
 .top-actions { margin: var(--s2) 0 0; }
 /* The search field heads the list and a task's tree: `/` focuses it, Esc clears it. */
 #find { display: flex; align-items: center; gap: var(--s3); margin: 0 0 var(--s3); }
@@ -878,10 +875,7 @@ function drawBar(r) {
     mode = "tabs";
     html = cell('data-act="all"', "All", list && !S.reorder)
       + cell('data-act="reorder"', "Reorder", list && S.reorder)
-      + (chatOn() ? `<button data-tab="chats" ${r.view === "chats" ? 'aria-current="page"' : ""}>Chats</button>` : "")
-      // On a phone the floating "Add a task" button covered the badges of the rows scrolling under it (14% of scroll positions
-      // on the 153-task list), so the phone gets a tab instead; a screen of 900px or more keeps the button and hides the tab.
-      + (list ? `<button class="tab-add" data-act="newtask">Add task</button>` : "");
+      + (chatOn() ? `<button data-tab="chats" ${r.view === "chats" ? 'aria-current="page"' : ""}>Chats</button>` : "");
   } else {
     mode = "task";
     const flagged = S.task ? S.task.assumed.length : 0;
@@ -1256,7 +1250,8 @@ function drawTasks(push) {
   if (S.archivedCount || showArchived())
     html += `<div class="actions"><button class="btn" data-act="archived" aria-pressed="${showArchived()}">${showArchived() ? "Hide archived" : "Show archived (" + S.archivedCount + ")"}</button></div>`;
   if (!items.length) html += `<p class="hint">No tasks yet. Open one in the terminal with <code>run --open</code>.</p>`;
-  html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask">Add a task</button>`;
+  // Not in reorder mode: the plus would sit over a row's drag grip at the right edge, and that view is for ordering, not adding.
+  if (!S.reorder) html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask" aria-label="Add task">+</button>`;
   $("#view").className = "col" + (table ? " tbl" : "");
   const on = document.activeElement && document.activeElement.matches("#view button.item[data-act=task]") ? document.activeElement.dataset.id : null;
   if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }

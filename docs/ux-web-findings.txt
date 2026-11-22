@@ -7,7 +7,7 @@ Measured at 390x844 and 1280x800 on the repo's 153 tasks and on the old review's
 - sideways scroll: none. unlabelled controls: none. text under WCAG AA contrast: none. console errors: none (except 403 on /api/chats under --no-work).
 - opened node Approach: one run-on paragraph (fixed in W131.35).
 - --no-work: Chats leaves the previous screen up (W131.36).
-- "Add a task" button covers the last row's badges on the phone list (W131.36).
+- "Add a task" button covers the last row's badges on the phone list (W131.36). Now a "+" button; it was hidden on the phone and is back there, so the cover can recur, and is not drawn in reorder mode (W182).
 - fold buttons 40 px wide (W131.36).
 - Accept dialog: reviewer-note box is cut mid-line with no scroll cue (W131.36).
 - Not covered: answering a raise, the refute/confirm and add-node forms, reorder, work controls, run log, 320 px width, keyboard use.
