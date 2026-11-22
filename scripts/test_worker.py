@@ -591,6 +591,16 @@ class Models(unittest.TestCase):
         self.assertEqual(self.w.models(), dict(plan="opus", implement=""))   # the default is untouched
         self.assertEqual(self.w.task_models("W1"), dict(plan="haiku", implement="sonnet[1m]"))
 
+    def test_a_task_s_own_unlisted_name_is_in_the_model_choices(self):
+        self.w.set_model("plan", "opus")
+        self.assertNotIn("my-own-model", self.w.model_choices())
+        self.w.set_model("plan", "my-own-model", item="W1")
+        self.assertIn("my-own-model", self.w.model_choices())
+        self.assertIn("my-own-model", self.w.snapshot()["model_choices"])
+        self.assertEqual(self.w.models()["plan"], "opus")                    # the instance's default is as it was
+        self.w.set_model("plan", "", item="W1")
+        self.assertNotIn("my-own-model", self.w.model_choices())
+
     def test_a_task_chooses_one_role_and_leaves_the_other_to_the_default(self):
         self.w.set_model("implement", "sonnet")
         self.w.set_model("plan", "haiku", item="W1")

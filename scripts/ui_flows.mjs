@@ -1336,6 +1336,20 @@ const FLOWS = {
     await page.selectOption("#model-task-W1-plan", "");
     await page.waitForFunction(() => !(S.work.task_models || {}).W1);
     assert(await page.locator("#model-task-W1-plan").inputValue() === "", "clearing it shows the instance default again");
+    // A name typed in the task's Other box is the task's own, not the instance's, and the drop-down then shows it.
+    const before = await page.evaluate(() => JSON.stringify(S.work.models));
+    await page.waitForTimeout(400);      // the redraw the last choice began lands first, or it would blank the box
+    await page.click(".taskmodels summary");      // clearing the choice closed the details
+    await page.selectOption("#model-task-W1-plan", { label: "Other (type a name)..." });
+    await page.waitForSelector("#model-task-W1-plan-other"); await page.waitForTimeout(400);
+    // Typing needs a browser that can insert text; set the value and send the change the Enter key sends.
+    await page.evaluate(() => { const e = document.querySelector("#model-task-W1-plan-other"); e.value = "my-own-model"; e.dispatchEvent(new Event("change", { bubbles: true })); });
+    await page.waitForFunction(() => (S.work.task_models || {}).W1?.plan === "my-own-model");
+    same(await page.evaluate(() => JSON.stringify(S.work.models)), before, "a name typed on a task leaves the instance's models alone");
+    await page.waitForFunction(() => document.querySelector("#model-task-W1-plan")?.value === "my-own-model", null, { timeout: 5000 }).catch(() => {});
+    assert(await page.locator("#model-task-W1-plan").inputValue() === "my-own-model", "the task's own unlisted name is shown selected");
+    await page.selectOption("#model-task-W1-plan", "");
+    await page.waitForFunction(() => !(S.work.task_models || {}).W1);
     same(errors, [], "no page errors");
   },
 

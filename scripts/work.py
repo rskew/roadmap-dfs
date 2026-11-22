@@ -972,10 +972,14 @@ class WorkMixin:
 
     def model_choices(self):
         """The models the next chain's agent can be given, for the page's drop-down: empty for
-        an agent that reads its model from its own config. A model kept that is not listed is added."""
+        an agent that reads its model from its own config. A model kept, the instance's or a task's own,
+        that is not listed is added."""
         listed = kiro_models() if self.agent == "kiro" else list(MODEL_CHOICES.get(self.agent, []))
         if listed:
-            for name in self.models().values():
+            kept = list(self.models().values())
+            for mine in self.all_task_models().values():
+                kept.extend(mine.values())
+            for name in kept:
                 if name and name not in listed:
                     listed.append(name)
         return listed

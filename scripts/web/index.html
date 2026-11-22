@@ -1457,7 +1457,7 @@ const PROGRESS_LABEL = { done: ["✓", "complete"], started: ["", "started"], op
 function taskModels(t) {
   const w = S.work;
   if (!w || !w.enabled || t.status === "done" || !(w.model_choices || []).length) return "";
-  return `<details class="taskmodels"${(w.task_models || {})[t.id] ? " open" : ""}><summary>Models for ${esc(t.id)}</summary>${modelFields(w, t.id)}<p class="hint">Plan: the first session, the critic and the review. Implement: the rest. A task's choice replaces the instance default for its chains.</p></details>`;
+  return `<details class="taskmodels"${(w.task_models || {})[t.id] || (S.modelOther || {})[t.id + ":plan"] || (S.modelOther || {})[t.id + ":implement"] ? " open" : ""}><summary>Models for ${esc(t.id)}</summary>${modelFields(w, t.id)}<p class="hint">Plan: the first session, the critic and the review. Implement: the rest. A task's choice replaces the instance default for its chains.</p></details>`;
 }
 function drawTask() {
   const had = findEnter();
@@ -2436,7 +2436,7 @@ document.addEventListener("keydown", e => {
   else if (e.key === "Enter" && e.target.dataset && e.target.dataset.other) { e.preventDefault(); e.target.dispatchEvent(new Event("change", { bubbles: true })); }
   else if (e.key === "Escape" && e.target.dataset && e.target.dataset.other) closeModelOther(e.target.dataset.role, e.target.dataset.item);
 });
-document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.other) { const v = e.target.value.trim(); if (v) setModel(e.target.dataset.role, v); else closeModelOther(e.target.dataset.role, e.target.dataset.item); }
+document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.other) { const v = e.target.value.trim(); if (v) setModel(e.target.dataset.role, v, e.target.dataset.item); else closeModelOther(e.target.dataset.role, e.target.dataset.item); }
   else if (e.target.dataset && e.target.dataset.role) { if (e.target.value === OTHER_MODEL) openModelOther(e.target.dataset.role, e.target.dataset.item); else { const it = e.target.dataset.item; if (S.modelOther) S.modelOther[(it ? it + ":" : "") + e.target.dataset.role] = false; setModel(e.target.dataset.role, e.target.value, it); } } });
 
 /* A phone puts a page to sleep when another app is on top, and its requests and its timers stop with it. On coming back
