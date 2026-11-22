@@ -1,0 +1,211 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>W180: where b puts the break on the upside-down list</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  p, li, h1, h2, h3, .box, .legend { overflow-wrap: break-word; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .tabs button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333; border-radius: 6px; background: #fff; cursor: pointer; }
+  .tabs button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .dg { display: flex; flex-direction: column; gap: 0; max-width: 360px; }
+  .box { border: 1.5px solid #333; border-radius: 6px; background: #fff; padding: 10px 12px; min-height: 24px; }
+  .box.sel { background: #fff3c4; }
+  .fence { border-top: 3px dashed #b00020; color: #b00020; font-size: 14px; padding: 4px 2px; min-height: 22px; }
+  .cols { display: flex; flex-direction: column; gap: 12px; }
+  @media (min-width: 720px) { .cols { flex-direction: row; } .cols > div { flex: 1; } }
+  .file { font-family: ui-monospace, monospace; font-size: 14px; background: #fff; border: 1.5px solid #333; border-radius: 6px; padding: 8px 12px; margin: 0; white-space: pre; overflow-x: auto; }
+  .cap { color: #444; font-size: 14px; margin: 6px 0 0; }
+</style>
+<h1>Where b puts the break</h1>
+<p>The list is drawn upside down: the last task in <code>.dfs/order.md</code> is the top row. A break sits between two tasks. Everything on its upper side waits until everything on its lower side is done. Pick the task W2 and press <b>b</b>.</p>
+<div class="tabs" role="group" aria-label="Which behaviour">
+  <button type="button" id="b-now" aria-pressed="true">Now: break below W2</button>
+  <button type="button" id="b-new" aria-pressed="false">Proposed: break above W2</button>
+</div>
+<div class="cols">
+  <div>
+    <h2>On the screen</h2>
+    <div class="dg" id="screen" data-node="screen"></div>
+    <p class="cap" id="scap"></p>
+  </div>
+  <div>
+    <h2>In order.md</h2>
+    <pre class="file" id="file" data-node="file"></pre>
+    <p class="cap" id="fcap"></p>
+  </div>
+</div>
+<h2>What follows</h2>
+<ul>
+  <li>The drawing of the list and the walk do not change; only which two tasks the new break sits between.</li>
+  <li>Proposed: W2 ends up on the done side, so the break says "W2 and everything below is finished".</li>
+  <li>The top task (W4) is refused, since a break above it would gate nothing. Now it is the bottom task (W1) that is refused.</li>
+  <li>A nested task is still refused. A break already there is taken away by the same key.</li>
+</ul>
+<script>
+  function draw(proposed) {
+    var rows = ['W4', 'W3', 'W2', 'W1'], out = '';
+    var at = proposed ? 'W3' : 'W2';        // the task drawn just under the break
+    var above = proposed ? 'W3' : 'W2';
+    rows.forEach(function (r) {
+      if (proposed && r === 'W2') out += '<div class="fence">break</div>';
+      out += '<div class="box' + (r === 'W2' ? ' sel' : '') + '">' + r + (r === 'W2' ? ' (selected)' : '') + '</div>';
+      if (!proposed && r === 'W2') out += '<div class="fence">break</div>';
+    });
+    document.getElementById('screen').innerHTML = out;
+    document.getElementById('file').textContent = proposed ? '- W1\n- W2\n---\n- W3\n- W4' : '- W1\n---\n- W2\n- W3\n- W4';
+    document.getElementById('scap').textContent = proposed ? 'The break is above W2: W3 and W4 wait on W2 and W1.' : 'The break is below W2: W2, W3 and W4 wait on W1.';
+    document.getElementById('fcap').textContent = proposed ? 'The break goes after W2 in the file.' : 'The break goes before W2 in the file.';
+    document.getElementById('b-now').setAttribute('aria-pressed', String(!proposed));
+    document.getElementById('b-new').setAttribute('aria-pressed', String(proposed));
+  }
+  document.getElementById('b-now').addEventListener('click', function () { draw(false); });
+  document.getElementById('b-new').addEventListener('click', function () { draw(true); });
+  draw(false);
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  /* An option's text is a flex item, which `overflow-wrap: break-word` cannot narrow: `anywhere` can, and a label is one
+     line of text in its own row, so it cannot squeeze a column of other words. */
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <!-- One label per option. Its value is the answer as the author should be seen to give
+       it, so write the decision, not a letter. A Hypothesis page whose Confirm and Refute
+       say it all may delete the fieldset. -->
+  <fieldset id="dfs-options">
+    <legend>What "above it" means</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Above means above on the screen: b on a task puts the break between it and the task drawn over it, so the task is on the done side."> Above on the screen (what I read)</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Something else: I explain it below."> Something else (say so below)</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  // The page's own script may call dfsAnswer.choose(value) to pick an
+  // option from its own controls, define window.dfsPageState() to return what the page
+  // should reopen with, and listen for the "dfs-state" event, whose detail is that state.
+  // A control that changes that state without picking an option calls dfsAnswer.keep(), or
+  // nothing is saved. window.dfsAnswer does not exist while the page's own script runs
+  // (this one comes after it): call it from a handler, or guard with if (window.dfsAnswer).
+  //
+  // The server this page came from keeps what the reader chose, so the page opens as they
+  // left it; it records the answer when an open raise names this page ("Answer with: ...")
+  // and rules on the node whose Hypothesis names it (verdict: confirmed or refuted). Opened
+  // from a file (the artefact check) there is no server and the form only says so. Send
+  // text/plain (a JSON string, no header): that needs no preflight, which the server never grants.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    // What the author reads in the log: the option, then their own words.
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');   // the web page's form closes; nothing, opened alone
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      // Confirming prunes the later siblings; the server wants the author's yes for those holding work.
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
