@@ -787,16 +787,16 @@ def reorder(body):
         if dfs_order.index_of(nodes, item) is None:
             raise Refused("no task %s" % item, 404)
         if move == "break":
-            had = dfs_order.has_break_above(nodes, item)
+            had = dfs_order.has_break_after(nodes, item)
             after = dfs_order.break_toggled(nodes, item)
             refusal = ("is nested — a break separates whole branches, never cuts one"
                        if dict(nodes).get(item) else
-                       "is the bottom item — a break below it would gate nothing")
+                       "is the top item — a break above it would gate nothing")
         elif move == "stop":
             after = dfs_order.stop_toggled(nodes, item)
             refusal = ("is nested — a break separates whole branches, never cuts one"
                        if dict(nodes).get(item) else
-                       "is the bottom item — a break below it would gate nothing")
+                       "is the top item — a break above it would gate nothing")
         else:
             if move == "place":
                 target, where = need(body, "target", "the task to go beside"), body.get("where")

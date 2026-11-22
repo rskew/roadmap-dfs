@@ -369,8 +369,20 @@ def outdented(nodes, item):
     return _replant(nodes, i, span(nodes, par)[1], -1)
 
 
+def _fence_after(nodes, item):
+    """`(i, end)`: `item`'s index and the index just past its subtree, or None for a nested or unknown item."""
+    i = index_of(nodes, item)
+    if i is None or nodes[i][1] != 0:
+        return None
+    return i, span(nodes, i)[1]
+
+
 def break_toggled(nodes, item):
-    """`nodes` with a fence above `item`, or the fence already there taken away.
+    """`nodes` with a fence above `item` ON THE SCREEN, or the fence already there taken away.
+
+    The list is drawn last task first, so the fence on the screen's upper side of `item`
+    is the one in the file right AFTER `item`'s subtree: `item` and everything under it
+    in the file are on the finished side, and what follows waits on them.
 
     One key for both directions because a fence has only two states and the screen
     shows which one it is in — an `insert` that needed a separate `delete` would want
@@ -378,49 +390,56 @@ def break_toggled(nodes, item):
 
     Two refusals, and they are different things to do next. A NESTED item cannot have
     one: a break separates whole branches and cutting a parent from its children with
-    one would be two claims at once (`{` first, then this). The FIRST item cannot
-    either: a fence means "everything above is finished", and above the first item
-    there is nothing, so it would gate nothing while looking as though it gated
-    everything.
+    one would be two claims at once (`{` first, then this). The LAST item cannot
+    either: a fence means "what is after this waits", and after the last item there is
+    nothing, so it would gate nothing while looking as though it gated everything.
     """
-    i = index_of(nodes, item)
-    if i is None or nodes[i][1] != 0:
+    at = _fence_after(nodes, item)
+    if at is None:
         return None
-    if i and is_break(nodes[i - 1][0]):
-        return nodes[:i - 1] + nodes[i:]
-    if i == 0:
+    end = at[1]
+    if end < len(nodes) and is_break(nodes[end][0]):
+        return nodes[:end] + nodes[end + 1:]
+    if end == len(nodes):
         return None
-    return nodes[:i] + [(BREAK, 0)] + nodes[i:]
+    return nodes[:end] + [(BREAK, 0)] + nodes[end:]
 
 
-def has_break_above(nodes, item) -> bool:
-    """Whether `item` is the first thing after a fence — what the toggle will undo."""
+def has_break_after(nodes, item) -> bool:
+    """Whether a fence follows `item`'s subtree (above it on the screen) — what the toggle will undo."""
     i = index_of(nodes, item)
-    return i is not None and i > 0 and is_break(nodes[i - 1][0])
+    if i is None:
+        return False
+    end = span(nodes, i)[1]
+    return end < len(nodes) and is_break(nodes[end][0])
 
 
 def stop_toggled(nodes, item):
-    """`nodes` with the fence above `item` made a stop break, or made plain again.
+    """`nodes` with the fence above `item` on the screen made a stop break, or made plain again.
 
-    With no fence above it, one is put there that stops a work at once, under the
-    same refusals as `break_toggled` (a nested item, the first item); taking a fence
+    With no fence there, one is put there that stops a work at once, under the
+    same refusals as `break_toggled` (a nested item, the last item); taking a fence
     away altogether stays `break_toggled`'s, so this key never removes a fence.
     """
-    i = index_of(nodes, item)
-    if i is None or nodes[i][1] != 0:
+    at = _fence_after(nodes, item)
+    if at is None:
         return None
-    if i and is_break(nodes[i - 1][0]):
-        flip = BREAK if is_stop(nodes[i - 1][0]) else STOP
-        return nodes[:i - 1] + [(flip, 0)] + nodes[i:]
-    if i == 0:
+    end = at[1]
+    if end < len(nodes) and is_break(nodes[end][0]):
+        flip = BREAK if is_stop(nodes[end][0]) else STOP
+        return nodes[:end] + [(flip, 0)] + nodes[end + 1:]
+    if end == len(nodes):
         return None
-    return nodes[:i] + [(STOP, 0)] + nodes[i:]
+    return nodes[:end] + [(STOP, 0)] + nodes[end:]
 
 
-def has_stop_above(nodes, item) -> bool:
-    """Whether the fence right above `item` is a stop break."""
+def has_stop_after(nodes, item) -> bool:
+    """Whether the fence right after `item`'s subtree (above it on the screen) is a stop break."""
     i = index_of(nodes, item)
-    return i is not None and i > 0 and is_stop(nodes[i - 1][0])
+    if i is None:
+        return False
+    end = span(nodes, i)[1]
+    return end < len(nodes) and is_stop(nodes[end][0])
 
 
 def header_of(text: str) -> str:
@@ -459,9 +478,9 @@ def render(nodes) -> str:
     """
     # ⚠️ A fence with nothing after it is not a fence, and is not written back. It
     # gates nothing (there is nothing on its far side), the screen draws no rule for
-    # it, and — since a break is toggled from the row BELOW it — one left at the end
-    # is one the author has no row to press `b` on. Dropping it is what keeps what
-    # you see and what is on disk the same tree.
+    # it, and no row can toggle it: a break is toggled from the task right before it,
+    # and a fence with nothing after it follows the last task, which `b` refuses.
+    # Dropping it keeps what you see and what is on disk the same tree.
     nodes = list(nodes)
     while nodes and is_break(nodes[-1][0]):
         nodes.pop()

@@ -848,6 +848,28 @@ class Web(unittest.TestCase):
         self.assertFalse(out["narrow"])
         self.assertEqual((out["unchanged"], out["crossed"], out["again"], out["back"]), (0, 1, 1, 2), "one redraw per crossing, none when nothing changed")
 
+    def test_a_nested_row_that_only_ends_its_branch_does_not_offer_to_remove_the_break_above(self):
+        """drawTasks() in index.html, run under node (skipped when there is none): a break sits between
+        root tasks, so a nested last child of a branch is not the task the fence above belongs to."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, workHtml = () => '', workTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
+              "const view = {}; const $ = s => s === '#view' ? view : null;"
+              "const row = (id, depth, segment) => ({id, goal: 'g', depth, status: 'open', segment, stop: false, raises: 0,"
+              " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
+              "const S = {reorder: true, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "row('A', 0, 0), row('A1', 1, 0), row('B', 0, 1)]}};" + body +
+              "drawTasks(); console.log(JSON.stringify(view.innerHTML))")
+        html = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        a = html[html.index('data-row="A"'):]
+        a1 = html[html.index('data-row="A1"'):html.index('data-row="A"')]
+        self.assertIn("Remove the break above", a, "A owns the fence above it")
+        self.assertNotIn("Remove the break above", a1, "A1 only ends A's branch")
+        self.assertEqual(html.count("Remove the break above"), 1)
+
     def test_a_stop_break_is_drawn_apart_from_a_plain_one_and_offers_to_be_plain(self):
         """drawTasks() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
@@ -873,10 +895,13 @@ class Web(unittest.TestCase):
         self.assertLess(at("break, waiting on W2"), at('data-row="W2"'))
         self.assertLess(at('data-row="W2"'), at("stop break, below is done"))
         self.assertLess(at("stop break, below is done"), at('data-row="W1"'))
-        self.assertIn("Put a break below", html)
-        self.assertNotIn("break above", html, "a break is drawn under the task it holds")
-        self.assertEqual(html.count("Plain break"), 1, "W2 sits behind a stop break")
-        self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
+        # The buttons act on the break ABOVE the task on the screen: the one right after it in the work order.
+        self.assertEqual(html.count("Put a break above"), 1, "only W3, the top task, has no break above it")
+        self.assertEqual(html.count("Remove the break above"), 2, "W1 and W2 each have one above them")
+        self.assertNotIn("break below", html)
+        self.assertEqual(html.count("Plain break"), 1, "the break above W1 is a stop break")
+        self.assertEqual(html.count(">Stop break<"), 2, "the break above W2 is plain and W3 has none")
+        self.assertIn("Plain break", html[html.index('data-row="W1"'):], "W1 is the last row and offers the plain break")
 
     def test_the_task_list_is_drawn_last_task_first_with_a_break_under_the_task_it_holds(self):
         """drawTasks() in index.html, run under node: the work climbs the page (skipped when there is none)."""
@@ -1833,20 +1858,20 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
 
     def test_a_break_is_added_and_taken_away_and_survives_other_moves(self):
         self.three_tasks()
-        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="break"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="break"))
         self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
-                         [("W1", 0), ("W2", 1), ("W3", 1)])
+                         [("W1", 0), ("W2", 1), ("W3", 1)], "the break goes above W1 on the screen: after it in the file")
         self.assertIn("---", self.order_file())
         _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))
         self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
                          [("W1", 0), ("W3", 1), ("W2", 1)], "a move keeps the fence")
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="break"))
         self.assertEqual({i["segment"] for i in data["items"]}, {0})
         self.assertNotIn("---", self.order_file())
 
     def test_a_stop_break_is_made_flipped_and_survives_other_moves(self):
         self.three_tasks()
-        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="stop"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
         self.assertEqual([(i["id"], i["segment"], i["stop"]) for i in data["items"]],
                          [("W1", 0, False), ("W2", 1, True), ("W3", 1, True)],
                          "no fence there: one is put in that stops a work")
@@ -1854,26 +1879,26 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))
         self.assertEqual([(i["id"], i["stop"]) for i in data["items"]],
                          [("W1", False), ("W3", True), ("W2", True)], "a move keeps the stop")
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="stop"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
         self.assertEqual({i["stop"] for i in data["items"]}, {False}, "a stop break made plain")
         self.assertEqual({i["segment"] for i in data["items"]}, {0, 1}, "the fence stays")
         self.assertNotIn("--- stop", self.order_file())
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="break"))
         self.assertEqual({i["segment"] for i in data["items"]}, {0})
         self.assertNotIn("---", self.order_file())
 
     def test_a_stop_break_that_cannot_be_made_is_refused_and_writes_nothing(self):
         self.three_tasks()
-        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
+        status, data, _ = self.call("POST", "/api/order", dict(item="W3", move="stop"))
         self.assertEqual(status, 409)
-        self.assertIn("bottom item", data["error"])
+        self.assertIn("top item", data["error"])
         self.assertFalse((self.root / ".dfs" / "order.md").exists())
 
     def test_a_move_that_cannot_be_made_is_refused_with_the_reason_and_writes_nothing(self):
         self.three_tasks()
         for item, move, why in (("W3", "up", "first"), ("W1", "down", "last"),
                                 ("W1", "out", "root"), ("W1", "in", "no sibling below"),
-                                ("W1", "break", "bottom item")):
+                                ("W3", "break", "top item")):
             status, data, _ = self.call("POST", "/api/order", dict(item=item, move=move))
             self.assertEqual(status, 409, (item, move))
             self.assertIn(why, data["error"])

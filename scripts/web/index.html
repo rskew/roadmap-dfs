@@ -1191,7 +1191,13 @@ function drawTasks(push) {
   // keeps its place between the same two tasks, which puts it under the task it holds. The reorder view is drawn the same
   // way, and its controls mean up and down on the screen: a task moved up the screen moves later in the work order.
   for (const it of items.slice().reverse()) {
-    const fenced = it.segment > (items.indexOf(it) ? items[items.indexOf(it) - 1].segment : 0);
+    const at = items.indexOf(it);
+    const fenced = it.segment > (at ? items[at - 1].segment : 0);
+    // The break the row's buttons act on is the one ABOVE the task on the screen: right after its subtree in the work order.
+    let next = at + 1;
+    while (next < items.length && items[next].depth > it.depth) next++;
+    // A fence sits only between root branches, so a nested row that merely ends its parent's branch owns none.
+    const fenceAbove = !it.depth && next < items.length && items[next].segment > it.segment ? items[next] : null;
     const fence = fenced ? `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "below is done"}</div>` : "";
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     const draft = it.draft && it.status === "open" && !it.blocked_by;
@@ -1231,7 +1237,7 @@ function drawTasks(push) {
       const grip = `<button class="grip" data-grip="${esc(it.id)}" aria-label="Drag ${esc(it.id)} to a new place among its siblings; the up and down arrow keys move it one place"><svg viewBox="0 0 18 18" aria-hidden="true">${[3, 9, 15].map(y => `<circle cx="6" cy="${y}" r="1.7"/><circle cx="12" cy="${y}" r="1.7"/>`).join("")}</svg></button>`;
       const whole = [it.id + " " + it.goal, it.status, it.waiting_on && "waiting on " + it.waiting_on, it.blocked_by && "held by " + it.blocked_by, it.pr_ready && "ready to open a pull request", it.rev, it.status !== "open" && it.status !== "done" && it.why].filter(Boolean).join(", ");   // the row clips its goal, tags and reason; the title has all of it
       html += `<div class="${cls} reorder${S.moved === it.id ? " moved" : ""}${wait ? " pending" : ""}" data-row="${esc(it.id)}" title="${esc(whole)}" style="${style}">${inner}
-        <span class="moves">${mv("break", fenced ? "Remove break" : "Break", fenced ? "Remove the break below" : "Put a break below")}${mv("stop", fenced && it.stop ? "Plain break" : "Stop break", fenced && it.stop ? "Make the break below a plain one, which a work passes:" : "Make the break below a stop break, which ends a work that waited at it:")}</span>${grip}</div>`;
+        <span class="moves">${mv("break", fenceAbove ? "Remove break" : "Break", fenceAbove ? "Remove the break above" : "Put a break above")}${mv("stop", fenceAbove && fenceAbove.stop ? "Plain break" : "Stop break", fenceAbove && fenceAbove.stop ? "Make the break above a plain one, which a work passes:" : "Make the break above a stop break, which ends a work that waited at it:")}</span>${grip}</div>`;
     } else if (it.archivable) {
       const box = `<svg viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="3" width="14" height="3.5"/><path d="M3 6.5v8h12v-8M7 10h4"/></svg>`;
       html += `<div class="arow" style="${style}"><button class="archive" data-act="archive" data-id="${esc(it.id)}" aria-label="Archive ${esc(it.id)}" title="Archive ${esc(it.id)}">${box}</button><button class="${cls}" data-act="task" data-id="${esc(it.id)}" style="${style}">${inner}</button></div>`;

@@ -264,15 +264,19 @@ class Breaks(unittest.TestCase):
                       dfs_order.indented(self.nodes(), "W3")):
             self.assertEqual(sum(1 for n, _ in after if dfs_order.is_break(n)), 1)
         self.assertEqual(
-            sum(1 for n, _ in dfs_order.break_toggled(self.nodes(), "W3")
+            sum(1 for n, _ in dfs_order.break_toggled(self.nodes(), "W1")
                 if dfs_order.is_break(n)), 2)
 
     def test_the_toggle_adds_and_takes_away(self):
-        added = dfs_order.break_toggled(self.nodes(), "W3")
-        self.assertEqual(added[2], (dfs_order.BREAK, 0))
-        self.assertTrue(dfs_order.has_break_above(added, "W3"))
-        self.assertEqual(dfs_order.break_toggled(added, "W3"), self.nodes())
-        self.assertEqual(dfs_order.break_toggled(self.nodes(), "W4"),
+        # The fence goes right after the task's subtree: above it on the screen, which is
+        # drawn last task first.
+        added = dfs_order.break_toggled(self.nodes(), "W1")
+        self.assertEqual(added, [("W1", 0), ("W2", 1), (dfs_order.BREAK, 0), ("W3", 0),
+                                 (dfs_order.BREAK, 0), ("W4", 0), ("W5", 1)])
+        self.assertTrue(dfs_order.has_break_after(added, "W1"))
+        self.assertEqual(dfs_order.break_toggled(added, "W1"), self.nodes())
+        self.assertTrue(dfs_order.has_break_after(self.nodes(), "W3"))
+        self.assertEqual(dfs_order.break_toggled(self.nodes(), "W3"),
                          [("W1", 0), ("W2", 1), ("W3", 0), ("W4", 0), ("W5", 1)])
 
     def test_the_toggle_refuses_a_nested_item(self):
@@ -281,10 +285,15 @@ class Breaks(unittest.TestCase):
         self.assertIsNone(dfs_order.break_toggled(self.nodes(), "W2"))
         self.assertIsNone(dfs_order.break_toggled(self.nodes(), "W5"))
 
-    def test_the_toggle_refuses_the_first_item(self):
-        # Nothing above it to be finished, so the fence would gate nothing while
-        # looking as though it gated everything.
-        self.assertIsNone(dfs_order.break_toggled(self.nodes(), "W1"))
+    def test_the_toggle_refuses_the_last_item(self):
+        # Nothing after it to wait, so the fence would gate nothing while looking as
+        # though it gated everything. The last item is the top row on the screen.
+        self.assertIsNone(dfs_order.break_toggled(self.nodes(), "W4"))
+        self.assertIsNone(dfs_order.break_toggled([("W1", 0), ("W2", 0)], "W2"))
+
+    def test_the_first_item_can_have_a_break_above_it_on_the_screen(self):
+        self.assertEqual(dfs_order.break_toggled([("W1", 0), ("W2", 0)], "W1"),
+                         [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0)])
 
     def test_a_fence_with_nothing_after_it_is_not_written_back(self):
         # It gates nothing, the screen draws no rule for it, and — since a break is
@@ -320,21 +329,22 @@ class StopBreaks(unittest.TestCase):
                              [("W1", 0), (dfs_order.STOP, 0), ("W2", 0)], text)
 
     def test_the_stop_toggle_flips_the_fence_above_or_adds_a_stopping_one(self):
-        plain = dfs_order.stop_toggled(self.nodes(), "W3")
+        # "Above" is above on the screen: the fence right after the task in the file.
+        plain = dfs_order.stop_toggled(self.nodes(), "W2")
         self.assertEqual(plain[2], (dfs_order.BREAK, 0))
-        self.assertFalse(dfs_order.has_stop_above(plain, "W3"))
-        self.assertEqual(dfs_order.stop_toggled(plain, "W3"), self.nodes())
-        self.assertTrue(dfs_order.has_stop_above(self.nodes(), "W3"))
-        self.assertEqual(dfs_order.stop_toggled(self.nodes(), "W2"),
+        self.assertFalse(dfs_order.has_stop_after(plain, "W2"))
+        self.assertEqual(dfs_order.stop_toggled(plain, "W2"), self.nodes())
+        self.assertTrue(dfs_order.has_stop_after(self.nodes(), "W2"))
+        self.assertEqual(dfs_order.stop_toggled(self.nodes(), "W1"),
                          [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), (dfs_order.STOP, 0),
                           ("W3", 0), ("W4", 1)])
 
     def test_the_stop_toggle_refuses_where_a_break_is_refused(self):
-        self.assertIsNone(dfs_order.stop_toggled(self.nodes(), "W1"))
+        self.assertIsNone(dfs_order.stop_toggled(self.nodes(), "W3"))
         self.assertIsNone(dfs_order.stop_toggled(self.nodes(), "W4"))
 
     def test_the_break_toggle_takes_a_stop_break_away(self):
-        self.assertEqual(dfs_order.break_toggled(self.nodes(), "W3"),
+        self.assertEqual(dfs_order.break_toggled(self.nodes(), "W2"),
                          [("W1", 0), ("W2", 0), ("W3", 0), ("W4", 1)])
 
     def test_a_move_keeps_the_stop(self):
@@ -745,34 +755,34 @@ class BreaksOnTheScreen(InAWorkRoot):
         dfs_order.write_order([("W1", 0), ("W2", 0), ("W3", 0)])
         reload()
 
-    def test_b_puts_a_fence_below_the_selected_item(self):
+    def test_b_puts_a_fence_above_the_selected_item(self):
         self.ui.sel = 1
         self.ui.answers = ["y"]
         self.ui.toggle_break()
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
-                         [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])
-        self.assertEqual([i["segment"] for i in self.ui.items], [0, 1, 1])
+                         [("W1", 0), ("W2", 0), (dfs_order.BREAK, 0), ("W3", 0)])
+        self.assertEqual([i["segment"] for i in self.ui.items], [0, 0, 1])
         self.assertEqual(self.ui.current()["id"], "W2", "the cursor stays on the item")
-        self.assertEqual(self.ui.current()["waiting_on"], "W1")
-        # The list is drawn upside down: W3, W2, the fence, then W1 at the bottom.
+        self.assertEqual(self.ui.items[2]["waiting_on"], "W1")
+        # The list is drawn upside down: W3, the fence, W2 (selected), then W1 at the bottom.
         self.assertEqual(self.ui.list_rows(),
-                         [("item", 2), ("item", 1), ("break", "W1", False), ("item", 0)])
+                         [("item", 2), ("break", "W1", False), ("item", 1), ("item", 0)])
 
     def test_capital_b_makes_the_fence_a_stop_break_and_plain_again(self):
         self.ui.sel = 1
         self.ui.answers = ["y"]
         self.ui.toggle_stop()
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
-                         [("W1", 0), (dfs_order.STOP, 0), ("W2", 0), ("W3", 0)])
-        self.assertEqual(self.ui.list_rows()[2], ("break", "W1", True))
+                         [("W1", 0), ("W2", 0), (dfs_order.STOP, 0), ("W3", 0)])
+        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", True))
         self.assertIn("a work ends there", self.ui.msg)
         self.ui.toggle_stop()
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
-                         [("W1", 0), (dfs_order.BREAK, 0), ("W2", 0), ("W3", 0)])
-        self.assertEqual(self.ui.list_rows()[2], ("break", "W1", False))
-        self.ui.sel = 0
+                         [("W1", 0), ("W2", 0), (dfs_order.BREAK, 0), ("W3", 0)])
+        self.assertEqual(self.ui.list_rows()[1], ("break", "W1", False))
+        self.ui.sel = 2
         self.ui.toggle_stop()
-        self.assertIn("bottom item", self.ui.msg)
+        self.assertIn("top item", self.ui.msg)
 
     def test_capital_b_without_a_yes_adds_no_break(self):
         self.ui.sel = 1
@@ -816,10 +826,10 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.ui.sel = 1
         self.ui.answers = ["y"]
         self.ui.toggle_break()
-        self.ui.sel = 2                      # W3, on the far side
-        self.ui.reorder(1)                   # down the screen is earlier in the order
+        self.ui.sel = 0                      # W1, on the far side
+        self.ui.reorder(-1)                  # up the screen is later in the order
         self.assertEqual(dfs_order.nodes_of(dfs_order.read_text()),
-                         [("W1", 0), (dfs_order.BREAK, 0), ("W3", 0), ("W2", 0)])
+                         [("W2", 0), ("W1", 0), (dfs_order.BREAK, 0), ("W3", 0)])
 
     def test_b_without_a_yes_adds_no_break(self):
         before = dfs_order.read_text()
@@ -837,8 +847,9 @@ class BreaksOnTheScreen(InAWorkRoot):
         self.assertEqual(dfs_order.read_text(), before)
         self.assertIn("nested", self.ui.msg)
 
-    def test_b_on_the_bottom_item_says_so_and_writes_nothing(self):
+    def test_b_on_the_top_item_says_so_and_writes_nothing(self):
         before = dfs_order.read_text()
+        self.ui.sel = 2
         self.ui.toggle_break()
         self.assertEqual(dfs_order.read_text(), before)
         self.assertIn("gate nothing", self.ui.msg)
