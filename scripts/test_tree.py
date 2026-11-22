@@ -2461,10 +2461,11 @@ class ReadsItsBody(InARepo):
         self.write(task())
         self.commit()
 
-    def start(self, *args):
+    def start(self, *args, env=None):
         p = subprocess.Popen([sys.executable, str(HERE / "tree.py"), *args], cwd=self.root,
                              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE, text=True)
+                             stderr=subprocess.PIPE, text=True,
+                             env=None if env is None else {**os.environ, **env})
         self.addCleanup(lambda: [f.close() for f in (p.stdin, p.stdout, p.stderr) if f])
         return p
 
@@ -2501,6 +2502,38 @@ class ReadsItsBody(InARepo):
         out, err = p.communicate("late body\n", timeout=15)
         self.assertEqual(p.returncode, 0, err)
         self.assertIn("late body", (self.root / ".dfs/items/W1.log.md").read_text())
+
+    def test_a_body_that_starts_after_the_wait_is_lost_and_the_command_says_so(self):
+        p = self.start("log", "W1", "raise", "W1.1")
+        time.sleep(2.5)
+        out, err = p.communicate("too late\n", timeout=15)
+        self.assertEqual(p.returncode, 0, err)
+        self.assertNotIn("too late", (self.root / ".dfs/items/W1.log.md").read_text())
+        self.assertIn("DFS_BODY_WAIT", err)
+
+    def test_an_open_silent_stdin_also_says_so(self):
+        p = self.start("log", "W1", "session", "work")
+        p.wait(timeout=15)              # stdin stays open: communicate() would close it
+        self.assertIn("DFS_BODY_WAIT", p.stderr.read())
+
+    def test_dfs_body_wait_lets_a_slow_writer_arrive_whole_without_a_note(self):
+        p = self.start("log", "W1", "raise", "W1.1", env={"DFS_BODY_WAIT": "5"})
+        time.sleep(2.5)
+        out, err = p.communicate("slow body\n", timeout=15)
+        self.assertEqual(p.returncode, 0, err)
+        self.assertIn("slow body", (self.root / ".dfs/items/W1.log.md").read_text())
+        self.assertNotIn("DFS_BODY_WAIT", err)
+
+    def test_a_body_sent_whole_prints_no_note(self):
+        p = self.start("log", "W1", "raise", "W1.1")
+        out, err = p.communicate("whole\n", timeout=15)
+        self.assertEqual(err, "")
+
+    def test_a_bad_dfs_body_wait_is_ignored(self):
+        self.assertEqual(dfs_tree.body_wait({"DFS_BODY_WAIT": "soon"}), dfs_tree.BODY_WAIT)
+        self.assertEqual(dfs_tree.body_wait({"DFS_BODY_WAIT": "-3"}), dfs_tree.BODY_WAIT)
+        self.assertEqual(dfs_tree.body_wait({"DFS_BODY_WAIT": "2.5"}), 2.5)
+        self.assertEqual(dfs_tree.body_wait({}), dfs_tree.BODY_WAIT)
 
     def test_read_body_of_a_terminal_is_empty(self):
         class Tty:
