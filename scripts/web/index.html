@@ -1196,7 +1196,8 @@ function drawTasks(push) {
     // The break the row's buttons act on is the one ABOVE the task on the screen: right after its subtree in the work order.
     let next = at + 1;
     while (next < items.length && items[next].depth > it.depth) next++;
-    const fenceAbove = next < items.length && items[next].segment > it.segment ? items[next] : null;
+    // A fence sits only between root branches, so a nested row that merely ends its parent's branch owns none.
+    const fenceAbove = !it.depth && next < items.length && items[next].segment > it.segment ? items[next] : null;
     const fence = fenced ? `<div class="break cap${it.stop ? " stop" : ""}" data-fence="${esc(it.id)}">${it.stop ? "stop break" : "break"}, ${it.waiting_on ? "waiting on " + esc(it.waiting_on) : "below is done"}</div>` : "";
     const blocks = it.status === "blocked" || it.raises > 0, assumes = !blocks && it.assumptions.length > 0;
     const draft = it.draft && it.status === "open" && !it.blocked_by;

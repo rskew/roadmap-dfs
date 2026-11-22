@@ -848,6 +848,28 @@ class Web(unittest.TestCase):
         self.assertFalse(out["narrow"])
         self.assertEqual((out["unchanged"], out["crossed"], out["again"], out["back"]), (0, 1, 1, 2), "one redraw per crossing, none when nothing changed")
 
+    def test_a_nested_row_that_only_ends_its_branch_does_not_offer_to_remove_the_break_above(self):
+        """drawTasks() in index.html, run under node (skipped when there is none): a break sits between
+        root tasks, so a nested last child of a branch is not the task the fence above belongs to."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's drawTasks()")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("function drawTasks("):src.index("// One tap, one move")]
+        js = ("const esc = s => String(s), chatOn = () => false, workHtml = () => '', workTags = () => '', iidHtml = s => s, tagHtml = () => '', typingInBox = () => false, findEnter = () => null, findLeave = () => {}, document = {activeElement: null}, pinSizes = null, showArchived = () => false, wide = () => false, tableWide = () => false, listStyle = () => 'card';"
+              "const view = {}; const $ = s => s === '#view' ? view : null;"
+              "const row = (id, depth, segment) => ({id, goal: 'g', depth, status: 'open', segment, stop: false, raises: 0,"
+              " assumptions: [], rev: '', waiting_on: '', blocked_by: '', why: '', needs_you: false});"
+              "const S = {reorder: true, moved: null, pending: new Set(), state: {needs_you: 0, items: ["
+              "row('A', 0, 0), row('A1', 1, 0), row('B', 0, 1)]}};" + body +
+              "drawTasks(); console.log(JSON.stringify(view.innerHTML))")
+        html = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        a = html[html.index('data-row="A"'):]
+        a1 = html[html.index('data-row="A1"'):html.index('data-row="A"')]
+        self.assertIn("Remove the break above", a, "A owns the fence above it")
+        self.assertNotIn("Remove the break above", a1, "A1 only ends A's branch")
+        self.assertEqual(html.count("Remove the break above"), 1)
+
     def test_a_stop_break_is_drawn_apart_from_a_plain_one_and_offers_to_be_plain(self):
         """drawTasks() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
