@@ -81,6 +81,7 @@ KIRO_MODELS_TTL = 600           # seconds a list read from kiro-cli is kept
 KIRO_MODELS_TIMEOUT = 30        # seconds the read may take
 _kiro_models = {"ids": [], "at": 0.0, "busy": False}
 _kiro_models_lock = threading.Lock()
+TASK_NAME = re.compile(r"[A-Za-z]+\d+\Z")          # a task id, as a key of the models file
 MODEL_NAME = re.compile(r"[A-Za-z0-9._:\[\]][A-Za-z0-9._:\[\]-]*\Z")   # never a flag: no leading "-"
 
 
@@ -123,18 +124,11 @@ def models_file():
     return os.path.join(dfs_runs.run_root(), "models")
 
 
-def read_models(path=None, agent="claude"):
-    """The chosen model per role for `agent`: {"plan": name, "implement": name}, "" for a role
-    not chosen (run.sh then uses its own default). The file holds claude's choice at its top
-    level and kiro's under "kiro"; an agent run.sh tells no model reads as nothing chosen.
-    A missing or unreadable file, or a name it should not hold, reads as nothing chosen."""
+def _models_of(data, agent):
+    """The two roles' names `data` (a models record) holds for `agent`: claude's at its top
+    level, kiro's under "kiro". A role not chosen, or a name it should not hold, is ""."""
     out = {r: "" for r in MODEL_ROLES}
     if agent not in MODEL_AGENTS:
-        return out
-    try:
-        with open(path or models_file(), errors="replace") as fh:
-            data = json.load(fh)
-    except (OSError, ValueError):
         return out
     if agent != "claude" and isinstance(data, dict):
         data = data.get(agent)
@@ -142,6 +136,38 @@ def read_models(path=None, agent="claude"):
         for r in MODEL_ROLES:
             v = data.get(r)
             if isinstance(v, str) and (v == "default" or MODEL_NAME.match(v)):
+                out[r] = v
+    return out
+
+
+def _models_data(path=None):
+    """The whole models file as a dict; {} when it is missing, unreadable or not an object."""
+    try:
+        with open(path or models_file(), errors="replace") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def task_models(item, path=None, agent="claude"):
+    """The models chosen for `item` alone, per role, for `agent`: "" for a role the task has not
+    chosen. They are kept in the file's "tasks" key, in the same shape as its top level."""
+    tasks = _models_data(path).get("tasks")
+    return _models_of(tasks.get(item) if isinstance(tasks, dict) else None, agent)
+
+
+def read_models(path=None, agent="claude", item=None):
+    """The chosen model per role for `agent`: {"plan": name, "implement": name}, "" for a role
+    not chosen (run.sh then uses its own default). The file holds claude's choice at its top
+    level and kiro's under "kiro"; an agent run.sh tells no model reads as nothing chosen.
+    The top level is the instance's default. With `item`, a role the task has chosen for
+    itself (the file's "tasks" key) takes that choice instead.
+    A missing or unreadable file, or a name it should not hold, reads as nothing chosen."""
+    out = _models_of(_models_data(path), agent)
+    if item:
+        for r, v in task_models(item, path, agent).items():
+            if v:
                 out[r] = v
     return out
 
@@ -874,7 +900,7 @@ class WorkMixin:
         console = os.path.join(rundir, "console.log")
         argv = self.runner(item, cap)
         env = dict(os.environ, RUNDIR=rundir)
-        for role, name in read_models(agent=self.agent).items():
+        for role, name in read_models(agent=self.agent, item=item).items():
             if name:                    # "default" is the empty variable: claude's own default
                 env[MODEL_ENV[role]] = "" if name == "default" else name
         try:
@@ -923,8 +949,14 @@ class WorkMixin:
         self.event("work", "agent: " + name)
 
     def models(self):
-        """The models chosen for the chains the work starts next, per role, for the agent they use."""
+        """The models chosen for the chains the work starts next, per role, for the agent they use:
+        the instance's defaults, which a task's own choice (`task_models`) overrides."""
         return read_models(agent=self.agent)
+
+    def task_models(self, item):
+        """The models `item` has chosen for itself, per role, for the agent the next chain uses;
+        "" for a role it leaves to the instance's default."""
+        return task_models(item, agent=self.agent)
 
     def model_choices(self):
         """The models the next chain's agent can be given, for the page's drop-down: empty for
@@ -942,11 +974,14 @@ class WorkMixin:
         and read their model from their own config."""
         return dict(MODEL_DEFAULTS) if self.agent == "claude" else {r: "" for r in MODEL_ROLES}
 
-    def set_model(self, role, name):
+    def set_model(self, role, name, item=None):
         """Choose the model the next chain's agent (claude or kiro) runs on for `role` (plan: the first session
         on a task, the critic and the review; implement: every other work session), kept
         in `models_file` for the next chain. "" takes the choice away (run.sh's default
-        again); "default" gives claude's own default. ValueError says why not."""
+        again); "default" gives claude's own default. ValueError says why not.
+        With `item` the choice is that task's own, kept under the file's "tasks" key: it
+        overrides the instance's default for that task's chains, and "" takes it away so
+        the instance's default applies again."""
         if role not in MODEL_ROLES:
             raise ValueError("a model is chosen for " + " or ".join(MODEL_ROLES))
         if self.agent not in MODEL_AGENTS:
@@ -973,12 +1008,39 @@ class WorkMixin:
             chosen = {}
         if not isinstance(chosen, dict):
             chosen = {}
-        mine = read_models(agent=self.agent)
-        mine[role] = name
-        if self.agent == "claude":
-            chosen.update(mine)
+        if item is not None:
+            if not isinstance(item, str) or not TASK_NAME.match(item):
+                raise ValueError("%r is not a task" % (item,))
+            tasks = chosen.get("tasks")
+            tasks = tasks if isinstance(tasks, dict) else {}
+            rec = tasks.get(item)
+            rec = dict(rec) if isinstance(rec, dict) else {}
+            mine = task_models(item, agent=self.agent)
+            mine[role] = name
+            mine = {r: v for r, v in mine.items() if v}      # a role not chosen is not written
+            if self.agent == "claude":
+                for r in MODEL_ROLES:
+                    rec.pop(r, None)
+                rec.update(mine)
+            elif mine:
+                rec[self.agent] = mine
+            else:
+                rec.pop(self.agent, None)
+            if rec:
+                tasks[item] = rec
+            else:
+                tasks.pop(item, None)
+            if tasks:
+                chosen["tasks"] = tasks
+            else:
+                chosen.pop("tasks", None)
         else:
-            chosen[self.agent] = mine
+            mine = read_models(agent=self.agent)
+            mine[role] = name
+            if self.agent == "claude":
+                chosen.update(mine)
+            else:
+                chosen[self.agent] = mine
         tmp = "%s.%d.tmp" % (path, os.getpid())   # written whole, then swapped in: a reader never sees half
         try:
             with open(tmp, "w") as fh:
@@ -991,7 +1053,8 @@ class WorkMixin:
             except OSError:
                 pass
             raise ValueError("could not keep the choice: %s" % e)
-        what = "%s model: %s" % (role, name or "run.sh's default")
+        what = "%s%s model: %s" % (item + " " if item else "", role,
+                                  name or ("the instance's default" if item else "run.sh's default"))
         self.msg = what
         self.event("work", what)
 
@@ -1176,9 +1239,9 @@ class HeadlessWork(WorkMixin):
         with self.lock:
             WorkMixin.set_agent(self, name)
 
-    def set_model(self, role, name):
+    def set_model(self, role, name, item=None):
         with self.lock:
-            WorkMixin.set_model(self, role, name)
+            WorkMixin.set_model(self, role, name, item)
 
     def snapshot(self, data=None):
         """The work as the page shows it. `data` is a state the caller already holds (the page's
