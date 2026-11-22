@@ -64,6 +64,7 @@ def read_agent(path):
 
 
 MODEL_ROLES = ("plan", "implement")      # the two things run.sh gives a claude session a model for
+# The instance sets the defaults (the top level of the models file); a task may choose its own (its "tasks" record).
 MODEL_ENV = {"plan": "PLAN_MODEL", "implement": "IMPLEMENT_MODEL"}
 MODEL_DEFAULTS = {"plan": "opus", "implement": "sonnet"}   # what run.sh runs a claude session on when none is chosen
 # The agents run.sh can tell a model, and the models the work offers for each. A model is chosen for an
