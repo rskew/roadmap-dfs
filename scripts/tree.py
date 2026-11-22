@@ -837,6 +837,16 @@ ANSWER_PAGE = re.compile(r"^[ \t]*Answer with:[ \t]*(?:\.dfs/)?(?:artefacts/)?([
                          re.I | re.M)
 
 
+# Every HTML page a raise names: by its artefacts path, or by a bare <uuid>.html (the web page links both).
+PAGE_REF = re.compile(r"(?:artefacts/([0-9A-Za-z][0-9A-Za-z._-]*\.html)"
+                      r"|\b([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\.html))", re.I)
+
+
+def named_pages(body):
+    """The HTML pages a raise's text names, as file names."""
+    return {m.group(1) or m.group(2) for m in PAGE_REF.finditer(body or "")}
+
+
 def answer_page(body):
     """The file name of the page a raise names as its answer (`Answer with:`), else None."""
     m = ANSWER_PAGE.search(body or "")
@@ -866,8 +876,12 @@ SUBMIT_BUTTON = re.compile(r"<button\b|<input\b[^>]*\btype\s*=\s*[\"']?(?:submit
                            r"|createElement\(\s*['\"]button['\"]", re.I)
 
 
+_COMMENT = re.compile(r"<!--.*?-->", re.S)
+
+
 def has_submit_button(page):
-    return bool(SUBMIT_BUTTON.search(page))
+    # A button inside an HTML comment is not on the page.
+    return bool(SUBMIT_BUTTON.search(_COMMENT.sub("", page)))
 
 
 def can_answer(page):
@@ -907,6 +921,10 @@ def append_log(task, kind, args=(), body=""):
                          "the verdict is `ok`, and any lesser point goes in its body"
                          % (kind, task))
     page = answer_page(body) if kind == "raise" else None
+    if kind == "raise" and named_pages(body) - {page}:
+        raise ValueError("the raise names %s, which is not its answer page: a page a raise names must be "
+                         "the one `Answer with:` page, which has the submit button, so draw it into that "
+                         "page (a screenshot may be a .png)" % ", ".join(sorted(named_pages(body) - {page})))
     if page and not dfs_paths.artefact_file(page).is_file():
         raise ValueError("the raise says to answer with %s, which is not in %s"
                          % (page, dfs_paths.rel(dfs_paths.artefacts())))

@@ -73,10 +73,11 @@ route but the one below. That is what "self-contained" is for.
 
 A Hypothesis names its page as `.dfs/artefacts/<uuid>.html` inside the Hypothesis, and
 `check.py` refuses a commit that adds one without it. A raise names its page on a line of
-its own, `Answer with: .dfs/artefacts/<uuid>.html`; a raise may link several pages to look
-at, and this line picks the one that answers. `tree.py log raise` refuses a page that is
-not there or cannot answer: one with no control, no submit button (a `<button>` or an
-`<input type="submit">`), no handler, or no post of an `answer` to `/artefact-state/`.
+its own, `Answer with: .dfs/artefacts/<uuid>.html`. A raise names no other `.html` page, since
+only this one has the submit button; a screenshot (`.png`) may be named. `tree.py log raise`
+refuses a second page, and a page that is not there or cannot answer: one with no control,
+no submit button (a `<button>` or an `<input type="submit">` outside an HTML comment), no
+handler, or no post of an `answer` to `/artefact-state/`.
 
 A raise with an `Answer with:` page is answered on that page, opened in full: tapping its
 node on the web page opens the page in the viewer in place of the text dialog, and `a` on its
