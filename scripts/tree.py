@@ -94,6 +94,7 @@ import calendar
 import contextlib
 import os
 import re
+import select
 import shutil
 import subprocess
 import sys
@@ -2205,6 +2206,33 @@ def outline(t):
     return lines
 
 
+BODY_WAIT = 1.0     # seconds to wait for a body to start, and for a quiet writer to go on
+
+
+def read_body(stream=None, wait=None):
+    """The text sent on stdin, or "" when none is sent.
+
+    A terminal sends none. An agent's shell hands over a pipe that stays open and is never
+    written, so a plain `read()` waits for ever. This waits `wait` seconds (BODY_WAIT) for
+    the first bytes, then reads to the end of input, and stops early if the writer goes
+    quiet for that long. A heredoc, a file redirect and `echo ... |` arrive well inside it."""
+    stream = sys.stdin if stream is None else stream
+    wait = BODY_WAIT if wait is None else wait
+    try:
+        if stream.isatty():
+            return ""
+        fd = stream.fileno()
+    except (AttributeError, ValueError, OSError):
+        return stream.read()            # not a real file (a test's stand-in): read it
+    chunks = []
+    while select.select([fd], [], [], wait)[0]:
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            break
+        chunks.append(chunk)
+    return b"".join(chunks).decode("utf-8", errors="replace")
+
+
 def main(argv):
     try:
         return _main(argv)
@@ -2216,11 +2244,11 @@ def main(argv):
 def _main(argv):
     if len(argv) >= 3 and argv[1] == "log":
         task, kind, args = argv[2], argv[3] if len(argv) > 3 else "", argv[4:]
-        body = "" if sys.stdin.isatty() else sys.stdin.read()
+        body = read_body()
         print(append_log(task, kind, args, body))
         return 0
     if len(argv) >= 5 and argv[1] == "add":
-        approach = "" if sys.stdin.isatty() else sys.stdin.read()
+        approach = read_body()
         print(add_node(argv[2], " ".join(argv[4:]), None if argv[3] == "-" else argv[3], approach))
         return 0
     if len(argv) == 4 and argv[1] == "start":

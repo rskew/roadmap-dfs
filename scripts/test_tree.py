@@ -2453,5 +2453,67 @@ class Branches(InARepo):
         self.assertNotEqual(self.git("rev-parse -q --verify HEAD^2").returncode, 0)
 
 
+class ReadsItsBody(InARepo):
+    """`tree.py log` and `add` run from an agent's shell, whose stdin is an open pipe nobody writes."""
+
+    def setUp(self):
+        super().setUp()
+        self.write(task())
+        self.commit()
+
+    def start(self, *args):
+        p = subprocess.Popen([sys.executable, str(HERE / "tree.py"), *args], cwd=self.root,
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True)
+        self.addCleanup(lambda: [f.close() for f in (p.stdin, p.stdout, p.stderr) if f])
+        return p
+
+    def test_an_open_silent_stdin_is_no_body_and_the_command_returns(self):
+        p = self.start("log", "W1", "session", "work")
+        try:
+            p.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            self.fail("tree.py log waited for ever on an open stdin that sends nothing")
+        self.assertEqual(p.returncode, 0, p.stderr.read())
+        self.assertIn("session · work", (self.root / ".dfs/items/W1.log.md").read_text())
+
+    def test_add_returns_on_an_open_silent_stdin_too(self):
+        p = self.start("add", "W1", "-", "a step")
+        try:
+            p.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            self.fail("tree.py add waited for ever on an open stdin that sends nothing")
+        self.assertEqual(p.returncode, 0, p.stderr.read())
+
+    def test_a_heredoc_style_body_arrives_whole(self):
+        p = self.start("log", "W1", "raise", "W1.1")
+        out, err = p.communicate("What I need from you: a or b\nmore, \u00e9 and \u4e2d\n", timeout=15)
+        self.assertEqual(p.returncode, 0, err)
+        log = (self.root / ".dfs/items/W1.log.md").read_text()
+        self.assertIn("What I need from you: a or b", log)
+        self.assertIn("more, \u00e9 and \u4e2d", log)
+
+    def test_a_writer_that_starts_late_but_inside_the_wait_is_read(self):
+        p = self.start("log", "W1", "raise", "W1.1")
+        time.sleep(0.4)
+        out, err = p.communicate("late body\n", timeout=15)
+        self.assertEqual(p.returncode, 0, err)
+        self.assertIn("late body", (self.root / ".dfs/items/W1.log.md").read_text())
+
+    def test_read_body_of_a_terminal_is_empty(self):
+        class Tty:
+            def isatty(self):
+                return True
+        self.assertEqual(dfs_tree.read_body(Tty()), "")
+
+    def test_read_body_of_a_file_is_all_of_it(self):
+        f = self.root / "body.txt"
+        f.write_text("one\ntwo\n")
+        with f.open() as fh:
+            self.assertEqual(dfs_tree.read_body(fh), "one\ntwo\n")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
