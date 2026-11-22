@@ -798,6 +798,8 @@ async function renderDraw(force, changed) {
       if (mine !== RENDERS) return;
       if (!same) for (const k of [r.task, "*"]) if (stale.get(k) <= seen) stale.delete(k);      // a push that came in during the read stays
       S.node = r.node;
+      foldByDefault(t, r.node);
+      if (arrived) unfoldTo(t, r.node);      // coming to a node by a link: the way to it is open
       const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.work && S.work.pinned) + "|" + workHere(r.task) + "|" + JSON.stringify(workOf(r.task));
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
@@ -1413,6 +1415,26 @@ document.addEventListener("keydown", async e => {
 /* ── one task ───────────────────────────────────────────────────────────────── */
 // A node the author is there for: an open raise or an assumption (an old Ask counts).
 const wantsYou = r => r.raises.length > 0 || r.assumes || r.ask;
+/* A task's branches (nodes that have children) start folded. The first read of a task folds them all and later reads keep
+   the author's own folds; a node the page is opened on has the way to it unfolded, so it is never hidden. */
+function unfoldTo(t, id) {
+  const s = S.folded[t.id], byId = {};
+  if (!s) return;
+  t.rows.forEach(r => { if (r.kind === "node") byId[r.id] = r; });
+  for (let p = byId[id] && byId[id].parent; p && byId[p]; p = byId[p].parent) s.delete(p);
+}
+function foldByDefault(t, node) {
+  if (S.folded[t.id]) return;
+  S.folded[t.id] = new Set(t.rows.filter(r => r.kind === "node" && r.kids).map(r => r.id));
+  unfoldTo(t, node);
+}
+/* The raises under a node, for the chip on a folded row: a fold must not hide what is waiting for the author. */
+function raisesBelowOf(t) {
+  const kids = {}, memo = {};
+  t.rows.forEach(r => { if (r.kind === "node") (kids[r.parent] ||= []).push(r); });
+  const count = id => memo[id] ??= (kids[id] || []).reduce((n, k) => n + k.raises.length + count(k.id), 0);
+  return count;
+}
 function visibleRows(t) {
   // Searching: the nodes whose id or title hold every word, wherever they sit and folded or not.
   if (S.q) return t.rows.filter(r => r.kind === "node" && (!S.flagged || wantsYou(r)) && hit(S.q, r.id, r.title));
@@ -1430,7 +1452,7 @@ const workHere = id => !!(S.work && S.work.enabled && S.work.candidates.some(c =
 const PROGRESS_LABEL = { done: ["✓", "complete"], started: ["", "started"], open: ["", "not started"] };
 function drawTask() {
   const had = findEnter();
-  const t = S.task, folded = S.folded[t.id] || new Set();
+  const t = S.task, folded = S.folded[t.id] || new Set(), below = raisesBelowOf(t);
   let html = `<div class="head"><h2>${inline(t.goal)}</h2>
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
     ${(tags => tags ? `<p class="worktags">${tags}</p>` : "")(workTags(workOf(t.id)))}</div>
@@ -1462,7 +1484,7 @@ function drawTask() {
       const chips = [
         r.raises.length ? `<span class="tag attention">raise, ${esc(r.raises[0].age)}</span>` : "",
         r.raises.some(answerPage) ? `<span class="tag page" title="Tapping this node opens its answer page">answer page</span>` : "",
-        r.raises_below ? `<span class="tag attention">${r.raises_below} raise${r.raises_below === 1 ? "" : "s"} below</span>` : "",
+        folded.has(r.id) && !S.flagged && !S.q && below(r.id) ? `<span class="tag attention">${below(r.id)} raise${below(r.id) === 1 ? "" : "s"} below</span>` : "",
         r.assumes ? `<span class="tag assumption">assumption</span>` : "",
         r.ask ? `<span class="tag attention">ask</span>` : "",
         r.answered ? `<span class="tag">answered</span>` : "",
@@ -1602,7 +1624,7 @@ function nextFlag() {
   for (let k = 1; k <= all.length; k++) {
     const r = all[(at + k) % all.length];
     if (r.raises.length || r.assumes || r.ask) {
-      const folded = S.folded[S.task.id]; if (folded) { for (let p = r.parent, byId = Object.fromEntries(all.map(x => [x.id, x])); p && byId[p]; p = byId[p].parent) folded.delete(p); }
+      unfoldTo(S.task, r.id);
       return go(`t/${S.task.id}/${r.id}`, true);
     }
   }
@@ -2162,7 +2184,7 @@ function addForm(parent) {
     ${dead ? `<p class="warn">${esc(parent)} is ${esc(p.status)}, so a node under it is pruned too.</p>` : ""}
     <div><label for="t">Title</label>${line("t", "title", "")}</div>
     <div><label for="a">Approach, optional: what to do, where, and the check</label><textarea id="a" name="approach"></textarea></div>${buttons("Add")}`,
-    async fd => { const res = await api("/api/add", { task: S.task.id, parent: parent || null, title: fd.get("title"), approach: fd.get("approach") }); await wrote(res, "Added " + res.added + "."); });
+    async fd => { const res = await api("/api/add", { task: S.task.id, parent: parent || null, title: fd.get("title"), approach: fd.get("approach") }); if (parent && S.folded[S.task.id]) S.folded[S.task.id].delete(parent); await wrote(res, "Added " + res.added + "."); });
 }
 /* An assumption's evidence in the Accept dialog: its first lines as the node holds them ("for: ..." / "against: ...") and
    what is left on the node sheet, so the author weighs the test against what was seen without opening each node. */

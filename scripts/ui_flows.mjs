@@ -81,7 +81,13 @@ async function open(browser, opts, scheme = "light") {
   return { ctx, page, errors };
 }
 const bg = page => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-async function task(page, id) { await page.click(`.item[data-id=${id}]`); await page.waitForSelector(".row"); }
+// A task opens with its branches folded. Most flows are about the nodes, so `task` opens the task and unfolds every
+// branch; the flow that is about the fold (folded_by_default) clicks the item itself.
+async function unfoldAll(page) {
+  await page.evaluate(() => { S.folded[S.task.id] = new Set(); S.sig = ""; render(true); });
+  await page.waitForFunction(() => ![...document.querySelectorAll("#view .fold:not(.none)")].some(b => b.textContent === "+"));
+}
+async function task(page, id) { await page.click(`.item[data-id=${id}]`); await page.waitForSelector(".row"); await unfoldAll(page); }
 // Back to the list from wherever: the bar's Back on a phone, the header's on a wide screen.
 async function toList(page) {
   for (let i = 0; i < 3 && !(await page.$(".item")); i++) {
@@ -146,7 +152,7 @@ const FLOWS = {
     await page.keyboard.press("j"); await page.keyboard.press("Enter");
     await page.waitForSelector(".row");
     same(await hash(), "#/t/" + ids[1], "Enter opens the focused task");
-    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row"); await unfoldAll(page);
     await wait("step 2",() => document.activeElement.matches('.main[data-id="W9.2"]'));
     const nodes = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
     const at = nodes.indexOf("W9.2");
@@ -213,7 +219,7 @@ const FLOWS = {
     await page.keyboard.press("/"); await page.fill("#find-q", word); await page.keyboard.press("Enter");
     same(await page.evaluate(() => document.activeElement.dataset.id), want[0], "Enter focuses the first task left");
     // On a task: nodes by id or title, folded ones included.
-    await page.goto(URL_ + "#/t/W9"); await page.waitForSelector(".row");
+    await page.goto(URL_ + "#/t/W9"); await page.waitForSelector(".row"); await unfoldAll(page);
     const ids = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
     const folded = await page.$eval("#view .row:has(.fold:not(.none)) .fold", e => e.dataset.id);
     await page.click(`#view .fold[data-id="${folded}"]`); await page.waitForFunction(n => document.querySelectorAll("#view .row").length < n, ids.length);
@@ -316,6 +322,34 @@ const FLOWS = {
       return { tagRight: t.right, bodyRight: r.right, scrollW: document.documentElement.scrollWidth, innerW: innerWidth };
     });
     assert(wide.tagRight <= wide.bodyRight + 1 && wide.scrollW <= wide.innerW, "a long tag wraps inside its row and the page does not scroll sideways: " + JSON.stringify(wide));
+    same(errors, [], "no page errors");
+  },
+
+  // A task opens with its branches folded: only the nodes that have no folded parent are drawn, a fold button unfolds, and a
+  // page opened on a node under a fold opens the way to it.
+  async folded_by_default(b) {
+    const { page, errors } = await open(b, PHONE);
+    await page.click(".item[data-id=W9]"); await page.waitForSelector(".row");
+    const drawn = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
+    const rows = await page.evaluate(() => S.task.rows.filter(r => r.kind === "node").map(r => ({ id: r.id, parent: r.parent, kids: r.kids })));
+    const branches = rows.filter(r => r.kids).map(r => r.id);
+    assert(branches.length > 0, "the fixture has a branch");
+    const shown = branches.filter(id => drawn.includes(id));      // a branch under a fold is not drawn, so it has no button yet
+    same(await page.$$eval("#view .fold:not(.none)", a => a.map(e => e.dataset.id).sort()), shown.slice().sort(), "every branch drawn has a fold button");
+    same(await page.$$eval("#view .fold:not(.none)", a => [...new Set(a.map(e => e.textContent))]), ["+"], "and every one is folded");
+    const hiddenIds = rows.filter(r => r.parent && branches.includes(r.parent) && !drawn.includes(r.id)).map(r => r.id);
+    assert(hiddenIds.length > 0 && drawn.length < rows.length, "the children of a branch are not drawn");
+    // A fold button opens one branch and leaves the others as they were.
+    const first = shown[0];
+    await page.click(`#view .fold[data-id="${first}"]`);
+    await page.waitForFunction(n => document.querySelectorAll("#view .row").length > n, drawn.length);
+    same(await page.$eval(`#view .fold[data-id="${first}"]`, e => e.textContent), "−", "the branch is unfolded");
+    const open_ = await page.$$eval("#view .fold:not(.none)", a => a.filter(e => e.textContent === "−").map(e => e.dataset.id));
+    same(open_, [first], "the other branches stay folded");
+    // A page opened on a node under a fold draws it: the way to it is unfolded.
+    const deep = rows.find(r => r.parent && branches.includes(r.parent) && !drawn.includes(r.id));
+    await page.goto(URL_ + "#/t/W9/" + deep.id); await page.reload(); await page.waitForSelector(".row");
+    assert((await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id))).includes(deep.id), "a node opened by link is drawn");
     same(errors, [], "no page errors");
   },
 
