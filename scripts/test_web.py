@@ -642,6 +642,7 @@ class Web(unittest.TestCase):
         self.assertIn("drawChatsOff(list.off)", src)
         self.assertRegex(src, r"\.row \.fold \{ flex: 0 0 calc\(44px")
         self.assertIn('class="btn primary fab" data-act="newtask" aria-label="Add task">+</button>', src)
+        self.assertIn('if (!S.reorder) html += `<div class="fab-gap"></div><button class="btn primary fab"', src)
         self.assertNotIn("tab-add", src)
         self.assertNotRegex(src, r"\.fab, \.fab-gap \{ display: none")
         quote = css[css.index("dialog .quote {"):]

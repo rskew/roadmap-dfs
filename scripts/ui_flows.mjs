@@ -2349,7 +2349,7 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
   // A drag can land either side of a break: the gap just above it is the end of the segment above, and the gap just under it
   // the start of the one below, so the task beside a break crosses it by one gap, and any task reaches the end of a segment.
   async reorderbreakdrag(b) {
-    // a phone tall enough to hold the list: no grip lies under Add a task, and no drag reaches an edge where the list scrolls
+    // a phone tall enough to hold the list: no drag reaches an edge where the list scrolls (the plus button is not drawn in reorder mode, so it never covers a grip)
     const { page, errors } = await open(b, { ...PHONE, viewport: { width: PHONE.viewport.width, height: 1400 } });
     const ids = () => page.$$eval(".item .iid", es => es.map(e => e.textContent.trim()));
     const [a, c, d, e, ...tail] = await ids();
@@ -2502,6 +2502,12 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     const wbtn = await wide.page.$eval("[data-act=newtask]", e => { const r = e.getBoundingClientRect(); return { h: r.height, fixed: getComputedStyle(e).position === "fixed", right: innerWidth - r.right, low: innerHeight - r.bottom < 60, text: e.textContent.trim() }; });
     assert(wbtn.h >= 44 && wbtn.fixed && wbtn.right < 60 && wbtn.low && wbtn.text === "+", "on a wide screen the plus floats at the bottom right");
     await wide.ctx.close();
+    // reorder mode has no plus, so it never covers a row's drag grip
+    await page.click("[data-act=reorder]");
+    await page.waitForSelector(".item.reorder .grip");
+    assert(!(await page.$("[data-act=newtask]")), "reorder mode draws no plus button, which would cover a drag grip");
+    await page.click("[data-act=all]");
+    await page.waitForSelector("[data-act=newtask]");
     await page.click("[data-act=newtask]"); await dialog(page);
     await page.fill("#nn", "Cache the lookups");
     await page.fill("#ng", "Hits above 90%.");

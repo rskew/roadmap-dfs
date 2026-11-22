@@ -1250,7 +1250,8 @@ function drawTasks(push) {
   if (S.archivedCount || showArchived())
     html += `<div class="actions"><button class="btn" data-act="archived" aria-pressed="${showArchived()}">${showArchived() ? "Hide archived" : "Show archived (" + S.archivedCount + ")"}</button></div>`;
   if (!items.length) html += `<p class="hint">No tasks yet. Open one in the terminal with <code>run --open</code>.</p>`;
-  html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask" aria-label="Add task">+</button>`;
+  // Not in reorder mode: the plus would sit over a row's drag grip at the right edge, and that view is for ordering, not adding.
+  if (!S.reorder) html += `<div class="fab-gap"></div><button class="btn primary fab" data-act="newtask" aria-label="Add task">+</button>`;
   $("#view").className = "col" + (table ? " tbl" : "");
   const on = document.activeElement && document.activeElement.matches("#view button.item[data-act=task]") ? document.activeElement.dataset.id : null;
   if (held) { while (held.nextSibling) held.nextSibling.remove(); held.insertAdjacentHTML("afterend", html); }
