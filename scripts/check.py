@@ -42,7 +42,8 @@ edited log line or a rewritten determination erases what the author reviews. So:
     - a live node, new in this commit or with its Hypothesis changed, that states a
       Hypothesis naming no interactive artefact: a `.dfs/artefacts/<name>.html` that
       exists and has an input, button, select, textarea or details with a handler
-      (addEventListener or onclick and the like) answering it and posts a verdict to
+      (addEventListener or onclick and the like) answering it, a submit button (a
+      `<button>` or `<input type="submit">` outside an HTML comment) and a verdict posted to
       `/artefact-state/` (`check_assumptions`).
       A node already at HEAD is judged as committed, and a merge commit judges none
       (the other branch's commits were judged there)
@@ -562,6 +563,10 @@ def check_assumptions(task, text, head, read, archive="", head_archive=""):
                 why.append("%s is not interactive (it needs an <input>, <button>, <select>, "
                            "<textarea> or <details> and a handler that answers it: "
                            "addEventListener or an onclick-style attribute)" % name)
+            elif not dfs_tree.has_submit_button(page):
+                why.append("%s has no submit button (a <button> or an <input type=\"submit\"> "
+                           "outside an HTML comment), so the author cannot send a ruling from it: "
+                           "templates/_TEMPLATE_ANSWER.html's Confirm and Refute buttons do" % name)
             else:
                 break
         else:
