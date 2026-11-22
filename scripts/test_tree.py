@@ -643,11 +643,18 @@ class Check(InARepo):
             self.assertIn("not interactive", self.assumed(hyp(art), pages={"a1.html": page}),
                           page)
         self.assertEqual(self.assumed(hyp(art), pages={"a1.html": self.PAGE}), "")
-        for page in ("<details>x</details><script>d.addEventListener('toggle', f)</script>",
+        for page in ("<details>x</details><button>Send</button><script>d.addEventListener('toggle', f)</script>",
                      "<button onclick=\"go()\">x</button>",
                      "<script>var b = document.createElement('button');"
                      "b.addEventListener('click', f)</script>"):
             self.assertEqual(self.assumed(hyp(art), pages={"a1.html": page + self.RULES}), "", page)
+        # a page that can be operated and can rule, but has nothing to press to send the ruling, cannot stand alone
+        for page in ("<textarea id=a></textarea><script>a.addEventListener('input', f)</script>",
+                     "<details>x</details><script>d.addEventListener('toggle', f)</script>",
+                     "<!-- <button>Send</button> --><textarea id=a></textarea><script>a.addEventListener('input', f)</script>"):
+            self.assertIn("no submit button", self.assumed(hyp(art), pages={"a1.html": page + self.RULES}), page)
+        self.assertEqual(self.assumed(hyp(art), pages={"a1.html": "<input type=submit value=Send>"
+                                                        "<script>a.addEventListener('click', f)</script>" + self.RULES}), "")
         # a page the reader can operate that cannot rule on its node is a picture of a decision
         for page in ("<button onclick=\"go()\">x</button>",
                      "<button onclick=\"go()\">x</button><script>fetch('/artefact-state/a1.html', "
