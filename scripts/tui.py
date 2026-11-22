@@ -833,8 +833,8 @@ KEYS = [
     ("items", "]  = +", ord("]"), "down", "move down among its siblings"),
     ("items", "{  <", ord("{"), "out", "move out of its branch"),
     ("items", "}  >", ord("}"), "in", "move into the branch below"),
-    ("items", "b", ord("b"), "fence", "put a fence below it (asks first), or take the fence away"),
-    ("items", "B", ord("B"), "stopbreak", "make the fence below it a stop break, which ends a work there, or plain again"),
+    ("items", "b", ord("b"), "fence", "put a fence above it (asks first), or take the fence away"),
+    ("items", "B", ord("B"), "stopbreak", "make the fence above it a stop break, which ends a work there, or plain again"),
     ("items", "z", ord("z"), "undo", "undo the last move made from here"),
     ("items", "x", ord("x"), "agent", "switch the agent: claude, codex, kiro or opencode (remembered)"),
     ("tree", "⏎", 10, "node", "open or close the node under the cursor"),
@@ -2125,8 +2125,8 @@ class UI(WorkMixin):
         A fence is DRAWN and not selectable. Everything this screen does to a row —
         run it, answer it, move it, stop its chain — needs an item, so a cursor that
         could land on a rule would make every one of those keys begin by asking
-        whether it had. `b` toggles the fence on the selected item's work side instead
-        (below it on the screen), which is the whole of what a fence has to do from here.
+        whether it had. `b` toggles the fence on the selected item's far side instead
+        (above it on the screen), which is the whole of what a fence has to do from here.
 
         ⚠ `self.items` stays in WORK order and `sel` indexes it; only the drawing is
         flipped (`move`, `reorder` and the fence keys turn their steps to match).
@@ -2190,8 +2190,9 @@ class UI(WorkMixin):
                           else "moved to the root")
 
     def toggle_break(self):
-        """Put a fence below the selected item (the work side: the list is drawn upside
-        down, see `list_rows`), or take away the one that is there.
+        """Put a fence above the selected item on the screen (the list is drawn upside
+        down, see `list_rows`, so that is right after it in the order file), or take
+        away the one that is there.
 
         The third thing an author knows about their own plan, after "this comes
         before that" and "this only makes sense under that": **nothing after here is
@@ -2204,25 +2205,25 @@ class UI(WorkMixin):
         if it is None:
             return
         nodes = self.nodes()
-        had = dfs_order.has_break_above(nodes, it["id"])
+        had = dfs_order.has_break_after(nodes, it["id"])
         refusal = ("is nested — a break separates whole branches, never cuts one"
                    if it["depth"] else
-                   "is the bottom item — a break below it would gate nothing")
+                   "is the top item — a break above it would gate nothing")
         after = dfs_order.break_toggled(nodes, it["id"])
         # ⚠️ ADDING ONE ASKS; taking one away does not. A fence gates everything after
         # it on everything before, and `b` sits among the keys a hand finds by
         # accident. A refusal (nested, first) says so without asking first.
         if after is not None and not had:
-            if self.prompt("put a break below %s — everything above it waits on "
-                           "everything below? [y/N]:" % it["id"])[:1].lower() != "y":
+            if self.prompt("put a break above %s — everything above it waits on "
+                           "it and everything below? [y/N]:" % it["id"])[:1].lower() != "y":
                 self.msg = "no break added"
                 return
         if self.retree(after, it, refusal):
-            self.said(it, "is no longer behind a break" if had
-                          else "now waits on everything below the break")
+            self.said(it, "no longer has a break above it" if had
+                          else "now has a break above it: what is above waits on it")
 
     def toggle_stop(self):
-        """Make the fence below the selected item a STOP break, or plain again; with no
+        """Make the fence above the selected item a STOP break, or plain again; with no
         fence there, put up one that stops (asking first, as `b` does).
 
         A stop break holds what is after it as any fence does, and a work that worked up
@@ -2232,20 +2233,20 @@ class UI(WorkMixin):
         if it is None:
             return
         nodes = self.nodes()
-        had = dfs_order.has_break_above(nodes, it["id"])
-        stops = dfs_order.has_stop_above(nodes, it["id"])
+        had = dfs_order.has_break_after(nodes, it["id"])
+        stops = dfs_order.has_stop_after(nodes, it["id"])
         after = dfs_order.stop_toggled(nodes, it["id"])
         if after is not None and not had:
-            if self.prompt("put a stop break below %s — everything above it waits on everything "
-                           "below, and a work ends there? [y/N]:" % it["id"])[:1].lower() != "y":
+            if self.prompt("put a stop break above %s — everything above it waits on it and "
+                           "everything below, and a work ends there? [y/N]:" % it["id"])[:1].lower() != "y":
                 self.msg = "no break added"
                 return
         refusal = ("is nested — a break separates whole branches, never cuts one"
                    if it["depth"] else
-                   "is the bottom item — a break below it would gate nothing")
+                   "is the top item — a break above it would gate nothing")
         if self.retree(after, it, refusal):
-            self.said(it, "is behind a plain break: a work goes on through it" if stops
-                          else "is behind a stop break: a work ends there")
+            self.said(it, "has a plain break above it: a work goes on through it" if stops
+                          else "has a stop break above it: a work ends there")
 
     def said(self, it, did):
         self.event("order", "%s %s" % (it["id"], did))

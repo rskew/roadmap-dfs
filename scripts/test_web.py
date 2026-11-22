@@ -1833,20 +1833,20 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
 
     def test_a_break_is_added_and_taken_away_and_survives_other_moves(self):
         self.three_tasks()
-        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="break"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="break"))
         self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
-                         [("W1", 0), ("W2", 1), ("W3", 1)])
+                         [("W1", 0), ("W2", 1), ("W3", 1)], "the break goes above W1 on the screen: after it in the file")
         self.assertIn("---", self.order_file())
         _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))
         self.assertEqual([(i["id"], i["segment"]) for i in data["items"]],
                          [("W1", 0), ("W3", 1), ("W2", 1)], "a move keeps the fence")
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="break"))
         self.assertEqual({i["segment"] for i in data["items"]}, {0})
         self.assertNotIn("---", self.order_file())
 
     def test_a_stop_break_is_made_flipped_and_survives_other_moves(self):
         self.three_tasks()
-        _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="stop"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
         self.assertEqual([(i["id"], i["segment"], i["stop"]) for i in data["items"]],
                          [("W1", 0, False), ("W2", 1, True), ("W3", 1, True)],
                          "no fence there: one is put in that stops a work")
@@ -1854,26 +1854,26 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
         _, data, _ = self.call("POST", "/api/order", dict(item="W2", move="up"))
         self.assertEqual([(i["id"], i["stop"]) for i in data["items"]],
                          [("W1", False), ("W3", True), ("W2", True)], "a move keeps the stop")
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="stop"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
         self.assertEqual({i["stop"] for i in data["items"]}, {False}, "a stop break made plain")
         self.assertEqual({i["segment"] for i in data["items"]}, {0, 1}, "the fence stays")
         self.assertNotIn("--- stop", self.order_file())
-        _, data, _ = self.call("POST", "/api/order", dict(item="W3", move="break"))
+        _, data, _ = self.call("POST", "/api/order", dict(item="W1", move="break"))
         self.assertEqual({i["segment"] for i in data["items"]}, {0})
         self.assertNotIn("---", self.order_file())
 
     def test_a_stop_break_that_cannot_be_made_is_refused_and_writes_nothing(self):
         self.three_tasks()
-        status, data, _ = self.call("POST", "/api/order", dict(item="W1", move="stop"))
+        status, data, _ = self.call("POST", "/api/order", dict(item="W3", move="stop"))
         self.assertEqual(status, 409)
-        self.assertIn("bottom item", data["error"])
+        self.assertIn("top item", data["error"])
         self.assertFalse((self.root / ".dfs" / "order.md").exists())
 
     def test_a_move_that_cannot_be_made_is_refused_with_the_reason_and_writes_nothing(self):
         self.three_tasks()
         for item, move, why in (("W3", "up", "first"), ("W1", "down", "last"),
                                 ("W1", "out", "root"), ("W1", "in", "no sibling below"),
-                                ("W1", "break", "bottom item")):
+                                ("W3", "break", "top item")):
             status, data, _ = self.call("POST", "/api/order", dict(item=item, move=move))
             self.assertEqual(status, 409, (item, move))
             self.assertIn(why, data["error"])

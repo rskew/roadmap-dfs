@@ -911,10 +911,10 @@ class AddingABreakAsks(unittest.TestCase):
         wrote = []
         ui.retree = lambda after, it, refusal: wrote.append(after) or after is not None
         ui.said = lambda it, did: None
-        self.saved = (TUI.dfs_order.has_break_above, TUI.dfs_order.break_toggled)
-        TUI.dfs_order.has_break_above = lambda nodes, i: had
+        self.saved = (TUI.dfs_order.has_break_after, TUI.dfs_order.break_toggled)
+        TUI.dfs_order.has_break_after = lambda nodes, i: had
         TUI.dfs_order.break_toggled = lambda nodes, i: "tree"
-        self.addCleanup(lambda: (setattr(TUI.dfs_order, "has_break_above", self.saved[0]),
+        self.addCleanup(lambda: (setattr(TUI.dfs_order, "has_break_after", self.saved[0]),
                                  setattr(TUI.dfs_order, "break_toggled", self.saved[1])))
         return ui, wrote
 
