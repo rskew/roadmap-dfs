@@ -1,0 +1,146 @@
+W48.17 · what claude 2.1.325, opencode 2.1.1, codex 0.163.0 and kiro-cli 2.35.1 ask the terminal at start-up, and whether the answers change what they draw
+Setup: scratch HOME /tmp/w48b/home (fake keys, claude and codex trusted, the hand-made claude transcript with CJK, emoji and a table). qlist.py starts each agent through Relay.start with nobody attached and lists the queries in Relay.tail (8 s; 14 s for kiro). qrun.py runs the agent directly on a 24x80 pty (no Relay), types a message with CJK, emoji (ZWJ family, flag, VS16, skin tone), a box and Korean, resizes 30x104, 20x60, 24x80, and reads the screen with emu.Term (a small terminal emulator, grapheme-aware for ZWJ, VS16, skin tones and flag pairs). Its queries are answered per policy: none (what a background chat gets), basic (DA1, XTVERSION, CPR, OSC 10/11), full (basic + DECRQM 2026 2027 1016 2031 1004 2004 as set-able, kitty keyboard, pixel size), unsup (full, DECRQM answered as not supported; opencode only).
+
+QUERIES a chat sends in the background (none reaches the real terminal; the relay forwards only while attached):
+ * claude fullscreen and inline: ESC[>0q (XTVERSION), ESC[?u (kitty keyboard), ESC]7501;? , then ESC[c (DA1) last, as a sentinel; ?2031h.
+ * opencode: ESC]10;? ESC]11;? ESC[>0q ESC[6n x3, DCS +q Ms, DECRQM ?1016 ?2027 ?2031 ?1004 ?2004 ?2026, ESC[?u, ESC]7501;? , ESC[c, ESC[14t; it writes ?2027h (grapheme clusters) whatever the answer.
+ * codex: ESC[6n, OSC 10/11, ESC[?u, ESC[c.
+ * kiro: OSC 11;? only (and only after its first screen).
+ Answered, claude follows with more queries (DECRQM ?2026 ?1016, ESC[16t, a second DA1): 17516 bytes without replies, 17577 with basic, inline; so the replies do change what claude sends.
+
+RESULTS (visible rows, queries unanswered against answered):
+ * claude, fullscreen and inline, none / basic / full: the three screens are equal at every step (0 differing lines, all 4 steps), the typed wide message and the transcript table wrap the same.
+ * opencode, none / basic / full / unsup: the typed message rows are the same at 24x80 and 30x104 in all four; at 20x60 the same rows, shifted down 2 by a model answer that arrived in some runs; other differences are the spinner, the placeholder text, the session titles and the thinking row.
+ * codex, none / basic / full: with an emulator that gave a ZWJ family 8 cells, the none run showed the typed row without spaces between emoji; the bytes showed the same cursor position for every glyph and only the re-written spaces differed. With a grapheme-aware emulator the typed rows are equal in all three (spinner and 'Working' rows aside).
+ * kiro: its screen is the 'Launching...' spinner (fake key), so no chat rows to compare; the only query is OSC 11.
+NOT COVERED: a real terminal (the emulator does not change widths with ?2027), a real model turn, kiro's chat screen, the real terminal's replies to the queries.
+FOUND, not a query: opencode writes ?2027h (grapheme-cluster width) in the background and `ptyrelay.MODES` is (1049 1000 1002 1003 1006 1004 2004), so the real terminal never gets ?2027h through the relay, whereas run directly it does. See the next node.
+
+=================== qlist.py
+"""qlist.py: start each agent through Relay.start in the background (nobody attached), wait, and list the terminal queries in what it wrote."""
+import os, sys, time, re
+sys.path.insert(0, "/workspace/roadmap-dfs/.dfs/worktrees/W48/scripts")
+import ptyrelay
+ptyrelay.TAIL = 10**8
+HOME = "/tmp/w48b/home"; CWD = HOME + "/work"
+CL = "/nix/store/3r7q2hj4y7lm0vx3bcnx8ncx7m7pk7qz-claude-code-2.1.325/bin/claude"
+AG = {
+ "claude": [CL, "--resume", "aaaaaaaa-0000-4000-8000-000000000002", "--dangerously-skip-permissions"],
+ "claude-inline": [CL, "--resume", "aaaaaaaa-0000-4000-8000-000000000002", "--dangerously-skip-permissions"],
+ "opencode": ["/nix/store/aklj4winymg3qa8l048b8wkprlkf4683-opencode-2.1.1/bin/opencode"],
+ "codex": ["/nix/store/03h8zqzsxqrvlr143r5h2vzzx8mhqp95-codex-0.163.0/bin/codex"],
+ "kiro": ["/nix/store/msc3ymp3cadcp2b75yj5vi3rzwwaidhf-kiro-cli-unwrapped-2.35.1/bin/kiro-cli", "chat", "--v3", "--trust-all-tools"],
+}
+QUERY = re.compile(rb"\x1b\[[>=?]?[0-9;]*c|\x1b\[>[0-9]*q|\x1b\[\?u|\x1b\[\?[0-9;]*\$p|\x1b\[[0-9;]*n|\x1b\[\?[0-9;]*n|\x1b\][0-9]+;\?(?:\x07|\x1b\\)|\x1b\[[0-9;]*t|\x1bP\+q[0-9a-fA-F;]*\x1b\\|\x1b\[\?(?:2031|1004|2004|1049|1000|1002|1003|1006|2026|2027|9001)[hl]")
+for name in sys.argv[1:]:
+    env = {"PATH": os.environ["PATH"], "HOME": HOME, "TERM": "xterm-256color", "XDG_CONFIG_HOME": HOME + "/.config",
+           "XDG_DATA_HOME": HOME + "/.local/share", "XDG_CACHE_HOME": HOME + "/.cache", "LANG": "C.UTF-8", "CODEX_HOME": HOME + "/.codex",
+           "ANTHROPIC_API_KEY": "sk-ant-xxxxxxxxxxabcdefghijklmnopqrst", "KIRO_API_KEY": "ksk-fakefakefakefakefakefake",
+           "TMPDIR": "/tmp/w48b/q"}
+    EX = "/workspace/roadmap-dfs/.dfs/worktrees/W48/.dfs/scratch_w48"
+    os.makedirs(EX, exist_ok=True); os.makedirs(HOME + "/.codex", exist_ok=True)
+    env["TMPDIR"] = EX
+    if name == "kiro":
+        env["HOME"] = "/workspace/roadmap-dfs/.dfs/worktrees/W48/.w48k/home"; env["TMPDIR"] = "/workspace/roadmap-dfs/.dfs/worktrees/W48/.w48k/tmp"
+        for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"): env.pop(k)
+        os.makedirs(env["TMPDIR"], exist_ok=True)
+    if name == "claude-inline": env["CLAUDE_CODE_NO_FLICKER"] = "0"
+    r = ptyrelay.Relay().start(AG[name], env=env, cwd=(env["HOME"] if name == "kiro" else CWD), size=None)
+    time.sleep(14 if name == "kiro" else 8)
+    data = bytes(r.tail)
+    open("/tmp/w48b/q/%s.bin" % name, "wb").write(data)
+    print("==", name, len(data), "bytes in the background; attached:", r.attached)
+    seen = {}
+    for m in QUERY.finditer(data):
+        seen.setdefault(m.group(0), []).append(m.start())
+    for q, pos in seen.items():
+        print("  %-28r x%d first at %d" % (q, len(pos), pos[0]))
+    r.close(wait=True)
+
+=================== qrun.py
+#!/usr/bin/env python3
+"""qrun.py AGENT POLICY [inline=1]: the agent directly on a pty (24x80), its terminal queries answered per POLICY:
+none = no replies (what a chat started in the background gets), basic = emu.Term's replies (DA1, XTVERSION, CPR, OSC 10/11),
+full = basic + DECRQM (2026 2027 1016 2031 1004 2004 reported supported) + kitty keyboard + window size in pixels.
+Steps: settle, type a message with wide characters, 30x104, 20x60, back. Screens go to /tmp/w48b/q/AGENT-POLICY.txt."""
+import fcntl, os, pty, re, select, struct, sys, termios, time, signal
+sys.path.insert(0, "/tmp/w48b")
+from emu import Term
+agent, policy = sys.argv[1], sys.argv[2]
+opts = dict(a.split("=", 1) for a in sys.argv[3:])
+W = "/workspace/roadmap-dfs/.dfs/worktrees/W48"
+HOME = "/tmp/w48b/home"; CWD = HOME + "/work"
+CL = "/nix/store/3r7q2hj4y7lm0vx3bcnx8ncx7m7pk7qz-claude-code-2.1.325/bin/claude"
+AG = {"claude": [CL, "--resume", "aaaaaaaa-0000-4000-8000-000000000002", "--dangerously-skip-permissions"],
+ "opencode": ["/nix/store/aklj4winymg3qa8l048b8wkprlkf4683-opencode-2.1.1/bin/opencode"],
+ "codex": ["/nix/store/03h8zqzsxqrvlr143r5h2vzzx8mhqp95-codex-0.163.0/bin/codex"],
+ "kiro": ["/nix/store/msc3ymp3cadcp2b75yj5vi3rzwwaidhf-kiro-cli-unwrapped-2.35.1/bin/kiro-cli", "chat", "--v3", "--trust-all-tools"]}
+env = {"PATH": os.environ["PATH"], "HOME": HOME, "TERM": "xterm-256color", "XDG_CONFIG_HOME": HOME + "/.config",
+       "XDG_DATA_HOME": HOME + "/.local/share", "XDG_CACHE_HOME": HOME + "/.cache", "LANG": "C.UTF-8", "CODEX_HOME": HOME + "/.codex",
+       "ANTHROPIC_API_KEY": "sk-ant-xxxxxxxxxxabcdefghijklmnopqrst", "KIRO_API_KEY": "ksk-fakefakefakefakefakefake", "TMPDIR": W + "/.dfs/scratch_w48"}
+cwd = CWD
+if agent == "kiro":
+    cwd = env["HOME"] = W + "/.w48k/home"; env["TMPDIR"] = W + "/.w48k/tmp"
+    for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME"): env.pop(k)
+if opts.get("inline"): env["CLAUDE_CODE_NO_FLICKER"] = "0"
+rows, cols = 24, 80
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(cwd); os.execvpe(AG[agent][0], AG[agent], env)
+fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0)); os.kill(pid, signal.SIGWINCH)
+term = Term(rows, cols); raw = bytearray(); asked = {}; sent = []
+FULL = [(re.compile(rb"\x1b\[\?(\d+)\$p"), lambda m: b"\x1b[?%s;%s$y" % (m.group(1), b"0" if policy == "unsup" else b"2")),
+        (re.compile(rb"\x1b\[\?u"), lambda m: b"\x1b[?0u"),
+        (re.compile(rb"\x1b\[14t"), lambda m: b"\x1b[4;%d;%dt" % (rows * 16, cols * 8)),
+        (re.compile(rb"\x1b\[16t"), lambda m: b"\x1b[6;16;8t")]
+scan = b""
+def answer(d):
+    global scan
+    scan = (scan + d)[-4096:]
+    for rx, mk in FULL:
+        for m in rx.finditer(d):
+            asked[m.group(0)] = asked.get(m.group(0), 0) + 1
+            if policy in ("full", "unsup"): os.write(fd, mk(m)); sent.append(mk(m))
+def pump(secs):
+    end = time.time() + secs
+    while time.time() < end:
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try: d = os.read(fd, 65536)
+            except OSError: return
+            if not d: return
+            raw.extend(d); term.feed(d)
+            for q in re.findall(rb"\x1b\[[>?]?[0-9;]*[cqnu]|\x1b\][0-9]+;\?", d): asked[q] = asked.get(q, 0) + 1
+            if policy != "none":
+                while term.replies:
+                    x = term.replies.pop(0); os.write(fd, x); sent.append(x)
+            else:
+                term.replies.clear()
+            answer(d)
+snaps = []
+def snap(label): snaps.append((label, term.lines(), len(term.hist), term.rows, term.cols, sorted(term.modes)))
+def resize(r, c):
+    global rows, cols
+    rows, cols = r, c
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", r, c, 0, 0)); term.resize(r, c); os.kill(pid, signal.SIGWINCH)
+MSG = "日本語の長い文章 ✅ 🚀 👨‍👩‍👧‍👦 🇯🇵 ❤️ 🧑🏽‍💻 ┌─┐ 中文也一样很长 한국어 and then enough plain words to wrap this typed line across several rows of an eighty column terminal"
+pump(float(opts.get("settle", 9))); snap("settled 24x80")
+if agent != "claude" or opts.get("send"):
+    os.write(fd, MSG.encode()); pump(1.0)
+    if agent != "claude": os.write(fd, b"\r")
+    pump(float(opts.get("wait", 8))); snap("after typing")
+else:
+    os.write(fd, MSG.encode()); pump(2.0); snap("typed, not sent")
+resize(30, 104); pump(4); snap("30x104")
+resize(20, 60); pump(4); snap("20x60")
+resize(24, 80); pump(4); snap("back 24x80")
+out = []
+for label, lines, hist, r, c, modes in snaps:
+    out.append("--- %s (%dx%d) hist=%d modes=%s" % (label, r, c, hist, modes))
+    out += ["%2d|%s" % (k, l) for k, l in enumerate(lines)]
+name = "%s%s-%s" % (agent, "-inline" if opts.get("inline") else "", policy)
+open("/tmp/w48b/q/%s.txt" % name, "w").write("\n".join(out) + "\n")
+open("/tmp/w48b/q/%s.raw" % name, "wb").write(bytes(raw))
+print(name, "bytes", len(raw), "replies sent", len(sent), "asked", {k: v for k, v in asked.items()})
+try: os.kill(pid, signal.SIGKILL)
+except OSError: pass
