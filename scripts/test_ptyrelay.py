@@ -314,6 +314,21 @@ class Looking(unittest.TestCase):
         self.t.join(5)
         self.assertTrue(self.seen(b"\x1b[?1049l\x1b[?2004l"))
 
+    def test_grapheme_cluster_width_set_in_the_background_reaches_the_terminal_and_is_reset(self):
+        """opencode writes ESC[?2027h at start-up, while nobody is attached; a terminal that never gets it
+        measures a ZWJ emoji or a flag by its parts, so the chat's columns would be off."""
+        self.relay.close()
+        self.relay = ptyrelay.Relay().start(["bash", "-c", r"printf '\033[?2027h'; " + AGENT],
+                                            env=dict(os.environ, LOG=str(self.log)))
+        self.addCleanup(self.relay.close)
+        self.assertTrue(until(lambda: self.relay.modes == {2027}))
+        self.t = threading.Thread(target=lambda: self.result.append(self.relay.attach()), daemon=True)
+        self.t.start()
+        self.assertTrue(self.seen(b"\x1b[?2027h"))
+        os.write(self.keys_w, b"\x1d")
+        self.t.join(5)
+        self.assertTrue(self.seen(b"\x1b[?2027l"))
+
     def test_a_terminal_resized_as_it_attaches_leaves_the_agent_the_new_size(self):
         """herdr narrows its pane by a column as the screen leaves curses, just as `attach` reads the
         size: the SIGWINCH handler sets the new one while the redraw step sleeps, and the stale one
@@ -340,6 +355,56 @@ class Looking(unittest.TestCase):
         # the first poll comes after the redraw step, which passes through 73 on its way
         self.assertTrue(polled.wait(30), "attach had not finished fitting the agent in 30s")
         self.assertEqual(struct.unpack("HHHH", real(self.relay.fd))[:2], (33, 73))
+
+    def test_the_scrollback_erase_is_not_shown_but_the_text_around_it_is(self):
+        """kiro sends ESC[3J with every redraw, which would erase the shell history above the roadmap."""
+        self.looking()
+        self.assertTrue(self.relay.send("a\x1b[3Jb"))
+        self.assertTrue(self.seen(b"heard: ab"))
+
+    def test_a_scrollback_erase_cut_between_two_reads_is_held_back_and_nothing_else_is(self):
+        r = ptyrelay.Relay()
+        for cut in range(1, 4):
+            whole = b"one\x1b[3Jtwo"
+            first = r._without_scrollback_erase(whole[:3 + cut])
+            self.assertEqual(first + r._without_scrollback_erase(whole[3 + cut:]), b"onetwo", cut)
+        self.assertEqual(r._without_scrollback_erase(b"\x1b[2J\x1b[H\x1b[3"), b"\x1b[2J\x1b[H")
+        self.assertEqual(r._without_scrollback_erase(b"4m"), b"\x1b[34m")      # not an erase: given back whole
+
+    def written_sizes(self, chat_size):
+        """The sizes `attach` writes to the chat's pty when the terminal is 33x74 and the chat starts at
+        `chat_size`: fcntl.ioctl is recorded and still done."""
+        real_winsize, out = ptyrelay._winsize, sys.stdout.fileno()
+        real_ioctl = ptyrelay.fcntl.ioctl
+        wrote = []
+
+        def winsize(fd):
+            return struct.pack("HHHH", 33, 74, 0, 0) if fd == out else real_winsize(fd)
+
+        def ioctl(fd, request, *args):
+            if fd == self.relay.fd and request == ptyrelay.termios.TIOCSWINSZ:
+                wrote.append(struct.unpack("HHHH", args[0])[:2])
+            return real_ioctl(fd, request, *args)
+        ptyrelay._winsize = winsize
+        ptyrelay.fcntl.ioctl = ioctl
+        self.addCleanup(setattr, ptyrelay, "_winsize", real_winsize)
+        self.addCleanup(setattr, ptyrelay.fcntl, "ioctl", real_ioctl)
+        self.relay.resize(chat_size)
+        wrote.clear()                           # the chat's own resize above is not attach's
+        polled = threading.Event()
+        self.t = threading.Thread(target=lambda: self.result.append(
+            self.relay.attach(idle=polled.set, every=0.1)), daemon=True)
+        self.t.start()
+        self.assertTrue(polled.wait(30), "attach had not finished fitting the agent in 30s")
+        return list(wrote)
+
+    def test_attach_resizes_once_when_the_chat_is_not_the_terminals_size(self):
+        """A size change is what makes the agent draw itself again, so a chat of another size needs no
+        cols-1 step, which would paint a whole frame one column narrower than the terminal."""
+        self.assertEqual(self.written_sizes((40, 120)), [(33, 74)])
+
+    def test_attach_takes_the_narrower_step_only_when_the_chat_is_already_the_terminals_size(self):
+        self.assertEqual(self.written_sizes((33, 74)), [(33, 73), (33, 74)])
 
     def test_attaching_to_a_chat_that_has_already_ended_returns_false(self):
         gone = ptyrelay.Relay().start(["bash", "-c", "exit 127"])
@@ -426,6 +491,7 @@ class Sizing(unittest.TestCase):
             ui.poll()
         self.assertEqual(calls, ["follow"])
 
+    # (a test of a call, kept though its node is parked: deleting the call in `UI.loop` turns it red)
     def test_a_resize_key_in_the_main_loop_follows_the_terminal_size(self):
         import curses
         import tui

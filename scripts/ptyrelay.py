@@ -51,7 +51,9 @@ FIRST_LAUNCH = {"codex": ("Trust and continue", (b"\r",)), "kiro": ("Yes, I acce
 # paste mode it turns on when it starts, and a stand-in claude that never does is typed to after HANDOVER_TIMEOUT.
 OPENING = b"running its opening turn first"
 OPENED = b"opening an interactive"
-MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004)      # private modes the terminal is brought in step with
+# private modes the terminal is brought in step with. 2027 is grapheme-cluster width: opencode sets it at start-up, so
+# the terminal has to measure an emoji or CJK cluster as the chat does, or its columns and wraps are off.
+MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004, 2027)
 _MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
 TAIL = 16384                # bytes of the agent's last output kept, for the log
 STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a message before the log says so
@@ -115,6 +117,7 @@ class Relay:
         self.out_fd = None          # where the terminal is, while attached
         self.modes = set()          # the private modes (?1049 alt screen, mouse, paste ...) the agent has switched on
         self._mode_carry = b""
+        self._erase_carry = b""                 # the start of an ESC[3J cut by a read, held back
 
     # ── life ───────────────────────────────────────────────────────────────────────────
     @property
@@ -157,6 +160,20 @@ class Relay:
                     (self.modes.add if m.group(2) == b"h" else self.modes.discard)(int(n))
         self._mode_carry = buf[-32:]
 
+    def _without_scrollback_erase(self, data):
+        """What goes to the terminal: `data` without ESC[3J, which erases the terminal's scrollback. kiro
+        sends it with every redraw and `attach` forces one, so the shell history above the roadmap would
+        be gone after `c`. ESC[2J (clear the screen) stays. A sequence cut between two reads is held back
+        until the next, so a prefix of it at the end of `data` is not written yet."""
+        buf = self._erase_carry + data
+        buf = buf.replace(b"\x1b[3J", b"")
+        self._erase_carry = b""
+        for n in (3, 2, 1):                     # ESC [ 3 J cut after 3, 2 or 1 bytes
+            if buf.endswith(b"\x1b[3J"[:n]):
+                self._erase_carry, buf = buf[-n:], buf[:-n]
+                break
+        return buf
+
     def _mode_bytes(self, on):
         """Switch the terminal to the modes the agent has on (`on`), or back off."""
         return b"".join(b"\x1b[?%d%s" % (n, b"h" if on else b"l") for n in MODES if n in self.modes)
@@ -179,7 +196,7 @@ class Relay:
             self._follow_modes(data)
             self._follow_opening(data)
             if self.attached and self.out_fd is not None:
-                _try(os.write, self.out_fd, data)
+                _try(os.write, self.out_fd, self._without_scrollback_erase(data))
         with self.lock:
             self.fd = None
         _try(os.close, master)
@@ -410,7 +427,9 @@ class Relay:
     def attach(self, idle=None, every=0.3):
         """Wire the real terminal to it until it ends or ctrl-] is pressed. Returns True if it
         was detached (still running), False if it ended. `idle()` runs about every `every` seconds
-        meanwhile, typing or not, on this thread: the screen's poll, which a chat would block."""
+        meanwhile, typing or not, on this thread: the screen's poll, which a chat would block.
+        The terminal is put in the modes the chat has set (alt screen, mouse, bracketed paste, focus, grapheme-cluster width)
+        and back to the roadmap's own when this returns, so after a detach the screen is as it was."""
         if not self.live:                       # it ended before anyone looked: `fit` has no pty to size
             return False
         stdin, stdout = sys.stdin.fileno(), sys.stdout.fileno()
@@ -420,6 +439,8 @@ class Relay:
 
         def fit(redraw=False):
             fd = self.fd                        # `_pump` sets it to None when the agent ends, even mid-attach
+            # `_pump` may also close it between this read and the ioctls below: `_try` hides the error, and
+            # only a descriptor number reused in that instant could be hit, which nothing here opens
             if fd is None:
                 return
             rows, cols, x, y = struct.unpack("HHHH", _winsize(stdout))
@@ -444,6 +465,7 @@ class Relay:
             old = None
         _try(os.write, stdout, self._mode_bytes(True))      # what it switched on while nobody looked
         self.out_fd = stdout
+        self._erase_carry = b""
         self.attached = True
         fit(redraw=True)
         detached = False

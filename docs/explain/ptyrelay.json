@@ -23,7 +23,7 @@
   "edges": [
     {"kind": "moves", "from": "agent", "to": "Relay._pump", "label": "its output, up to 64 KB per read", "at": "Relay._pump"},
     {"kind": "moves", "from": "Relay._pump", "to": "tail", "label": "appended; only the last 16384 bytes are kept", "at": "Relay._pump"},
-    {"kind": "moves", "from": "Relay._pump", "to": "term", "label": "written through as it arrives, only while attached", "at": "Relay._pump"},
+    {"kind": "moves", "from": "Relay._pump", "to": "term", "label": "written through as it arrives (without ESC[3J, which erases the scrollback), only while attached", "at": "Relay._pump"},
     {"kind": "moves", "from": "Relay._pump", "to": "chatlog", "label": "'exit ...' with the last screen, once the output ends", "at": "Relay._pump"},
     {"kind": "moves", "from": "ChatHost.ensure", "to": "Relay.start", "label": "argv, env, cwd from make()", "at": "ChatHost.ensure"},
     {"kind": "moves", "from": "Relay._typist", "to": "agent", "label": "the text as a bracketed paste, then Enter 0.15 s later", "at": "Relay._typist"},
