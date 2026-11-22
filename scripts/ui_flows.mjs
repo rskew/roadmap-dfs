@@ -605,9 +605,11 @@ const FLOWS = {
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
     await page.click("#chat [data-act=chatend]");
-    // ending a chat returns to the list of chats: the dialog closes and the Chats tab is current
-    await page.waitForFunction(() => !document.querySelector("#chat[open]") && document.querySelector("#tabs [data-tab=chats][aria-current=page]"));
+    // ending a chat goes back like Back does: the dialog closes and the task it was opened from is still showing
+    await page.waitForFunction(() => !document.querySelector("#chat[open]"));
     same(ended, 1, "Archive asks the server to archive the chat");
+    same(await page.evaluate(() => location.hash), "#/t/W9", "Archive from a task stays on the task, not the Chats list");
+    await page.evaluate(() => { location.hash = "#/chats"; });   // a phone's task screen has no Chats tab
     await page.waitForSelector(".endedchats");
     same(await page.$$eval("#view > .crow", e => e.length), 0, "nothing in progress is left above the Archived group");
     same(await page.$eval(".endedchats summary", e => e.textContent.trim()), "Archived (2)", "the Archived group counts the archived chats");
@@ -626,7 +628,7 @@ const FLOWS = {
     assert(!(await page.$("#chat[open]")), "the link opens the item, not the chat");
     // a chat opened from the Chats list is archived on a page already at #/chats: no hashchange follows, so the list is redrawn at once
     state.ended = false; chats[0].ended = false; ended = 0;
-    await page.click("#tabs [data-tab=chats]"); await page.waitForSelector(".chatrow");
+    await page.evaluate(() => { location.hash = "#/chats"; }); await page.waitForSelector(".chatrow");
     await page.click("#view > .crow .chatrow[data-scope=W9]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
     await page.click("#chat [data-act=chatend]");

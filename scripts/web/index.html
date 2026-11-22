@@ -2221,7 +2221,7 @@ document.addEventListener("click", e => {
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope, !!d.fresh), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: toChats,
-    chatend: async () => { try { CHAT.last = ""; await api("/api/chat/end", { scope: CHAT.scope }); if ($("#chat").open) toChats(); toast("Chat archived."); } catch (e) { toast(e.message, true); } },
+    chatend: async () => { try { CHAT.last = ""; await api("/api/chat/end", { scope: CHAT.scope }); if ($("#chat").open) { $("#chat").close(); if (route().view === "chats") render(true); } toast("Chat archived."); } catch (e) { toast(e.message, true); } },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     workstart: workStart, workstop: workStop,
