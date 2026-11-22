@@ -478,9 +478,9 @@ def render(nodes) -> str:
     """
     # ⚠️ A fence with nothing after it is not a fence, and is not written back. It
     # gates nothing (there is nothing on its far side), the screen draws no rule for
-    # it, and — since a break is toggled from the item BEFORE it, and the last item is
-    # refused — one left at the end is one the author has no row to press `b` on. Dropping it is what keeps what
-    # you see and what is on disk the same tree.
+    # it, and no row can toggle it: a break is toggled from the task right before it,
+    # and a fence with nothing after it follows the last task, which `b` refuses.
+    # Dropping it keeps what you see and what is on disk the same tree.
     nodes = list(nodes)
     while nodes and is_break(nodes[-1][0]):
         nodes.pop()
