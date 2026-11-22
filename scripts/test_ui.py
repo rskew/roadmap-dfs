@@ -374,6 +374,14 @@ class Flows(unittest.TestCase):
     def test_a_running_chain_shows_what_it_runs_on(self):
         self.flow("workchain")
 
+    def test_a_task_chooses_its_own_models_on_its_screen(self):
+        runs = self.root / "runs"          # where the models are kept: not the real run root
+        runs.mkdir()
+        os.environ["DFS_RUN_DIR"] = str(runs)
+        self.addCleanup(os.environ.pop, "DFS_RUN_DIR", None)
+        self.flow("taskmodels")
+        self.assertEqual(json.loads((runs / "models").read_text()).get("tasks", {}), {})   # cleared again: nothing kept
+
     def test_the_work_controls_stay_under_the_bar_as_the_list_scrolls(self):
         self.flow("workpin")
 

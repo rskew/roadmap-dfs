@@ -958,6 +958,17 @@ class WorkMixin:
         "" for a role it leaves to the instance's default."""
         return task_models(item, agent=self.agent)
 
+    def all_task_models(self):
+        """Every task's own choices for the agent the next chain uses: {task: {role: name}},
+        the tasks and roles that have chosen only."""
+        tasks = _models_data().get("tasks")
+        out = {}
+        for item in (tasks if isinstance(tasks, dict) else {}):
+            mine = {r: v for r, v in task_models(item, agent=self.agent).items() if v}
+            if mine:
+                out[item] = mine
+        return out
+
     def model_choices(self):
         """The models the next chain's agent can be given, for the page's drop-down: empty for
         an agent that reads its model from its own config. A model kept that is not listed is added."""
@@ -1103,7 +1114,7 @@ class WorkMixin:
             budget=self.work_budget, used=self.work_used(), parallel=self.work_parallel,
             stop_on_limit=self.work_stop_on_limit,
             hold=max(0, int(self.work_until - now)) if self.work_until > now else 0,
-            note=self.work_note, agent=self.agent, agents=list(AGENTS), models=self.models(),
+            note=self.work_note, agent=self.agent, agents=list(AGENTS), models=self.models(), task_models=self.all_task_models(),
             model_defaults=self.model_defaults(), model_choices=self.model_choices(),
             pinned=self.work_next, auto=auto, auto_goal=goal,
             chains=[dict(item=r["item"], run=r["run"], cap=r["cap"],

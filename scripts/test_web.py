@@ -2251,6 +2251,16 @@ const submit = async () => { $("#chat-input").value = "also check the tests"; $(
             self.assertEqual(self.call("POST", "/api/work/model", dict(role="review", model="opus"))[0], 409)
             self.assertEqual(self.call("POST", "/api/work/model", dict(role="plan", model="--help"))[0], 409)
 
+    def test_a_task_chooses_its_own_models_and_the_instance_default_stays(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
+            self.call("POST", "/api/work/model", dict(role="plan", model="opus"))
+            status, snap, _ = self.call("POST", "/api/work/model", dict(role="plan", model="haiku", item="W1"))
+            self.assertEqual((status, snap["task_models"], snap["models"]["plan"]),
+                             (200, dict(W1=dict(plan="haiku")), "opus"))
+            status, snap, _ = self.call("POST", "/api/work/model", dict(role="plan", model="", item="W1"))
+            self.assertEqual((status, snap["task_models"]), (200, {}))
+            self.assertEqual(self.call("POST", "/api/work/model", dict(role="plan", model="haiku", item="../x"))[0], 409)
+
     def test_a_kiro_work_answers_409_for_the_claude_name_opus_and_names_kiros_models(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}), \
                 mock.patch.object(dfs_work, "fetch_kiro_models", return_value=[]), \

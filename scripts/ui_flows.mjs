@@ -864,7 +864,11 @@ const FLOWS = {
     const desk = await open(b, DESKTOP);
     await task(desk.page, "W9");
     const menu = async sel => {
-      await desk.page.click(sel + " .main[data-act=node]", { button: "right" });
+      // Scrolled to first: the menu closes on a scroll event, which arrives after the click's own scroll-into-view.
+      const main = desk.page.locator(sel + " .main[data-act=node]").first();
+      await main.scrollIntoViewIfNeeded();
+      await desk.page.waitForTimeout(200);
+      await main.click({ button: "right" });
       await desk.page.waitForSelector("#ctx:not([hidden]) button");
       const n = await desk.page.locator("#ctx [data-act=correct]").count();
       await desk.page.keyboard.press("Escape");
@@ -1315,6 +1319,23 @@ const FLOWS = {
     assert(!/own model/.test(shown[2]) && /claude/.test(shown[2]), "a chain that has not begun a session names no model: " + shown[2]);
     same(shown[3], "codex", "the Agent field still shows the next chain's agent");
     if (process.env.W151_SHOT) { await openWork(page); await page.evaluate(() => { S.work.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true, agent: "claude", kind: "work", model: "sonnet" })]; drawTasks(true); }); await page.screenshot({ path: process.env.W151_SHOT }); }
+    same(errors, [], "no page errors");
+  },
+
+  // A task chooses its own plan and implement models on its screen; the empty option gives it the instance default again.
+  async taskmodels(b) {
+    const { page, errors } = await open(b, DESKTOP);
+    await page.goto(URL_ + "#/t/W1"); await page.waitForSelector(".row");
+    await page.waitForSelector(".taskmodels");
+    assert(await page.locator("#model-task-W1-plan").count() === 1, "the task view has a Plan model drop-down");
+    assert(/Instance default/.test(await page.locator("#model-task-W1-plan option").first().textContent()), "its empty option says it is the instance default");
+    await page.click(".taskmodels summary");
+    await page.selectOption("#model-task-W1-plan", "haiku");
+    await page.waitForFunction(() => (S.work.task_models || {}).W1?.plan === "haiku");
+    assert(await page.locator("#model-task-W1-plan").inputValue() === "haiku", "the task's choice stays shown after the redraw");
+    await page.selectOption("#model-task-W1-plan", "");
+    await page.waitForFunction(() => !(S.work.task_models || {}).W1);
+    assert(await page.locator("#model-task-W1-plan").inputValue() === "", "clearing it shows the instance default again");
     same(errors, [], "no page errors");
   },
 

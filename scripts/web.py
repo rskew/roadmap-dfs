@@ -1100,7 +1100,7 @@ def work_act(name, body):
         elif name == "work/agent":
             w.set_agent(body.get("agent"))
         elif name == "work/model":
-            w.set_model(body.get("role"), body.get("model", ""))
+            w.set_model(body.get("role"), body.get("model", ""), body.get("item") or None)
         elif name == "chain/stop":
             w.stop_chain(need(body, "item", "the task"))
         else:

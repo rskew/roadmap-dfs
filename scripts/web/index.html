@@ -259,7 +259,10 @@ dl.keys kbd { font: inherit; font-weight: 600; white-space: pre; }
 .work[open] > summary .chev { transform: rotate(-135deg); }
 .work .state .on { color: var(--settled); } .work .state .hold { color: var(--assumption); }
 .work .line2 { color: var(--muted); font-size: var(--fs-small); margin: 0 0 6px; }
-.work .row2 { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0; }
+.taskmodels { margin: var(--s2) 0; }
+.taskmodels > summary { min-height: var(--hit); display: flex; align-items: center; cursor: pointer; }
+.taskmodels label { font-size: var(--fs-label); font-weight: 500; letter-spacing: .12em; color: var(--muted); }
+.work .row2, .taskmodels .row2 { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); align-items: center; gap: 10px; margin: 10px 0; }
 .work .row2.act { margin-bottom: 14px; }
 .work .pair { display: flex; align-items: center; gap: 10px; }
 .work .pair input { flex: 1; min-height: var(--hit); padding-block: 0; }
@@ -797,7 +800,7 @@ async function renderDraw(force, changed) {
       S.node = r.node;
       foldByDefault(t, r.node);
       if (arrived) unfoldTo(t, r.node);      // coming to a node by a link: the way to it is open
-      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + (S.work && S.work.pinned) + "|" + workHere(r.task) + "|" + JSON.stringify(workOf(r.task));
+      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + (S.work && S.work.pinned) + "|" + workHere(r.task) + "|" + JSON.stringify(workOf(r.task)) + "|" + JSON.stringify([(S.work && S.work.task_models || {})[r.task], S.work && S.work.models, S.modelOther]);
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
     } else if (r.view === "artefact") {
@@ -958,29 +961,37 @@ async function setAgent(agent) {
    text box for a name the list does not hold (S.modelOther[role] keeps it open over a redraw); Enter or leaving the
    box keeps the name, and a kept name is in the list from then on. */
 const OTHER_MODEL = "__other__";
-function modelFields(w) {
-  const m = w.models || {}, d = w.model_defaults || {}, list = w.model_choices || [];
+function modelFields(w, item) {
+  const base = w.models || {}, d = w.model_defaults || {}, list = w.model_choices || [];
+  // For a task, the first option is "the instance's default", which is what the work box chose, else the runner's own.
+  const m = item ? ((w.task_models || {})[item] || {}) : base;
   const open = (S && S.modelOther) || {};
   const own = (w.agent || "the agent") + "'s own";
+  const idp = item ? "task-" + item + "-" : "";
   const field = (role, label) => {
-    const first = list.length && d[role] ? `${d[role]} (the runner's)` : own + (list.length ? "" : ", not set here");
-    const other = !!open[role] && list.length > 0;
+    const inherited = (base[role] === "default" ? "claude's own default" : base[role]) || (d[role] ? d[role] + " (the runner's)" : own);
+    const first = item ? "Instance default: " + inherited : list.length && d[role] ? `${d[role]} (the runner's)` : own + (list.length ? "" : ", not set here");
+    const okey = (item ? item + ":" : "") + role;
+    const other = !!open[okey] && list.length > 0;
     const opts = [`<option value=""${m[role] || other ? "" : " selected"}>${esc(first)}</option>`].concat(list.map(n =>
       `<option value="${esc(n)}"${m[role] === n && !other ? " selected" : ""}>${esc(n === "default" ? "claude's own default" : n)}</option>`));
     if (list.length) opts.push(`<option value="${OTHER_MODEL}"${other ? " selected" : ""}>Other (type a name)...</option>`);
-    const box = other ? `<div class="row2"><label for="model-${role}-other">Name</label><input type="text" id="model-${role}-other" data-role="${role}" data-other="1" value="" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${label} name" placeholder="a model name, then Enter"></div>` : "";
-    return `<div class="row2"><label for="model-${role}">${label}</label><select id="model-${role}" data-role="${role}"${list.length ? "" : " disabled"}>${opts.join("")}</select></div>${box}`;
+    const di = item ? ` data-item="${esc(item)}"` : "";
+    const box = other ? `<div class="row2"><label for="model-${idp}${role}-other">Name</label><input type="text" id="model-${idp}${role}-other" data-role="${role}"${di} data-other="1" value="" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="${label} name" placeholder="a model name, then Enter"></div>` : "";
+    return `<div class="row2"><label for="model-${idp}${role}">${label}</label><select id="model-${idp}${role}" data-role="${role}"${di}${list.length ? "" : " disabled"}>${opts.join("")}</select></div>${box}`;
   };
   return field("plan", "Plan model") + field("implement", "Implement model");
 }
-async function setModel(role, model) {
-  try { S.work = await api("/api/work/model", { role, model }); if (S.modelOther) S.modelOther[role] = false; toast(model ? "The " + role + " model is " + model + " from the next chain." : "The " + role + " model is the runner's own."); drawTasks(); }
+// `item` set: the choice is that task's own, and "" gives it the instance's default again.
+async function setModel(role, model, item) {
+  const key = (item ? item + ":" : "") + role, who = item ? item + "'s " : "The ";
+  try { S.work = await api("/api/work/model", { role, model, item: item || null }); if (S.modelOther) S.modelOther[key] = false; toast(model ? who + role + " model is " + model + " from its next chain." : who + role + " model is " + (item ? "the instance's default." : "the runner's own.")); if (item) { S.sig = ""; render(true); } else drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
 }
 // "Other" picked: show the text box and put the caret in it.
-function openModelOther(role) { S.modelOther = Object.assign({}, S.modelOther, { [role]: true }); drawTasks(); $("#model-" + role + "-other")?.focus(); }
+function openModelOther(role, item) { const key = (item ? item + ":" : "") + role; S.modelOther = Object.assign({}, S.modelOther, { [key]: true }); if (item) { S.sig = ""; render(true); } else drawTasks(); $("#model-" + (item ? "task-" + item + "-" : "") + role + "-other")?.focus(); }
 // The text box left empty: nothing is kept, and the box closes on the model that was.
-function closeModelOther(role) { if (S.modelOther) S.modelOther[role] = false; drawTasks(); }
+function closeModelOther(role, item) { const key = (item ? item + ":" : "") + role; if (S.modelOther) S.modelOther[key] = false; if (item) { S.sig = ""; render(true); } else drawTasks(); }
 async function setNext(item) {
   try { S.work = await api("/api/work/pin", { item: item || null }); toast(item ? "Next goes to " + item + "." : "Next is automatic."); drawTasks(); }
   catch (e) { toast(e.message, true); render(true); }
@@ -1441,6 +1452,13 @@ const workHere = id => !!(S.work && S.work.enabled && S.work.candidates.some(c =
 /* The mark before a node's id, so its state is not told by the rule's colour alone: complete, started (a session has
    begun to change code for it), not begun. A node the work has left (refuted, parked) has none; its chip says. */
 const PROGRESS_LABEL = { done: ["✓", "complete"], started: ["", "started"], open: ["", "not started"] };
+/* The task's own models: they override the work box's for this task's chains only. Shown for a task the work can
+   run, and only for an agent the runner tells a model. */
+function taskModels(t) {
+  const w = S.work;
+  if (!w || !w.enabled || t.status === "done" || !(w.model_choices || []).length) return "";
+  return `<details class="taskmodels"${(w.task_models || {})[t.id] ? " open" : ""}><summary>Models for ${esc(t.id)}</summary>${modelFields(w, t.id)}<p class="hint">Plan: the first session, the critic and the review. Implement: the rest. A task's choice replaces the instance default for its chains.</p></details>`;
+}
 function drawTask() {
   const had = findEnter();
   const t = S.task, folded = S.folded[t.id] || new Set(), below = raisesBelowOf(t);
@@ -1459,7 +1477,7 @@ function drawTask() {
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
       ${workHere(t.id) ? `<button class="btn" data-act="workhere" data-item="${esc(t.id)}">${S.work.pinned === t.id ? "Work goes here next" : "Work here next"}</button>` : ""}
-    </div>`}${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
+    </div>${taskModels(t)}`}${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
   for (const r of visibleRows(t)) {
     if (r.kind === "section") {
       // The Goal is a tap away on any width: open, it is a screen of its own above the
@@ -2416,10 +2434,10 @@ document.addEventListener("input", e => {
 document.addEventListener("keydown", e => {
   if (e.key === "Enter" && (e.target.id === "bud" || e.target.id === "par")) { e.preventDefault(); workStart(); }
   else if (e.key === "Enter" && e.target.dataset && e.target.dataset.other) { e.preventDefault(); e.target.dispatchEvent(new Event("change", { bubbles: true })); }
-  else if (e.key === "Escape" && e.target.dataset && e.target.dataset.other) closeModelOther(e.target.dataset.role);
+  else if (e.key === "Escape" && e.target.dataset && e.target.dataset.other) closeModelOther(e.target.dataset.role, e.target.dataset.item);
 });
-document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.other) { const v = e.target.value.trim(); if (v) setModel(e.target.dataset.role, v); else closeModelOther(e.target.dataset.role); }
-  else if (e.target.dataset && e.target.dataset.role) { if (e.target.value === OTHER_MODEL) openModelOther(e.target.dataset.role); else { if (S.modelOther) S.modelOther[e.target.dataset.role] = false; setModel(e.target.dataset.role, e.target.value); } } });
+document.addEventListener("change", e => { if (e.target.id === "nextsel") setNext(e.target.value); else if (e.target.id === "agentsel") setAgent(e.target.value); else if (e.target.dataset && e.target.dataset.other) { const v = e.target.value.trim(); if (v) setModel(e.target.dataset.role, v); else closeModelOther(e.target.dataset.role, e.target.dataset.item); }
+  else if (e.target.dataset && e.target.dataset.role) { if (e.target.value === OTHER_MODEL) openModelOther(e.target.dataset.role, e.target.dataset.item); else { const it = e.target.dataset.item; if (S.modelOther) S.modelOther[(it ? it + ":" : "") + e.target.dataset.role] = false; setModel(e.target.dataset.role, e.target.value, it); } } });
 
 /* A phone puts a page to sleep when another app is on top, and its requests and its timers stop with it. On coming back
    (visible again, restored from the back/forward cache, or the network up) an open chat is read at once and its poll
