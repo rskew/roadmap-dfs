@@ -314,6 +314,21 @@ class Looking(unittest.TestCase):
         self.t.join(5)
         self.assertTrue(self.seen(b"\x1b[?1049l\x1b[?2004l"))
 
+    def test_grapheme_cluster_width_set_in_the_background_reaches_the_terminal_and_is_reset(self):
+        """opencode writes ESC[?2027h at start-up, while nobody is attached; a terminal that never gets it
+        measures a ZWJ emoji or a flag by its parts, so the chat's columns would be off."""
+        self.relay.close()
+        self.relay = ptyrelay.Relay().start(["bash", "-c", r"printf '\033[?2027h'; " + AGENT],
+                                            env=dict(os.environ, LOG=str(self.log)))
+        self.addCleanup(self.relay.close)
+        self.assertTrue(until(lambda: self.relay.modes == {2027}))
+        self.t = threading.Thread(target=lambda: self.result.append(self.relay.attach()), daemon=True)
+        self.t.start()
+        self.assertTrue(self.seen(b"\x1b[?2027h"))
+        os.write(self.keys_w, b"\x1d")
+        self.t.join(5)
+        self.assertTrue(self.seen(b"\x1b[?2027l"))
+
     def test_a_terminal_resized_as_it_attaches_leaves_the_agent_the_new_size(self):
         """herdr narrows its pane by a column as the screen leaves curses, just as `attach` reads the
         size: the SIGWINCH handler sets the new one while the redraw step sleeps, and the stale one

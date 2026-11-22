@@ -51,7 +51,9 @@ FIRST_LAUNCH = {"codex": ("Trust and continue", (b"\r",)), "kiro": ("Yes, I acce
 # paste mode it turns on when it starts, and a stand-in claude that never does is typed to after HANDOVER_TIMEOUT.
 OPENING = b"running its opening turn first"
 OPENED = b"opening an interactive"
-MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004)      # private modes the terminal is brought in step with
+# private modes the terminal is brought in step with. 2027 is grapheme-cluster width: opencode sets it at start-up, so
+# the terminal has to measure an emoji or CJK cluster as the chat does, or its columns and wraps are off.
+MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004, 2027)
 _MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
 TAIL = 16384                # bytes of the agent's last output kept, for the log
 STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a message before the log says so
@@ -426,7 +428,7 @@ class Relay:
         """Wire the real terminal to it until it ends or ctrl-] is pressed. Returns True if it
         was detached (still running), False if it ended. `idle()` runs about every `every` seconds
         meanwhile, typing or not, on this thread: the screen's poll, which a chat would block.
-        The terminal is put in the modes the chat has set (alt screen, mouse, bracketed paste, focus)
+        The terminal is put in the modes the chat has set (alt screen, mouse, bracketed paste, focus, grapheme-cluster width)
         and back to the roadmap's own when this returns, so after a detach the screen is as it was."""
         if not self.live:                       # it ended before anyone looked: `fit` has no pty to size
             return False
