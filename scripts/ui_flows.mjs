@@ -2489,11 +2489,13 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     await ctx.close();
   },
 
-  // A new task from the floating button, and the title renamed by clicking it.
+  // A new task from the plus button, and the title renamed by clicking it.
   async newtask(b) {
     const { page, errors } = await open(b, PHONE);
     const btn = await page.$eval("[data-act=newtask]", e => { const r = e.getBoundingClientRect(), t = document.querySelector("#tabs").getBoundingClientRect(); return { h: r.height, fixed: getComputedStyle(e).position === "fixed", right: innerWidth - r.right, aboveTabs: r.bottom <= t.top, low: r.top > innerHeight / 2 }; });
     assert(btn.h >= 44 && btn.fixed && btn.right < 40 && btn.aboveTabs && btn.low, "the button is tap-sized and floats at the bottom right, above the tab bar");
+    assert(!(await page.$("#tabs [data-act=newtask]")), "the tab bar has no Add task tab: it is the plus button");
+    assert((await page.$eval("[data-act=newtask]", e => e.textContent.trim() + "|" + e.getAttribute("aria-label"))) === "+|Add task", "the button is a plus with an accessible name");
     assert(!(await page.$("[data-act=chat][data-scope=project]")), "the task list has no project chat button");
     await page.click("[data-act=newtask]"); await dialog(page);
     await page.fill("#nn", "Cache the lookups");
