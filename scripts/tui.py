@@ -3785,7 +3785,11 @@ class UI(WorkMixin):
         """`:model` shows the models chosen for the work's claude sessions; `:model plan opus`
         and `:model implement sonnet` choose them for the next chain, `:model plan default`
         leaves claude to its own default and `:model plan none` takes the choice away (the
-        runner's opus to plan and sonnet to implement). Kept like the agent, for the next screen."""
+        runner's opus to plan and sonnet to implement). Kept like the agent, for the next screen.
+        Those are the instance's defaults; `:model W7 plan haiku` is task W7's own choice, which
+        its chains take over the default, and `:model W7 plan none` gives it the default again."""
+        if args and self.item_index(args[0]) is not None:
+            return self.command_task_model(self.items[self.item_index(args[0])]["id"], args[1:])
         if not args:
             m = self.models()
             self.msg = "models: " + ", ".join("%s %s" % (r, m[r] or self.model_default_text(r))
@@ -3798,7 +3802,32 @@ class UI(WorkMixin):
             except ValueError as e:
                 self.msg = str(e)
         else:
-            self.msg = ":model plan|implement <name>, <name> being default (claude), none or a model of the next chain's agent"
+            self.msg = ":model [<task>] plan|implement <name>, <name> being default (claude), none or a model of the next chain's agent"
+        return True
+
+    def task_model_text(self, item, role):
+        """A task's model for `role` as `:model` words it: its own choice, else the instance's
+        default (marked as that)."""
+        own = self.task_models(item)[role]
+        if own:
+            return own
+        return "(instance default: %s)" % (self.models()[role] or self.model_default_text(role)).strip("()")
+
+    def command_task_model(self, item, args):
+        """`:model W7` shows the task's models beside the instance defaults, `:model W7 plan`
+        one of them, `:model W7 plan haiku` chooses it and `:model W7 plan none` takes it away."""
+        if not args:
+            self.msg = "%s models: " % item + ", ".join("%s %s" % (r, self.task_model_text(item, r))
+                                                       for r in MODEL_ROLES)
+        elif len(args) == 1 and args[0] in MODEL_ROLES:
+            self.msg = "%s %s model: %s" % (item, args[0], self.task_model_text(item, args[0]))
+        elif len(args) == 2:
+            try:
+                self.set_model(args[0], "" if args[1] == "none" else args[1], item)
+            except ValueError as e:
+                self.msg = str(e)
+        else:
+            self.msg = ":model %s plan|implement <name>, <name> being default (claude), none (the instance's) or a model of the next chain's agent" % item
         return True
 
     def item_index(self, iid):
@@ -4032,6 +4061,11 @@ class UI(WorkMixin):
         if it.get("corrections"):
             out.append(("corrected, not yet carried out: %s"
                         % ", ".join(it["corrections"]), curses.A_BOLD))
+        own = {r: v for r, v in self.task_models(it["id"]).items() if v}
+        if own:
+            out.append(("models for this task: " + ", ".join("%s %s" % (r, own[r]) for r in MODEL_ROLES if r in own)
+                        + " · :model %s plan|implement none gives back the instance's" % it["id"],
+                        look("chrome")))
         out.append(("sessions %d since the author spoke · critic in %d"
                     % (it.get("sessions", 0), max(5 - it.get("since_critic", 0), 0)),
                     look("chrome")))
@@ -5532,8 +5566,8 @@ class UiWorker:
     def set_agent(self, name):
         self.ui.call_soon(lambda: self.ui.set_agent(name))
 
-    def set_model(self, role, name):
-        self.ui.call_soon(lambda: self.ui.set_model(role, name))
+    def set_model(self, role, name, item=None):
+        self.ui.call_soon(lambda: self.ui.set_model(role, name, item))
 
     def agent(self):
         return self.ui.agent
