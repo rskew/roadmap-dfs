@@ -746,6 +746,28 @@ class Web(unittest.TestCase):
         self.assertEqual(off, ["section", "a", "d", "e"], "folded a hides b and c")
         self.assertEqual(on, ["section", "b", "c", "d"], "folds are ignored; a and e are dropped")
 
+    def test_a_task_opens_with_its_branches_folded_and_keeps_the_authors_folds(self):
+        """foldByDefault(), unfoldTo() and raisesBelowOf() in index.html, run under node (skipped when there is none)."""
+        node = shutil.which("node") or os.environ.get("DFS_NODE")
+        if not node:
+            self.skipTest("no node on PATH (or DFS_NODE) to run the page's fold functions")
+        src = (HERE / "web" / "index.html").read_text()
+        body = src[src.index("// A node the author is there for"):src.index("function visibleRows(t) {")]
+        js = ("const S = {folded: {}, flagged: false};" + body +
+              "const row = (id, p, kids, raises) => ({kind:'node', id, parent:p, kids, raises: raises || [], assumes:false, ask:false});"
+              "const t = {id:'T', rows: [{kind:'section'}, row('a','',2), row('b','a',1), row('c','b',0,[1,2]), row('d','a',0), row('e','',0)]};"
+              "const out = {};"
+              "foldByDefault(t, null); out.first = [...S.folded.T].sort();"
+              "S.folded.T.delete('a'); foldByDefault(t, null); out.kept = [...S.folded.T].sort();"      # a second read keeps the author's fold
+              "S.folded.T = undefined; foldByDefault(t, 'c'); out.routed = [...S.folded.T].sort();"      # a node opened by link: its way is open
+              "const n = raisesBelowOf(t); out.below = [n('a'), n('b'), n('c'), n('e')];"
+              "console.log(JSON.stringify(out))")
+        got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(got["first"], ["a", "b"], "the nodes with children start folded, the leaves have nothing to fold")
+        self.assertEqual(got["kept"], ["b"], "a task read again keeps the author's folds")
+        self.assertEqual(got["routed"], [], "a node opened by link has every ancestor unfolded")
+        self.assertEqual(got["below"], [2, 2, 0, 0], "a folded row counts the raises below it at any depth")
+
     def test_reorder_swaps_the_rows_for_ones_that_carry_moves(self):
         """drawTasks() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
