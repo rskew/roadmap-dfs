@@ -298,9 +298,9 @@ a budget, a tooling bug, a choice between two wordings.
   `Answer with: .dfs/artefacts/<uuid>.html` (one page, even when the raise shows
   several); a raise naming a page that cannot post an answer is refused. The author
   answers it on that page, opened in full and marked "answer page" on the raise's node.
-- **For a picture alone**, start from `_TEMPLATE.html` and name the page in the raise by
-  its path, `.dfs/artefacts/<uuid>.html` (the web page links it and the screen's `v`
-  pane lists it).
+- **For a picture alone**, save a screenshot as a `.png` and name it in the raise. A raise
+  names no second `.html` page: one that is not the `Answer with:` page has no submit
+  button, and the log refuses it. Draw the picture into the answer page instead.
 - **Either way**: the page is one self-contained HTML file in `.dfs/artefacts/`, written
   mobile-first (the author reads on a phone) and checked with
   `<scripts>/artefact_check.sh`, whose screenshot you look at. How to write one is

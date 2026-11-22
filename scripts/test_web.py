@@ -330,6 +330,13 @@ class Web(unittest.TestCase):
                 else:
                     os.environ[k] = v
 
+    def raise_unchecked(self, body):
+        """A raise written as an older one was, before the log refused a second page: the server must still
+        treat the pages in it as it always has."""
+        ts = dfs_tree.now_ts()
+        dfs_tree.write_log_entry("W1", dfs_tree.make_entry(ts, "raise", (), body))
+        return ts
+
     def put_artefact(self, name="0a1b2c.html", title="How the limiter is wired"):
         d = self.root / ".dfs" / "artefacts"
         d.mkdir(parents=True, exist_ok=True)
@@ -406,7 +413,7 @@ class Web(unittest.TestCase):
 
     def test_the_api_still_refuses_what_a_sandboxed_page_can_send(self):
         self.put_artefact()
-        ts = dfs_tree.append_log("W1", "raise", (), "Which? Answer with: .dfs/artefacts/0a1b2c.html")
+        ts = dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/0a1b2c.html")
         body = dict(task="W1", ts=ts, body="Forged.")
         self.assertEqual(self.call("POST", "/api/answer", json.dumps(body), ctype="text/plain",
                                    headers={"Origin": "null"})[0], 403)
@@ -416,8 +423,8 @@ class Web(unittest.TestCase):
     def test_the_page_a_raise_names_records_the_answer_and_no_other_page_can(self):
         self.put_artefact()
         self.put_artefact("other.html", "Another page")
-        ts = dfs_tree.append_log("W1", "raise", (), "Which design? Look at .dfs/artefacts/other.html, then\n"
-                                 "Answer with: .dfs/artefacts/0a1b2c.html\nI would pick A.")
+        ts = self.raise_unchecked("Which design? Look at .dfs/artefacts/other.html, then\n"
+                                  "Answer with: .dfs/artefacts/0a1b2c.html\nI would pick A.")
         self.assertEqual(self.page_call("GET", "0a1b2c.html")[1]["raise"], {"task": "W1", "ts": ts})
         self.assertIsNone(self.page_call("GET", "other.html")[1]["raise"])
         status, data, _ = self.page_call("POST", "other.html", {"answer": "From the wrong page."})
@@ -479,7 +486,7 @@ class Web(unittest.TestCase):
 
     def test_a_raise_that_names_no_answering_page_is_answered_by_no_page(self):
         self.put_artefact()
-        dfs_tree.append_log("W1", "raise", (), "Which design? See .dfs/artefacts/0a1b2c.html")
+        self.raise_unchecked("Which design? See .dfs/artefacts/0a1b2c.html")
         self.assertEqual(self.page_call("POST", "0a1b2c.html", {"answer": "Mine."})[0], 409)
         self.assertEqual([e for e in self.log() if e["kind"] == "answer"], [])
 
@@ -505,6 +512,24 @@ class Web(unittest.TestCase):
                     self.root / ".dfs" / "artefacts" / "tpl.html")
         with self.assertRaisesRegex(ValueError, "placeholders"):
             dfs_tree.append_log("W1", "raise", (), "Which?\nAnswer with: .dfs/artefacts/tpl.html")
+
+    def test_a_raise_cannot_name_a_page_that_is_not_its_answer_page(self):
+        self.put_artefact()
+        self.put_artefact("other.html", "Another page")
+        # A page linked "to look at" is a page with nothing to press: the log refuses it, with or without an answer page.
+        for body in ("Which?\nSee .dfs/artefacts/other.html", "Which?\nSee 8e1a0c2b-1f3d-4a5e-9b7c-0d2e4f6a8b1c.html",
+                     "Which? Look at .dfs/artefacts/other.html, then\nAnswer with: .dfs/artefacts/0a1b2c.html"):
+            with self.assertRaisesRegex(ValueError, "not its answer page"):
+                dfs_tree.append_log("W1", "raise", (), body)
+        # The answer page named again, a screenshot and an ordinary reference to a .html file are not second pages.
+        before = len([e for e in self.log() if e["kind"] == "raise"])
+        dfs_tree.append_log("W1", "raise", (), "Which? See .dfs/artefacts/0a1b2c.html and .dfs/artefacts/x.png\n"
+                            "Answer with: .dfs/artefacts/0a1b2c.html")
+        self.assertEqual(len([e for e in self.log() if e["kind"] == "raise"]), before + 1)
+
+    def test_a_button_in_a_comment_is_not_a_submit_button(self):
+        self.assertFalse(dfs_tree.has_submit_button("<!-- <button>Send</button> --><textarea></textarea>"))
+        self.assertTrue(dfs_tree.has_submit_button("<!-- note --><button>Send</button>"))
 
     def test_a_raise_cannot_name_an_answering_page_that_does_not_exist(self):
         with self.assertRaises(ValueError):
@@ -551,8 +576,8 @@ class Web(unittest.TestCase):
     def test_a_task_lists_only_the_artefacts_it_names(self):
         self.put_artefact()
         self.put_artefact("standing-map.html", "The standing map")
-        dfs_tree.append_log("W1", "raise", (), "Which design? See .dfs/artefacts/0a1b2c.html, "
-                            "or http://localhost:3016/0a1b2c.html, or gone.html.")
+        self.raise_unchecked("Which design? See .dfs/artefacts/0a1b2c.html, "
+                             "or http://localhost:3016/0a1b2c.html, or gone.html.")
         arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
         self.assertEqual([(a["file"], a["title"]) for a in arts],
                          [("0a1b2c.html", "How the limiter is wired")])
