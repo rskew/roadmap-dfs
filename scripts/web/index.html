@@ -498,7 +498,7 @@ const tagAt = id => String(id).indexOf("@");
 const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
 const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
-const S = { work: null, state: null, task: null, taskId: null, folded: {}, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, flagged: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0, q: "" };
+const S = { work: null, state: null, task: null, taskId: null, folded: {}, reorder: false, moved: null, pending: new Map(), inflight: 0, stale: false, node: null, sig: "", dirty: false, archived: [], archivedCount: 0, q: "" };
 /* Show archived: the list draws the tasks `archive_task` retired after the live ones, read-only. Kept in localStorage. */
 const showArchived = () => { try { return localStorage.getItem("showArchived") === "1"; } catch (e) { return false; } };
 const wide = () => matchMedia("(min-width: 900px)").matches;
@@ -797,7 +797,7 @@ async function renderDraw(force, changed) {
       S.node = r.node;
       foldByDefault(t, r.node);
       if (arrived) unfoldTo(t, r.node);      // coming to a node by a link: the way to it is open
-      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + S.flagged + "|" + (S.work && S.work.pinned) + "|" + workHere(r.task) + "|" + JSON.stringify(workOf(r.task));
+      const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + (S.work && S.work.pinned) + "|" + workHere(r.task) + "|" + JSON.stringify(workOf(r.task));
       S.task = t;
       if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
     } else if (r.view === "artefact") {
@@ -1408,8 +1408,6 @@ document.addEventListener("keydown", async e => {
 });
 
 /* ── one task ───────────────────────────────────────────────────────────────── */
-// A node the author is there for: an open raise or an assumption (an old Ask counts).
-const wantsYou = r => r.raises.length > 0 || r.assumes || r.ask;
 /* A task's branches (nodes that have children) start folded. The first read of a task folds them all and later reads keep
    the author's own folds; a node the page is opened on has the way to it unfolded, so it is never hidden. */
 function unfoldTo(t, id) {
@@ -1432,9 +1430,7 @@ function raisesBelowOf(t) {
 }
 function visibleRows(t) {
   // Searching: the nodes whose id or title hold every word, wherever they sit and folded or not.
-  if (S.q) return t.rows.filter(r => r.kind === "node" && (!S.flagged || wantsYou(r)) && hit(S.q, r.id, r.title));
-  // Flagged only: the other nodes go, and with them the folds (one on a dropped node would hide a flagged one below it).
-  if (S.flagged) return t.rows.filter(r => r.kind !== "node" || wantsYou(r));
+  if (S.q) return t.rows.filter(r => r.kind === "node" && hit(S.q, r.id, r.title));
   const folded = S.folded[t.id] || new Set(), byId = {};
   t.rows.forEach(r => { if (r.kind === "node") byId[r.id] = r; });
   const hidden = r => { let p = r.parent; while (p && byId[p]) { if (folded.has(p)) return true; p = byId[p].parent; } return false; };
@@ -1452,7 +1448,7 @@ function drawTask() {
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
     ${(tags => tags ? `<p class="worktags">${tags}</p>` : "")(workTags(workOf(t.id)))}</div>
     ${t.archived ? `<p class="hint archived-note" role="note">Archived: this task is kept for reading. Its files are under <code>.dfs/archive/archived</code>: move <code>items/</code> back to <code>.dfs/items</code> and <code>archive/</code> to <code>.dfs/archive/items</code> to work on it again.</p>
-    <div class="actions"><button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button></div>` : `<div class="actions">
+    ` : `<div class="actions">
       ${t.acceptable ? `<button class="btn primary" data-act="accept">Accept tree</button>` : ""}
       <button class="btn" data-act="add" data-parent="">Add a node</button>
       <button class="btn" data-act="edittask">Edit task</button>
@@ -1460,7 +1456,6 @@ function drawTask() {
       ${t.pr_ready ? `<button class="btn primary" data-act="openpr" title="Push the branch and open its pull request with gh">Open PR</button>` : ""}
       ${t.pr ? `<a class="btn" href="${esc(t.pr)}" target="_blank" rel="noopener">Pull request</a>` : ""}
       <button class="btn" data-act="deletetask">Delete task</button>
-      <button class="btn" data-act="flagged" aria-pressed="${S.flagged}">${S.flagged ? "Show every node" : "Flagged nodes only"}</button>
       ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
       ${workHere(t.id) ? `<button class="btn" data-act="workhere" data-item="${esc(t.id)}">${S.work.pinned === t.id ? "Work goes here next" : "Work here next"}</button>` : ""}
@@ -1479,14 +1474,14 @@ function drawTask() {
       const chips = [
         r.raises.length ? `<span class="tag attention">raise, ${esc(r.raises[0].age)}</span>` : "",
         r.raises.some(answerPage) ? `<span class="tag page" title="Tapping this node opens its answer page">answer page</span>` : "",
-        folded.has(r.id) && !S.flagged && !S.q && below(r.id) ? `<span class="tag attention">${below(r.id)} raise${below(r.id) === 1 ? "" : "s"} below</span>` : "",
+        folded.has(r.id) && !S.q && below(r.id) ? `<span class="tag attention">${below(r.id)} raise${below(r.id) === 1 ? "" : "s"} below</span>` : "",
         r.assumes ? `<span class="tag assumption">assumption</span>` : "",
         r.ask ? `<span class="tag attention">ask</span>` : "",
         r.answered ? `<span class="tag">answered</span>` : "",
         r.progress === "ruled" ? `<span class="tag">confirmed by you, not built</span>` : "",
         ["refuted", "parked", "dormant", "pruned"].includes(r.status) ? `<span class="tag ${r.status === "refuted" ? "red" : ""}">${esc(r.status)}</span>` : ""].join("");
       html += `<div class="${cls}" style="--i:${r.indent}">
-        <button class="fold ${r.kids && !S.flagged && !S.q ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
+        <button class="fold ${r.kids && !S.q ? "" : "none"}" data-act="fold" data-id="${esc(r.id)}" aria-label="${folded.has(r.id) ? "Unfold" : "Fold"} ${esc(r.id)}">${folded.has(r.id) ? "+" : "−"}</button>
         <button class="main" data-act="node" data-id="${esc(r.id)}">
           <div class="line">${PROGRESS_LABEL[r.progress] ? `<span class="mk ${r.progress}" role="img" aria-label="${PROGRESS_LABEL[r.progress][1]}">${PROGRESS_LABEL[r.progress][0]}</span>` : ""}<span class="nid">${r.chain ? "↳ " : ""}${esc(r.id)}</span>${inline(r.title)}</div>
           ${chips ? `<div class="chips">${chips}</div>` : ""}
@@ -2224,7 +2219,6 @@ document.addEventListener("click", e => {
   const d = b.dataset;
   ({
     retry: () => render(true),
-    flagged: () => { S.flagged = !S.flagged; S.sig = ""; render(true); },
     liststyle: () => { try { localStorage.setItem("listStyle", listStyle() === "table" ? "card" : "table"); } catch (e) {} render(true); },
     archived: () => { try { localStorage.setItem("showArchived", showArchived() ? "0" : "1"); } catch (e) {} render(true); },
     all: () => { S.reorder = false; S.moved = null; showList(); },
@@ -2308,13 +2302,12 @@ setInterval(() => { if (route().view === "chats" && !document.hidden && !$("#cha
 const KEYS = [
   { id: "next", keys: ["j", "ArrowDown"], show: "j  ↓", does: "Next task on the list, next node in the tree", on: "both" },
   { id: "prev", keys: ["k", "ArrowUp"], show: "k  ↑", does: "Previous task, previous node", on: "both" },
-  { id: "unfold", keys: ["ArrowRight"], show: "→", does: "Unfold the focused node (not while a search is set or only flagged nodes show)", on: "task" },
-  { id: "fold", keys: ["ArrowLeft"], show: "←", does: "Fold the focused node's children (not while a search is set or only flagged nodes show)", on: "task" },
+  { id: "unfold", keys: ["ArrowRight"], show: "→", does: "Unfold the focused node (not while a search is set)", on: "task" },
+  { id: "fold", keys: ["ArrowLeft"], show: "←", does: "Fold the focused node's children (not while a search is set)", on: "task" },
   { id: "open", keys: ["Enter"], show: "Enter", does: "Open the focused task, or the first node", on: "both" },
   { id: "back", keys: ["Escape"], show: "Esc", does: "Back out: in the search field clear it; close a form, leave a node for its task, a task for the list, a run log or artefact for where Back goes; inside an artefact's own frame use the Back button", on: "both" },
   { id: "find", keys: ["/"], show: "/", does: "Search the tasks, or the nodes of a task", on: "both" },
   { id: "flag", keys: ["n"], show: "n", does: "Go to the next node that wants you", on: "task" },
-  { id: "flagged", keys: ["f"], show: "f", does: "Show only the nodes that want you, or all", on: "task" },
   { id: "correct", keys: ["c"], show: "c", does: "Confirm or refute the open node (not while it has an open raise)", on: "task" },
   { id: "help", keys: ["?"], show: "?", does: "This list", on: "both" },
 ];
@@ -2376,14 +2369,13 @@ addEventListener("keydown", e => {
   }
   else if (is("flag", e)) nextFlag();
   else if (is("back", e)) up();                       // a node back to its task, a task back to the list
-  else if ((is("fold", e) || is("unfold", e)) && onRow && cur && cur.kids && !S.flagged && !S.q) {
+  else if ((is("fold", e) || is("unfold", e)) && onRow && cur && cur.kids && !S.q) {
     e.preventDefault();                                // the arrow would also scroll a page that overflows sideways
     const s = S.folded[S.task.id] ||= new Set(), folded = s.has(cur.id);
     if (is("fold", e) ? !folded : folded) { folded ? s.delete(cur.id) : s.add(cur.id); S.focusId = cur.id; S.sig = ""; render(true); }
   }
   else if (is("open", e) && !S.node && e.target === document.body) { const first = visibleRows(S.task).find(x => x.kind === "node"); if (first) go(`t/${S.task.id}/${first.id}`); }
   else if (is("correct", e) && open && !open.raises.length) correctForm(open.id);
-  else if (is("flagged", e)) { S.flagged = !S.flagged; S.sig = ""; render(true); }
 });
 /* Right-click on a node: its actions at the pointer, the same ones the sheet has. Any click, Escape or scroll closes it. */
 function ctxClose() { const m = $("#ctx"); if (!m.hidden) { m.hidden = true; m.innerHTML = ""; } }

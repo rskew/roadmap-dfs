@@ -264,7 +264,7 @@ const FLOWS = {
     const shown = await page.$$eval("dialog[open] dl.keys dt", a => a.map(e => e.textContent.trim()));
     const table = await page.evaluate(() => KEYS.map(k => k.show.trim()));
     same(shown, table, "the dialog lists every key in the table");
-    for (const k of ["/", "Esc", "?", "n", "c", "f"]) assert(shown.includes(k), `${k} is listed`);
+    for (const k of ["/", "Esc", "?", "n", "c"]) assert(shown.includes(k), `${k} is listed`);
     const says = await page.$$eval("dialog[open] dl.keys dd", a => a.map(e => e.textContent));
     assert(says.some(s => /search is set/.test(s) && /Fold/.test(s)), "← says it does nothing while a search is set");
     assert(says.some(s => /artefact's own frame/.test(s)), "Esc says it is inert inside an artefact's frame");
@@ -2847,10 +2847,6 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
       await page.keyboard.press("c"); await dialog(page); await page.keyboard.press("Escape");
       await page.waitForFunction(() => document.activeElement === document.body || document.activeElement.matches(".row .main"));     // the closed dialog gives its focus back, to the open node's row
       await page.keyboard.press("Escape"); await page.waitForFunction(() => !document.querySelector("#sheet.open"));
-      // f shows the flagged nodes only, and again all of them
-      const all = (await page.$$(".row")).length;
-      await page.keyboard.press("f"); await page.waitForFunction(c => document.querySelectorAll(".row").length < c, all);
-      await page.keyboard.press("f"); await page.waitForFunction(c => document.querySelectorAll(".row").length === c, all);
       // right-click: the node's actions at the pointer; Escape closes the menu and leaves the page as it was
       await page.click(".row .main", { button: "right" });
       await page.waitForSelector("#ctx:not([hidden])");

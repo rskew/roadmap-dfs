@@ -730,32 +730,14 @@ class Web(unittest.TestCase):
         # a row is a blocker or an assumption, never both, so the red fill never meets the amber stripe
         self.assertEqual(src.count("assumes = !blocks && it.assumptions.length > 0"), 2)
 
-    def test_flagged_only_keeps_the_nodes_that_want_the_author(self):
-        """visibleRows() in index.html, run under node (skipped when there is none)."""
-        node = shutil.which("node") or os.environ.get("DFS_NODE")
-        if not node:
-            self.skipTest("no node on PATH (or DFS_NODE) to run the page's visibleRows()")
-        src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("// A node the author is there for"):src.index("function drawTask() {")]
-        js = ("const S = {folded: {T: new Set(['a'])}, flagged: false};" + body +
-              "const row = (id, p, o) => Object.assign({kind:'node', id, parent:p, raises:[], assumes:false, ask:false}, o);"
-              "const t = {id:'T', rows: [{kind:'section'}, row('a',''), row('b','a',{assumes:true}),"
-              "row('c','a',{raises:[1]}), row('d','',{ask:true}), row('e','')]};"
-              "const ids = () => visibleRows(t).map(r => r.id || r.kind);"
-              "const off = ids(); S.flagged = true;"
-              "console.log(JSON.stringify([off, ids()]))")
-        off, on = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(off, ["section", "a", "d", "e"], "folded a hides b and c")
-        self.assertEqual(on, ["section", "b", "c", "d"], "folds are ignored; a and e are dropped")
-
     def test_a_task_opens_with_its_branches_folded_and_keeps_the_authors_folds(self):
         """foldByDefault(), unfoldTo() and raisesBelowOf() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's fold functions")
         src = (HERE / "web" / "index.html").read_text()
-        body = src[src.index("// A node the author is there for"):src.index("function visibleRows(t) {")]
-        js = ("const S = {folded: {}, flagged: false};" + body +
+        body = src[src.index("/* A task's branches (nodes that have children) start folded."):src.index("function visibleRows(t) {")]
+        js = ("const S = {folded: {}};" + body +
               "const row = (id, p, kids, raises) => ({kind:'node', id, parent:p, kids, raises: raises || [], assumes:false, ask:false});"
               "const t = {id:'T', rows: [{kind:'section'}, row('a','',2), row('b','a',1), row('c','b',0,[1,2]), row('d','a',0), row('e','',0)]};"
               "const out = {};"

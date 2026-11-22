@@ -197,7 +197,7 @@ try:
                 print("   opened %s (answered=%s, overruled=%s): sheet says: %s" % (r["id"], r["answered"], r["overruled"], sheet[:520]))
         for n in j["notes"]:
             print("   note %r on the task page: %s" % (n["heading"], n["heading"] in t))
-        print("'Next flagged' and 'Flagged nodes only' buttons on the page:", "Next flagged" in t, "Flagged nodes only" in t)
+        print("'Next flagged' button on the page:", "Next flagged" in t)
         print("page scrollWidth / viewport width:", width)
         print("accept dialog after a click on Accept (text):", repr(re.sub(r"\s+", " ", dialog)[:1200]) if dialog else "none opened")
         print("assumed[] (the accept form's list):")
