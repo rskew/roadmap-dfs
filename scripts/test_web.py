@@ -873,10 +873,13 @@ class Web(unittest.TestCase):
         self.assertLess(at("break, waiting on W2"), at('data-row="W2"'))
         self.assertLess(at('data-row="W2"'), at("stop break, below is done"))
         self.assertLess(at("stop break, below is done"), at('data-row="W1"'))
-        self.assertIn("Put a break below", html)
-        self.assertNotIn("break above", html, "a break is drawn under the task it holds")
-        self.assertEqual(html.count("Plain break"), 1, "W2 sits behind a stop break")
-        self.assertEqual(html.count(">Stop break<"), 2, "W1 has no fence and W3 a plain one")
+        # The buttons act on the break ABOVE the task on the screen: the one right after it in the work order.
+        self.assertEqual(html.count("Put a break above"), 1, "only W3, the top task, has no break above it")
+        self.assertEqual(html.count("Remove the break above"), 2, "W1 and W2 each have one above them")
+        self.assertNotIn("break below", html)
+        self.assertEqual(html.count("Plain break"), 1, "the break above W1 is a stop break")
+        self.assertEqual(html.count(">Stop break<"), 2, "the break above W2 is plain and W3 has none")
+        self.assertIn("Plain break", html[html.index('data-row="W1"'):], "W1 is the last row and offers the plain break")
 
     def test_the_task_list_is_drawn_last_task_first_with_a_break_under_the_task_it_holds(self):
         """drawTasks() in index.html, run under node: the work climbs the page (skipped when there is none)."""
