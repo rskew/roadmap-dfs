@@ -36,6 +36,27 @@ session carries it out.
 5. **Open nodes the critic or reviewer added** carry only an Approach: what is wrong
    and what would settle it. Take them up like any open node.
 
+## The code behind this
+
+The process is code, and it is yours to read. When a rule here is unclear, or a commit
+is refused, read the code that enforces it before guessing. Paths are under `<scripts>`:
+
+- `tree.py`: the task file format. The one place a node, its status and its log mean
+  anything, and the commands you run (`start`, `add`, `log`, `shelve`, `compact`).
+- `state.py`: derives the status, the stop conditions and the briefing you were handed
+  (`brief`), the critic's (`critic_brief`) and the reviewer's (`review_brief`).
+- `check.py`, run by `hook.sh` on every commit: the invariants that refuse a commit.
+  Its messages say which rule you broke.
+- `run.sh`: the loop that starts sessions one after another, and the facts it stops on.
+- `work.py`: what is decided when a chain of sessions ends (next session, critic,
+  review, next task).
+- `branch.py`: the item's worktree and branch, and the rebase and merge back.
+- `context.py`: how the session budget is measured.
+- `inbox.py`: how the author's messages reach a running session.
+
+Read the code to understand the process. Do not change it inside a task: a fault in
+the tooling is raised (see Raising).
+
 ## A node
 
 ```
