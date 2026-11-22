@@ -224,7 +224,7 @@ body.dragging { user-select: none; -webkit-user-select: none; }
 .break.stop::after { border-top-style: double; border-top-width: 4px; }
 .hint { color: var(--muted); padding: 28px 0; }
 p.foot { margin: var(--s5) 0 var(--s2); text-align: center; }
-/* Add a task is a plus button floating at the bottom right, clear of the tab bar, on every screen size; the gap keeps the last row from hiding under it */
+/* Add a task is a plus button floating at the bottom right, clear of the tab bar, on every screen size; the gap keeps the last row from hiding under it. The "+" is a symbol, so the button is named by its aria-label "Add task" and not by its text */
 .fab { position: fixed; right: var(--s4); bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px) + var(--s4)); z-index: 5; width: calc(52px * var(--z)); min-height: calc(52px * var(--z)); padding: 0; font-size: calc(28px * var(--z)); line-height: 1; letter-spacing: 0; }
 .fab-gap { height: 72px; }
 .top-actions { margin: var(--s2) 0 0; }

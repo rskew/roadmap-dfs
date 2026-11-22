@@ -2497,6 +2497,11 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     assert(!(await page.$("#tabs [data-act=newtask]")), "the tab bar has no Add task tab: it is the plus button");
     assert((await page.$eval("[data-act=newtask]", e => e.textContent.trim() + "|" + e.getAttribute("aria-label"))) === "+|Add task", "the button is a plus with an accessible name");
     assert(!(await page.$("[data-act=chat][data-scope=project]")), "the task list has no project chat button");
+    // a wide screen has its tab bar at the top: the same plus sits at the bottom right with nothing under it
+    const wide = await open(b, DESKTOP);
+    const wbtn = await wide.page.$eval("[data-act=newtask]", e => { const r = e.getBoundingClientRect(); return { h: r.height, fixed: getComputedStyle(e).position === "fixed", right: innerWidth - r.right, low: innerHeight - r.bottom < 60, text: e.textContent.trim() }; });
+    assert(wbtn.h >= 44 && wbtn.fixed && wbtn.right < 60 && wbtn.low && wbtn.text === "+", "on a wide screen the plus floats at the bottom right");
+    await wide.ctx.close();
     await page.click("[data-act=newtask]"); await dialog(page);
     await page.fill("#nn", "Cache the lookups");
     await page.fill("#ng", "Hits above 90%.");
