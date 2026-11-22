@@ -864,7 +864,11 @@ const FLOWS = {
     const desk = await open(b, DESKTOP);
     await task(desk.page, "W9");
     const menu = async sel => {
-      await desk.page.click(sel + " .main[data-act=node]", { button: "right" });
+      // Scrolled to first: the menu closes on a scroll event, which arrives after the click's own scroll-into-view.
+      const main = desk.page.locator(sel + " .main[data-act=node]").first();
+      await main.scrollIntoViewIfNeeded();
+      await desk.page.waitForTimeout(200);
+      await main.click({ button: "right" });
       await desk.page.waitForSelector("#ctx:not([hidden]) button");
       const n = await desk.page.locator("#ctx [data-act=correct]").count();
       await desk.page.keyboard.press("Escape");
@@ -1315,6 +1319,37 @@ const FLOWS = {
     assert(!/own model/.test(shown[2]) && /claude/.test(shown[2]), "a chain that has not begun a session names no model: " + shown[2]);
     same(shown[3], "codex", "the Agent field still shows the next chain's agent");
     if (process.env.W151_SHOT) { await openWork(page); await page.evaluate(() => { S.work.chains = [Object.assign({ item: "W1", run: "2", cap: "5", progress: "run 2/5", live: true, agent: "claude", kind: "work", model: "sonnet" })]; drawTasks(true); }); await page.screenshot({ path: process.env.W151_SHOT }); }
+    same(errors, [], "no page errors");
+  },
+
+  // A task chooses its own plan and implement models on its screen; the empty option gives it the instance default again.
+  async taskmodels(b) {
+    const { page, errors } = await open(b, DESKTOP);
+    await page.goto(URL_ + "#/t/W1"); await page.waitForSelector(".row");
+    await page.waitForSelector(".taskmodels");
+    assert(await page.locator("#model-task-W1-plan").count() === 1, "the task view has a Plan model drop-down");
+    assert(/Instance default/.test(await page.locator("#model-task-W1-plan option").first().textContent()), "its empty option says it is the instance default");
+    await page.click(".taskmodels summary");
+    await page.selectOption("#model-task-W1-plan", "haiku");
+    await page.waitForFunction(() => (S.work.task_models || {}).W1?.plan === "haiku");
+    assert(await page.locator("#model-task-W1-plan").inputValue() === "haiku", "the task's choice stays shown after the redraw");
+    await page.selectOption("#model-task-W1-plan", "");
+    await page.waitForFunction(() => !(S.work.task_models || {}).W1);
+    assert(await page.locator("#model-task-W1-plan").inputValue() === "", "clearing it shows the instance default again");
+    // A name typed in the task's Other box is the task's own, not the instance's, and the drop-down then shows it.
+    const before = await page.evaluate(() => JSON.stringify(S.work.models));
+    await page.waitForTimeout(400);      // the redraw the last choice began lands first, or it would blank the box
+    await page.click(".taskmodels summary");      // clearing the choice closed the details
+    await page.selectOption("#model-task-W1-plan", { label: "Other (type a name)..." });
+    await page.waitForSelector("#model-task-W1-plan-other"); await page.waitForTimeout(400);
+    // Typing needs a browser that can insert text; set the value and send the change the Enter key sends.
+    await page.evaluate(() => { const e = document.querySelector("#model-task-W1-plan-other"); e.value = "my-own-model"; e.dispatchEvent(new Event("change", { bubbles: true })); });
+    await page.waitForFunction(() => (S.work.task_models || {}).W1?.plan === "my-own-model");
+    same(await page.evaluate(() => JSON.stringify(S.work.models)), before, "a name typed on a task leaves the instance's models alone");
+    await page.waitForFunction(() => document.querySelector("#model-task-W1-plan")?.value === "my-own-model", null, { timeout: 5000 }).catch(() => {});
+    assert(await page.locator("#model-task-W1-plan").inputValue() === "my-own-model", "the task's own unlisted name is shown selected");
+    await page.selectOption("#model-task-W1-plan", "");
+    await page.waitForFunction(() => !(S.work.task_models || {}).W1);
     same(errors, [], "no page errors");
   },
 

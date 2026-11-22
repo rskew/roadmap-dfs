@@ -7,6 +7,7 @@ page's pins, stopping, and the snapshot. The world is in memory.
 
 Run:  python3 roadmap-dfs/scripts/test_worker.py
 """
+import json
 import os
 import sys
 import tempfile
@@ -553,14 +554,14 @@ class Models(unittest.TestCase):
         self.assertEqual(env["PLAN_MODEL"], "claude-opus-5.5")
         self.assertNotIn("IMPLEMENT_MODEL", env)
 
-    def chain_env(self):
+    def chain_env(self, item="W1"):
         """The environment a chain really started by `start_chain` is given."""
         w = dfs_work.HeadlessWork()
         w.reload = lambda data=None: None
         with mock.patch.object(dfs_work.dfs_runs, "live_for", return_value=None), \
                 mock.patch.object(dfs_work.subprocess, "Popen") as popen:
             popen.return_value.pid = 1
-            w.start_chain("W1", "5")
+            w.start_chain(item, "5")
         return popen.call_args.kwargs["env"]
 
     def test_a_chain_gets_the_chosen_models_as_the_variables_run_sh_reads(self):
@@ -574,6 +575,69 @@ class Models(unittest.TestCase):
             self.w.set_model("implement", "default")
             env = self.chain_env()
             self.assertEqual((env["PLAN_MODEL"], env["IMPLEMENT_MODEL"]), ("opus", ""))
+
+    def test_a_task_s_own_models_win_for_its_chain_and_no_other(self):
+        self.w.set_model("plan", "opus")                       # the instance's default
+        self.w.set_model("plan", "haiku", item="W1")
+        self.w.set_model("implement", "sonnet[1m]", item="W1")
+        with mock.patch.dict(os.environ):
+            os.environ.pop("PLAN_MODEL", None)
+            os.environ.pop("IMPLEMENT_MODEL", None)
+            env = self.chain_env("W1")
+            self.assertEqual((env["PLAN_MODEL"], env["IMPLEMENT_MODEL"]), ("haiku", "sonnet[1m]"))
+            env = self.chain_env("W2")                         # no choice of its own: the default
+            self.assertEqual(env["PLAN_MODEL"], "opus")
+            self.assertNotIn("IMPLEMENT_MODEL", env)
+        self.assertEqual(self.w.models(), dict(plan="opus", implement=""))   # the default is untouched
+        self.assertEqual(self.w.task_models("W1"), dict(plan="haiku", implement="sonnet[1m]"))
+
+    def test_a_task_s_own_unlisted_name_is_in_the_model_choices(self):
+        self.w.set_model("plan", "opus")
+        self.assertNotIn("my-own-model", self.w.model_choices())
+        self.w.set_model("plan", "my-own-model", item="W1")
+        self.assertIn("my-own-model", self.w.model_choices())
+        self.assertIn("my-own-model", self.w.snapshot()["model_choices"])
+        self.assertEqual(self.w.models()["plan"], "opus")                    # the instance's default is as it was
+        self.w.set_model("plan", "", item="W1")
+        self.assertNotIn("my-own-model", self.w.model_choices())
+
+    def test_a_task_chooses_one_role_and_leaves_the_other_to_the_default(self):
+        self.w.set_model("implement", "sonnet")
+        self.w.set_model("plan", "haiku", item="W1")
+        self.assertEqual(dfs_work.read_models(item="W1"), dict(plan="haiku", implement="sonnet"))
+        self.assertEqual(self.w.task_models("W1"), dict(plan="haiku", implement=""))
+
+    def test_a_task_can_choose_claudes_own_default_over_the_instance_s(self):
+        self.w.set_model("plan", "opus")
+        self.w.set_model("plan", "default", item="W1")
+        self.assertEqual(dfs_work.read_models(item="W1")["plan"], "default")
+        with mock.patch.dict(os.environ):
+            self.assertEqual(self.chain_env("W1")["PLAN_MODEL"], "")
+
+    def test_clearing_a_task_s_choice_gives_it_the_instance_default_and_leaves_the_file_tidy(self):
+        self.w.set_model("plan", "opus")
+        self.w.set_model("plan", "haiku", item="W1")
+        self.w.set_model("plan", "", item="W1")
+        self.assertEqual(dfs_work.read_models(item="W1")["plan"], "opus")
+        with open(dfs_work.models_file()) as fh:
+            self.assertEqual(json.load(fh), dict(plan="opus", implement=""))
+
+    def test_a_task_keeps_claudes_and_kiros_choices_apart(self):
+        self.w.set_model("plan", "haiku", item="W1")
+        self.w.agent = "kiro"
+        self.assertEqual(self.w.task_models("W1"), dict(plan="", implement=""))
+        self.w.set_model("plan", "claude-opus-5.5", item="W1")
+        self.assertEqual(self.w.task_models("W1")["plan"], "claude-opus-5.5")
+        self.w.agent = "claude"
+        self.assertEqual(self.w.task_models("W1")["plan"], "haiku")
+        self.w.set_model("plan", "", item="W1")
+        self.assertEqual(self.w.task_models("W1")["plan"], "")
+
+    def test_a_name_that_is_not_a_task_is_refused(self):
+        for item in ("", "../x", "W1 W2", "W1@a", 3):
+            with self.assertRaises(ValueError, msg=item):
+                self.w.set_model("plan", "opus", item=item)
+        self.assertFalse(os.path.exists(dfs_work.models_file()))
 
 
 if __name__ == "__main__":

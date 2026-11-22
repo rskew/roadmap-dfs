@@ -45,6 +45,7 @@ def a_screen(items, **kw):
     ui.tree_item, ui.tree_folded, ui.tree_open = None, set(), set()
     ui.tree_flagged = False
     ui._sel_row = ui._list_y = None
+    ui.agent = "claude"       # what the work reads its models for
     ui.draw = lambda: None
     ui.__dict__.update(kw)
     return ui
@@ -304,6 +305,43 @@ class Commanding(unittest.TestCase):
             ui.command_run("model review opus")
             self.assertIn("plan or implement", ui.msg)
             self.assertEqual(ui.models(), dict(plan="", implement="default"))
+
+    def tree_text(self, ui):
+        """The item pane as drawn, for the task under the cursor."""
+        t = TUI.dfs_tree.parse(TREE.split("## Log")[0] + "## Log\n", ui.current()["id"])
+        ui.tree_of, ui.status_attr, ui._tree_cache, ui.focus = (lambda task: (t, "", {})), (lambda status: 0), {}, "list"
+        look, pair = TUI.look, curses.color_pair
+        TUI.look, curses.color_pair = (lambda name: 0), (lambda n: 0)
+        try:
+            return "\n".join(l[0] for l in ui.lines_tree(100))
+        finally:
+            TUI.look, curses.color_pair = look, pair
+
+    def test_model_with_a_task_chooses_that_tasks_models_and_the_default_stays(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):
+            ui = a_screen([item("W1"), item("W2")], agent="claude")
+            ui.command_run("model plan opus")
+            ui.command_run("model W1")
+            self.assertEqual(ui.msg, "W1 models: plan (instance default: opus), implement (instance default: sonnet)")
+            ui.command_run("model W1 plan haiku")
+            self.assertEqual(ui.task_models("W1"), dict(plan="haiku", implement=""))
+            self.assertEqual(ui.task_models("W2"), dict(plan="", implement=""))
+            self.assertEqual(ui.models(), dict(plan="opus", implement=""))      # the instance's default is as it was
+            ui.command_run("model w1 plan")
+            self.assertEqual(ui.msg, "W1 plan model: haiku")
+            ui.command_run("model W1")
+            self.assertEqual(ui.msg, "W1 models: plan haiku, implement (instance default: sonnet)")
+            self.assertIn("models for this task: plan haiku", self.tree_text(ui))
+            ui.command_run("model W2")
+            self.assertIn("plan (instance default: opus)", ui.msg)
+            ui.sel = 1
+            self.assertNotIn("models for this task", self.tree_text(ui))
+            ui.command_run("model W1 plan none")
+            self.assertEqual(ui.task_models("W1"), dict(plan="", implement=""))
+            ui.command_run("model W1 plan --help")
+            self.assertIn("not a model name", ui.msg)
+            ui.command_run("model W1 review opus")
+            self.assertIn("plan or implement", ui.msg)
 
     def test_model_says_another_agent_reads_its_own_config_and_not_opus_and_sonnet(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"DFS_RUN_DIR": tmp}):

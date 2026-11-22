@@ -76,6 +76,8 @@
 #                          first work session, while the task has no nodes, and every critic
 #                          and implementation review
 #         IMPLEMENT_MODEL  the model every other claude work session runs on (default: sonnet)
+#                          The work sets both per task: a task's own choice, else the instance's
+#                          default (the models file in the run root), is what the work passes here.
 #                          Either set empty passes no --model, so claude's own default
 #                          applies. kiro is told a model only when one of these is set
 #                          (kiro's names, such as claude-opus-5.5); codex and opencode are not.
