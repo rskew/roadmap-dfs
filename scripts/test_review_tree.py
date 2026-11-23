@@ -266,6 +266,29 @@ class Rows(unittest.TestCase):
         rows = {r["key"]: r for r in TUI.tree_entries(tree())}
         self.assertEqual(rows["W1.1"]["raises_below"], 0, "nothing is hidden when open")
 
+    UNDER = TREE.split("### W1.1")[0] + (
+        "### W1.1 · top\nStatus: confirmed\nDetermination: ok.\n\n"
+        "### W1.2 · middle\nParent: W1.1\nStatus: confirmed\nDetermination: ok.\n\n"
+        "### W1.3 · deep, unfinished\nParent: W1.2\nStatus: open\nApproach: x.\n\n"
+        "### W1.4 · deep, assumed\nParent: W1.3\nStatus: confirmed\nApproach: y.\n"
+        "Hypothesis: it holds. Wrong if it does not.\nDetermination: ok.\n\n"
+        "### W1.5 · deep, refuted\nParent: W1.3\nStatus: refuted\nHypothesis: z. Wrong if q.\n"
+        "Determination: no.\n\n"
+        "### W1.6 · parked\nParent: W1.2\nStatus: parked\nDetermination: later.\n\n"
+        "## Log\n\n- 2026-09-27T01:05:00Z · raise · W1.4\n  Which way?\n")
+
+    def test_a_row_counts_what_is_below_it_folded_or_not(self):
+        # An open raise, an unfinished node and an assumption three levels down are all
+        # counted on every ancestor; a refuted node's assumption and a parked node are not.
+        for folded in ((), {"W1.1"}):
+            rows = {r["key"]: r for r in TUI.tree_entries(
+                dfs_tree.parse(self.UNDER, "W1"), folded) if r["kind"] == "node"}
+            self.assertEqual(rows["W1.1"]["under"], {"raises": 1, "open": 1, "assumes": 1}, folded)
+            if not folded:
+                self.assertEqual(rows["W1.2"]["under"], {"raises": 1, "open": 1, "assumes": 1})
+                self.assertEqual(rows["W1.3"]["under"], {"raises": 1, "open": 0, "assumes": 1})
+                self.assertEqual(rows["W1.4"]["under"], {"raises": 0, "open": 0, "assumes": 0})
+
     def test_folding_a_leaf_is_not_a_fold(self):
         rows = {r["key"]: r for r in TUI.tree_entries(tree(), {"W1.3"})}
         self.assertFalse(rows["W1.3"]["folded"])

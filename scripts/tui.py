@@ -150,6 +150,11 @@ def tree_entries(t, folded=(), flagged=False):
     only thing the author was there to answer off the screen. So a folded row
     carries `raises_below`, the count of open raises it is hiding.
 
+    Raises are not the only thing the author looks for. Every row with children carries
+    `under`, over all its descendants folded or not: `raises` (open ones), `open` (live
+    nodes not yet done: open or started, not dormant, parked, refuted or pruned) and
+    `assumes` (live nodes that state a Hypothesis). A surface shows them on a folded row.
+
     `flagged` keeps only the nodes that want the author (an assumption, an old Ask, an
     open raise on the node) and drops the rest, ancestors included. Folds are off
     then (a fold on a dropped row would hide a flagged node below it) and a kept
@@ -210,8 +215,13 @@ def tree_entries(t, folded=(), flagged=False):
                   else "dormant")
             kids = kids_of(nid)
             shut = nid in folded and bool(kids)
-            below = (sum(len(on_node.get(k["id"], ()))
-                         for k in dfs_tree.descendants(t, nid)) if shut else 0)
+            lower = dfs_tree.descendants(t, nid) if kids else []
+            under = dict(raises=sum(len(on_node.get(k["id"], ())) for k in lower),
+                         open=sum(1 for k in lower if k["id"] not in pruned
+                                  and status[k["id"]] == "open" and k["id"] not in asleep),
+                         assumes=sum(1 for k in lower
+                                     if k["id"] in wants and k["fields"].get("Hypothesis")))
+            below = under["raises"] if shut else 0
             # ⚠️ `chain`: drawn at its parent's column, which reads as the parent's
             # sibling, so "add under" looked like it had added beside. The row says it.
             out.append(dict(key=nid, kind="node", depth=d, indent=min(ind, TREE_INDENT_CAP),
@@ -223,7 +233,7 @@ def tree_entries(t, folded=(), flagged=False):
                                       "started" if nd["status"] == "started" else "open"),
                             chain=parent is not None and len(sibs) == 1,
                             raises=on_node.get(nid, []), kids=len(kids),
-                            folded=shut, raises_below=below,
+                            folded=shut, raises_below=below, under=under,
                             assumes=nid in wants and bool(nd["fields"].get("Hypothesis")),
                             asks=nid in wants and bool(nd["fields"].get("Ask"))))
             if flagged:
@@ -4123,14 +4133,24 @@ class UI(WorkMixin):
                 flag += "  ? ask"
             if dfs_tree.story(t, nd["id"])["answered"]:
                 flag += "  ✎ answered"
-            if row["raises_below"]:
-                flag += "  ● %d raise%s below" % (row["raises_below"],
-                                                  "" if row["raises_below"] == 1 else "s")
+            if row["folded"]:
+                # ⚠ What a fold hides, said on the row: open raises, nodes not done, assumptions.
+                under = row["under"]
+                if under["raises"]:
+                    flag += "  ● %d raise%s below" % (under["raises"],
+                                                      "" if under["raises"] == 1 else "s")
+                if under["open"]:
+                    flag += "  ○ %d unfinished below" % under["open"]
+                if under["assumes"]:
+                    flag += "  ⚑ %d assumption%s below" % (under["assumes"],
+                                                          "" if under["assumes"] == 1 else "s")
             attr = (look("chrome") if st in TREE_QUIET else 0)
             if assumes or asks:
                 # ⚠️ AMBER AND BOLD, because most nodes are "something was done" and
                 # these are the ones the author is there to read. A raise is red and
                 # wins: it blocks the task, an assumption only asks to be looked at.
+                attr = look("amber") | curses.A_BOLD
+            if row["folded"] and row["under"]["assumes"]:
                 attr = look("amber") | curses.A_BOLD
             if row["raises"] or row["raises_below"]:
                 attr = red | curses.A_BOLD

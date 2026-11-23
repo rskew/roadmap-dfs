@@ -1436,12 +1436,14 @@ function foldByDefault(t, node) {
   S.folded[t.id] = new Set(t.rows.filter(r => r.kind === "node" && r.kids).map(r => r.id));
   unfoldTo(t, node);
 }
-/* The raises under a node, for the chip on a folded row: a fold must not hide what is waiting for the author. */
-function raisesBelowOf(t) {
-  const kids = {}, memo = {};
-  t.rows.forEach(r => { if (r.kind === "node") (kids[r.parent] ||= []).push(r); });
-  const count = id => memo[id] ??= (kids[id] || []).reduce((n, k) => n + k.raises.length + count(k.id), 0);
-  return count;
+/* What a fold hides, for the chips on a folded row: open raises, nodes not done and assumptions below it (`under`, counted
+   by the server over every descendant). A fold must not hide what is waiting for the author. */
+const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+function underChips(r) {
+  const u = r.under || {};
+  return [u.raises ? `<span class="tag attention">${plural(u.raises, "raise", "raises")} below</span>` : "",
+    u.open ? `<span class="tag">${u.open} unfinished below</span>` : "",
+    u.assumes ? `<span class="tag assumption">${plural(u.assumes, "assumption", "assumptions")} below</span>` : ""].join("");
 }
 function visibleRows(t) {
   // Searching: the nodes whose id or title hold every word, wherever they sit and folded or not.
@@ -1465,7 +1467,7 @@ function taskModels(t) {
 }
 function drawTask() {
   const had = findEnter();
-  const t = S.task, folded = S.folded[t.id] || new Set(), below = raisesBelowOf(t);
+  const t = S.task, folded = S.folded[t.id] || new Set();
   let html = `<div class="head"><h2>${inline(t.goal)}</h2>
     <p class="muted">${esc(t.why)}. ${t.sessions} session${t.sessions === 1 ? "" : "s"} since you last spoke.</p>
     ${(tags => tags ? `<p class="worktags">${tags}</p>` : "")(workTags(workOf(t.id)))}</div>
@@ -1496,7 +1498,7 @@ function drawTask() {
       const chips = [
         r.raises.length ? `<span class="tag attention">raise, ${esc(r.raises[0].age)}</span>` : "",
         r.raises.some(answerPage) ? `<span class="tag page" title="Tapping this node opens its answer page">answer page</span>` : "",
-        folded.has(r.id) && !S.q && below(r.id) ? `<span class="tag attention">${below(r.id)} raise${below(r.id) === 1 ? "" : "s"} below</span>` : "",
+        folded.has(r.id) && !S.q ? underChips(r) : "",
         r.assumes ? `<span class="tag assumption">assumption</span>` : "",
         r.ask ? `<span class="tag attention">ask</span>` : "",
         r.answered ? `<span class="tag">answered</span>` : "",

@@ -1162,6 +1162,34 @@ class AnAssumptionStandsOut(unittest.TestCase):
         self.assertEqual(len(said), 1, said)
 
 
+class AFoldedRowSaysWhatItHides(unittest.TestCase):
+    """A fold hides its descendants, so its row counts the open raises, unfinished nodes and
+    assumptions below it; unfolded, the children say it themselves."""
+
+    TEXT = TREE.split("### W1.1")[0] + (
+        "### W1.1 · top\nStatus: confirmed\nDetermination: ok.\n\n"
+        "### W1.2 · unfinished\nParent: W1.1\nStatus: open\n\n"
+        "### W1.3 · assumed\nParent: W1.2\nStatus: confirmed\n"
+        "Hypothesis: it holds. Wrong if it does not.\nDetermination: ok.\n\n"
+        "## Log\n\n- 2026-09-27T01:05:00Z · raise · W1.3\n  Which way?\n")
+
+    def lines(self, folded):
+        ui = a_screen([item("W1")], pane="item", focus="tree", tree_open=set())
+        ui.tree_of = lambda task: (TUI.dfs_tree.parse(self.TEXT, "W1"), "", {})
+        ui.status_attr = lambda status: 0
+        ui._tree_cache = {}
+        ui.tree_folded = folded
+        return " ".join(l[0] for l in ui.lines_tree(200) if "W1.1" in l[0])
+
+    def test_a_folded_row_counts_what_it_hides(self):
+        text = self.lines({"W1.1"})
+        for said in ("1 raise below", "1 unfinished below", "1 assumption below"):
+            self.assertIn(said, text)
+
+    def test_an_unfolded_row_does_not(self):
+        self.assertNotIn(" below", self.lines(set()))
+
+
 class ANodeSaysHowFarItIs(unittest.TestCase):
     """The tree told complete from open by a glyph; a started node reads as open to the
     work but is drawn filled in, and a refuted one keeps its own glyph."""
