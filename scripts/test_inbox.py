@@ -208,7 +208,7 @@ class Inbox(unittest.TestCase):
 
 class Model:
     """A stand-in `/v1/messages`: the n-th main-loop call gets `answers[n]`, ("tool", a Bash
-    command) or ("text", a reply). Side calls (no tools offered) get a bare text."""
+    command, or the Bash tool's whole input as a dict) or ("text", a reply). Side calls (no tools offered) get a bare text."""
 
     def __init__(self, answers):
         self.answers, self.requests = answers, []
@@ -234,7 +234,7 @@ class Model:
                 self.end_headers()
                 if kind in ("tool", "agent"):
                     block = {"type": "tool_use", "id": "toolu_%d" % model.calls, "name": "Bash" if kind == "tool" else "Agent", "input": {}}
-                    args = {"command": val, "description": "wait"} if kind == "tool" else {
+                    args = (val if isinstance(val, dict) else {"command": val, "description": "wait"}) if kind == "tool" else {
                         "description": "look into it", "prompt": val, "subagent_type": "general-purpose"}
                     delta = {"type": "input_json_delta", "partial_json": json.dumps(args)}
                     stop = "tool_use"
@@ -302,6 +302,7 @@ class RealClaude(unittest.TestCase):
         p = subprocess.Popen([CLAUDE, "-p", "work the task", "--output-format", "json", "--dangerously-skip-permissions",
                               "--settings", inbox.settings(str(run_dir / "inbox"))],
                              env=env, cwd=str(home), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.proc = p
         meanwhile(model, run_dir)
         out, err = p.communicate(timeout=120)
         self.assertEqual(p.returncode, 0, err)
@@ -320,6 +321,25 @@ class RealClaude(unittest.TestCase):
         self.assertIn("W104-PING also check the README", json.dumps(model.requests[1]))
         self.assertEqual(result, "done")
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
+    def test_a_background_bash_call_keeps_claude_alive_after_its_last_answer_until_it_is_killed(self):
+        """W188: a Bash call started with `run_in_background` is a direct child of claude, and claude
+        does not exit, or write its result, while it runs. Killing the child makes it exit at once."""
+        seen = {}
+
+        def watch(model, run_dir):
+            end = time.time() + 60
+            while len(model.requests) < 2 and time.time() < end:
+                time.sleep(0.05)
+            time.sleep(4)                   # the final answer is in, and the Stop hook has run
+            seen["alive"] = self.proc.poll() is None
+            subprocess.run(["pkill", "-P", str(self.proc.pid)])
+            seen["killed"] = time.time()
+        bg = {"command": "sleep 302", "description": "a server", "run_in_background": True}
+        _, _, result = self.session([("tool", bg), ("text", "done")], watch)
+        self.assertEqual(result, "done")
+        self.assertTrue(seen["alive"], "claude exited by itself, so there was no hang to fix")
+        self.assertLess(time.time() - seen["killed"], 10)
 
     def test_a_message_sent_during_a_subagents_tool_call_waits_for_the_main_session(self):
         def send(model, run_dir):
@@ -537,6 +557,7 @@ class RealCodex(unittest.TestCase):
         p = subprocess.Popen([CODEX, *model.args(), *inbox.codex_args(str(run_dir / "inbox")), "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
                               "work the task"], env=env, cwd=str(home), stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.proc = p
         meanwhile(model, run_dir)
         out, err = p.communicate(timeout=120)
         self.assertEqual(p.returncode, 0, err)
