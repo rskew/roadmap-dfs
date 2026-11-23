@@ -17,6 +17,7 @@ import http.server
 import io
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -27,6 +28,7 @@ import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -206,9 +208,55 @@ class Inbox(unittest.TestCase):
             os.environ.pop("DFS_INBOX")
 
 
+class StopMark(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.box, self.mark = os.path.join(self.d, "inbox"), os.path.join(self.d, "stopped")
+
+    def stop(self):
+        with redirect_stdout(io.StringIO()) as out, mock.patch("sys.stdin", io.StringIO('{"hook_event_name": "Stop"}')):
+            self.assertEqual(inbox.main(["inbox.py", "stop", self.box, self.mark]), 0)
+        return out.getvalue()
+
+    def test_a_stop_with_nothing_waiting_writes_the_mark_and_prints_nothing(self):
+        self.assertEqual(self.stop(), "")
+        self.assertTrue(float(Path(self.mark).read_text()) > 1e9)
+
+    def test_a_stop_that_hands_a_message_over_removes_the_mark_since_the_session_goes_on(self):
+        self.stop()
+        dfs_runs.post_message(self.d, "one more thing")
+        self.assertIn('"decision": "block"', self.stop())
+        self.assertFalse(os.path.exists(self.mark))
+
+    def hook(self, event):
+        with redirect_stdout(io.StringIO()) as out, mock.patch("sys.stdin", io.StringIO("{}")):
+            self.assertEqual(inbox.main(["inbox.py", event, self.box, self.mark]), 0)
+        return out.getvalue()
+
+    def test_a_tool_call_or_a_new_turn_after_the_stop_removes_the_mark_since_the_session_was_not_over(self):
+        """W188.7: claude starts a new turn when a background call ends by itself, and another Stop hook may keep a session going."""
+        for event in ("post", "prompt"):
+            self.stop()
+            self.assertTrue(os.path.exists(self.mark))
+            self.assertEqual(self.hook(event), "")
+            self.assertFalse(os.path.exists(self.mark), event)
+
+    def test_a_new_turn_hands_over_no_message(self):
+        dfs_runs.post_message(self.d, "for a tool call or the stop")
+        self.assertEqual(self.hook("prompt"), "")
+        self.assertEqual([m["state"] for m in dfs_runs.messages(self.d)], ["waiting"])
+
+    def test_the_settings_name_the_mark_in_every_hook_but_the_new_turn_hook_exists_only_with_a_mark(self):
+        hooks = json.loads(inbox.settings(self.box, self.mark))["hooks"]
+        for ev, event in (("Stop", "stop"), ("PostToolUse", "post"), ("UserPromptSubmit", "prompt")):
+            self.assertTrue(hooks[ev][0]["hooks"][0]["command"].endswith("%s %s %s" % (event, self.box, self.mark)), ev)
+        self.assertEqual(sorted(json.loads(inbox.settings(self.box))["hooks"]), ["PostToolUse", "Stop"])
+
+
 class Model:
     """A stand-in `/v1/messages`: the n-th main-loop call gets `answers[n]`, ("tool", a Bash
-    command) or ("text", a reply). Side calls (no tools offered) get a bare text."""
+    command, or the Bash tool's whole input as a dict) or ("text", a reply). Side calls (no tools offered) get a bare text."""
 
     def __init__(self, answers):
         self.answers, self.requests = answers, []
@@ -234,7 +282,7 @@ class Model:
                 self.end_headers()
                 if kind in ("tool", "agent"):
                     block = {"type": "tool_use", "id": "toolu_%d" % model.calls, "name": "Bash" if kind == "tool" else "Agent", "input": {}}
-                    args = {"command": val, "description": "wait"} if kind == "tool" else {
+                    args = (val if isinstance(val, dict) else {"command": val, "description": "wait"}) if kind == "tool" else {
                         "description": "look into it", "prompt": val, "subagent_type": "general-purpose"}
                     delta = {"type": "input_json_delta", "partial_json": json.dumps(args)}
                     stop = "tool_use"
@@ -300,8 +348,9 @@ class RealClaude(unittest.TestCase):
         env.update(HOME=str(home), ANTHROPIC_API_KEY=KEY, ANTHROPIC_BASE_URL="http://127.0.0.1:%d" % model.server.server_address[1],
                    DISABLE_AUTOUPDATER="1")      # the hooks name the box: the agent's environment does not
         p = subprocess.Popen([CLAUDE, "-p", "work the task", "--output-format", "json", "--dangerously-skip-permissions",
-                              "--settings", inbox.settings(str(run_dir / "inbox"))],
+                              "--settings", inbox.settings(str(run_dir / "inbox"), str(run_dir / "stopped"))],
                              env=env, cwd=str(home), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.proc = p
         meanwhile(model, run_dir)
         out, err = p.communicate(timeout=120)
         self.assertEqual(p.returncode, 0, err)
@@ -320,6 +369,52 @@ class RealClaude(unittest.TestCase):
         self.assertIn("W104-PING also check the README", json.dumps(model.requests[1]))
         self.assertEqual(result, "done")
         self.assertEqual([m["state"] for m in dfs_runs.messages(str(run_dir))], ["delivered"])
+
+    def test_a_background_bash_call_keeps_claude_alive_after_its_last_answer_until_it_is_killed(self):
+        """W188: a Bash call started with `run_in_background` is a direct child of claude, and claude
+        does not exit, or write its result, while it runs. Killing the child makes it exit at once."""
+        seen = {}
+
+        def watch(model, run_dir):
+            seen["run_dir"] = run_dir
+            end = time.time() + 60
+            while len(model.requests) < 2 and time.time() < end:
+                time.sleep(0.05)
+            time.sleep(4)                   # the final answer is in, and the Stop hook has run
+            seen["alive"] = self.proc.poll() is None
+            seen["marked"] = (run_dir / "stopped").exists()      # what run.sh's watch waits for
+            subprocess.run(["pkill", "-P", str(self.proc.pid)])
+            seen["killed"] = time.time()
+        bg = {"command": "sleep 302", "description": "a server", "run_in_background": True}
+        _, _, result = self.session([("tool", bg), ("text", "done")], watch)
+        self.assertEqual(result, "done")
+        self.assertTrue(seen["alive"], "claude exited by itself, so there was no hang to fix")
+        self.assertTrue(seen["marked"], "the Stop hook wrote no mark while claude was stuck")
+        self.assertLess(time.time() - seen["killed"], 10)
+
+    def test_the_stop_watch_leaves_a_new_turn_alone_that_claude_began_when_a_background_call_ended(self):
+        """W188.7: the background call ends by itself inside the grace, claude begins a new turn with a 9 s
+        Bash call, and run.sh's `stop_watch` (the real function, cut out of run.sh) must not end it: the
+        Stop hook's mark of the first answer was removed by the new turn."""
+        out = Path(tempfile.mkdtemp(dir=os.environ.get("TMPDIR") or None))
+        self.addCleanup(shutil.rmtree, out, ignore_errors=True)
+        src = (HERE / "run.sh").read_text()
+        funcs = "\n".join(re.search(r"^%s\(\) \{\n.*?^\}$" % name, src, re.M | re.S).group(0) for name in ("descendants", "stop_watch"))
+        (out / "watch.sh").write_text(funcs + '\nstop_watch "$1" "$2"\n')
+        seen = {}
+
+        def watch(model, run_dir):
+            w = subprocess.Popen(["bash", str(out / "watch.sh"), str(self.proc.pid), str(run_dir / "stopped")],
+                                 env=dict(os.environ, DFS_STOP_GRACE="4"), stderr=subprocess.PIPE, text=True)
+            self.proc.wait(timeout=120)
+            w.wait(timeout=30)
+            seen["watch"] = w.stderr.read()
+        bg = {"command": "sleep 2", "description": "a short job", "run_in_background": True}
+        slow = "sleep 9; touch %s" % (out / "finished")
+        model, _, result = self.session([("tool", bg), ("text", "done1"), ("tool", slow), ("text", "done2")], watch)
+        self.assertEqual(seen["watch"], "")
+        self.assertTrue((out / "finished").exists(), "the new turn's Bash call was ended")
+        self.assertEqual(result, "done2")
 
     def test_a_message_sent_during_a_subagents_tool_call_waits_for_the_main_session(self):
         def send(model, run_dir):
@@ -537,6 +632,7 @@ class RealCodex(unittest.TestCase):
         p = subprocess.Popen([CODEX, *model.args(), *inbox.codex_args(str(run_dir / "inbox")), "exec", "--json", "--dangerously-bypass-approvals-and-sandbox",
                               "work the task"], env=env, cwd=str(home), stdin=subprocess.DEVNULL,
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        self.proc = p
         meanwhile(model, run_dir)
         out, err = p.communicate(timeout=120)
         self.assertEqual(p.returncode, 0, err)

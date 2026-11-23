@@ -573,7 +573,23 @@ stop_is() {
 # `end` after it stops, so a session killed outright is a `session` with no `end`,
 # and every count the stops use is read from the file rather than kept here.
 tree_log() {  # tree_log <kind> [args...]  (body on stdin, or none)
-  python3 "$TREE_PY" log "$ITEM" "$@" < /dev/null > /dev/null
+  # An `end` after a session that left a stop mark is dated by the mark (STOPPED_AT), the moment the
+  # session finished, and not by the process exiting, which a child it left running can delay by an hour.
+  local at=""
+  [ "$1" != end ] || at="${STOPPED_AT:-}"
+  DFS_LOG_AT="$at" python3 "$TREE_PY" log "$ITEM" "$@" < /dev/null > /dev/null
+}
+
+# The Stop hook's mark of a session that has just ended: sets STOPPED_AT to its time (the log's
+# `YYYY-MM-DDTHH:MM:SSZ`) and STALL_NOTE to how long the process outlived it, when that is 5 s or more.
+# Every `end` entry made after it is dated by the mark (tree_log), but only an `ok` one carries the note.
+read_stop_mark() {
+  STOPPED_AT=""; STALL_NOTE=""
+  [ -s "$RUNDIR/stopped" ] || return 0
+  local out
+  out="$(python3 -c 'import sys,time; t=float(open(sys.argv[1]).read()); print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t)), int(time.time()-t))' "$RUNDIR/stopped" 2>/dev/null)" || return 0
+  STOPPED_AT="${out% *}"
+  [ "${out#* }" -lt 5 ] || STALL_NOTE="; the process ran ${out#* } s after the session finished"
 }
 
 IN_SESSION=""
@@ -626,8 +642,11 @@ settle_accept() {
 
 # Ctrl-C must end the CHAIN, not just the run. A claude that handles the interrupt
 # itself and exits 0 looks exactly like a session that finished, so this trap is what
-# makes one Ctrl-C mean "stop".
+# makes one Ctrl-C mean "stop". It also ends the agent the session is waiting on (AGENT_PID, set for
+# every agent since the session runs beside `stop_watch`; before, a kiro, codex or opencode run was left
+# to its own handling of the signal).
 on_interrupt() {
+  [ -z "${AGENT_PID:-}" ] || kill "$AGENT_PID" 2>/dev/null || true
   stop_is interrupt
   [ -n "$IN_SESSION" ] && tree_log end "$IN_SESSION" interrupt || true
   echo
@@ -783,6 +802,49 @@ stream_watch_sid() {  # stream_watch_sid <log> <pid>
   meta_set sid="$SID"
 }
 
+# Every process below `$1`, children first-listed: what a session left running.
+descendants() {
+  ps -A -o pid= -o ppid= | awk -v r="$1" '{c[$2] = c[$2] " " $1}
+    END {n = split(c[r], q, " "); for (i = 1; i <= n; i++) { print q[i]; m = split(c[q[i]], k, " "); for (j = 1; j <= m; j++) q[++n] = k[j] } }'
+}
+
+# Ends what a claude left running once it has finished. Runs beside the session: `$2` is the file
+# the Stop hook writes when the model seems done (and removes if the session goes on: a later tool call
+# or a new turn, which claude starts when a background call ends by itself), `$1` is claude's
+# pid. When the file has been there DFS_STOP_GRACE seconds (default 20) and claude is still alive, its
+# descendants are ended (TERM, then KILL), which lets claude write its result and exit by itself; if it
+# is still there DFS_STOP_GRACE seconds later it is ended too. A session that stops normally is gone
+# long before the grace, so this never touches it.
+stop_watch() {
+  local pid="$1" mark="$2" grace="${DFS_STOP_GRACE:-20}" waited=0 stage=0 left seen="" now
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1
+    if [ ! -e "$mark" ]; then waited=0; stage=0; seen=""; continue; fi
+    # a mark written again is a later Stop: the session went on in between, so the grace starts over
+    now="$(cat "$mark" 2>/dev/null)"
+    if [ "$now" != "$seen" ]; then seen="$now"; waited=0; stage=0; fi
+    waited=$((waited + 1))
+    [ "$waited" -ge "$grace" ] || continue
+    waited=0
+    if [ "$stage" = 0 ]; then
+      left="$(descendants "$pid" | tr '\n' ' ')"
+      echo "dfs_run: claude is still running $grace s after its last answer; ending what the session left running (${left:-nothing found})." >&2
+      stage=1
+      # shellcheck disable=SC2086
+      [ -z "$left" ] || kill $left 2>/dev/null
+      sleep 3
+      # shellcheck disable=SC2086
+      [ -z "$left" ] || kill -9 $left 2>/dev/null
+    else
+      echo "dfs_run: claude is still running after what it left was ended; ending it." >&2
+      kill "$pid" 2>/dev/null
+      sleep 3
+      kill -9 "$pid" 2>/dev/null
+      return 0
+    fi
+  done
+}
+
 # Start one fresh non-interactive session and leave its provider session id in SID.
 # Codex, Kiro and Opencode assign the id and emit it in their JSONL stream; Claude
 # accepts ours up front.
@@ -875,10 +937,24 @@ run_session() {
     # these two hooks hand them over: at the next tool call, or as one more turn when
     # the session would stop (inbox.py). Without a message they print nothing.
     local inbox_settings
-    inbox_settings="$(python3 "$HERE/inbox.py" --settings "$RUNDIR/inbox")"
+    inbox_settings="$(python3 "$HERE/inbox.py" --settings "$RUNDIR/inbox" "$RUNDIR/stopped")"
+    rm -f "$RUNDIR/stopped"
+    # ⚠ BACKGROUNDED SO A SESSION THAT HAS FINISHED CAN BE ENDED (W188). A Bash call the model started
+    # with `run_in_background` (its backend, say) is a child of claude, and claude then does not exit,
+    # or write its JSON, until that child does: a chain lost an hour to one. The Stop hook writes
+    # `$RUNDIR/stopped` once the model is done, and `stop_watch` ends what is left. `< /dev/null` as
+    # for codex: a background command has no terminal input anyway.
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" \
-      --settings "$inbox_settings" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
+      --settings "$inbox_settings" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log" < /dev/null &
+    agent_pid=$!
+    AGENT_PID=$agent_pid
+    stop_watch "$agent_pid" "$RUNDIR/stopped" &
+    local watch_pid=$!
+    wait "$agent_pid"
     session_rc=$?
+    kill "$watch_pid" 2>/dev/null || true
+    wait "$watch_pid" 2>/dev/null || true
+    AGENT_PID=
   fi
   return "$session_rc"
 }
@@ -1277,9 +1353,11 @@ for i in $(seq 1 "$CAP"); do
   fi
   IN_SESSION="$kind"
   set +e
+  STOPPED_AT=""; STALL_NOTE=""
   run_session "$prompt" "$log"
   rc=$?
   set -e
+  read_stop_mark
 
   cost="$(session_cost "$log")"
   tp="$(transcript_path "$SID" "$log")"
@@ -1389,7 +1467,7 @@ for i in $(seq 1 "$CAP"); do
     fi
     silent=0
     [ "$kind" = critic ] && refused=0
-    tree_log end "$kind" ok "peak $peak_shown$outside_note"
+    tree_log end "$kind" ok "peak $peak_shown$outside_note$STALL_NOTE"
   else
     fp_after="$(python3 "$HERE/state.py" --fingerprint)"
     if [ "$fp_after" = "$fp_before" ]; then
@@ -1398,7 +1476,7 @@ for i in $(seq 1 "$CAP"); do
       echo "dfs_run: the repo did not move — the session changed nothing. Stopping rather than repeating it."
       exit 1
     fi
-    tree_log end work ok "peak $peak_shown"
+    tree_log end work ok "peak $peak_shown$STALL_NOTE"
     silent=0
   fi
   # What the run did to the task, as one outline.

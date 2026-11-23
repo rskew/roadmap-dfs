@@ -911,9 +911,13 @@ def write_log_entry(task, entry):
     dfs_paths.write_atomically(p, old.rstrip("\n") + "\n\n" + entry["text"].rstrip() + "\n")
 
 
-def append_log(task, kind, args=(), body=""):
+def append_log(task, kind, args=(), body="", at=None):
     """Append one entry, keyed by a timestamp later than every other in this file,
-    and re-render: the Log section is found by name, wherever it is."""
+    and re-render: the Log section is found by name, wherever it is. `at` is the time the
+    entry records (`YYYY-MM-DDTHH:MM:SSZ`) when that is not now: the runner's `end` of a session
+    says when the session stopped, not when its process exited."""
+    if at is not None and not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", at):
+        raise ValueError("a log time is YYYY-MM-DDTHH:MM:SSZ, not %r" % at)
     if kind not in KINDS:
         raise ValueError("unknown log kind %r (one of %s)" % (kind, ", ".join(KINDS)))
     if kind in ("critic", "review") and list(args[:1]) == ["issues"] and not finding_id(task).search(body):
@@ -946,7 +950,7 @@ def append_log(task, kind, args=(), body=""):
                              "body, or add the node first" % task)
     carry_attachments(task, body)
     ensure_part(task)
-    ts = now_ts()
+    ts = at or now_ts()
     # Later than every entry of the TASK, not just of this part: an answer or a
     # correction names what it settles by timestamp, across parts.
     latest = max((e["ts"] for e in load(task)["log"]), default="")
@@ -2264,7 +2268,7 @@ def _main(argv):
     if len(argv) >= 3 and argv[1] == "log":
         task, kind, args = argv[2], argv[3] if len(argv) > 3 else "", argv[4:]
         body = read_body()
-        print(append_log(task, kind, args, body))
+        print(append_log(task, kind, args, body, os.environ.get("DFS_LOG_AT") or None))
         return 0
     if len(argv) >= 5 and argv[1] == "add":
         approach = read_body()

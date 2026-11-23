@@ -8,6 +8,7 @@ tree that is not this task's, and fails a critic that touched the code.
 
 Run:  python3 roadmap-dfs/scripts/test_chain.py
 """
+import calendar
 import json
 import os
 import re
@@ -73,6 +74,9 @@ Evidence:
 #   resolvemain confirm the open node, committing it, after rebasing the branch onto main
 #              the way the node asks (keeping the branch's side of a conflict)
 #   codenew    add new.txt in the worktree, uncommitted (`confirm` commits it)
+#   sleeper    record its own pid and wait a minute, to be interrupted
+#   hang       change app.txt, run the Stop hook it was given, then wait on a background child
+#              the way claude does (W188), and finish only once that child is gone
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
 STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -122,6 +126,10 @@ case "$recipe" in
   meddle)  echo "critic was here" >> app.txt; $T log W1 critic ok < /dev/null > /dev/null ;;
   rmeddle) echo "reviewer was here" >> app.txt; $T log W1 review ok < /dev/null > /dev/null ;;
   silent)  : ;;
+  hang)    echo "change $n" >> app.txt
+           python3 -c 'import json,subprocess,sys; subprocess.run(json.loads(sys.argv[1])["hooks"]["Stop"][0]["hooks"][0]["command"], shell=True, stdin=subprocess.DEVNULL)' "$(cat "$KINDS_FILE.settings")"
+           sleep 300 & echo $! > "$KINDS_FILE.child"; wait $! || true ;;
+  sleeper) echo $$ > "$KINDS_FILE.pid"; sleep 60 > /dev/null 2>&1 & echo $! > "$KINDS_FILE.child"; wait $! || true ;;
   noverdict) echo "a note" | $T log W1 raise W1.1 > /dev/null ;;
   lower)   python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n"
            echo "$n" > "$LOWER_FILE" ;;
@@ -2454,9 +2462,57 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), "<unset>", "the agent inherited the inbox, and so would what it runs")
         hooks = json.loads((self.aside / "kinds.settings").read_text())["hooks"]
         box = shlex.quote(str(named.resolve() / "inbox"))
-        self.assertEqual(sorted(hooks), ["PostToolUse", "Stop"])
-        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post " + box), hooks)
-        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop " + box), hooks)
+        self.assertEqual(sorted(hooks), ["PostToolUse", "Stop", "UserPromptSubmit"])
+        mark = shlex.quote(str(named.resolve() / "stopped"))
+        for ev, event in (("PostToolUse", "post"), ("Stop", "stop"), ("UserPromptSubmit", "prompt")):
+            self.assertTrue(hooks[ev][0]["hooks"][0]["command"].endswith("inbox.py %s %s %s" % (event, box, mark)), hooks)
+
+    def test_a_claude_session_kept_alive_by_a_child_it_left_running_is_ended_after_its_stop_hook(self):
+        """W188: claude does not exit while a background Bash call runs. The Stop hook marks the end of the
+        session, and the chain ends what is left once DFS_STOP_GRACE has passed, instead of waiting on it."""
+        t0 = time.time()
+        rc, meta, out = self.run_chain("hang", cap=1, DFS_STOP_GRACE="2")
+        self.assertLess(time.time() - t0, 120, out)     # the child sleeps 300 s
+        self.assertIn("ending what the session left running", out)
+        self.assertEqual(rc, 0, out)
+        child = (self.aside / "kinds.child").read_text().strip()
+        self.assertFalse(Path("/proc/%s" % child).exists() and "sleep" in Path("/proc/%s/cmdline" % child).read_text(), "the child is still running")
+
+    def test_the_end_entry_is_dated_by_the_stop_hook_and_says_how_long_the_process_ran_on(self):
+        """W188: the log's `end` records when the session finished, not when its process exited."""
+        rc, meta, out = self.run_chain("hang", cap=1, DFS_STOP_GRACE="6")
+        mark = float(next((self.root / ".dfs" / "runs").glob("*/stopped")).read_text())
+        text = "\n".join(p.read_text() for p in self.root.glob(".dfs/**/W1.log.md") if "end" in p.read_text())
+        end = re.search(r"^- (\S+) · end · work · ok · peak \S+; the process ran (\d+) s after the session finished$", text, re.M)
+        self.assertTrue(end, text)
+        # at the mark's time, or a second on when the stub's session entry was made in that same second
+        at = calendar.timegm(time.strptime(end.group(1), "%Y-%m-%dT%H:%M:%SZ"))
+        self.assertIn(at - int(mark), (0, 1), "the end entry is %s, the Stop hook ran at %s" % (end.group(1), mark))
+        self.assertGreaterEqual(int(end.group(2)), 5)
+
+    def test_a_term_to_the_chain_ends_the_session_it_is_waiting_on(self):
+        """W188.2: `on_interrupt` kills the backgrounded agent (AGENT_PID) for every agent, and the chain stops with 130."""
+        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE="sleeper", COUNT_FILE=str(self.count),
+                 KINDS_FILE=str(self.kinds), TREE_PY=str(HERE / "tree.py"), HOME=str(self.aside))
+        e.pop("RUNDIR", None)
+        p = subprocess.Popen([str(RUNNER), "W1", "1"], cwd=self.root, env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        self.addCleanup(p.kill)
+        pidfile, child = Path(str(self.kinds) + ".pid"), Path(str(self.kinds) + ".child")
+        end = time.time() + 60
+        while not (pidfile.exists() and child.exists()) and time.time() < end:
+            time.sleep(0.1)
+        agent, leftover = pidfile.read_text().strip(), child.read_text().strip()
+        self.addCleanup(lambda: subprocess.run(["kill", leftover], capture_output=True))
+        p.terminate()
+        out, _ = p.communicate(timeout=60)
+        self.assertEqual(p.returncode, 130, out)
+        time.sleep(0.5)
+        self.assertFalse(Path("/proc/%s" % agent).exists(), "the session outlived the interrupted chain")
+
+    def test_a_claude_session_that_ends_by_itself_is_not_touched_by_the_stop_watch(self):
+        rc, meta, out = self.run_chain("work", cap=1, DFS_STOP_GRACE="2")
+        self.assertNotIn("ending what the session left running", out)
+        self.assertNotIn("after the session finished", "\n".join(p.read_text() for p in self.root.glob(".dfs/**/W1.log.md")))
 
     def test_a_codex_work_session_is_started_with_the_inbox_hooks_before_exec_and_its_run_s_inbox(self):
         named = self.aside / "named"
