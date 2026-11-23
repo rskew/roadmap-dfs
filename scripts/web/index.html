@@ -1842,7 +1842,12 @@ function chatDraw(st) {
   const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
   const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
   if (sig === CHAT.last) return;
-  CHAT.last = sig; CHAT.messages = st.messages;
+  // A busy turn changes only the seconds in "Working on it" on most polls. Say them in place: replacing the whole log every 1.5s
+  // would tear the Copy buttons out from under a reader's focus or a tap that is in progress.
+  const body = JSON.stringify([st.messages, st.busy, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
+  const wait = st.busy && CHAT.last && body === CHAT.body ? log.querySelector(".msg.wait .what") : null;
+  CHAT.last = sig; CHAT.body = body; CHAT.messages = st.messages;
+  if (wait) { wait.textContent = `Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})`; return; }
   const recalled = RECALL.at;
   RECALL.sent = st.messages.filter(m => m.role === "you" && m.text).map(m => m.text).filter((t, i, a) => i === 0 || t !== a[i - 1]);
   // A message that came in before the one showing moves its place: find it again by its text (the nearest if it is there twice).
@@ -1856,6 +1861,8 @@ function chatDraw(st) {
   $("#chat-backend").hidden = !be;
   $("#chat-backend").textContent = be ? `${be.agent || st.agent || "The agent"} has hit its usage limit${be.resets ? " (" + be.resets + ")" : ""}. A message sent before it lifts may not be answered.` : "";
   $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.length;
+  // A new message does replace the log: a Copy button that had focus gets it back (the same message's, by index).
+  const kept = document.activeElement?.closest?.("#chat-log") && document.activeElement.dataset.act === "chatcopy" ? document.activeElement.dataset.i : null;
   log.innerHTML = (st.ended ? `<p class="muted">Archived. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
@@ -1863,6 +1870,7 @@ function chatDraw(st) {
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
     + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
   chatButtons(st);
+  if (kept !== null) log.querySelector(`[data-act=chatcopy][data-i="${CSS.escape(kept)}"]`)?.focus({ preventScroll: true });
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
   // A busy turn redraws every poll ("Working on it (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;

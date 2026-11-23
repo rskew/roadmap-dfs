@@ -539,6 +539,21 @@ const FLOWS = {
     await page.click("#chat-log .msg.error .copy");
     same(await read(), "no answer", "Copy on an error line puts its text on the clipboard");
     if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    // A busy turn is polled every 1.5s and its seconds change each time. The buttons must not be rebuilt for that: the one with
+    // focus stays the same element, still focused, and Enter on it copies its message.
+    await page.focus("#chat-log .msg.agent .copy");
+    await page.evaluate(() => { document.querySelector("#chat-log .msg.agent .copy").dataset.mark = "same"; });
+    state.busy_for = 7;
+    await page.waitForFunction(() => /Working on it \(7 seconds\)/.test(document.querySelector("#chat-log .msg.wait").textContent), null, { timeout: 6000 });
+    same(await page.evaluate(() => document.activeElement.dataset.mark || ""), "same", "a poll of a busy turn leaves the focused Copy button as it was");
+    await page.evaluate(() => navigator.clipboard.writeText("x"));
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector("#toast").textContent === "Copied.");
+    same(await read(), reply, "Enter on the focused Copy button copies its message after a poll");
+    // A new message does replace the log; the Copy button that had focus gets it back, on the same message.
+    state.messages = [...state.messages, { role: "agent", text: "more" }];
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 5, null, { timeout: 6000 });
+    same(await page.evaluate(() => document.activeElement.dataset.act + ":" + document.activeElement.dataset.i), "chatcopy:1", "after a redraw focus is back on the same message's Copy button");
     // the page with no clipboard of its own: the fallback copies through a selected box, which goes again afterwards
     await page.evaluate(() => {
       Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
