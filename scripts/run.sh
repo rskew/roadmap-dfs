@@ -573,7 +573,22 @@ stop_is() {
 # `end` after it stops, so a session killed outright is a `session` with no `end`,
 # and every count the stops use is read from the file rather than kept here.
 tree_log() {  # tree_log <kind> [args...]  (body on stdin, or none)
-  python3 "$TREE_PY" log "$ITEM" "$@" < /dev/null > /dev/null
+  # An `end` after a session that left a stop mark is dated by the mark (STOPPED_AT), the moment the
+  # session finished, and not by the process exiting, which a child it left running can delay by an hour.
+  local at=""
+  [ "$1" != end ] || at="${STOPPED_AT:-}"
+  DFS_LOG_AT="$at" python3 "$TREE_PY" log "$ITEM" "$@" < /dev/null > /dev/null
+}
+
+# The Stop hook's mark of a session that has just ended: sets STOPPED_AT to its time (the log's
+# `YYYY-MM-DDTHH:MM:SSZ`) and STALL_NOTE to how long the process outlived it, when that is 5 s or more.
+read_stop_mark() {
+  STOPPED_AT=""; STALL_NOTE=""
+  [ -s "$RUNDIR/stopped" ] || return 0
+  local out
+  out="$(python3 -c 'import sys,time; t=float(open(sys.argv[1]).read()); print(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t)), int(time.time()-t))' "$RUNDIR/stopped" 2>/dev/null)" || return 0
+  STOPPED_AT="${out% *}"
+  [ "${out#* }" -lt 5 ] || STALL_NOTE="; the process ran ${out#* } s after the session finished"
 }
 
 IN_SESSION=""
@@ -1331,9 +1346,11 @@ for i in $(seq 1 "$CAP"); do
   fi
   IN_SESSION="$kind"
   set +e
+  STOPPED_AT=""; STALL_NOTE=""
   run_session "$prompt" "$log"
   rc=$?
   set -e
+  read_stop_mark
 
   cost="$(session_cost "$log")"
   tp="$(transcript_path "$SID" "$log")"
@@ -1443,7 +1460,7 @@ for i in $(seq 1 "$CAP"); do
     fi
     silent=0
     [ "$kind" = critic ] && refused=0
-    tree_log end "$kind" ok "peak $peak_shown$outside_note"
+    tree_log end "$kind" ok "peak $peak_shown$outside_note$STALL_NOTE"
   else
     fp_after="$(python3 "$HERE/state.py" --fingerprint)"
     if [ "$fp_after" = "$fp_before" ]; then
@@ -1452,7 +1469,7 @@ for i in $(seq 1 "$CAP"); do
       echo "dfs_run: the repo did not move — the session changed nothing. Stopping rather than repeating it."
       exit 1
     fi
-    tree_log end work ok "peak $peak_shown"
+    tree_log end work ok "peak $peak_shown$STALL_NOTE"
     silent=0
   fi
   # What the run did to the task, as one outline.

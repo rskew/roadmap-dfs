@@ -52,7 +52,7 @@
     {"kind": "takes", "from": "claim", "to": "box", "label": "everything waiting at once, oldest first; claude, codex and kiro move it before reading (at most once)", "at": "claim"},
     {"kind": "takes", "from": "peek", "to": "box", "label": "opencode reads without moving, then ack moves (at least once: a refused prompt leaves it waiting)", "at": "peek"},
     {"kind": "takes", "from": "take", "to": "box", "label": "two hooks at once cannot both get a file: the second rename fails", "at": "take"},
-    {"kind": "stops", "from": "main", "to": "box", "label": "nothing waiting → the hook prints nothing and the session carries on", "at": "main"}
+    {"kind": "stops", "from": "main", "to": "box", "label": "nothing waiting → the hook prints nothing and the session carries on; given a MARK file it also writes the time there (the session is ending), or removes it when it hands a message over (the session goes on), which is how run.sh knows to end what a finished claude left running", "at": "main"}
   ],
   "handled": [
     {"at": "main", "error": "stdin cannot be read", "how": "uses empty input"},

@@ -8,6 +8,7 @@ tree that is not this task's, and fails a critic that touched the code.
 
 Run:  python3 roadmap-dfs/scripts/test_chain.py
 """
+import calendar
 import json
 import os
 import re
@@ -2474,9 +2475,22 @@ class Chain(unittest.TestCase):
         child = (self.aside / "kinds.child").read_text().strip()
         self.assertFalse(Path("/proc/%s" % child).exists() and "sleep" in Path("/proc/%s/cmdline" % child).read_text(), "the child is still running")
 
+    def test_the_end_entry_is_dated_by_the_stop_hook_and_says_how_long_the_process_ran_on(self):
+        """W188: the log's `end` records when the session finished, not when its process exited."""
+        rc, meta, out = self.run_chain("hang", cap=1, DFS_STOP_GRACE="6")
+        mark = float(next((self.root / ".dfs" / "runs").glob("*/stopped")).read_text())
+        text = "\n".join(p.read_text() for p in self.root.glob(".dfs/**/W1.log.md") if "end" in p.read_text())
+        end = re.search(r"^- (\S+) · end · work · ok · peak \S+; the process ran (\d+) s after the session finished$", text, re.M)
+        self.assertTrue(end, text)
+        # at the mark's time, or a second on when the stub's session entry was made in that same second
+        at = calendar.timegm(time.strptime(end.group(1), "%Y-%m-%dT%H:%M:%SZ"))
+        self.assertIn(at - int(mark), (0, 1), "the end entry is %s, the Stop hook ran at %s" % (end.group(1), mark))
+        self.assertGreaterEqual(int(end.group(2)), 5)
+
     def test_a_claude_session_that_ends_by_itself_is_not_touched_by_the_stop_watch(self):
         rc, meta, out = self.run_chain("work", cap=1, DFS_STOP_GRACE="2")
         self.assertNotIn("ending what the session left running", out)
+        self.assertNotIn("after the session finished", "\n".join(p.read_text() for p in self.root.glob(".dfs/**/W1.log.md")))
 
     def test_a_codex_work_session_is_started_with_the_inbox_hooks_before_exec_and_its_run_s_inbox(self):
         named = self.aside / "named"
