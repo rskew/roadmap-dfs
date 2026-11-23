@@ -147,6 +147,9 @@ class Flows(unittest.TestCase):
     def log(self, task):
         return dfs_tree.load(task)["log"]
 
+    def test_opening_stepping_and_closing_a_node_does_not_read_the_task_again(self):
+        self.flow("node_open_reads")
+
     def test_the_claude_account_is_signed_in_from_the_project_dialog(self):
         import stat
         import test_login

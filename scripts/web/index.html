@@ -769,17 +769,17 @@ function findStep() {
   const el = route().view === "task" ? $("#view .row .main") : [...document.querySelectorAll("#view button.item[data-act=task]")].find(x => !x.closest("[hidden]"));
   if (el) { el.focus(); el.scrollIntoView({ block: "nearest" }); }
 }
-async function render(force, changed) {
+async function render(force, changed, local) {
   const key = document.activeElement?.closest?.("#workbox") ? focusKey(document.activeElement) : null;
   const mine = RENDERS + 1;
-  await renderDraw(force, changed);
+  await renderDraw(force, changed, local);
   const lost = !document.activeElement || document.activeElement === document.body;
   if (key && lost) {
     const el = (key.sel && $(key.sel)) || document.querySelectorAll(FOCUSABLE)[key.at]; if (el) el.focus();
   } else if (MID.picked && lost) midSelect();      // the selected control was drawn over: the middle's is selected again
   if (mine === RENDERS) focusRow();      // a newer render draws over this one, and gives the focus back after it
 }
-async function renderDraw(force, changed) {
+async function renderDraw(force, changed, local) {
   // A render is a fetch and then a draw, and a newer one can start before an older one
   // lands: an older list render finishing after the tap on a task drew the list over it.
   // Only the newest draws.
@@ -789,6 +789,7 @@ async function renderDraw(force, changed) {
   const arrived = where !== lastView;
   if (r.view !== "task" && r.view !== "tasks") FIND.scope = "";      // any other view leaves the search: coming back starts with nothing typed
   if (arrived) { lastView = where; SCROLL.ready = false; window.scrollTo(0, 0); S.sig = ""; }
+  let skipNeeds = false;      // a route change inside the open task reads nothing, the header's count included
   try {
     if (r.view === "task") {
       if (S.taskId !== r.task) { S.task = null; S.taskId = r.task; }
@@ -796,9 +797,15 @@ async function renderDraw(force, changed) {
       // A push that names the tasks it changed, and not this one, leaves the task as it is: only the work is read again.
       // A change stays unread (`stale`) until a read of the task has landed and been kept, so a render that is replaced or
       // fails before that does not make the next push trust the old copy.
-      const same = changed && !arrived && S.task && S.taskId === r.task && S.task.id === r.task && !stale.has(r.task) && !stale.has("*");
-      [t, S.work] = await Promise.all([same ? S.task : api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/work").then(workSeen)]);
-      S.workAt = at;
+      // A move inside the task already open (a node opened, stepped to or closed: `local`) reads nothing: the task holds every
+      // node's card, and a change to it is a push, which marks it `stale`, so the next route change reads it then.
+      const held = !arrived && S.task && S.taskId === r.task && S.task.id === r.task && !stale.has(r.task) && !stale.has("*");
+      const same = (changed || local) && held;
+      if (local && held && S.work) { t = S.task; skipNeeds = true; }
+      else {
+        [t, S.work] = await Promise.all([same ? S.task : api("/api/task/" + encodeURIComponent(r.task) + "?archived=1"), api("/api/work").then(workSeen)]);
+        S.workAt = at;
+      }
       if (mine !== RENDERS) return;
       if (!same) for (const k of [r.task, "*"]) if (stale.get(k) <= seen) stale.delete(k);      // a push that came in during the read stays
       S.node = r.node;
@@ -806,7 +813,9 @@ async function renderDraw(force, changed) {
       if (arrived) unfoldTo(t, r.node);      // coming to a node by a link: the way to it is open
       const sig = JSON.stringify(t) + "|" + r.node + "|" + JSON.stringify([...(S.folded[r.task] || [])]) + "|" + (S.work && S.work.pinned) + "|" + workHere(r.task) + "|" + JSON.stringify(workOf(r.task)) + "|" + JSON.stringify([(S.work && S.work.task_models || {})[r.task], S.work && S.work.models, S.modelOther]);
       S.task = t;
-      if (sig !== S.sig || force) { S.sig = sig; drawTask(); }
+      // A move inside the open task that changes nothing drawn (two keys pressed before the first draw) does not redraw the rows,
+      // which would drop the focus the first draw put on a row.
+      if (sig !== S.sig || (force && !skipNeeds)) { S.sig = sig; drawTask(); }
     } else if (r.view === "artefact") {
       const t = await api("/api/task/" + encodeURIComponent(r.task) + "?archived=1");
       if (mine !== RENDERS) return;
@@ -838,7 +847,7 @@ async function renderDraw(force, changed) {
       S.node = null; if (JSON.stringify([state, work, S.archived]) !== drawn) drawTasks(true);
     }
     chrome(r);
-    if (r.view === "task") refreshNeeds();
+    if (r.view === "task" && !skipNeeds) refreshNeeds();
     if (!SCROLL.ready && mine === RENDERS) scrollBack(where);
   } catch (e) {
     toast(e.message, true);
@@ -2343,7 +2352,7 @@ $("#chat-log").addEventListener("scroll", e => {
 // One redraw path for the table's room: the observer sees a viewport crossing and a classic scrollbar appearing or going (which leaves the media query unchanged); the media listener is only the fallback where there is no ResizeObserver, since both together redraw twice.
 if (typeof ResizeObserver === "function") { let tw = tableWide(); new ResizeObserver(() => { const n = tableWide(); if (n !== tw) { tw = n; render(true); } }).observe(document.documentElement); }
 else matchMedia(`(min-width: ${TABLE_MIN}px)`).addEventListener("change", () => render(true));
-addEventListener("hashchange", () => { NAVS++; histNote(); render(true); });
+addEventListener("hashchange", () => { NAVS++; histNote(); render(true, null, true); });
 document.addEventListener("toggle", e => { if (e.target.id === "runs") S.runsOpen = e.target.open; }, true);
 setInterval(() => { if (route().view === "run" && RUNLOG.info && RUNLOG.info.state === "live" && !document.hidden) render(true); }, 2000);
 // The list of chats redraws every few seconds: whether its Archived group is open is kept here, not in the redrawn element.

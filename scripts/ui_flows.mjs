@@ -152,7 +152,10 @@ const FLOWS = {
     await page.keyboard.press("j"); await page.keyboard.press("Enter");
     await page.waitForSelector(".row");
     same(await hash(), "#/t/" + ids[1], "Enter opens the focused task");
-    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row"); await unfoldAll(page);
+    // Unfolded before the link is followed: a link inside the open task draws at once, and an unfold after it would redraw
+    // the rows and drop the focus the draw has just put on W9.2.
+    await unfoldAll(page);
+    await page.goto(URL_ + "#/t/W9/W9.2"); await page.waitForSelector(".row");
     await wait("step 2",() => document.activeElement.matches('.main[data-id="W9.2"]'));
     const nodes = await page.$$eval("#view .row .main", a => a.map(e => e.dataset.id));
     const at = nodes.indexOf("W9.2");
@@ -912,6 +915,25 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Opening a node, stepping to the next and closing the sheet only move the route inside a task the page
+  // already holds whole: none of them reads the task again, and each draws at once.
+  async node_open_reads(b) {
+    const { page, errors } = await open(b, PHONE);
+    await task(page, "W1");
+    await page.waitForTimeout(1500);
+    const reqs = [];
+    page.on("request", r => { const u = new URL(r.url()).pathname; if (u.startsWith("/api/") && u !== "/api/events") reqs.push(u); });
+    await page.click(".row .main >> nth=0");
+    await page.waitForSelector("#sheet.open");
+    await page.click("#sheet [data-act=next]");
+    await page.waitForTimeout(300);
+    await page.click("#sheet [data-act=close]");
+    await page.waitForFunction(() => !document.querySelector("#sheet.open"), null, { timeout: 4000 });
+    await page.waitForTimeout(500);
+    assert(!reqs.some(u => u.startsWith("/api/task/")), "opening, stepping and closing a node read the task again: " + JSON.stringify(reqs));
+    same(errors, [], "no page errors");
+  },
+
   // A node with an open raise is settled by answering it: its card and its menu offer no Refute/confirm.
   async no_correct_on_raise(b) {
     const { page, errors } = await open(b, PHONE);
@@ -924,7 +946,8 @@ const FLOWS = {
     await page.keyboard.press("c");
     assert(await page.locator("dialog[open]").count() === 0, "the c shortcut opens no correction on it");
     await page.click("#sheet [data-act=close]");
-    await page.keyboard.press("Escape");
+    // The close draws at once from the task held, so there is no sheet left for Escape to close (it would leave the task).
+    await page.waitForFunction(() => !document.querySelector("#sheet.open"));
     const desk = await open(b, DESKTOP);
     await task(desk.page, "W9");
     const menu = async sel => {
