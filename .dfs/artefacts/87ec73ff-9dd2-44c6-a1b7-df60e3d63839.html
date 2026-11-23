@@ -44,6 +44,8 @@
   <div class="box good" data-node="typed-fix">The relay presses Esc (the menu says "Esc to cancel"), then types the message. claude submits it, answers that the limit is hit, and records both. The page and the agent agree.</div>
 </div>
 
+<p><strong>Wrong if</strong> Esc does not leave the menu in a real claude, or the hang you see is on another path (for example a headless page turn, or a chat that is not claude).</p>
+
 <script>
   function show(fix) {
     document.getElementById('now').hidden = fix;

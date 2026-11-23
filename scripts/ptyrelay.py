@@ -22,6 +22,7 @@ import time
 import tty
 
 import chatlog
+import limit as dfs_limit
 
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
@@ -55,6 +56,12 @@ OPENED = b"opening an interactive"
 # the terminal has to measure an emoji or CJK cluster as the chat does, or its columns and wraps are off.
 MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004, 2027)
 _MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
+# claude at its usage limit answers "You've hit your session limit · resets 5:20pm (UTC)" and opens `/rate-limit-options`:
+# "What do you want to do? 1. Stop and wait for limit to reset ...  Enter to confirm · Esc to cancel", and waits at that
+# menu (seen in a real chat's log, W68). It is not a prompt: a message pasted into it is never submitted, so claude
+# records nothing and the page's message hangs. Esc cancels the menu and leaves the prompt.
+LIMIT_MENU = b"Stop and wait for limit to reset"
+LIMIT_MENU_WAIT = 5.0       # seconds for the agent to draw its prompt after Esc
 TAIL = 16384                # bytes of the agent's last output kept, for the log
 STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a message before the log says so
 
@@ -118,6 +125,11 @@ class Relay:
         self.modes = set()          # the private modes (?1049 alt screen, mouse, paste ...) the agent has switched on
         self._mode_carry = b""
         self._erase_carry = b""                 # the start of an ESC[3J cut by a read, held back
+        self.limit_menu = False     # claude is at its usage-limit menu, where a typed message is lost (LIMIT_MENU)
+        self.limit_resets = ""      # what that menu's screen says about when the limit lifts ("resets 5:20pm (UTC)")
+        self.limit_at = 0.0         # when the menu was last drawn: the chat is at its limit from then
+        self.limit_reset_at = None  # the same as an instant, when its shape is known
+        self._limit_seam = b""
 
     # ── life ───────────────────────────────────────────────────────────────────────────
     @property
@@ -195,6 +207,7 @@ class Relay:
             del self.tail[:-TAIL]
             self._follow_modes(data)
             self._follow_opening(data)
+            self._follow_limit(data)
             if self.attached and self.out_fd is not None:
                 _try(os.write, self.out_fd, self._without_scrollback_erase(data))
         with self.lock:
@@ -248,6 +261,47 @@ class Relay:
                 self.awaiting = False
             else:
                 self.first_out = 0.0
+
+    @property
+    def limit(self):
+        """The usage limit this chat's agent is at, as `Chats.backend` keeps it ({limit, resets, reset_at, at}), or None:
+        not at one, or past the time it lifts (when that was known)."""
+        if not self.live or not self.limit_at:
+            return None
+        if self.limit_reset_at is not None and self.limit_reset_at <= time.time():
+            return None
+        return dict(limit=True, resets=self.limit_resets, reset_at=self.limit_reset_at, at=self.limit_at)
+
+    def _follow_limit(self, data):
+        """Note that claude has drawn its usage-limit menu, and what the screen says about when the limit lifts."""
+        if self.agent != "claude":
+            return
+        seen = self._limit_seam + data
+        self._limit_seam = seen[-len(LIMIT_MENU):]
+        if LIMIT_MENU in seen:
+            self.limit_menu = True
+            self.limit_at = time.time()
+            self.limit_resets = self._last_resets()
+            self.limit_reset_at = dfs_limit.reset_at(self.limit_resets, self.limit_at)
+
+    def _last_resets(self):
+        """The last "resets ..." on the screen: the one nearest the menu is the one that is current."""
+        found = list(dfs_limit.RESETS_RE.finditer(chatlog.screen_text(self.tail, keep=TAIL)))
+        return found[-1].group(0) if found else ""
+
+    def _leave_limit_menu(self):
+        """Press Esc at the usage-limit menu and wait for the prompt to be drawn, so the message about to be typed is
+        submitted (claude then answers that the limit is hit, and records both) and not lost in the menu."""
+        with self.lock:
+            if self.fd is None or not self.limit_menu:
+                return
+            self.limit_menu = False
+            _try(os.write, self.fd, b"\x1b")
+        self.log("the agent is at its usage limit menu: Esc pressed before the message is typed")
+        end = time.time() + LIMIT_MENU_WAIT
+        time.sleep(0.3)
+        while self.live and time.time() < end and time.time() - self.last_out < QUIET:
+            time.sleep(0.1)
 
     def _watch(self):
         """Say so in the log when a message has gone in and the agent then says nothing for STALL
@@ -382,6 +436,8 @@ class Relay:
                 elif self.handed and not self.first_out:
                     end = max(end, self.handed + HANDOVER_TIMEOUT)      # nor is the agent's own slow start
                 time.sleep(0.1)
+            if self.limit_menu:
+                self._leave_limit_menu()
             with self.lock:
                 fd = self.fd
                 if fd is None:

@@ -209,6 +209,63 @@ class Resubmitting(unittest.TestCase):
         self.assertEqual(self.lines(), ["one"])             # an Enter again would have been heard as an empty line
 
 
+# claude at its usage limit: the answer, then the menu it waits at. A key other than Esc is not a message (the menu takes it
+# and does nothing); Esc leaves the menu for the prompt, where a line typed and entered is submitted.
+LIMIT_MENU = r"""
+import os, sys, tty
+tty.setraw(0)
+sys.stdout.write("\x1b[?2004hready\r\n  \u23bf  You've hit your session limit \u00b7 resets 5:20pm (UTC)\r\n")
+sys.stdout.write("What do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n2. Wait here\r\n3. Upgrade your plan\r\nEnter to confirm \u00b7 Esc to cancel\r\n")
+sys.stdout.flush()
+menu, buf = True, ""
+while True:
+    d = os.read(0, 4096).decode()
+    for ch in d.replace("\x1b[200~", "").replace("\x1b[201~", ""):
+        if ch == "\x1b" and menu:
+            menu = False
+            sys.stdout.write("\r\n\u276f \r\n"); sys.stdout.flush()
+        elif menu:
+            pass
+        elif ch == "\r":
+            if buf:
+                open(os.environ["LOG"], "a").write(buf + "\n")
+                buf = ""
+        else:
+            buf += ch
+"""
+
+
+class LimitMenu(unittest.TestCase):
+    def setUp(self):
+        self.log = Path(tempfile.mkdtemp()) / "log"
+        self.log.write_text("")
+        self.env = dict(os.environ, LOG=str(self.log))
+        self.relay = ptyrelay.Relay(agent="claude").start([sys.executable, "-c", LIMIT_MENU], env=self.env)
+        self.addCleanup(self.relay.close)
+
+    def lines(self):
+        return self.log.read_text().splitlines()
+
+    def test_the_menu_is_noticed_with_the_time_the_limit_lifts(self):
+        self.assertTrue(until(lambda: self.relay.limit, 8))
+        got = self.relay.limit
+        self.assertEqual(got["resets"], "resets 5:20pm (UTC)")
+        self.assertGreater(got["reset_at"], time.time() - 1)
+        self.assertTrue(self.relay.limit_menu)
+
+    def test_a_message_is_typed_after_escape_has_left_the_menu_and_not_into_it(self):
+        self.assertTrue(until(lambda: b"Stop and wait for limit" in bytes(self.relay.tail), 8))
+        self.relay.send("hello")
+        self.assertTrue(until(lambda: self.lines() == ["hello"], 15), self.lines())
+
+    def test_another_agent_is_not_read_for_the_menu(self):
+        relay = ptyrelay.Relay(agent="codex").start([sys.executable, "-c", LIMIT_MENU], env=self.env)
+        self.addCleanup(relay.close)
+        self.assertTrue(until(lambda: relay.first_out, 8))
+        time.sleep(0.5)
+        self.assertIsNone(relay.limit)
+
+
 class Looking(unittest.TestCase):
     """The terminal: a pipe for the keys and one for the display."""
 

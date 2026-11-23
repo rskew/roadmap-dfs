@@ -5585,6 +5585,10 @@ class UiWorker:
         r = self._relay(scope)
         return bool(r and r.active)
 
+    def chat_limit(self, scope):
+        r = self._relay(scope)
+        return r.limit if r else None
+
     def chat_open(self, scope):
         """A new chat was opened on the page: start it, and it opens with the summary."""
         self.ui.start_chat(scope)

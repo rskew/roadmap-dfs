@@ -1154,6 +1154,9 @@ class HeadlessWork(WorkMixin):
     def chat_active(self, scope):
         return False
 
+    def chat_limit(self, scope):
+        return None
+
     def chat_open(self, scope):
         return False
 
