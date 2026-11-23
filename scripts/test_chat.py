@@ -1417,6 +1417,32 @@ class Chat(unittest.TestCase):
         self.assertNotIn("error", [m["role"] for m in st["messages"]])
         self.assertIsNone(dfs_chat.Chats().state("W1")["backend"])
 
+    def test_a_screen_chat_at_its_limit_menu_says_so_as_the_backends_state(self):
+        at = time.time() + 3600
+        class Screen:
+            has_screen = True
+            limit = dict(limit=True, resets="resets 5:20pm (UTC)", reset_at=at, at=time.time())
+            def chat_live(s, scope): return True
+            def chat_active(s, scope): return False
+            def chat_limit(s, scope): return s.limit
+        screen = Screen()
+        chats = dfs_chat.Chats(worker=lambda: screen)
+        b = chats.state("W1")["backend"]
+        self.assertEqual((b["limit"], b["resets"], b["reset_at"], b["agent"]), (True, "resets 5:20pm (UTC)", at, "claude"))
+        screen.limit = None         # the relay dropped the limit: a message was answered with no sign of it
+        self.assertIsNone(chats.state("W1")["backend"])
+
+    def test_a_limit_a_page_turn_saved_stands_over_the_screens_limit(self):
+        class Screen:
+            has_screen = True
+            def chat_live(s, scope): return True
+            def chat_active(s, scope): return False
+            def chat_limit(s, scope): return dict(limit=True, resets="resets 5:20pm (UTC)", reset_at=time.time() + 3600, at=time.time())
+        chats = dfs_chat.Chats(worker=lambda: Screen())
+        chats.save_sid("W1", "s1", "claude")
+        chats.set_backend("W1", dict(limit=True, resets="resets 9pm (UTC)", reset_at=time.time() + 7200, agent="claude", at=0))
+        self.assertEqual(chats.state("W1")["backend"]["resets"], "resets 9pm (UTC)")
+
     def test_a_limit_is_dropped_once_its_reset_time_has_passed_and_another_failure_is_not_a_limit(self):
         self.chats.save_sid("W1", "s1", "claude")
         self.chats.set_backend("W1", dict(limit=True, resets="resets 3pm (UTC)", reset_at=time.time() - 1, agent="claude", at=0))

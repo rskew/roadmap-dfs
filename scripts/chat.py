@@ -660,11 +660,15 @@ class Chats:
             live = bool(w and w.chat_live(scope))
             talking = bool(live and w.chat_active(scope))      # a background chat that is answering
             elsewhere = bool(sid) and not started and not live and running_elsewhere(sid, agent=agent)
+            backend = self.backend(scope)
+            hit = live and getattr(w, "chat_limit", lambda s: None)(scope)       # the screen's chat sits at its limit menu: a fact about the agent, which no turn of ours reported
+            if hit and not backend:
+                backend = dict(hit, agent=agent)
             return dict(scope=scope, messages=messages, busy=bool(started) or talking,
                         ended=self.is_ended(scope, live, bool(started) or talking or elsewhere),
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
-                        elsewhere=elsewhere, agent=agent, backend=self.backend(scope),
+                        elsewhere=elsewhere, agent=agent, backend=backend,
                         steer=bool(started or talking) and agent in STEERED)    # steer: a message sent now reaches the turn answering (a headless one through its inbox, a background chat typed into)
 
     def reopen(self, scope):

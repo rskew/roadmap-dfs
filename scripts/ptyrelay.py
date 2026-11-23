@@ -22,6 +22,7 @@ import time
 import tty
 
 import chatlog
+import limit as dfs_limit
 
 DETACH = b"\x1d"            # ctrl-]
 QUIET = 1.0                 # seconds without output before a fresh agent is taken to be ready
@@ -55,6 +56,33 @@ OPENED = b"opening an interactive"
 # the terminal has to measure an emoji or CJK cluster as the chat does, or its columns and wraps are off.
 MODES = (1049, 1000, 1002, 1003, 1006, 1004, 2004, 2027)
 _MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
+# claude at its usage limit answers "You've hit your session limit · resets 5:20pm (UTC)" and opens `/rate-limit-options`:
+# "What do you want to do? 1. Stop and wait for limit to reset ...  Enter to confirm · Esc to cancel", and waits at that
+# menu (seen in a real chat's log, W68). It is not a prompt: a message pasted into it is never submitted, so claude
+# records nothing and the page's message hangs. Esc cancels the menu and leaves the prompt.
+LIMIT_MENU = b"Stop and wait for limit to reset"
+LIMIT_MENU_WAIT = 5.0       # seconds for the agent to draw its prompt after Esc
+LIMIT_PROBE = 120.0         # seconds a message typed at a limit is watched, at most, for the agent answering it and going quiet
+# claude draws the blank cells of a line as cursor moves, not as space bytes: the real chat logs, escapes removed, show its
+# menu's lines as "2.Waithere,thencontinueautomaticallyat5:20pm" and its footer as "Usagelimitreached ·limitresets12:50pm".
+# So its words are read as text with each cursor-forward move taken as a space (`_screen_text`) and, where a match must not
+# depend on the gaps at all, with every space taken out (`_squash`).
+_CURSOR_FORWARD = re.compile(r"\x1b\[\d*C")
+_ESCAPE_CUT = 64            # an escape sequence longer than this is not held back for the next read
+
+
+def _screen_text(raw, keep=1500):
+    """`chatlog.screen_text` with a cursor-forward move read as the space it leaves."""
+    text = raw.decode(errors="replace") if isinstance(raw, (bytes, bytearray)) else raw
+    return chatlog.screen_text(_CURSOR_FORWARD.sub(" ", text), keep=keep)
+
+
+def _squash(text):
+    """`text` without any whitespace, lower case: words match whatever lies between them."""
+    return re.sub(r"\s+", "", text).lower()
+
+
+_LIMIT_MENU_SQUASHED = _squash(LIMIT_MENU.decode())
 TAIL = 16384                # bytes of the agent's last output kept, for the log
 STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a message before the log says so
 
@@ -118,6 +146,12 @@ class Relay:
         self.modes = set()          # the private modes (?1049 alt screen, mouse, paste ...) the agent has switched on
         self._mode_carry = b""
         self._erase_carry = b""                 # the start of an ESC[3J cut by a read, held back
+        self.limit_menu = False     # claude is at its usage-limit menu, where a typed message is lost (LIMIT_MENU)
+        self.limit_resets = ""      # what that menu's screen says about when the limit lifts ("resets 5:20pm (UTC)")
+        self.limit_at = 0.0         # when the menu was last drawn: the chat is at its limit from then
+        self.limit_reset_at = None  # the same as an instant, when its shape is known
+        self._limit_seam = ""       # the end of the last read's squashed text, for the menu phrase that straddles two
+        self._limit_carry = b""     # the start of an escape sequence cut by a read, held back
 
     # ── life ───────────────────────────────────────────────────────────────────────────
     @property
@@ -195,6 +229,7 @@ class Relay:
             del self.tail[:-TAIL]
             self._follow_modes(data)
             self._follow_opening(data)
+            self._follow_limit(data)
             if self.attached and self.out_fd is not None:
                 _try(os.write, self.out_fd, self._without_scrollback_erase(data))
         with self.lock:
@@ -248,6 +283,89 @@ class Relay:
                 self.awaiting = False
             else:
                 self.first_out = 0.0
+
+    @property
+    def limit(self):
+        """The usage limit this chat's agent is at, as `Chats.backend` keeps it ({limit, resets, reset_at, at}), or None:
+        not at one, or past the time it lifts (when that was known)."""
+        if not self.live or not self.limit_at:
+            return None
+        if self.limit_reset_at is not None and self.limit_reset_at <= time.time():
+            return None
+        return dict(limit=True, resets=self.limit_resets, reset_at=self.limit_reset_at, at=self.limit_at)
+
+    def _follow_limit(self, data):
+        """Note that claude has drawn its usage-limit menu, and what the screen says about when the limit lifts.
+        The phrase is looked for with the whitespace taken out (see `_squash`), in the text of what was drawn: its
+        words may have cursor moves between them. An escape sequence a read cuts is held back for the next."""
+        if self.agent != "claude":
+            return
+        raw = self._limit_carry + data
+        self._limit_carry = b""
+        cut = raw.rfind(b"\x1b")
+        if cut >= 0 and len(raw) - cut < _ESCAPE_CUT and not chatlog.ANSI.match(raw[cut:].decode(errors="replace")):
+            raw, self._limit_carry = raw[:cut], raw[cut:]
+        seen = self._limit_seam + _squash(_screen_text(raw, keep=len(raw)))
+        self._limit_seam = seen[-(len(_LIMIT_MENU_SQUASHED) - 1):]   # one short of the phrase: a read ending exactly at it is not found again in the next
+        if _LIMIT_MENU_SQUASHED in seen:
+            resets = self._last_resets()
+            now = time.time()
+            with self.lock:         # as _leave_limit_menu reads and clears limit_menu: a redraw is not lost between its Esc and its clear
+                self.limit_menu = True
+                self.limit_at = now
+                self.limit_resets = resets
+                self.limit_reset_at = dfs_limit.reset_at(resets, now)
+
+    def _last_resets(self):
+        """The last "resets ..." on the screen: the one nearest the menu is the one that is current."""
+        found = list(dfs_limit.RESETS_RE.finditer(_screen_text(self.tail, keep=TAIL)))
+        return found[-1].group(0) if found else ""
+
+    def _probe_limit(self, at, entered, text=""):
+        """A message was entered while the chat was at a usage limit (`at`, when it was noted). If claude then says
+        it is still at it (the menu drawn again, or "hit your ... limit" and its like) the limit stands. If it answers
+        and goes quiet (QUIET seconds) without saying so, the limit has lifted, or its reset time was one `reset_at`
+        cannot read: drop it, so the page stops saying so. Still answering after LIMIT_PROBE seconds is not
+        taken as lifted. `entered` is `total_out` when the message was entered; `text` is the message, which claude
+        draws back (its echo is not claude's answer, whatever words the message holds, nor where it wraps)."""
+        echo = _squash(text)
+        end = time.time() + LIMIT_PROBE
+        while self.live and time.time() < end:
+            if self.limit_at != at:
+                return                      # the menu was drawn again
+            new = self.total_out - entered
+            if new > 0 and self._says_limit(bytes(self.tail)[-new:], echo):
+                return
+            if new > 0 and time.time() - self.last_out >= QUIET:
+                with self.lock:
+                    if self.live and self.limit_at == at:
+                        self.limit_at, self.limit_resets, self.limit_reset_at = 0.0, "", None
+                        self.log("the agent answered a message with no sign of its usage limit: the limit is taken as lifted")
+                return
+            time.sleep(0.2)
+
+    @staticmethod
+    def _says_limit(raw, echo=""):
+        """Whether what was drawn (`raw`) says the agent is at a usage limit, in the words `limit.LIMIT_RE` knows,
+        whatever lies between them. `echo` (squashed) is the message typed, which is not the agent's words."""
+        drawn = _squash(_screen_text(raw, keep=TAIL))
+        if echo:
+            drawn = drawn.replace(echo, "")
+        return bool(dfs_limit.LIMIT_SQUASHED_RE.search(drawn))
+
+    def _leave_limit_menu(self):
+        """Press Esc at the usage-limit menu and wait for the prompt to be drawn, so the message about to be typed is
+        submitted (claude then answers that the limit is hit, and records both) and not lost in the menu."""
+        with self.lock:
+            if self.fd is None or not self.limit_menu:
+                return
+            self.limit_menu = False
+            _try(os.write, self.fd, b"\x1b")
+        self.log("the agent is at its usage limit menu: Esc pressed before the message is typed")
+        end = time.time() + LIMIT_MENU_WAIT
+        time.sleep(0.3)
+        while self.live and time.time() < end and time.time() - self.last_out < QUIET:
+            time.sleep(0.1)
 
     def _watch(self):
         """Say so in the log when a message has gone in and the agent then says nothing for STALL
@@ -383,6 +501,10 @@ class Relay:
                     end = max(end, self.handed + HANDOVER_TIMEOUT)      # nor is the agent's own slow start
                 time.sleep(0.1)
             with self.lock:
+                at_menu, at_limit = self.limit_menu, self.limit_at   # at_limit is 0.0 when the chat is not known to be at a limit
+            if at_menu:
+                self._leave_limit_menu()
+            with self.lock:
                 fd = self.fd
                 if fd is None:
                     self.log("message of %d characters dropped: the agent ended before it was typed" % len(text))
@@ -403,6 +525,8 @@ class Relay:
                     continue
                 _try(os.write, self.fd, b"\r")
                 entered = self.total_out
+            if at_limit:
+                threading.Thread(target=self._probe_limit, args=(at_limit, entered, text), daemon=True).start()
             if first and self.agent in RESUBMIT:
                 self._resubmit(entered, stops)
 
