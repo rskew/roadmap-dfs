@@ -280,10 +280,13 @@ class Relay:
         seen = self._limit_seam + data
         self._limit_seam = seen[-len(LIMIT_MENU):]
         if LIMIT_MENU in seen:
-            self.limit_menu = True
-            self.limit_at = time.time()
-            self.limit_resets = self._last_resets()
-            self.limit_reset_at = dfs_limit.reset_at(self.limit_resets, self.limit_at)
+            resets = self._last_resets()
+            now = time.time()
+            with self.lock:         # as _leave_limit_menu reads and clears limit_menu: a redraw is not lost between its Esc and its clear
+                self.limit_menu = True
+                self.limit_at = now
+                self.limit_resets = resets
+                self.limit_reset_at = dfs_limit.reset_at(resets, now)
 
     def _last_resets(self):
         """The last "resets ..." on the screen: the one nearest the menu is the one that is current."""

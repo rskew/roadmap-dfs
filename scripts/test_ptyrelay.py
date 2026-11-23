@@ -296,6 +296,17 @@ class LimitMenu(unittest.TestCase):
         time.sleep(ptyrelay.LIMIT_PROBE + 1)
         self.assertTrue(relay.limit)
 
+    def test_a_relay_that_ends_while_escape_is_awaited_drops_the_message_and_does_not_hang(self):
+        self.assertTrue(until(lambda: self.relay.limit_menu, 8))
+        start = time.time()
+        self.relay.send("hello")
+        time.sleep(0.5)
+        self.relay.close()
+        self.assertTrue(until(lambda: not self.relay.live, 8))
+        time.sleep(1)
+        self.assertLess(time.time() - start, ptyrelay.LIMIT_MENU_WAIT + 4)
+        self.assertEqual(self.lines(), [])
+
     def test_another_agent_is_not_read_for_the_menu(self):
         relay = ptyrelay.Relay(agent="codex").start([sys.executable, "-c", LIMIT_MENU], env=self.env)
         self.addCleanup(relay.close)
