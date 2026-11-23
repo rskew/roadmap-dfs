@@ -566,6 +566,13 @@ const FLOWS = {
     await page.evaluate(() => { document.execCommand = () => false; });
     await page.click("#chat-log .msg.you .copy");
     await page.waitForFunction(() => document.querySelector("#toast").classList.contains("err") && /Could not copy/.test(document.querySelector("#toast").textContent));
+    // with no dialog open the box goes to the page itself, and the fallback still copies and leaves nothing behind
+    await page.click("[data-act=chatclose]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    await page.evaluate(() => { document.execCommand = cmd => { window.__copied = cmd === "copy" ? document.activeElement.value : null; return cmd === "copy"; }; window.__copied = null; });
+    await page.evaluate(() => copyText("from the page"));
+    same(await page.evaluate(() => window.__copied), "from the page", "with no dialog open the fallback copies through a box on the page");
+    same(await page.$$eval("textarea[aria-hidden]", e => e.length), 0, "and leaves no box behind");
     same(errors, [], "no page errors");
   },
 
