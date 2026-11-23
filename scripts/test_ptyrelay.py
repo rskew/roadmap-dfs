@@ -13,6 +13,7 @@ import tempfile
 import threading
 import time
 import types
+from unittest import mock
 import unittest
 from pathlib import Path
 
@@ -172,6 +173,11 @@ while True:
             if buf:
                 open(os.environ["LOG"], "a").write(buf + "\n")
                 buf = ""
+                if os.environ.get("ANSWER") == "limit":     # still at the limit: it says so and draws the menu again
+                    sys.stdout.write("  \u23bf  You've hit your session limit\r\nWhat do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n")
+                else:                                       # the limit has lifted: an ordinary answer
+                    sys.stdout.write("\r\nHere is the answer, thinking about it for a while\r\n")
+                sys.stdout.flush()
         else:
             buf += ch
 '''
@@ -214,7 +220,7 @@ class Resubmitting(unittest.TestCase):
 LIMIT_MENU = r"""
 import os, sys, tty
 tty.setraw(0)
-sys.stdout.write("\x1b[?2004hready\r\n  \u23bf  You've hit your session limit \u00b7 resets 5:20pm (UTC)\r\n")
+sys.stdout.write("\x1b[?2004hready\r\n  \u23bf  You've hit your session limit \u00b7 " + os.environ.get("RESETS", "resets 5:20pm (UTC)") + "\r\n")
 sys.stdout.write("What do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n2. Wait here\r\n3. Upgrade your plan\r\nEnter to confirm \u00b7 Esc to cancel\r\n")
 sys.stdout.flush()
 menu, buf = True, ""
@@ -230,6 +236,11 @@ while True:
             if buf:
                 open(os.environ["LOG"], "a").write(buf + "\n")
                 buf = ""
+                if os.environ.get("ANSWER") == "limit":     # still at the limit: it says so and draws the menu again
+                    sys.stdout.write("  \u23bf  You've hit your session limit\r\nWhat do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n")
+                else:                                       # the limit has lifted: an ordinary answer
+                    sys.stdout.write("\r\nHere is the answer\r\n")
+                sys.stdout.flush()
         else:
             buf += ch
 """
@@ -257,6 +268,33 @@ class LimitMenu(unittest.TestCase):
         self.assertTrue(until(lambda: b"Stop and wait for limit" in bytes(self.relay.tail), 8))
         self.relay.send("hello")
         self.assertTrue(until(lambda: self.lines() == ["hello"], 15), self.lines())
+
+    def send_and_wait(self, relay, text):
+        relay.send(text)
+        self.assertTrue(until(lambda: text in self.lines(), 15), self.lines())
+
+    def relay_with(self, **env):
+        self.relay.close()
+        patch = mock.patch.object(ptyrelay, "LIMIT_PROBE", 2.0)
+        patch.start()
+        self.addCleanup(patch.stop)
+        relay = ptyrelay.Relay(agent="claude").start(
+            [sys.executable, "-c", LIMIT_MENU], env=dict(self.env, **env))
+        self.addCleanup(relay.close)
+        self.assertTrue(until(lambda: relay.limit, 8))
+        return relay
+
+    def test_a_limit_with_no_reset_time_it_can_read_is_dropped_once_the_agent_answers_a_message(self):
+        relay = self.relay_with(RESETS="resets 5:20pm (Europe/Berlin)")
+        self.assertIsNone(relay.limit["reset_at"])
+        self.send_and_wait(relay, "hello")
+        self.assertTrue(until(lambda: relay.limit is None, 8), relay.limit)
+
+    def test_a_limit_the_agent_says_again_after_a_message_is_kept(self):
+        relay = self.relay_with(ANSWER="limit")
+        self.send_and_wait(relay, "hello")
+        time.sleep(ptyrelay.LIMIT_PROBE + 1)
+        self.assertTrue(relay.limit)
 
     def test_another_agent_is_not_read_for_the_menu(self):
         relay = ptyrelay.Relay(agent="codex").start([sys.executable, "-c", LIMIT_MENU], env=self.env)

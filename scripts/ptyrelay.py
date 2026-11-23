@@ -62,6 +62,7 @@ _MODE = re.compile(rb"\x1b\[\?([0-9;]+)([hl])")
 # records nothing and the page's message hangs. Esc cancels the menu and leaves the prompt.
 LIMIT_MENU = b"Stop and wait for limit to reset"
 LIMIT_MENU_WAIT = 5.0       # seconds for the agent to draw its prompt after Esc
+LIMIT_PROBE = 10.0          # seconds a message typed at a limit is watched for the agent saying it is still at it
 TAIL = 16384                # bytes of the agent's last output kept, for the log
 STALL = float(os.environ.get("DFS_CHAT_STALL", 90))     # seconds quiet after a message before the log says so
 
@@ -289,6 +290,24 @@ class Relay:
         found = list(dfs_limit.RESETS_RE.finditer(chatlog.screen_text(self.tail, keep=TAIL)))
         return found[-1].group(0) if found else ""
 
+    def _probe_limit(self, at, entered):
+        """A message was entered while the chat was at a usage limit (`at`, when it was noted). If claude then says
+        it is still at it (the menu drawn again, or its "hit your ... limit" answer) the limit stands. If it draws
+        something else for LIMIT_PROBE seconds, the limit has lifted, or its reset time was one `reset_at` cannot read:
+        drop it, so the page stops saying so. `entered` is `total_out` when the message was entered."""
+        end = time.time() + LIMIT_PROBE
+        while self.live and time.time() < end:
+            if self.limit_at != at:
+                return                      # the menu was drawn again
+            new = self.total_out - entered
+            if new > 0 and dfs_limit.LIMIT_RE.search(chatlog.screen_text(bytes(self.tail)[-new:], keep=TAIL)):
+                return
+            time.sleep(0.2)
+        with self.lock:
+            if self.live and self.limit_at == at and self.total_out > entered:
+                self.limit_at, self.limit_resets, self.limit_reset_at = 0.0, "", None
+                self.log("the agent answered a message with no sign of its usage limit: the limit is taken as lifted")
+
     def _leave_limit_menu(self):
         """Press Esc at the usage-limit menu and wait for the prompt to be drawn, so the message about to be typed is
         submitted (claude then answers that the limit is hit, and records both) and not lost in the menu."""
@@ -438,6 +457,7 @@ class Relay:
                 time.sleep(0.1)
             if self.limit_menu:
                 self._leave_limit_menu()
+            at_limit = self.limit_at        # 0.0 when the chat is not known to be at a limit
             with self.lock:
                 fd = self.fd
                 if fd is None:
@@ -459,6 +479,8 @@ class Relay:
                     continue
                 _try(os.write, self.fd, b"\r")
                 entered = self.total_out
+            if at_limit:
+                threading.Thread(target=self._probe_limit, args=(at_limit, entered), daemon=True).start()
             if first and self.agent in RESUBMIT:
                 self._resubmit(entered, stops)
 
