@@ -262,9 +262,8 @@ class Rows(unittest.TestCase):
         # ⚠️ The first real tree this ran on had its only open raise four levels
         # under a folded node, and the fold took it off the screen.
         rows = {r["key"]: r for r in TUI.tree_entries(tree(), {"W1.1"})}
-        self.assertEqual(rows["W1.1"]["raises_below"], 1)
-        rows = {r["key"]: r for r in TUI.tree_entries(tree())}
-        self.assertEqual(rows["W1.1"]["raises_below"], 0, "nothing is hidden when open")
+        self.assertTrue(rows["W1.1"]["folded"])
+        self.assertEqual(rows["W1.1"]["under"]["raises"], 1)
 
     UNDER = TREE.split("### W1.1")[0] + (
         "### W1.1 · top\nStatus: confirmed\nDetermination: ok.\n\n"

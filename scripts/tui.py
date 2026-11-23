@@ -148,7 +148,7 @@ def tree_entries(t, folded=(), flagged=False):
     ⚠️ A fold must not hide a raise. The first tree this pane was tried on had its
     one open raise on W13.26, four levels under W13.8, and folding W13.8 took the
     only thing the author was there to answer off the screen. So a folded row
-    carries `raises_below`, the count of open raises it is hiding.
+    says the count of open raises it is hiding (`under["raises"]`).
 
     Raises are not the only thing the author looks for. Every row with children carries
     `under`, over all its descendants folded or not: `raises` (open ones), `open` (live
@@ -221,7 +221,6 @@ def tree_entries(t, folded=(), flagged=False):
                                   and status[k["id"]] == "open" and k["id"] not in asleep),
                          assumes=sum(1 for k in lower
                                      if k["id"] in wants and k["fields"].get("Hypothesis")))
-            below = under["raises"] if shut else 0
             # ⚠️ `chain`: drawn at its parent's column, which reads as the parent's
             # sibling, so "add under" looked like it had added beside. The row says it.
             out.append(dict(key=nid, kind="node", depth=d, indent=min(ind, TREE_INDENT_CAP),
@@ -233,7 +232,7 @@ def tree_entries(t, folded=(), flagged=False):
                                       "started" if nd["status"] == "started" else "open"),
                             chain=parent is not None and len(sibs) == 1,
                             raises=on_node.get(nid, []), kids=len(kids),
-                            folded=shut, raises_below=below, under=under,
+                            folded=shut, under=under,
                             assumes=nid in wants and bool(nd["fields"].get("Hypothesis")),
                             asks=nid in wants and bool(nd["fields"].get("Ask"))))
             if flagged:
@@ -4152,7 +4151,7 @@ class UI(WorkMixin):
                 attr = look("amber") | curses.A_BOLD
             if row["folded"] and row["under"]["assumes"]:
                 attr = look("amber") | curses.A_BOLD
-            if row["raises"] or row["raises_below"]:
+            if row["raises"] or (row["folded"] and row["under"]["raises"]):
                 attr = red | curses.A_BOLD
             if sel:
                 attr |= curses.A_REVERSE

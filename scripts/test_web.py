@@ -741,6 +741,15 @@ class Web(unittest.TestCase):
         # a row is a blocker or an assumption, never both, so the red fill never meets the amber stripe
         self.assertEqual(src.count("assumes = !blocks && it.assumptions.length > 0"), 2)
 
+    def test_a_folded_row_draws_the_chips_from_the_rows_under_counts(self):
+        """The page's own script cannot run here without node, so the source is read: a folded row,
+        and only when not searching, gets underChips(r), and underChips reads r.under."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertIn("folded.has(r.id) && !S.q ? underChips(r) : \"\"", src)
+        chips = re.search(r"function underChips\(r\) \{(.*?)\n\}", src, re.S).group(1)
+        for part in ("r.under", "u.raises", "u.open", "u.assumes"):
+            self.assertIn(part, chips)
+
     def test_a_task_opens_with_its_branches_folded_and_keeps_the_authors_folds(self):
         """foldByDefault() and unfoldTo() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")

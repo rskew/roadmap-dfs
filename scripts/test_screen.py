@@ -1173,13 +1173,16 @@ class AFoldedRowSaysWhatItHides(unittest.TestCase):
         "Hypothesis: it holds. Wrong if it does not.\nDetermination: ok.\n\n"
         "## Log\n\n- 2026-09-27T01:05:00Z · raise · W1.3\n  Which way?\n")
 
-    def lines(self, folded):
+    def rows(self, folded, text=None):
         ui = a_screen([item("W1")], pane="item", focus="tree", tree_open=set())
-        ui.tree_of = lambda task: (TUI.dfs_tree.parse(self.TEXT, "W1"), "", {})
+        ui.tree_of = lambda task: (TUI.dfs_tree.parse(text or self.TEXT, "W1"), "", {})
         ui.status_attr = lambda status: 0
         ui._tree_cache = {}
         ui.tree_folded = folded
-        return " ".join(l[0] for l in ui.lines_tree(200) if "W1.1" in l[0])
+        return [l for l in ui.lines_tree(200) if "W1.1" in l[0]]
+
+    def lines(self, folded):
+        return " ".join(l[0] for l in self.rows(folded))
 
     def test_a_folded_row_counts_what_it_hides(self):
         text = self.lines({"W1.1"})
@@ -1188,6 +1191,15 @@ class AFoldedRowSaysWhatItHides(unittest.TestCase):
 
     def test_an_unfolded_row_does_not(self):
         self.assertNotIn(" below", self.lines(set()))
+
+    def test_a_folded_row_with_an_assumption_below_and_no_raise_is_amber_and_bold(self):
+        TUI.LOOK["amber"] = 7000
+        quiet = self.TEXT.split("## Log")[0]          # the same tree with its raise taken out
+        head = self.rows({"W1.1"}, quiet)[0]
+        self.assertIn("1 assumption below", head[0])
+        self.assertNotIn("raise below", head[0])
+        self.assertTrue(head[1] & 7000 and head[1] & curses.A_BOLD, head)
+        self.assertFalse(self.rows(set(), quiet)[0][1] & 7000, "unfolded, the children say it")
 
 
 class ANodeSaysHowFarItIs(unittest.TestCase):
