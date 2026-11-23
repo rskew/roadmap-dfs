@@ -28,7 +28,7 @@
     {"kind": "moves", "from": "Relay._pump", "to": "chatlog", "label": "'exit ...' with the last screen, once the output ends", "at": "Relay._pump"},
     {"kind": "moves", "from": "ChatHost.ensure", "to": "Relay.start", "label": "argv, env, cwd from make()", "at": "ChatHost.ensure"},
     {"kind": "moves", "from": "Relay._typist", "to": "agent", "label": "the text as a bracketed paste, then Enter 0.15 s later; before it, Esc if the agent sits at its usage-limit menu, which would swallow the message", "at": "Relay._typist"},
-    {"kind": "sets", "from": "Relay._typist", "to": "limit", "label": "a message entered while the chat was at a limit starts _probe_limit, which clears the limit if, within LIMIT_PROBE seconds, claude draws something that does not say it is still at it", "at": "Relay._typist"},
+    {"kind": "sets", "from": "Relay._typist", "to": "limit", "label": "a message entered while the chat was at a limit starts _probe_limit, which clears the limit if, within LIMIT_PROBE seconds, claude draws something that does not say it is still at it (the message's own echo is not counted)", "at": "Relay._typist"},
     {"kind": "sets", "from": "Relay._pump", "to": "limit", "label": "a claude chat's output that holds the limit menu's 'Stop and wait for limit to reset' sets limit_menu, the reset text from the screen and its time", "at": "Relay._pump"},
     {"kind": "moves", "from": "Relay._resubmit", "to": "agent", "label": "a second Enter if a claude chat's first message draws nothing in 2 s", "at": "Relay._resubmit"},
     {"kind": "moves", "from": "Relay._answer_first_launch", "to": "agent", "label": "the keys that answer codex's or kiro's first-launch question", "at": "Relay._answer_first_launch"},

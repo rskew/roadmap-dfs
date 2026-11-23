@@ -278,7 +278,7 @@ class Relay:
         if self.agent != "claude":
             return
         seen = self._limit_seam + data
-        self._limit_seam = seen[-len(LIMIT_MENU):]
+        self._limit_seam = seen[-(len(LIMIT_MENU) - 1):]   # one short of the phrase: a read ending exactly at it is not found again in the next
         if LIMIT_MENU in seen:
             resets = self._last_resets()
             now = time.time()
@@ -293,17 +293,18 @@ class Relay:
         found = list(dfs_limit.RESETS_RE.finditer(chatlog.screen_text(self.tail, keep=TAIL)))
         return found[-1].group(0) if found else ""
 
-    def _probe_limit(self, at, entered):
+    def _probe_limit(self, at, entered, text=""):
         """A message was entered while the chat was at a usage limit (`at`, when it was noted). If claude then says
         it is still at it (the menu drawn again, or its "hit your ... limit" answer) the limit stands. If it draws
         something else for LIMIT_PROBE seconds, the limit has lifted, or its reset time was one `reset_at` cannot read:
-        drop it, so the page stops saying so. `entered` is `total_out` when the message was entered."""
+        drop it, so the page stops saying so. `entered` is `total_out` when the message was entered; `text` is the message,
+        which claude draws back (its echo is not claude's answer, whatever words the message holds)."""
         end = time.time() + LIMIT_PROBE
         while self.live and time.time() < end:
             if self.limit_at != at:
                 return                      # the menu was drawn again
             new = self.total_out - entered
-            if new > 0 and dfs_limit.LIMIT_RE.search(chatlog.screen_text(bytes(self.tail)[-new:], keep=TAIL)):
+            if new > 0 and dfs_limit.LIMIT_RE.search(chatlog.screen_text(bytes(self.tail)[-new:], keep=TAIL).replace(text, "")):
                 return
             time.sleep(0.2)
         with self.lock:
@@ -458,9 +459,12 @@ class Relay:
                 elif self.handed and not self.first_out:
                     end = max(end, self.handed + HANDOVER_TIMEOUT)      # nor is the agent's own slow start
                 time.sleep(0.1)
-            if self.limit_menu:
+            with self.lock:
+                at_menu = self.limit_menu
+            if at_menu:
                 self._leave_limit_menu()
-            at_limit = self.limit_at        # 0.0 when the chat is not known to be at a limit
+            with self.lock:
+                at_limit = self.limit_at    # 0.0 when the chat is not known to be at a limit
             with self.lock:
                 fd = self.fd
                 if fd is None:
@@ -483,7 +487,7 @@ class Relay:
                 _try(os.write, self.fd, b"\r")
                 entered = self.total_out
             if at_limit:
-                threading.Thread(target=self._probe_limit, args=(at_limit, entered), daemon=True).start()
+                threading.Thread(target=self._probe_limit, args=(at_limit, entered, text), daemon=True).start()
             if first and self.agent in RESUBMIT:
                 self._resubmit(entered, stops)
 

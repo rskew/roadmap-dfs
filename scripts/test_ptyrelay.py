@@ -235,6 +235,8 @@ while True:
         elif ch == "\r":
             if buf:
                 open(os.environ["LOG"], "a").write(buf + "\n")
+                if os.environ.get("ECHO"):                  # the transcript draws the message back once it is entered
+                    sys.stdout.write("\r\n\u276f " + buf + "\r\n")
                 buf = ""
                 if os.environ.get("ANSWER") == "limit":     # still at the limit: it says so and draws the menu again
                     sys.stdout.write("  \u23bf  You've hit your session limit\r\nWhat do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n")
@@ -306,6 +308,23 @@ class LimitMenu(unittest.TestCase):
         time.sleep(1)
         self.assertLess(time.time() - start, ptyrelay.LIMIT_MENU_WAIT + 4)
         self.assertEqual(self.lines(), [])
+
+    def test_a_read_that_ends_exactly_at_the_menu_phrase_does_not_find_it_again_in_the_next(self):
+        relay = ptyrelay.Relay(agent="claude")
+        relay._follow_limit(b"... 1. " + ptyrelay.LIMIT_MENU)
+        self.assertTrue(relay.limit_menu)
+        at = relay.limit_at
+        relay.limit_menu = False        # Esc was pressed
+        relay._follow_limit(b"\r\n2. Wait here\r\n")
+        self.assertFalse(relay.limit_menu)
+        self.assertEqual(relay.limit_at, at)
+        relay._follow_limit(ptyrelay.LIMIT_MENU[:5]); relay._follow_limit(ptyrelay.LIMIT_MENU[5:])     # a phrase split over two reads is found
+        self.assertTrue(relay.limit_menu)
+
+    def test_a_message_that_holds_limit_words_is_not_taken_as_the_agent_saying_it_is_still_at_the_limit(self):
+        relay = self.relay_with(ECHO="1")
+        self.send_and_wait(relay, "did you hit your usage limit")
+        self.assertTrue(until(lambda: relay.limit is None, 8), relay.limit)
 
     def test_another_agent_is_not_read_for_the_menu(self):
         relay = ptyrelay.Relay(agent="codex").start([sys.executable, "-c", LIMIT_MENU], env=self.env)
