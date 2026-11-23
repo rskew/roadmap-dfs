@@ -2460,9 +2460,10 @@ class Chain(unittest.TestCase):
         self.assertEqual((self.aside / "kinds.inbox").read_text().strip(), "<unset>", "the agent inherited the inbox, and so would what it runs")
         hooks = json.loads((self.aside / "kinds.settings").read_text())["hooks"]
         box = shlex.quote(str(named.resolve() / "inbox"))
-        self.assertEqual(sorted(hooks), ["PostToolUse", "Stop"])
-        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post " + box), hooks)
-        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop %s %s" % (box, shlex.quote(str(named.resolve() / "stopped")))), hooks)
+        self.assertEqual(sorted(hooks), ["PostToolUse", "Stop", "UserPromptSubmit"])
+        mark = shlex.quote(str(named.resolve() / "stopped"))
+        for ev, event in (("PostToolUse", "post"), ("Stop", "stop"), ("UserPromptSubmit", "prompt")):
+            self.assertTrue(hooks[ev][0]["hooks"][0]["command"].endswith("inbox.py %s %s %s" % (event, box, mark)), hooks)
 
     def test_a_claude_session_kept_alive_by_a_child_it_left_running_is_ended_after_its_stop_hook(self):
         """W188: claude does not exit while a background Bash call runs. The Stop hook marks the end of the

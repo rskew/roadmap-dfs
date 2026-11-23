@@ -11,6 +11,7 @@
     "delivered": {"kind": "store", "label": "delivered/", "note": "beside inbox/; a file's mtime is when it was delivered; nothing in inbox.py ever removes or empties it"},
     "msg": {"kind": "state", "label": "a message's state", "note": "waiting while it is in inbox/, delivered once moved"},
     "msgfile": {"kind": "resource", "label": "the open message file", "note": "a file handle, open only while its text is read"},
+    "stopmark": {"kind": "state", "label": "the stop mark (MARK)", "note": "a file holding the time of a Stop hook that handed nothing over; run.sh's watch ends what a claude left running when it has stood twenty seconds; a hand-over at Stop, a tool call (post) or a new turn (prompt) removes it, since the session went on"},
     "stdin": {"kind": "actor", "label": "the hook's input", "note": "JSON from the agent on stdin"},
     "agentfile": {"kind": "store", "label": ".kiro/agents/<name>.json", "note": "kiro's agent file, in the directory given on the command line: dfs-inbox.json for --kiro-agent (run.sh passes the worktree), and for --kiro-chat-agent a name of its own for each box, dfs-inbox- and 10 hex digits of the sha1 of the box's absolute path"}
   },
@@ -52,7 +53,8 @@
     {"kind": "takes", "from": "claim", "to": "box", "label": "everything waiting at once, oldest first; claude, codex and kiro move it before reading (at most once)", "at": "claim"},
     {"kind": "takes", "from": "peek", "to": "box", "label": "opencode reads without moving, then ack moves (at least once: a refused prompt leaves it waiting)", "at": "peek"},
     {"kind": "takes", "from": "take", "to": "box", "label": "two hooks at once cannot both get a file: the second rename fails", "at": "take"},
-    {"kind": "stops", "from": "main", "to": "box", "label": "nothing waiting → the hook prints nothing and the session carries on; given a MARK file it also writes the time there (the session is ending), or removes it when it hands a message over (the session goes on), which is how run.sh knows to end what a finished claude left running", "at": "main"}
+    {"kind": "stops", "from": "main", "to": "box", "label": "nothing waiting → the hook prints nothing and the session carries on; given a MARK file the stop hook also writes the time there (the session seems to be ending), and removes it when it hands a message over, and so do the post hook and the prompt hook (a tool call or a new turn: the session went on), which is how run.sh knows to end what a finished claude left running", "at": "main"},
+    {"kind": "moves", "from": "main", "to": "stopmark", "label": "stop writes the time; stop with a message, post and prompt remove the file", "at": "main"}
   ],
   "handled": [
     {"at": "main", "error": "stdin cannot be read", "how": "uses empty input"},

@@ -806,16 +806,20 @@ descendants() {
 }
 
 # Ends what a claude left running once it has finished. Runs beside the session: `$2` is the file
-# the Stop hook writes when the model is done (and removes if the session goes on), `$1` is claude's
+# the Stop hook writes when the model seems done (and removes if the session goes on: a later tool call
+# or a new turn, which claude starts when a background call ends by itself), `$1` is claude's
 # pid. When the file has been there DFS_STOP_GRACE seconds (default 20) and claude is still alive, its
 # descendants are ended (TERM, then KILL), which lets claude write its result and exit by itself; if it
 # is still there DFS_STOP_GRACE seconds later it is ended too. A session that stops normally is gone
 # long before the grace, so this never touches it.
 stop_watch() {
-  local pid="$1" mark="$2" grace="${DFS_STOP_GRACE:-20}" waited=0 stage=0 left
+  local pid="$1" mark="$2" grace="${DFS_STOP_GRACE:-20}" waited=0 stage=0 left seen="" now
   while kill -0 "$pid" 2>/dev/null; do
     sleep 1
-    if [ ! -e "$mark" ]; then waited=0; stage=0; continue; fi
+    if [ ! -e "$mark" ]; then waited=0; stage=0; seen=""; continue; fi
+    # a mark written again is a later Stop: the session went on in between, so the grace starts over
+    now="$(cat "$mark" 2>/dev/null)"
+    if [ "$now" != "$seen" ]; then seen="$now"; waited=0; stage=0; fi
     waited=$((waited + 1))
     [ "$waited" -ge "$grace" ] || continue
     waited=0

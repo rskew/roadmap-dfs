@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """The hook that hands the author's messages to a running session, whichever agent runs it.
 
-    inbox.py post [BOX]   as a PostToolUse hook: the next model call sees the messages
+    inbox.py post [BOX [MARK]]   as a PostToolUse hook: the next model call sees the messages; a MARK is removed
+    inbox.py prompt BOX MARK   as claude's UserPromptSubmit hook: removes MARK, since a new turn has begun
     inbox.py stop [BOX [MARK]]   as a Stop hook: a session about to end takes one more turn for them;
                           with nothing waiting it writes the time to the file MARK (see below)
     inbox.py pre [BOX]    as kiro's preToolUse hook: a tool call is held back, with the messages as its result
@@ -18,12 +19,15 @@ the run directory's `inbox/`, which the screen and the page write into (`runs.py
 `post_message`). With nothing waiting the hook prints nothing and the session goes on
 as if it were not there.
 
-⚠️ THE STOP MARK. A Stop hook that hands nothing over is the last thing a session does, yet a
+⚠️ THE STOP MARK. A Stop hook that hands nothing over is taken to be the end of a session, yet a
 claude that started a background Bash call (`run_in_background`) then stays alive, with its result
 unwritten, until that call ends (W188), and a chain waits on it for an hour. So that hook writes the
 time to MARK (`run.sh` passes `$RUNDIR/stopped`); `run.sh` watches the file and, if claude is still
-there after a grace, ends what the session left running. A hook that does hand something over
-removes MARK again, since the session goes on.
+there after a grace, ends what the session left running. That the session is over is an assumption
+(W188.7), and the mark is removed whenever it proves wrong: by a Stop hook that hands something over,
+by a tool call (`post`), and by a new turn (`prompt`: claude begins one when a background call ends
+by itself, with no Stop in between; seen with claude-code 2.1.329). A new turn that makes no tool call
+and has no other trigger is not seen, so one that runs on for twice the grace is cut off.
 
 ⚠️ THE BOX IS IN THE HOOK'S COMMAND, NOT IN THE AGENT'S ENVIRONMENT, for claude, codex and kiro:
 everything the agent runs inherits its environment, and a tool or test that ran `inbox.py`
@@ -251,9 +255,13 @@ def remove_kiro_agent(directory, name):
 
 
 def settings(box=None, mark=None):
-    """The claude `--settings` JSON naming this file as both hooks; the Stop hook writes `mark` when it ends the session."""
-    hook = lambda ev: [{"hooks": [{"type": "command", "command": command(ev, box, mark if ev == "stop" else None)}]}]
-    return json.dumps({"hooks": {"PostToolUse": hook("post"), "Stop": hook("stop")}})
+    """The claude `--settings` JSON naming this file as the hooks; the Stop hook writes `mark` when it ends the session,
+    and a tool call or a new turn after it (`post`, `prompt`) removes it again."""
+    hook = lambda ev: [{"hooks": [{"type": "command", "command": command(ev, box, mark if ev != "pre" else None)}]}]
+    hooks = {"PostToolUse": hook("post"), "Stop": hook("stop")}
+    if mark:
+        hooks["UserPromptSubmit"] = hook("prompt")      # claude's own new turn, e.g. a background call that ended
+    return json.dumps({"hooks": hooks})
 
 
 def codex_args(box=None):
@@ -273,7 +281,7 @@ def opencode_config(env):
     return json.dumps(cfg)
 
 
-USAGE = ("usage: inbox.py post|pre [BOX] | stop [BOX [MARK]] | peek | ack NAME... | --settings [BOX [MARK]] | --codex-args [BOX] | "
+USAGE = ("usage: inbox.py pre [BOX] | post|stop|prompt [BOX [MARK]] | peek | ack NAME... | --settings [BOX [MARK]] | --codex-args [BOX] | "
          "--opencode-config | --kiro-agent DIR [BOX] | --kiro-chat-agent DIR BOX")
 
 
@@ -306,7 +314,7 @@ def main(argv):
         else:
             take(box, args[1:])
         return 0
-    if not args or args[0] not in ("post", "stop", "pre") or len(args) > (3 if args[:1] == ["stop"] else 2):
+    if not args or args[0] not in ("post", "stop", "pre", "prompt") or len(args) > (2 if args[0] == "pre" else 3):
         print(USAGE, file=sys.stderr)
         return 2
     try:
@@ -314,6 +322,10 @@ def main(argv):
     except (OSError, ValueError):
         data = ""
     box = args[1] if len(args) >= 2 else os.environ.get("DFS_INBOX")
+    if args[0] in ("post", "prompt") and len(args) == 3:
+        mark_stop(args[2], ["going on"])        # a tool call or a new turn after the Stop hook: the session was not over
+    if args[0] == "prompt":
+        return 0
     event = hook_input(data)
     if from_subagent(event):
         return 0        # the message is for the session the author is watching, not for a subagent's call
