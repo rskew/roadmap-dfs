@@ -376,6 +376,17 @@ class Web(unittest.TestCase):
         self.assertIn("W1.7", json.dumps(data))
         self.assertIn(str(mine), [p for p, _ in dfs_web.roadmap_signature() if p == str(mine)])
 
+    def test_a_node_row_carries_what_is_below_it_for_the_fold_chips(self):
+        f = self.root / ".dfs" / "items" / "W1.md"
+        f.write_text(f.read_text().replace(
+            "## Tree\n", "## Tree\n\n### W1.7 · top\nStatus: confirmed\nDetermination: ok.\n\n"
+            "### W1.8 · unfinished\nParent: W1.7\nStatus: open\nApproach: a.\n\n"
+            "### W1.9 · assumed\nParent: W1.8\nStatus: open\nApproach: b.\n"
+            "Hypothesis: it holds. Wrong if it does not.\n", 1))
+        rows = {r["id"]: r for r in self.call("GET", "/api/task/W1")[1]["rows"] if r["kind"] == "node"}
+        self.assertEqual(rows["W1.7"]["under"], {"raises": 0, "open": 2, "assumes": 1})
+        self.assertEqual(rows["W1.9"]["under"], {"raises": 0, "open": 0, "assumes": 0})
+
     def test_the_signature_moves_when_a_file_changes_size_within_the_same_mtime(self):
         """A rewrite in the same clock tick as the last keeps the mtime: the size is what shows it."""
         f = self.root / ".dfs" / "items" / "W1.md"
@@ -730,8 +741,17 @@ class Web(unittest.TestCase):
         # a row is a blocker or an assumption, never both, so the red fill never meets the amber stripe
         self.assertEqual(src.count("assumes = !blocks && it.assumptions.length > 0"), 2)
 
+    def test_a_folded_row_draws_the_chips_from_the_rows_under_counts(self):
+        """The page's own script cannot run here without node, so the source is read: a folded row,
+        and only when not searching, gets underChips(r), and underChips reads r.under."""
+        src = (HERE / "web" / "index.html").read_text()
+        self.assertIn("folded.has(r.id) && !S.q ? underChips(r) : \"\"", src)
+        chips = re.search(r"function underChips\(r\) \{(.*?)\n\}", src, re.S).group(1)
+        for part in ("r.under", "u.raises", "u.open", "u.assumes"):
+            self.assertIn(part, chips)
+
     def test_a_task_opens_with_its_branches_folded_and_keeps_the_authors_folds(self):
-        """foldByDefault(), unfoldTo() and raisesBelowOf() in index.html, run under node (skipped when there is none)."""
+        """foldByDefault() and unfoldTo() in index.html, run under node (skipped when there is none)."""
         node = shutil.which("node") or os.environ.get("DFS_NODE")
         if not node:
             self.skipTest("no node on PATH (or DFS_NODE) to run the page's fold functions")
@@ -744,13 +764,11 @@ class Web(unittest.TestCase):
               "foldByDefault(t, null); out.first = [...S.folded.T].sort();"
               "S.folded.T.delete('a'); foldByDefault(t, null); out.kept = [...S.folded.T].sort();"      # a second read keeps the author's fold
               "S.folded.T = undefined; foldByDefault(t, 'c'); out.routed = [...S.folded.T].sort();"      # a node opened by link: its way is open
-              "const n = raisesBelowOf(t); out.below = [n('a'), n('b'), n('c'), n('e')];"
               "console.log(JSON.stringify(out))")
         got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(got["first"], ["a", "b"], "the nodes with children start folded, the leaves have nothing to fold")
         self.assertEqual(got["kept"], ["b"], "a task read again keeps the author's folds")
         self.assertEqual(got["routed"], [], "a node opened by link has every ancestor unfolded")
-        self.assertEqual(got["below"], [2, 2, 0, 0], "a folded row counts the raises below it at any depth")
 
     def test_reorder_swaps_the_rows_for_ones_that_carry_moves(self):
         """drawTasks() in index.html, run under node (skipped when there is none)."""

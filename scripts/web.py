@@ -442,7 +442,7 @@ def task_json(task, include_archived=False):
                 editable=st in ("open", "parked") and nd["fields"].get("Approach") != dfs_tree.SHELF_STUB,
                 approach=nd["fields"].get("Approach", ""),
                 raises=[raise_json(r) for r in row["raises"]],
-                raises_below=row["raises_below"],
+                under=row["under"],
                 assumes=row["assumes"], ask=row["asks"],
                 wrong=dfs_tree.split_falsifier(dfs_tree.without_page(f.get("Hypothesis")))[1],
                 parks=dfs_tree.actioned_siblings(t, nd["id"]),
