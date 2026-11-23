@@ -73,6 +73,8 @@ Evidence:
 #   resolvemain confirm the open node, committing it, after rebasing the branch onto main
 #              the way the node asks (keeping the branch's side of a conflict)
 #   codenew    add new.txt in the worktree, uncommitted (`confirm` commits it)
+#   hang       change app.txt, run the Stop hook it was given, then wait on a background child
+#              the way claude does (W188), and finish only once that child is gone
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
 STUB = r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -122,6 +124,9 @@ case "$recipe" in
   meddle)  echo "critic was here" >> app.txt; $T log W1 critic ok < /dev/null > /dev/null ;;
   rmeddle) echo "reviewer was here" >> app.txt; $T log W1 review ok < /dev/null > /dev/null ;;
   silent)  : ;;
+  hang)    echo "change $n" >> app.txt
+           python3 -c 'import json,subprocess,sys; subprocess.run(json.loads(sys.argv[1])["hooks"]["Stop"][0]["hooks"][0]["command"], shell=True, stdin=subprocess.DEVNULL)' "$(cat "$KINDS_FILE.settings")"
+           sleep 300 & echo $! > "$KINDS_FILE.child"; wait $! || true ;;
   noverdict) echo "a note" | $T log W1 raise W1.1 > /dev/null ;;
   lower)   python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n"
            echo "$n" > "$LOWER_FILE" ;;
@@ -2456,7 +2461,22 @@ class Chain(unittest.TestCase):
         box = shlex.quote(str(named.resolve() / "inbox"))
         self.assertEqual(sorted(hooks), ["PostToolUse", "Stop"])
         self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("inbox.py post " + box), hooks)
-        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop " + box), hooks)
+        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("inbox.py stop %s %s" % (box, shlex.quote(str(named.resolve() / "stopped")))), hooks)
+
+    def test_a_claude_session_kept_alive_by_a_child_it_left_running_is_ended_after_its_stop_hook(self):
+        """W188: claude does not exit while a background Bash call runs. The Stop hook marks the end of the
+        session, and the chain ends what is left once DFS_STOP_GRACE has passed, instead of waiting on it."""
+        t0 = time.time()
+        rc, meta, out = self.run_chain("hang", cap=1, DFS_STOP_GRACE="2")
+        self.assertLess(time.time() - t0, 120, out)     # the child sleeps 300 s
+        self.assertIn("ending what the session left running", out)
+        self.assertEqual(rc, 0, out)
+        child = (self.aside / "kinds.child").read_text().strip()
+        self.assertFalse(Path("/proc/%s" % child).exists() and "sleep" in Path("/proc/%s/cmdline" % child).read_text(), "the child is still running")
+
+    def test_a_claude_session_that_ends_by_itself_is_not_touched_by_the_stop_watch(self):
+        rc, meta, out = self.run_chain("work", cap=1, DFS_STOP_GRACE="2")
+        self.assertNotIn("ending what the session left running", out)
 
     def test_a_codex_work_session_is_started_with_the_inbox_hooks_before_exec_and_its_run_s_inbox(self):
         named = self.aside / "named"

@@ -628,6 +628,7 @@ settle_accept() {
 # itself and exits 0 looks exactly like a session that finished, so this trap is what
 # makes one Ctrl-C mean "stop".
 on_interrupt() {
+  [ -z "${AGENT_PID:-}" ] || kill "$AGENT_PID" 2>/dev/null || true
   stop_is interrupt
   [ -n "$IN_SESSION" ] && tree_log end "$IN_SESSION" interrupt || true
   echo
@@ -783,6 +784,45 @@ stream_watch_sid() {  # stream_watch_sid <log> <pid>
   meta_set sid="$SID"
 }
 
+# Every process below `$1`, children first-listed: what a session left running.
+descendants() {
+  ps -A -o pid= -o ppid= | awk -v r="$1" '{c[$2] = c[$2] " " $1}
+    END {n = split(c[r], q, " "); for (i = 1; i <= n; i++) { print q[i]; m = split(c[q[i]], k, " "); for (j = 1; j <= m; j++) q[++n] = k[j] } }'
+}
+
+# Ends what a claude left running once it has finished. Runs beside the session: `$2` is the file
+# the Stop hook writes when the model is done (and removes if the session goes on), `$1` is claude's
+# pid. When the file has been there DFS_STOP_GRACE seconds (default 20) and claude is still alive, its
+# descendants are ended (TERM, then KILL), which lets claude write its result and exit by itself; if it
+# is still there DFS_STOP_GRACE seconds later it is ended too. A session that stops normally is gone
+# long before the grace, so this never touches it.
+stop_watch() {
+  local pid="$1" mark="$2" grace="${DFS_STOP_GRACE:-20}" waited=0 stage=0 left
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1
+    if [ ! -e "$mark" ]; then waited=0; stage=0; continue; fi
+    waited=$((waited + 1))
+    [ "$waited" -ge "$grace" ] || continue
+    waited=0
+    if [ "$stage" = 0 ]; then
+      left="$(descendants "$pid" | tr '\n' ' ')"
+      echo "dfs_run: claude is still running $grace s after its last answer; ending what the session left running (${left:-nothing found})." >&2
+      stage=1
+      # shellcheck disable=SC2086
+      [ -z "$left" ] || kill $left 2>/dev/null
+      sleep 3
+      # shellcheck disable=SC2086
+      [ -z "$left" ] || kill -9 $left 2>/dev/null
+    else
+      echo "dfs_run: claude is still running after what it left was ended; ending it." >&2
+      kill "$pid" 2>/dev/null
+      sleep 3
+      kill -9 "$pid" 2>/dev/null
+      return 0
+    fi
+  done
+}
+
 # Start one fresh non-interactive session and leave its provider session id in SID.
 # Codex, Kiro and Opencode assign the id and emit it in their JSONL stream; Claude
 # accepts ours up front.
@@ -875,10 +915,24 @@ run_session() {
     # these two hooks hand them over: at the next tool call, or as one more turn when
     # the session would stop (inbox.py). Without a message they print nothing.
     local inbox_settings
-    inbox_settings="$(python3 "$HERE/inbox.py" --settings "$RUNDIR/inbox")"
+    inbox_settings="$(python3 "$HERE/inbox.py" --settings "$RUNDIR/inbox" "$RUNDIR/stopped")"
+    rm -f "$RUNDIR/stopped"
+    # ⚠ BACKGROUNDED SO A SESSION THAT HAS FINISHED CAN BE ENDED (W188). A Bash call the model started
+    # with `run_in_background` (its backend, say) is a child of claude, and claude then does not exit,
+    # or write its JSON, until that child does: a chain lost an hour to one. The Stop hook writes
+    # `$RUNDIR/stopped` once the model is done, and `stop_watch` ends what is left. `< /dev/null` as
+    # for codex: a background command has no terminal input anyway.
     "${AGENT_ENV[@]}" "${AGENT_ARGV[@]}" -p "$prompt" --output-format json --session-id "$SID" \
-      --settings "$inbox_settings" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log"
+      --settings "$inbox_settings" "${MODEL_ARGV[@]}" "${PERMISSION_ARGV[@]}" > "$log" < /dev/null &
+    agent_pid=$!
+    AGENT_PID=$agent_pid
+    stop_watch "$agent_pid" "$RUNDIR/stopped" &
+    local watch_pid=$!
+    wait "$agent_pid"
     session_rc=$?
+    kill "$watch_pid" 2>/dev/null || true
+    wait "$watch_pid" 2>/dev/null || true
+    AGENT_PID=
   fi
   return "$session_rc"
 }

@@ -27,6 +27,7 @@ import time
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -206,6 +207,33 @@ class Inbox(unittest.TestCase):
             os.environ.pop("DFS_INBOX")
 
 
+class StopMark(unittest.TestCase):
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.d, ignore_errors=True)
+        self.box, self.mark = os.path.join(self.d, "inbox"), os.path.join(self.d, "stopped")
+
+    def stop(self):
+        with redirect_stdout(io.StringIO()) as out, mock.patch("sys.stdin", io.StringIO('{"hook_event_name": "Stop"}')):
+            self.assertEqual(inbox.main(["inbox.py", "stop", self.box, self.mark]), 0)
+        return out.getvalue()
+
+    def test_a_stop_with_nothing_waiting_writes_the_mark_and_prints_nothing(self):
+        self.assertEqual(self.stop(), "")
+        self.assertTrue(float(Path(self.mark).read_text()) > 1e9)
+
+    def test_a_stop_that_hands_a_message_over_removes_the_mark_since_the_session_goes_on(self):
+        self.stop()
+        dfs_runs.post_message(self.d, "one more thing")
+        self.assertIn('"decision": "block"', self.stop())
+        self.assertFalse(os.path.exists(self.mark))
+
+    def test_the_settings_name_the_mark_in_the_stop_hook_only(self):
+        hooks = json.loads(inbox.settings(self.box, self.mark))["hooks"]
+        self.assertTrue(hooks["Stop"][0]["hooks"][0]["command"].endswith("stop %s %s" % (self.box, self.mark)))
+        self.assertTrue(hooks["PostToolUse"][0]["hooks"][0]["command"].endswith("post " + self.box))
+
+
 class Model:
     """A stand-in `/v1/messages`: the n-th main-loop call gets `answers[n]`, ("tool", a Bash
     command, or the Bash tool's whole input as a dict) or ("text", a reply). Side calls (no tools offered) get a bare text."""
@@ -300,7 +328,7 @@ class RealClaude(unittest.TestCase):
         env.update(HOME=str(home), ANTHROPIC_API_KEY=KEY, ANTHROPIC_BASE_URL="http://127.0.0.1:%d" % model.server.server_address[1],
                    DISABLE_AUTOUPDATER="1")      # the hooks name the box: the agent's environment does not
         p = subprocess.Popen([CLAUDE, "-p", "work the task", "--output-format", "json", "--dangerously-skip-permissions",
-                              "--settings", inbox.settings(str(run_dir / "inbox"))],
+                              "--settings", inbox.settings(str(run_dir / "inbox"), str(run_dir / "stopped"))],
                              env=env, cwd=str(home), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         self.proc = p
         meanwhile(model, run_dir)
@@ -328,17 +356,20 @@ class RealClaude(unittest.TestCase):
         seen = {}
 
         def watch(model, run_dir):
+            seen["run_dir"] = run_dir
             end = time.time() + 60
             while len(model.requests) < 2 and time.time() < end:
                 time.sleep(0.05)
             time.sleep(4)                   # the final answer is in, and the Stop hook has run
             seen["alive"] = self.proc.poll() is None
+            seen["marked"] = (run_dir / "stopped").exists()      # what run.sh's watch waits for
             subprocess.run(["pkill", "-P", str(self.proc.pid)])
             seen["killed"] = time.time()
         bg = {"command": "sleep 302", "description": "a server", "run_in_background": True}
         _, _, result = self.session([("tool", bg), ("text", "done")], watch)
         self.assertEqual(result, "done")
         self.assertTrue(seen["alive"], "claude exited by itself, so there was no hang to fix")
+        self.assertTrue(seen["marked"], "the Stop hook wrote no mark while claude was stuck")
         self.assertLess(time.time() - seen["killed"], 10)
 
     def test_a_message_sent_during_a_subagents_tool_call_waits_for_the_main_session(self):

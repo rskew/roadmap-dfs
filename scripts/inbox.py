@@ -2,11 +2,12 @@
 """The hook that hands the author's messages to a running session, whichever agent runs it.
 
     inbox.py post [BOX]   as a PostToolUse hook: the next model call sees the messages
-    inbox.py stop [BOX]   as a Stop hook: a session about to end takes one more turn for them
+    inbox.py stop [BOX [MARK]]   as a Stop hook: a session about to end takes one more turn for them;
+                          with nothing waiting it writes the time to the file MARK (see below)
     inbox.py pre [BOX]    as kiro's preToolUse hook: a tool call is held back, with the messages as its result
     inbox.py peek         opencode's plugin: the waiting messages, left where they are, as JSON {names, context}
     inbox.py ack NAME...  opencode's plugin: the messages it has handed over, moved to `delivered/`
-    inbox.py --settings [BOX]   the `--settings` JSON that installs both, as run.sh passes it to claude
+    inbox.py --settings [BOX [MARK]]   the `--settings` JSON that installs both, as run.sh passes it to claude
     inbox.py --codex-args [BOX]   the same for codex: the flags, one per line, that go BEFORE `exec`
     inbox.py --opencode-config   the same for opencode: its `OPENCODE_CONFIG_CONTENT`, naming the plugin
     inbox.py --kiro-agent DIR [BOX]   the same for kiro: writes the agent `dfs-inbox` under DIR/.kiro/agents
@@ -16,6 +17,13 @@
 the run directory's `inbox/`, which the screen and the page write into (`runs.py`,
 `post_message`). With nothing waiting the hook prints nothing and the session goes on
 as if it were not there.
+
+⚠️ THE STOP MARK. A Stop hook that hands nothing over is the last thing a session does, yet a
+claude that started a background Bash call (`run_in_background`) then stays alive, with its result
+unwritten, until that call ends (W188), and a chain waits on it for an hour. So that hook writes the
+time to MARK (`run.sh` passes `$RUNDIR/stopped`); `run.sh` watches the file and, if claude is still
+there after a grace, ends what the session left running. A hook that does hand something over
+removes MARK again, since the session goes on.
 
 ⚠️ THE BOX IS IN THE HOOK'S COMMAND, NOT IN THE AGENT'S ENVIRONMENT, for claude, codex and kiro:
 everything the agent runs inherits its environment, and a tool or test that ran `inbox.py`
@@ -57,6 +65,7 @@ import os
 import shlex
 import subprocess
 import sys
+import time
 
 HEAD = "The author sent this to the running session from the roadmap's screen or page:"
 
@@ -127,6 +136,18 @@ def peek(box):
     return {"names": [n for n, _ in pairs], "context": said([t for _, t in pairs]) if pairs else ""}
 
 
+def mark_stop(mark, texts):
+    """Record that the session is ending (`texts` empty: the time, to MARK) or going on (MARK removed)."""
+    try:
+        if texts:
+            os.remove(mark)
+        else:
+            with open(mark, "w") as fh:
+                fh.write("%.3f\n" % time.time())
+    except OSError:
+        pass
+
+
 def answer(event, texts):
     """The hook's JSON for `event` (`post` or `stop`), or None when there is nothing."""
     if not texts:
@@ -149,11 +170,12 @@ def held(texts):
 KIRO_AGENT = "dfs-inbox"
 
 
-def command(event, box=None):
-    """The hook's shell command for `event`: this file, and `box` when the hook is to read that inbox
-    and not `DFS_INBOX`."""
+def command(event, box=None, mark=None):
+    """The hook's shell command for `event`: this file, `box` when the hook is to read that inbox
+    and not `DFS_INBOX`, and `mark` (with a box) for the file a Stop hook writes when the session ends."""
     me = shlex.quote(os.path.abspath(__file__))
-    return "python3 %s %s%s" % (me, event, " " + shlex.quote(os.path.abspath(box)) if box else "")
+    tail = (" " + shlex.quote(os.path.abspath(box)) if box else "") + (" " + shlex.quote(os.path.abspath(mark)) if box and mark else "")
+    return "python3 %s %s%s" % (me, event, tail)
 
 
 def kiro_agent(box=None, name=KIRO_AGENT):
@@ -228,9 +250,9 @@ def remove_kiro_agent(directory, name):
         pass
 
 
-def settings(box=None):
-    """The claude `--settings` JSON naming this file as both hooks."""
-    hook = lambda ev: [{"hooks": [{"type": "command", "command": command(ev, box)}]}]
+def settings(box=None, mark=None):
+    """The claude `--settings` JSON naming this file as both hooks; the Stop hook writes `mark` when it ends the session."""
+    hook = lambda ev: [{"hooks": [{"type": "command", "command": command(ev, box, mark if ev == "stop" else None)}]}]
     return json.dumps({"hooks": {"PostToolUse": hook("post"), "Stop": hook("stop")}})
 
 
@@ -251,13 +273,13 @@ def opencode_config(env):
     return json.dumps(cfg)
 
 
-USAGE = ("usage: inbox.py post|stop|pre [BOX] | peek | ack NAME... | --settings [BOX] | --codex-args [BOX] | "
+USAGE = ("usage: inbox.py post|pre [BOX] | stop [BOX [MARK]] | peek | ack NAME... | --settings [BOX [MARK]] | --codex-args [BOX] | "
          "--opencode-config | --kiro-agent DIR [BOX] | --kiro-chat-agent DIR BOX")
 
 
 def main(argv):
     args = argv[1:]
-    if args[:1] == ["--settings"] and len(args) <= 2:
+    if args[:1] == ["--settings"] and len(args) <= 3:
         print(settings(*args[1:]))
         return 0
     if args[:1] == ["--codex-args"] and len(args) <= 2:
@@ -284,14 +306,14 @@ def main(argv):
         else:
             take(box, args[1:])
         return 0
-    if not args or args[0] not in ("post", "stop", "pre") or len(args) > 2:
+    if not args or args[0] not in ("post", "stop", "pre") or len(args) > (3 if args[:1] == ["stop"] else 2):
         print(USAGE, file=sys.stderr)
         return 2
     try:
         data = sys.stdin.read()     # the hook's own input; read so the agent's write never blocks
     except (OSError, ValueError):
         data = ""
-    box = args[1] if len(args) == 2 else os.environ.get("DFS_INBOX")
+    box = args[1] if len(args) >= 2 else os.environ.get("DFS_INBOX")
     event = hook_input(data)
     if from_subagent(event):
         return 0        # the message is for the session the author is watching, not for a subagent's call
@@ -304,7 +326,10 @@ def main(argv):
             print(text, file=sys.stderr)
             return 2        # kiro: the tool call does not run, and this is its result
         return 0
-    out = answer(args[0], claim(box)) if box else None
+    texts = claim(box) if box else []
+    if args[0] == "stop" and len(args) == 3:
+        mark_stop(args[2], texts)
+    out = answer(args[0], texts) if box else None
     if out:
         print(json.dumps(out))
     return 0
