@@ -211,6 +211,9 @@ class Flows(unittest.TestCase):
     def test_a_chat_names_the_agent_it_runs_under_in_its_header_and_in_the_list(self):
         self.flow("chat_agent")
 
+    def test_each_chat_message_has_a_copy_button_that_puts_its_text_on_the_clipboard(self):
+        self.flow("chat_copy")
+
     def test_a_chat_at_its_usage_limit_says_so_above_the_box_and_when_it_resets(self):
         self.flow("chat_backend")
 

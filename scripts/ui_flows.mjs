@@ -516,6 +516,44 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Each chat message has a Copy button that puts that message's own text on the clipboard: an agent's reply as the markdown
+  // it wrote, not as drawn. Where the page has no `navigator.clipboard` (plain http on a LAN) a selected box and execCommand do it.
+  async chat_copy(b) {
+    const { ctx, page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
+    await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const reply = "Here is **bold** and a list:\n\n- one\n- two\n\n```\nrun it\n```";
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: reply }, { role: "error", text: "no answer" }], busy: true, busy_for: 3, live: false, elsewhere: false, note: "", agent: "" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 4);
+    same(await page.$$eval("#chat-log .msg .copy", e => e.length), 3, "each message has a Copy button, the Working line does not");
+    const size = await page.$eval("#chat-log .msg .copy", e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; });
+    assert(size[0] >= 44 && size[1] >= 44, `the Copy button is big enough to touch (${size})`);
+    const read = () => page.evaluate(() => navigator.clipboard.readText());
+    await page.click("#chat-log .msg.agent .copy");
+    same(await read(), reply, "Copy puts the agent's reply on the clipboard as the text it wrote");
+    await page.waitForFunction(() => document.querySelector("#toast").textContent === "Copied.");
+    await page.click("#chat-log .msg.you .copy");
+    same(await read(), "where are we?", "Copy on a message of the reader's puts that message on the clipboard");
+    await page.click("#chat-log .msg.error .copy");
+    same(await read(), "no answer", "Copy on an error line puts its text on the clipboard");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    // the page with no clipboard of its own: the fallback copies through a selected box, which goes again afterwards
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+      window.__copied = null;
+      document.execCommand = cmd => { window.__copied = cmd === "copy" ? document.activeElement.value : null; return cmd === "copy"; };
+    });
+    await page.click("#chat-log .msg.agent .copy");
+    same(await page.evaluate(() => window.__copied), reply, "without navigator.clipboard the fallback copies the same text");
+    same(await page.$$eval("#chat textarea[aria-hidden]", e => e.length), 0, "the fallback leaves no box behind");
+    await page.evaluate(() => { document.execCommand = () => false; });
+    await page.click("#chat-log .msg.you .copy");
+    await page.waitForFunction(() => document.querySelector("#toast").classList.contains("err") && /Could not copy/.test(document.querySelector("#toast").textContent));
+    same(errors, [], "no page errors");
+  },
+
   // A picture attached in the chat box: the button, a paste and a drop each upload it (a file that is not a picture is
   // refused), its reference goes in the message, and the sent message draws the picture, in the project chat too.
   async chat_attach(b) {
