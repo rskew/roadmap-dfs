@@ -74,6 +74,7 @@ Evidence:
 #   resolvemain confirm the open node, committing it, after rebasing the branch onto main
 #              the way the node asks (keeping the branch's side of a conflict)
 #   codenew    add new.txt in the worktree, uncommitted (`confirm` commits it)
+#   sleeper    record its own pid and wait a minute, to be interrupted
 #   hang       change app.txt, run the Stop hook it was given, then wait on a background child
 #              the way claude does (W188), and finish only once that child is gone
 #   stash      stash app.txt, as a briefing listing it as not this task's says to
@@ -128,6 +129,7 @@ case "$recipe" in
   hang)    echo "change $n" >> app.txt
            python3 -c 'import json,subprocess,sys; subprocess.run(json.loads(sys.argv[1])["hooks"]["Stop"][0]["hooks"][0]["command"], shell=True, stdin=subprocess.DEVNULL)' "$(cat "$KINDS_FILE.settings")"
            sleep 300 & echo $! > "$KINDS_FILE.child"; wait $! || true ;;
+  sleeper) echo $$ > "$KINDS_FILE.pid"; sleep 60 > /dev/null 2>&1 & echo $! > "$KINDS_FILE.child"; wait $! || true ;;
   noverdict) echo "a note" | $T log W1 raise W1.1 > /dev/null ;;
   lower)   python3 -c 'import os,sys; p=os.environ["DFS_ITEMS"]+"/W1.md"; t=open(p).read(); open(p,"w").write(t.replace("Evidence:\n","Evidence:\n- for: look %s\n" % sys.argv[1], 1))' "$n"
            echo "$n" > "$LOWER_FILE" ;;
@@ -2487,6 +2489,25 @@ class Chain(unittest.TestCase):
         at = calendar.timegm(time.strptime(end.group(1), "%Y-%m-%dT%H:%M:%SZ"))
         self.assertIn(at - int(mark), (0, 1), "the end entry is %s, the Stop hook ran at %s" % (end.group(1), mark))
         self.assertGreaterEqual(int(end.group(2)), 5)
+
+    def test_a_term_to_the_chain_ends_the_session_it_is_waiting_on(self):
+        """W188.2: `on_interrupt` kills the backgrounded agent (AGENT_PID) for every agent, and the chain stops with 130."""
+        e = dict(os.environ, CLAUDE_CMD="bash %s" % self.stub, RECIPE="sleeper", COUNT_FILE=str(self.count),
+                 KINDS_FILE=str(self.kinds), TREE_PY=str(HERE / "tree.py"), HOME=str(self.aside))
+        e.pop("RUNDIR", None)
+        p = subprocess.Popen([str(RUNNER), "W1", "1"], cwd=self.root, env=e, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        self.addCleanup(p.kill)
+        pidfile, child = Path(str(self.kinds) + ".pid"), Path(str(self.kinds) + ".child")
+        end = time.time() + 60
+        while not (pidfile.exists() and child.exists()) and time.time() < end:
+            time.sleep(0.1)
+        agent, leftover = pidfile.read_text().strip(), child.read_text().strip()
+        self.addCleanup(lambda: subprocess.run(["kill", leftover], capture_output=True))
+        p.terminate()
+        out, _ = p.communicate(timeout=60)
+        self.assertEqual(p.returncode, 130, out)
+        time.sleep(0.5)
+        self.assertFalse(Path("/proc/%s" % agent).exists(), "the session outlived the interrupted chain")
 
     def test_a_claude_session_that_ends_by_itself_is_not_touched_by_the_stop_watch(self):
         rc, meta, out = self.run_chain("work", cap=1, DFS_STOP_GRACE="2")

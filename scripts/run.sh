@@ -582,6 +582,7 @@ tree_log() {  # tree_log <kind> [args...]  (body on stdin, or none)
 
 # The Stop hook's mark of a session that has just ended: sets STOPPED_AT to its time (the log's
 # `YYYY-MM-DDTHH:MM:SSZ`) and STALL_NOTE to how long the process outlived it, when that is 5 s or more.
+# Every `end` entry made after it is dated by the mark (tree_log), but only an `ok` one carries the note.
 read_stop_mark() {
   STOPPED_AT=""; STALL_NOTE=""
   [ -s "$RUNDIR/stopped" ] || return 0
@@ -641,7 +642,9 @@ settle_accept() {
 
 # Ctrl-C must end the CHAIN, not just the run. A claude that handles the interrupt
 # itself and exits 0 looks exactly like a session that finished, so this trap is what
-# makes one Ctrl-C mean "stop".
+# makes one Ctrl-C mean "stop". It also ends the agent the session is waiting on (AGENT_PID, set for
+# every agent since the session runs beside `stop_watch`; before, a kiro, codex or opencode run was left
+# to its own handling of the signal).
 on_interrupt() {
   [ -z "${AGENT_PID:-}" ] || kill "$AGENT_PID" 2>/dev/null || true
   stop_is interrupt
