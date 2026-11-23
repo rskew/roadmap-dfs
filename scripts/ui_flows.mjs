@@ -869,6 +869,9 @@ const FLOWS = {
     // an agent message lands; the quiet poll (4s) draws it
     const lands = async text => { state.messages.push({ role: "agent", text }); await count(state.messages.length); await page.waitForTimeout(500); };
     assert((await from_end()) < 4, "a chat opens at its end");
+    // the steps below mean nothing unless the log really scrolls: with no font installed `68ch` is 0px, the messages have no width and the log never overflows
+    const room = await page.$eval("#chat-log", e => e.scrollHeight - e.clientHeight);
+    assert(room > 600, `the log overflows enough for the 50, 120 and 300px steps to be real (${room}px of room)`);
     await scroll_to(50); let was = await page.$eval("#chat-log", e => Math.round(e.scrollTop));
     await lands("lands near the end");
     assert((await from_end()) < 4, `a reader 50px from the end is carried to a new message (${await from_end()} from the end)`);
