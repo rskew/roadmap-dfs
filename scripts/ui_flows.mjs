@@ -528,6 +528,7 @@ const FLOWS = {
     await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 4);
     same(await page.$$eval("#chat-log .msg .copy", e => e.length), 3, "each message has a Copy button, the Working line does not");
+    same(await page.$$eval("#chat-log .msg .copy", e => e.map(x => x.getAttribute("aria-label"))), ["Copy this message from you", "Copy this message from the agent", "Copy this message from the error line"], "each Copy button's name says whose message it copies");
     const size = await page.$eval("#chat-log .msg .copy", e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; });
     assert(size[0] >= 44 && size[1] >= 44, `the Copy button is big enough to touch (${size})`);
     const read = () => page.evaluate(() => navigator.clipboard.readText());

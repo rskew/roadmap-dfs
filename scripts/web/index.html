@@ -1840,10 +1840,13 @@ function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
+  const from = { prompt: "the prompt", you: "you", agent: "the agent", error: "the error line" };   // each Copy button's name says whose message it is
   const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
   if (sig === CHAT.last) return;
   // A busy turn changes only the seconds in "Working on it" on most polls. Say them in place: replacing the whole log every 1.5s
   // would tear the Copy buttons out from under a reader's focus or a tap that is in progress.
+  // `busy_for` is the only field of the signature that may be skipped here: the body below leaves it out and is compared whole,
+  // so a field added to `sig` must be added to `body` too, or its change would be dropped (no redraw, no buttons, no scroll).
   const body = JSON.stringify([st.messages, st.busy, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
   const wait = st.busy && CHAT.last && body === CHAT.body ? log.querySelector(".msg.wait .what") : null;
   CHAT.last = sig; CHAT.body = body; CHAT.messages = st.messages;
@@ -1866,13 +1869,13 @@ function chatDraw(st) {
   log.innerHTML = (st.ended ? `<p class="muted">Archived. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
-    + st.messages.map((m, i) => `<div class="msg ${esc(m.role)}"><div class="msghead"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span>${m.text ? `<button class="btn copy" type="button" data-act="chatcopy" data-i="${i}" aria-label="Copy this message" title="Copy this message">Copy</button>` : ""}</div><div class="what">${m.role === "agent" ? md(m.text) : m.role === "you" ? chatText(m.text) : esc(m.text)}</div></div>`).join("")
+    + st.messages.map((m, i) => `<div class="msg ${esc(m.role)}"><div class="msghead"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span>${m.text ? `<button class="btn copy" type="button" data-act="chatcopy" data-i="${i}" aria-label="Copy this message from ${esc(from[m.role] || m.role)}" title="Copy this message">Copy</button>` : ""}</div><div class="what">${m.role === "agent" ? md(m.text) : m.role === "you" ? chatText(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
     + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
   chatButtons(st);
   if (kept !== null) log.querySelector(`[data-act=chatcopy][data-i="${CSS.escape(kept)}"]`)?.focus({ preventScroll: true });
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
-  // A busy turn redraws every poll ("Working on it (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
+  // Only a reader at the end, or one who has just sent, is carried down. (A busy poll that changes nothing but the seconds never gets here.)
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
   CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
