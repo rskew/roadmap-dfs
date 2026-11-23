@@ -516,6 +516,67 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // Each chat message has a Copy button that puts that message's own text on the clipboard: an agent's reply as the markdown
+  // it wrote, not as drawn. Where the page has no `navigator.clipboard` (plain http on a LAN) a selected box and execCommand do it.
+  async chat_copy(b) {
+    const { ctx, page, errors } = await open(b, { viewport: { width: 360, height: 520 }, hasTouch: true });
+    await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const reply = "Here is **bold** and a list:\n\n- one\n- two\n\n```\nrun it\n```";
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: reply }, { role: "error", text: "no answer" }], busy: true, busy_for: 3, live: false, elsewhere: false, note: "", agent: "" };
+    await page.route("**/api/chat/**", r => r.fulfill({ contentType: "application/json", body: JSON.stringify(state) }));
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 4);
+    same(await page.$$eval("#chat-log .msg .copy", e => e.length), 3, "each message has a Copy button, the Working line does not");
+    same(await page.$$eval("#chat-log .msg .copy", e => e.map(x => x.getAttribute("aria-label"))), ["Copy this message from you", "Copy this message from the agent", "Copy this message from the error line"], "each Copy button's name says whose message it copies");
+    const size = await page.$eval("#chat-log .msg .copy", e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; });
+    assert(size[0] >= 44 && size[1] >= 44, `the Copy button is big enough to touch (${size})`);
+    const read = () => page.evaluate(() => navigator.clipboard.readText());
+    await page.click("#chat-log .msg.agent .copy");
+    same(await read(), reply, "Copy puts the agent's reply on the clipboard as the text it wrote");
+    await page.waitForFunction(() => document.querySelector("#toast").textContent === "Copied.");
+    await page.click("#chat-log .msg.you .copy");
+    same(await read(), "where are we?", "Copy on a message of the reader's puts that message on the clipboard");
+    await page.click("#chat-log .msg.error .copy");
+    same(await read(), "no answer", "Copy on an error line puts its text on the clipboard");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    // A busy turn is polled every 1.5s and its seconds change each time. The buttons must not be rebuilt for that: the one with
+    // focus stays the same element, still focused, and Enter on it copies its message.
+    await page.focus("#chat-log .msg.agent .copy");
+    await page.evaluate(() => { document.querySelector("#chat-log .msg.agent .copy").dataset.mark = "same"; });
+    state.busy_for = 7;
+    await page.waitForFunction(() => /Working on it \(7 seconds\)/.test(document.querySelector("#chat-log .msg.wait").textContent), null, { timeout: 6000 });
+    same(await page.evaluate(() => document.activeElement.dataset.mark || ""), "same", "a poll of a busy turn leaves the focused Copy button as it was");
+    await page.evaluate(() => navigator.clipboard.writeText("x"));
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector("#toast").textContent === "Copied.");
+    same(await read(), reply, "Enter on the focused Copy button copies its message after a poll");
+    // A new message does replace the log; the Copy button that had focus gets it back, on the same message.
+    state.messages = [...state.messages, { role: "agent", text: "more" }];
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 5, null, { timeout: 6000 });
+    same(await page.evaluate(() => document.activeElement.dataset.act + ":" + document.activeElement.dataset.i), "chatcopy:1", "after a redraw focus is back on the same message's Copy button");
+    // the page with no clipboard of its own: the fallback copies through a selected box, which goes again afterwards
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+      window.__copied = null;
+      document.execCommand = cmd => { window.__copied = cmd === "copy" ? document.activeElement.value : null; return cmd === "copy"; };
+    });
+    await page.click("#chat-log .msg.agent .copy");
+    same(await page.evaluate(() => window.__copied), reply, "without navigator.clipboard the fallback copies the same text");
+    same(await page.$$eval("#chat textarea[aria-hidden]", e => e.length), 0, "the fallback leaves no box behind");
+    await page.evaluate(() => { document.execCommand = () => false; });
+    await page.click("#chat-log .msg.you .copy");
+    await page.waitForFunction(() => document.querySelector("#toast").classList.contains("err") && /Could not copy/.test(document.querySelector("#toast").textContent));
+    // with no dialog open the box goes to the page itself, and the fallback still copies and leaves nothing behind
+    await page.click("[data-act=chatclose]");
+    await page.waitForFunction(() => !document.querySelector("dialog[open]"));
+    await page.evaluate(() => { document.execCommand = cmd => { window.__copied = cmd === "copy" ? document.activeElement.value : null; return cmd === "copy"; }; window.__copied = null; });
+    await page.evaluate(() => copyText("from the page"));
+    same(await page.evaluate(() => window.__copied), "from the page", "with no dialog open the fallback copies through a box on the page");
+    same(await page.$$eval("textarea[aria-hidden]", e => e.length), 0, "and leaves no box behind");
+    same(errors, [], "no page errors");
+  },
+
   // A picture attached in the chat box: the button, a paste and a drop each upload it (a file that is not a picture is
   // refused), its reference goes in the message, and the sent message draws the picture, in the project chat too.
   async chat_attach(b) {
@@ -809,6 +870,9 @@ const FLOWS = {
     // an agent message lands; the quiet poll (4s) draws it
     const lands = async text => { state.messages.push({ role: "agent", text }); await count(state.messages.length); await page.waitForTimeout(500); };
     assert((await from_end()) < 4, "a chat opens at its end");
+    // the steps below mean nothing unless the log really scrolls: with no font installed `68ch` is 0px, the messages have no width and the log never overflows
+    const room = await page.$eval("#chat-log", e => e.scrollHeight - e.clientHeight);
+    assert(room > 600, `the log overflows enough for the 50, 120 and 300px steps to be real (${room}px of room)`);
     await scroll_to(50); let was = await page.$eval("#chat-log", e => Math.round(e.scrollTop));
     await lands("lands near the end");
     assert((await from_end()) < 4, `a reader 50px from the end is carried to a new message (${await from_end()} from the end)`);

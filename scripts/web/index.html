@@ -370,6 +370,10 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 #chat-log { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--s4); overscroll-behavior: contain; }
 .msg { margin: 0 0 var(--s3); max-width: var(--measure); }
 .msg .who { display: block; margin-bottom: 2px; }
+/* a message's head: who said it, and its Copy button at the far end, --hit high so a thumb finds it */
+.msg .msghead { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); }
+.msg .msghead .who { margin-bottom: 0; }
+.msg .msghead .copy { flex: none; min-width: var(--hit); min-height: var(--hit); padding: 0 var(--s3); }
 .msg .what { white-space: pre-wrap; overflow-wrap: anywhere; }
 .msg.you { padding: var(--s2) var(--s3); background: var(--sel); border-left: var(--rule-status) solid var(--ink); }
 #chat-lost { flex: none; margin: 0; }
@@ -1836,9 +1840,17 @@ function chatDraw(st) {
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
+  const from = { prompt: "the prompt", you: "you", agent: "the agent", error: "the error line" };   // each Copy button's name says whose message it is
   const sig = JSON.stringify([st.messages, st.busy, st.busy_for, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
   if (sig === CHAT.last) return;
-  CHAT.last = sig;
+  // A busy turn changes only the seconds in "Working on it" on most polls. Say them in place: replacing the whole log every 1.5s
+  // would tear the Copy buttons out from under a reader's focus or a tap that is in progress.
+  // `busy_for` is the only field of the signature that may be skipped here: the body below leaves it out and is compared whole,
+  // so a field added to `sig` must be added to `body` too, or its change would be dropped (no redraw, no buttons, no scroll).
+  const body = JSON.stringify([st.messages, st.busy, st.live, st.elsewhere, st.note, st.agent, st.ended, st.steer, st.backend]);
+  const wait = st.busy && CHAT.last && body === CHAT.body ? log.querySelector(".msg.wait .what") : null;
+  CHAT.last = sig; CHAT.body = body; CHAT.messages = st.messages;
+  if (wait) { wait.textContent = `Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})`; return; }
   const recalled = RECALL.at;
   RECALL.sent = st.messages.filter(m => m.role === "you" && m.text).map(m => m.text).filter((t, i, a) => i === 0 || t !== a[i - 1]);
   // A message that came in before the one showing moves its place: find it again by its text (the nearest if it is there twice).
@@ -1852,20 +1864,44 @@ function chatDraw(st) {
   $("#chat-backend").hidden = !be;
   $("#chat-backend").textContent = be ? `${be.agent || st.agent || "The agent"} has hit its usage limit${be.resets ? " (" + be.resets + ")" : ""}. A message sent before it lifts may not be answered.` : "";
   $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.length;
+  // A new message does replace the log: a Copy button that had focus gets it back (the same message's, by index).
+  const kept = document.activeElement?.closest?.("#chat-log") && document.activeElement.dataset.act === "chatcopy" ? document.activeElement.dataset.i : null;
   log.innerHTML = (st.ended ? `<p class="muted">Archived. Send a message to pick it up again.</p>` : "")
     + (st.elsewhere ? `<p class="muted">Another terminal has this conversation open. Type there; what is said shows here.</p>` : st.live ? `<p class="muted">The agent is running in the background: type here, or press <code>c</code> in the terminal to look at it.</p>` : "")
     + (st.note ? `<p class="muted">${esc(st.note)}</p>` : "")
-    + st.messages.map(m => `<div class="msg ${esc(m.role)}"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span><div class="what">${m.role === "agent" ? md(m.text) : m.role === "you" ? chatText(m.text) : esc(m.text)}</div></div>`).join("")
+    + st.messages.map((m, i) => `<div class="msg ${esc(m.role)}"><div class="msghead"><span class="who cap">${who[m.role] || esc(m.role)}${m.steer ? ` · steering, ${m.steer === "waiting" ? "waiting to be read" : "read"}` : ""}</span>${m.text ? `<button class="btn copy" type="button" data-act="chatcopy" data-i="${i}" aria-label="Copy this message from ${esc(from[m.role] || m.role)}" title="Copy this message">Copy</button>` : ""}</div><div class="what">${m.role === "agent" ? md(m.text) : m.role === "you" ? chatText(m.text) : esc(m.text)}</div></div>`).join("")
     + (st.busy ? `<div class="msg wait"><span class="who cap">Agent</span><div class="what">Working on it (${st.busy_for} ${st.busy_for === 1 ? "second" : "seconds"})</div></div>` : "")
     + `<div class="chat-newest" aria-live="off"><button class="btn" type="button" data-act="chatbottom">Newest ↓</button></div>`;
   chatButtons(st);
+  if (kept !== null) log.querySelector(`[data-act=chatcopy][data-i="${CSS.escape(kept)}"]`)?.focus({ preventScroll: true });
   // A chat reopened where the reader had scrolled up to goes back there, not to the end; one left at the end follows it.
-  // A busy turn redraws every poll ("Working on it (n seconds)"), so only a reader at the end, or one who has just sent, is carried down.
+  // Only a reader at the end, or one who has just sent, is carried down. (A busy poll that changes nothing but the seconds never gets here.)
   const was = CHAT.fresh ? SCROLL.at[chatKey()] : undefined, follow = CHAT.follow;
   CHAT.fresh = CHAT.follow = false;
   if (was !== undefined) log.scrollTop = was;
   else if ((atEnd && !TOP_SCROLL.on) || follow) log.scrollTop = log.scrollHeight;
   chatNewest();
+}
+// The Copy button: the message's own text (an agent's reply as the markdown it wrote, not as drawn) goes to the clipboard.
+// A page served over plain http (a phone on the LAN) has no `navigator.clipboard`, so a selected hidden box and `execCommand` stand in.
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try { await navigator.clipboard.writeText(text); return; } catch (e) { /* refused: try the older way */ }
+  }
+  const box = document.createElement("textarea"), keep = document.activeElement;
+  box.value = text; box.setAttribute("readonly", ""); box.setAttribute("aria-hidden", "true");
+  box.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0";
+  (document.querySelector("dialog[open]") || document.body).appendChild(box);   // inside the open dialog: outside it, a modal makes the page inert
+  box.select(); box.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) { /* ok stays false */ }
+  box.remove(); if (keep && keep.focus) keep.focus();
+  if (!ok) throw new Error("copy is not allowed here");
+}
+async function chatCopy(i) {
+  const m = (CHAT.messages || [])[i];
+  if (!m || !m.text) return;
+  try { await copyText(m.text); toast("Copied."); } catch (e) { toast("Could not copy: " + e.message, true); }
 }
 // The Newest button shows while the reader is more than a screen's edge away from the end of the log.
 function chatNewest() {
@@ -2255,7 +2291,7 @@ document.addEventListener("click", e => {
     answer: () => answerForm(d.ts), correct: () => correctForm(d.id), rename: renameForm, newtask: newTaskForm,
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
-    chat: () => chatOpen(d.scope, !!d.fresh), chattop: chatTop, chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: toChats,
+    chat: () => chatOpen(d.scope, !!d.fresh), chattop: chatTop, chatcopy: () => chatCopy(+d.i), chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: toChats,
     chatend: async () => { try { CHAT.last = ""; await api("/api/chat/end", { scope: CHAT.scope }); if ($("#chat").open) { $("#chat").close(); if (route().view === "chats") render(true); } toast("Chat archived."); } catch (e) { toast(e.message, true); } },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
