@@ -62,6 +62,11 @@ LIMIT_RE = re.compile(
     r"|\brate.?limit(ed|s)?\b",
     re.I,
 )
+# LIMIT_RE for text with no whitespace left in it and lower case (a terminal that draws its blank cells as cursor moves
+# leaves "Usagelimitreached"): a chat's screen is matched this way. Keep it in step with LIMIT_RE; "limit reached" is
+# wider than its "usage limit reached", so "Session limit reached" counts too (a chat keeping a limit it should drop is
+# the safer mistake).
+LIMIT_SQUASHED_RE = re.compile(r"hityour[\w'-]{0,40}limit|limitreached|rate.?limit(?:ed|s)?")
 # The one thing worth printing beside the stop: when it lifts. Stops at the quote or
 # backslash that ends it inside JSON, exactly as the grep it replaces did.
 # kiro-cli's own wordings, read out of its binary (2.24.0): "The monthly usage limit

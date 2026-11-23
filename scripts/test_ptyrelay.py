@@ -13,9 +13,9 @@ import tempfile
 import threading
 import time
 import types
-from unittest import mock
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ptyrelay  # noqa: E402
@@ -173,11 +173,6 @@ while True:
             if buf:
                 open(os.environ["LOG"], "a").write(buf + "\n")
                 buf = ""
-                if os.environ.get("ANSWER") == "limit":     # still at the limit: it says so and draws the menu again
-                    sys.stdout.write("  \u23bf  You've hit your session limit\r\nWhat do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n")
-                else:                                       # the limit has lifted: an ordinary answer
-                    sys.stdout.write("\r\nHere is the answer, thinking about it for a while\r\n")
-                sys.stdout.flush()
         else:
             buf += ch
 '''
@@ -218,10 +213,13 @@ class Resubmitting(unittest.TestCase):
 # claude at its usage limit: the answer, then the menu it waits at. A key other than Esc is not a message (the menu takes it
 # and does nothing); Esc leaves the menu for the prompt, where a line typed and entered is submitted.
 LIMIT_MENU = r"""
-import os, sys, tty
+import os, sys, time, tty
 tty.setraw(0)
-sys.stdout.write("\x1b[?2004hready\r\n  \u23bf  You've hit your session limit \u00b7 " + os.environ.get("RESETS", "resets 5:20pm (UTC)") + "\r\n")
-sys.stdout.write("What do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n2. Wait here\r\n3. Upgrade your plan\r\nEnter to confirm \u00b7 Esc to cancel\r\n")
+GAPS = os.environ.get("GAPS")       # claude draws a blank cell as a cursor move forward, not as a space
+def put(text):
+    sys.stdout.write(text.replace(" ", "\x1b[1C") if GAPS else text)
+put("\x1b[?2004hready\r\n  \u23bf  You've hit your session limit \u00b7 " + os.environ.get("RESETS", "resets 5:20pm (UTC)") + "\r\n")
+put("What do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n2. Wait here\r\n3. Upgrade your plan\r\nEnter to confirm \u00b7 Esc to cancel\r\n")
 sys.stdout.flush()
 menu, buf = True, ""
 while True:
@@ -236,12 +234,18 @@ while True:
             if buf:
                 open(os.environ["LOG"], "a").write(buf + "\n")
                 if os.environ.get("ECHO"):                  # the transcript draws the message back once it is entered
-                    sys.stdout.write("\r\n\u276f " + buf + "\r\n")
+                    put("\r\n\u276f " + buf + "\r\n")
                 buf = ""
                 if os.environ.get("ANSWER") == "limit":     # still at the limit: it says so and draws the menu again
-                    sys.stdout.write("  \u23bf  You've hit your session limit\r\nWhat do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n")
+                    put("  \u23bf  You've hit your session limit\r\nWhat do you want to do?\r\n\u276f 1. Stop and wait for limit to reset\r\n")
+                elif os.environ.get("ANSWER") == "slow":    # a spinner for 3 s, then the footer saying it is still at the limit
+                    for i in range(10):
+                        put("\r\u273b Thinking " + "." * i); sys.stdout.flush(); time.sleep(0.3)
+                    put("\r\n\u26a0 Usage limit reached \u00b7 limit resets 12:50pm\r\n")
+                elif os.environ.get("ANSWER") == "banner":  # still at the limit: only its footer says so (seen in a real chat's log)
+                    put("\r\n\u26a0 Usage limit reached \u00b7 limit resets 12:50pm\r\n")
                 else:                                       # the limit has lifted: an ordinary answer
-                    sys.stdout.write("\r\nHere is the answer\r\n")
+                    put("\r\nHere is the answer\r\n")
                 sys.stdout.flush()
         else:
             buf += ch
@@ -298,6 +302,34 @@ class LimitMenu(unittest.TestCase):
         time.sleep(ptyrelay.LIMIT_PROBE + 1)
         self.assertTrue(relay.limit)
 
+    def test_a_menu_drawn_with_cursor_moves_for_its_spaces_is_noticed_with_its_reset_time(self):
+        relay = self.relay_with(GAPS="1")
+        self.assertNotIn(ptyrelay.LIMIT_MENU, bytes(relay.tail))       # the stub's bytes hold no such run
+        self.assertEqual(relay.limit["resets"], "resets 5:20pm (UTC)")
+        self.assertTrue(relay.limit_menu)
+        self.send_and_wait(relay, "hello")                              # Esc first, then the message
+
+    def test_a_limit_said_in_words_with_cursor_moves_for_spaces_is_kept_after_a_message(self):
+        for answer in ("limit", "banner"):
+            with self.subTest(answer=answer):
+                relay = self.relay_with(GAPS="1", ANSWER=answer)
+                self.send_and_wait(relay, "hello")
+                time.sleep(ptyrelay.LIMIT_PROBE + 1)
+                self.assertTrue(relay.limit)
+
+    def test_a_limit_is_not_dropped_while_the_agent_is_still_answering_and_is_kept_when_the_answer_says_it_is_at_it(self):
+        relay = self.relay_with(ANSWER="slow")             # LIMIT_PROBE is 2 s here, the answer takes 3 s
+        self.send_and_wait(relay, "hello")
+        time.sleep(ptyrelay.LIMIT_PROBE + 1.5)
+        self.assertTrue(relay.limit)
+        time.sleep(3)
+        self.assertTrue(relay.limit)
+
+    def test_a_limit_is_dropped_when_the_agent_answers_with_cursor_moves_for_spaces_and_no_limit_words(self):
+        relay = self.relay_with(GAPS="1", RESETS="resets 5:20pm (Europe/Berlin)")
+        self.send_and_wait(relay, "hello")
+        self.assertTrue(until(lambda: relay.limit is None, 8), relay.limit)
+
     def test_a_relay_that_ends_while_escape_is_awaited_drops_the_message_and_does_not_hang(self):
         self.assertTrue(until(lambda: self.relay.limit_menu, 8))
         start = time.time()
@@ -321,10 +353,37 @@ class LimitMenu(unittest.TestCase):
         relay._follow_limit(ptyrelay.LIMIT_MENU[:5]); relay._follow_limit(ptyrelay.LIMIT_MENU[5:])     # a phrase split over two reads is found
         self.assertTrue(relay.limit_menu)
 
+    def test_the_menu_phrase_is_found_when_a_read_cuts_an_escape_sequence_between_its_words(self):
+        relay = ptyrelay.Relay(agent="claude")
+        phrase = ptyrelay.LIMIT_MENU.replace(b" ", b"\x1b[1C")
+        cut = phrase.index(b"\x1b[1C") + 3                  # inside the first cursor move
+        relay._follow_limit(b"1.\x1b[1C" + phrase[:cut])
+        self.assertFalse(relay.limit_menu)
+        relay._follow_limit(phrase[cut:])
+        self.assertTrue(relay.limit_menu)
+
+    def test_the_words_of_a_real_chats_stripped_screens_are_read_as_the_limit_and_ordinary_ones_are_not(self):
+        # the lines of .dfs/runs/chat/project.log and W68.log as `chatlog.screen_text` left them
+        said = ["\u26a0Usagelimitreached \u00b7limitresets12:50pm\u00b7clau.de/wrap-up",
+                "Youvehityoursessionlimit\u00b7resets5:20pm(UTC)",
+                "You've hit your weekly limit", "Usage limit reached", "Session limit reached", "\u276f /rate-limit-options"]
+        not_said = ["Here is the answer", "You've used 99% of your session limit \u00b7 resets 2am (UTC)",
+                    "-Limit:Theprocessthattookthelockmayalreadybegonebythetimethelististaken"]
+        for text in said:
+            self.assertTrue(ptyrelay.Relay._says_limit(text.encode()), text)
+        for text in not_said:
+            self.assertFalse(ptyrelay.Relay._says_limit(text.encode()), text)
+
     def test_a_message_that_holds_limit_words_is_not_taken_as_the_agent_saying_it_is_still_at_the_limit(self):
         relay = self.relay_with(ECHO="1")
         self.send_and_wait(relay, "did you hit your usage limit")
         self.assertTrue(until(lambda: relay.limit is None, 8), relay.limit)
+
+    def test_a_message_that_holds_limit_words_is_not_the_agents_answer_where_its_echo_wraps(self):
+        message = "did you hit your usage limit or is the rate limit what it is"
+        drawn = ("\r\n\u276f " + message[:20] + "\r\n  " + message[20:] + "\r\n").encode()     # a wrapped line, indented
+        self.assertTrue(ptyrelay.Relay._says_limit(drawn))
+        self.assertFalse(ptyrelay.Relay._says_limit(drawn, ptyrelay._squash(message)))
 
     def test_another_agent_is_not_read_for_the_menu(self):
         relay = ptyrelay.Relay(agent="codex").start([sys.executable, "-c", LIMIT_MENU], env=self.env)
