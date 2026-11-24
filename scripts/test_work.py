@@ -780,6 +780,13 @@ class Parallel(Ticks, unittest.TestCase):
         self.assertEqual(ui.started, [("W7", "2"), ("W8", "3")])
         self.assertEqual([c["item"] for c in ui.work_chains], ["W7", "W8"])
 
+    def test_one_workable_task_among_three_slots_takes_the_whole_budget_as_its_cap(self):
+        ui = self.ui(work_parallel=3, work_budget=8)
+        self.tasks(ui, "W7")
+        self.live(ui, [])
+        ui.work_tick()
+        self.assertEqual(ui.started, [("W7", "8")])
+
     def test_one_slot_is_filled_once_and_the_other_task_waits_for_it(self):
         ui = self.two(work_budget=10)
         self.live(ui, [])
