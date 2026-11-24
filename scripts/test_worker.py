@@ -99,6 +99,12 @@ class Interface(unittest.TestCase):
         self.w.stop()
         self.assertEqual(self.w.work_chains, [])
 
+    def test_fewer_workable_tasks_than_workers_leave_no_budget_held_for_the_idle_ones(self):
+        self.w.world_items = [dict(id="W1", goal="one", status="open", reachable=True)]
+        self.w.reload()
+        self.w.start(8, 4)
+        self.assertEqual(self.w.started_chains, [("W1", "8")])
+
     def test_a_work_with_nothing_workable_pends_and_takes_the_task_that_appears(self):
         self.w.next_item = None
         self.w.world_items = [dict(id="W1", goal="one", status="done", reachable=True)]

@@ -592,7 +592,10 @@ class WorkMixin:
             if self.work_pending:
                 self.work_pending = False
                 self.event("work", "work: %s is workable — resuming" % item)
-            cap = max(1, avail // (free - picks.index(item)))
+            # Shared among the chains this tick starts, not among the free slots: a slot with
+            # no task to work would otherwise hold back budget no chain will ever use, and
+            # one workable task among four workers got a quarter of it.
+            cap = max(1, avail // (len(picks) - picks.index(item)))
             pin = self.work_next == item
             self.work_next = None if pin else self.work_next
             self.work_carry = [c for c in self.work_carry if c != item]
