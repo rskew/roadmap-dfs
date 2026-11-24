@@ -50,6 +50,7 @@
 
 <h1>Which node made an artefact?</h1>
 <p class="lede legend">The task page lists every artefact. Each tile will link to the node that made it. The page has to decide which node that is. Pick a rule to see the answer for one example: node W9.2 made a page and names it, and a later node W9.4 cites the same page.</p>
+<p class="legend"><b>Wrong if</b> a node names a page before the node that made it, or you mean the node of the commit that added the file. Checked on 138 earlier pages: both rules agree on 132. The other 6 were drawn in the commit before the node that asks about them, and Rule A links to that asking node.</p>
 <div class="tabs" role="group" aria-label="Rule">
   <button type="button" id="r1" aria-pressed="true">Rule A: first node whose text names it</button>
   <button type="button" id="r2" aria-pressed="false">Rule B: node of the commit that added the file</button>
