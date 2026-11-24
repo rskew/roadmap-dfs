@@ -1056,7 +1056,7 @@ class Chats:
                 raise ValueError("it is still answering: stop it or wait for it")
             rec = self.record(scope)
             if not rec.get("sid"):
-                raise ValueError("there is no conversation to archive")
+                raise ValueError("there is no conversation to archive: a chat that only has a title is dropped by blanking the title or with New chat")
             w = self.worker()
             if w and w.chat_active(scope):
                 raise ValueError("it is still answering: stop it or wait for it")

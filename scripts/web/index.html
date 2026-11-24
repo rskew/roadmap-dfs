@@ -1196,7 +1196,7 @@ function drawChats() {
   $("#view").className = "col";
   $("#view").innerHTML = `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project" data-fresh="1">Chat about the project</button></div>`
     + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up. Title a chat from its header to find it by its goal.</p>`
-    + (S.chats.length ? `<textarea class="line field" id="chats-find" rows="1" autocomplete="off" enterkeyhint="search" spellcheck="false" aria-label="Find a chat" placeholder="Find a chat by title, item or message">${esc(S.chatFind || "")}</textarea>` : "")
+    + (S.chats.length ? `<textarea class="line field" id="chats-find" rows="1" autocomplete="off" enterkeyhint="search" spellcheck="false" aria-label="Find a chat" placeholder="Find a chat by title, item, goal or message">${esc(S.chatFind || "")}</textarea>` : "")
     + `<div id="chatrows">${list()}</div>`;
 }
 document.addEventListener("keydown", e => { if (e.target.id === "chats-find" && e.key === "Enter" && !imeEnter(e)) { e.preventDefault(); e.target.blur(); } });
