@@ -859,6 +859,7 @@ KEYS = [
     ("tree", "tab", 9, "list", "back to the item list"),
     ("runs", "⏎", 10, "read", "read this run"),
     ("chats", "⏎", 10, "chat-open", "open this chat (as c does); ctrl-] comes back and leaves it running"),
+    ("chats", "N", ord("N"), "chat-title", "name the chat under the cursor, so it is found by its goal: the title leads its row, `/` searches it and the web page shows it; empty takes it off"),
     ("agentlog", "G", ord("G"), "follow", "to the end, and follow it while it grows"),
     ("agentlog", "M", ord("M"), "message", "send the running session a message: it reads it at its next tool call"),
     ("artefact", "⏎", 10, "browse", "open this artefact in a browser"),
@@ -3114,7 +3115,7 @@ class UI(WorkMixin):
         self.chat_sel = max(0, min(self.chat_sel, len(rows) - 1))
         archived = sum(1 for c in rows if c["ended"])
         out.append(("chats — %d in progress, %d archived" % (len(rows) - archived, archived), curses.A_BOLD))
-        out.append(("  enter opens one (an archived one resumes) · E archives it · ↑↓/jk moves · esc back", look("chrome")))
+        out.append(("  enter opens one (an archived one resumes) · N names it · E archives it · ↑↓/jk moves · esc back", look("chrome")))
         out.append(("", 0))
         self._sel_row = None
         if not rows:
@@ -3140,6 +3141,8 @@ class UI(WorkMixin):
             who = {"you": "you: ", "agent": "", "error": "error: "}.get(c["role"], "")
             room = max(8, width - len(head) - 1)
             last = " ".join((who + c["last"]).split())
+            if c.get("title"):      # the title leads, so a chat is found by its goal; the last message follows it
+                last = "[%s] %s" % (c["title"], last)
             out.append((head + (last if len(last) <= room else last[:room - 1] + "…"),
                         curses.A_REVERSE if sel else attr))
         return out
@@ -3147,6 +3150,29 @@ class UI(WorkMixin):
     def open_chats(self):
         self.chat_rows(fresh=True)
         self.pane = "chats"
+
+    def title_chat_row(self):
+        """What `N` does in the chats pane: name the chat under the cursor (`Chats.set_title`), so the list reads by
+        what each is for and `/` finds one by it. An empty line takes the title off; Esc leaves it."""
+        import chat as dfs_chat
+        rows = self.chat_rows()
+        if not rows:
+            self.msg = "no chat to name"
+            return
+        row = rows[max(0, min(self.chat_sel, len(rows) - 1))]
+        label = "title for the %s chat (%d characters at most; empty takes it off) [%s]:" % (
+            row["scope"], dfs_chat.MAX_TITLE, row.get("title") or "none")
+        got = self.answers.pop(0) if self.answers else self.read_line(label)
+        if got is None:
+            self.msg = "chat title kept"
+            return
+        try:
+            st = dfs_chat.Chats(worker=lambda: UiWorker(self)).set_title(row["scope"], got)
+        except ValueError as e:
+            self.msg = str(e)
+            return
+        self.msg = "%s chat titled: %s" % (row["scope"], st["title"]) if st["title"] else "%s chat title taken off" % row["scope"]
+        self.chat_rows(fresh=True)
 
     def end_chat_row(self):
         """What `E` does in the chats pane: archive the chat under the cursor."""
@@ -3914,7 +3940,7 @@ class UI(WorkMixin):
                      for r in self.runs], self.run_sel,
                     lambda i: setattr(self, "run_sel", i))
         if self.pane == "chats":
-            return (["%s %s %s" % (c["scope"], c["agent"], c["last"]) for c in self.chat_rows()],
+            return (["%s %s %s %s" % (c["scope"], c["agent"], c.get("title", ""), c["last"]) for c in self.chat_rows()],
                     self.chat_sel, lambda i: setattr(self, "chat_sel", i))
         if self.pane == "artefact":
             return ([a["name"] for a in self.artefacts()], self.art_sel,
@@ -4255,7 +4281,7 @@ class UI(WorkMixin):
         elif self.pane == "runs":
             actions, nav = ["⏎ open", "esc back"], ["↑↓/jk run"]
         elif self.pane == "chats":
-            actions, nav = ["⏎ open", "E archive", "esc back"], ["↑↓/jk chat"]
+            actions, nav = ["⏎ open", "N name", "E archive", "esc back"], ["↑↓/jk chat"]
         elif self.tree_focused():
             actions = ["⏎ open", "n next ⚑", "p flagged", "space fold", "i add", "a answer"]
             row = self.tree_row()
@@ -5466,6 +5492,8 @@ class UI(WorkMixin):
             self.open_chat(item)
         elif ch == ord("C"):
             self.open_chat("project")
+        elif ch == ord("N") and self.pane == "chats":
+            self.title_chat_row()
         elif ch == ord("E"):
             # Capital, and it asks, like `K`: it stops the chat's agent. The conversation stays.
             if self.pane == "chats":

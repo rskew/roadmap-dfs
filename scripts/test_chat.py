@@ -443,6 +443,34 @@ class Chat(unittest.TestCase):
         self.assertTrue(self.chats.path("W1").exists(), "the session id is kept under the run root, not in the roadmap")
         self.assertEqual(list(self.chats.path("W1").parts[-3:-1]), ["runs", "chat"])
 
+    def test_a_chat_can_be_titled_and_the_title_is_listed_and_kept(self):
+        self.assertEqual(self.chats.state("W1")["title"], "")
+        st = self.chats.set_title("W1", "  Plan the\n  rollout  ")
+        self.assertEqual(st["title"], "Plan the rollout", "one line, trimmed")
+        self.assertEqual([(c["scope"], c["title"], c["count"]) for c in self.chats.list()], [("W1", "Plan the rollout", 0)],
+                         "a chat named before it began is listed")
+        self.chats.save_sid("W1", "s-1", "claude")
+        self.assertEqual(self.chats.title("W1"), "Plan the rollout", "the session id being saved keeps it")
+        self.chats.send("W1", "Where is the work?")
+        self.settle("W1")
+        self.assertEqual(self.chats.list()[0]["title"], "Plan the rollout")
+        self.assertEqual(self.chats.end("W1")["title"], "Plan the rollout", "archiving keeps it")
+        self.assertEqual(self.chats.list()[0]["title"], "Plan the rollout")
+        self.assertEqual(self.chats.set_title("W1", "  ")["title"], "", "blank takes it off")
+        self.chats.set_title("W1", "again")
+        self.assertEqual(self.chats.clear("W1")["title"], "", "a new chat has a new aim: the title goes with the record")
+        self.assertEqual(self.chats.list(), [])
+
+    def test_a_title_that_is_too_long_or_for_no_chat_is_refused(self):
+        with self.assertRaises(ValueError):
+            self.chats.set_title("W1", "x" * (dfs_chat.MAX_TITLE + 1))
+        self.chats.set_title("W1", "x" * dfs_chat.MAX_TITLE)
+        with self.assertRaises(ValueError):
+            self.chats.set_title("W9", "nope")
+        with self.assertRaises(ValueError):
+            self.chats.set_title("W1", 5)
+        self.assertEqual(self.chats.title("W1"), "x" * dfs_chat.MAX_TITLE)
+
     def test_it_has_full_permissions_like_the_screens_chat(self):
         self.chats.send("W1", "hello")
         self.settle("W1")

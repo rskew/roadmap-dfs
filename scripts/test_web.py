@@ -280,6 +280,23 @@ class Web(unittest.TestCase):
                 else:
                     os.environ[k] = v
 
+    def test_a_chat_is_titled_through_the_page_and_the_title_is_off_with_the_work(self):
+        saved = dfs_web.CHAT["chats"]
+        dfs_web.CHAT["chats"] = None
+        try:
+            status, st, _ = self.call("POST", "/api/chat/title", dict(scope="W1", title=" Where are we "))
+            self.assertEqual((status, st["title"]), (200, "Where are we"))
+            self.assertEqual(self.call("GET", "/api/chat/W1")[1]["title"], "Where are we")
+            self.assertEqual([c["title"] for c in self.call("GET", "/api/chats")[1]["chats"]], ["Where are we"])
+            self.assertEqual(self.call("POST", "/api/chat/title", dict(scope="W9", title="x"))[0], 409)
+            self.assertEqual(self.call("POST", "/api/chat/title", dict(scope="W1", title="x" * 81))[0], 409)
+            self.assertEqual(self.call("POST", "/api/chat/title", dict(scope="W1", title=""))[1]["title"], "")
+            dfs_web.WORK["enabled"] = False
+            self.assertEqual(self.call("POST", "/api/chat/title", dict(scope="W1", title="x"))[0], 403)
+        finally:
+            dfs_web.WORK["enabled"] = True
+            dfs_web.CHAT["chats"] = saved
+
     def test_chat_goes_through_the_page_and_is_off_with_the_work(self):
         import stat
         import time as _t
