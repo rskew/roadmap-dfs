@@ -1068,6 +1068,8 @@ def chat_act(name, body=None, scope=None):
             return chats().end(need(body, "scope", "a scope"))
         if name == "chat/clear":
             return chats().clear(need(body, "scope", "a scope"))
+        if name == "chat/title":
+            return chats().set_title(need(body, "scope", "a scope"), body.get("title", ""))
         if name == "chat":
             return chats().state(scope)
         if name == "chats":

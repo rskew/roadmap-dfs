@@ -120,6 +120,7 @@ def run_turn(argv, message, cwd, env, on_start=None):
 # `chat/<scope>`, so scope `a.json` would name the file of scope `a`.
 SCOPE = re.compile(r"^(?!.*\.(?:json|log)$)[A-Za-z0-9][A-Za-z0-9._@-]*$")
 MAX_MESSAGE = 4000
+MAX_TITLE = 80      # characters: a chat's title is a line to find it by, not a message
 ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is closed does not undo the end
                     # (so a message answered within this long of the end leaves the chat ended too)
 TURN_GRACE = 5              # seconds an agent asked to stop has before it is killed
@@ -579,11 +580,44 @@ class Chats:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".tmp")
         rec = dict(sid=sid, agent=agent)
-        for kept in ("ended", "backend"):       # ending a chat, and the limit its backend is under, are kept when its session id is rewritten
+        for kept in ("ended", "backend", "title"):       # ending a chat, the limit its backend is under, and its title are kept when its session id is rewritten
             if kept in self.record(scope):
                 rec[kept] = self.record(scope)[kept]
         tmp.write_text(json.dumps(rec))
         os.replace(tmp, p)
+
+    def title(self, scope):
+        """The title the author gave this chat, or "" if it has none."""
+        t = self.record(scope).get("title")
+        return t if isinstance(t, str) else ""
+
+    def set_title(self, scope, text):
+        """Name this chat, so the Chats list can be read, and searched, by what each is for. The text is one
+        line of at most MAX_TITLE characters; blank takes the title off. A chat that has not begun can be named
+        too (its record then has the title alone). "New chat" (`clear`) deletes the record, and so the title:
+        a new conversation has a new aim."""
+        self.check(scope)
+        title = " ".join((text or "").split()) if isinstance(text, str) or text is None else None
+        if title is None:
+            raise ValueError("a title is text")
+        if len(title) > MAX_TITLE:
+            raise ValueError("a title is %d characters or fewer" % MAX_TITLE)
+        with self.lock:
+            rec = self.record(scope)
+            if title:
+                rec["title"] = title
+            elif "title" in rec:
+                del rec["title"]
+            else:
+                return self.state(scope)
+            p = self.path(scope)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(rec))
+            os.replace(tmp, p)
+            chatlog.log(scope, "chat titled: %s" % (title or "(none)"))
+        self.on_change()
+        return self.state(scope)
 
     def backend(self, scope):
         """What the agent behind this chat last said about itself, as a fact apart from the messages: a usage
@@ -664,7 +698,7 @@ class Chats:
             hit = live and getattr(w, "chat_limit", lambda s: None)(scope)       # the screen's chat sits at its limit menu: a fact about the agent, which no turn of ours reported
             if hit and not backend:
                 backend = dict(hit, agent=agent)
-            return dict(scope=scope, messages=messages, busy=bool(started) or talking,
+            return dict(scope=scope, title=self.title(scope), messages=messages, busy=bool(started) or talking,
                         ended=self.is_ended(scope, live, bool(started) or talking or elsewhere),
                         busy_for=int(time.time() - started) if started else 0,
                         screen=bool(w and w.has_screen), live=live,
@@ -999,13 +1033,14 @@ class Chats:
             messages = [m for m in transcript_messages(sid, agent) if m["role"] != "prompt"]   # the conversation, not what opened it
             live = bool(w and w.chat_live(scope))
             busy = scope in self.busy or bool(live and w.chat_active(scope))
-            if not messages and not live and not busy:
+            title = self.title(scope)
+            if not messages and not live and not busy and not title:     # a chat named before it began is kept in the list
                 continue
             marked = isinstance(self.record(scope).get("ended"), (int, float))
             elsewhere = marked and not live and not busy and bool(sid) and running_elsewhere(sid, agent=agent)
             last = messages[-1] if messages else dict(role="", text="")
             updated = transcript_mtime(sid, agent) or p.stat().st_mtime
-            out.append(dict(scope=scope, count=len(messages), role=last["role"], last=last["text"][:160],
+            out.append(dict(scope=scope, title=title, count=len(messages), role=last["role"], last=last["text"][:160],
                             updated=updated, live=live, busy=busy, agent=agent, backend=self.backend(scope),
                             ended=self.is_ended(scope, live, busy or elsewhere)))
         return sorted(out, key=lambda c: -c["updated"])
