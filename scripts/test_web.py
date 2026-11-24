@@ -634,9 +634,14 @@ class Web(unittest.TestCase):
         f.write_text(text)
         dfs_tree.append_log("W1", "raise", ("W1.3",), "Which?\nAnswer with: .dfs/artefacts/bb.html")
         dfs_tree.append_log("W1", "answer", (), "See ![x](.dfs/artefacts/cc.png)")
+        want = {"aa.html": "W1.2", "bb.html": "W1.3", "cc.png": "", "dd.png": "W1.3"}
         arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
-        self.assertEqual({a["file"]: a["node"] for a in arts},
-                         {"aa.html": "W1.2", "bb.html": "W1.3", "cc.png": "", "dd.png": "W1.3"})
+        self.assertEqual({a["file"]: a["node"] for a in arts}, want)
+        # answering the raise takes it off the row, but the page it named is still the node's
+        raise_ts = next(e["ts"] for e in dfs_tree.load("W1")["log"] if e["kind"] == "raise" and "bb.html" in e["body"])
+        dfs_tree.append_log("W1", "answer", (raise_ts,), "Take the first.")
+        arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
+        self.assertEqual({a["file"]: a["node"] for a in arts}, want)
 
     def test_a_done_tasks_summary_screenshot_is_one_of_its_artefacts_and_in_its_summary_row(self):
         """The item shows the change: the Summary section carries the embed, and the image is listed."""
