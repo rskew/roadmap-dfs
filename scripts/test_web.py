@@ -637,9 +637,12 @@ class Web(unittest.TestCase):
         want = {"aa.html": "W1.2", "bb.html": "W1.3", "cc.png": "", "dd.png": "W1.3"}
         arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
         self.assertEqual({a["file"]: a["node"] for a in arts}, want)
-        # answering the raise takes it off the row, but the page it named is still the node's
+        # answering the raise takes it off the row, but the page it named is still the node's;
+        # a page only the answer names (the card shows the answer) is no node's
+        self.put_artefact("ee.html", "Only the answer names it")
+        want["ee.html"] = ""
         raise_ts = next(e["ts"] for e in dfs_tree.load("W1")["log"] if e["kind"] == "raise" and "bb.html" in e["body"])
-        dfs_tree.append_log("W1", "answer", (raise_ts,), "Take the first.")
+        dfs_tree.append_log("W1", "answer", (raise_ts,), "Take the first. See ee.html")
         arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
         self.assertEqual({a["file"]: a["node"] for a in arts}, want)
 

@@ -412,14 +412,14 @@ def artefacts_for(text, nodes=()):
     return [entry(n) for n in named]
 
 
-def made_by(rows, raised=None):
-    """Each live node of a task page's `rows`, in tree order, with all the prose it holds: its own
-    fields, its card and its raises. `raised` maps a node id to the bodies of every raise on it,
-    answered or not, since a row holds only the open ones. The log at large and an answer's own
-    text never count."""
-    raised = raised or {}
-    return [(r["id"], "\n".join(strings([r["approach"], r["card"], r["raises"], r["page"],
-                                         raised.get(r["id"], [])])))
+def made_by(t, rows, raised=None):
+    """Each live node of a task page's `rows`, in tree order, with the prose it holds: its own
+    fields (Approach, Hypothesis, Evidence, Determination) and the bodies of every raise on it.
+    `raised` maps a node id to those bodies, answered or not, since a row holds only the open
+    ones. Not the card, which also carries the status line, the commit subjects and the
+    author's answers, and not the log at large: only what the node itself says."""
+    nodes, raised = dfs_tree.by_id(t), raised or {}
+    return [(r["id"], "\n".join(strings([nodes[r["id"]]["fields"], raised.get(r["id"], [])])))
             for r in rows if r["kind"] == "node" and r["status"] != "pruned"]
 
 
@@ -489,7 +489,7 @@ def task_json(task, include_archived=False):
                             evidence=evidence_lines(nodes[nid], held.get(nid, ()))))
     return dict(id=task, goal=t["name"] or (t["goal"].splitlines() or [""])[0],
                 name=t["name"], goal_text=t["goal"], runs=runs_for(task),
-                artefacts=artefacts_for("\n".join(strings(t)), made_by(rows, raised_on(t))),
+                artefacts=artefacts_for("\n".join(strings(t)), made_by(t, rows, raised_on(t))),
                 status=status, why=humanize(why), accepted=accepted,
                 acceptable=dfs_tree.acceptable(t), rows=rows, assumed=assumed,
                 notes=[dict(kind=g["kind"], heading=dfs_tui.note_heading(g),
