@@ -1109,11 +1109,50 @@ class TheChatsMenu(unittest.TestCase):
         ui.live = lambda mode="work": []
         ui.work_on = False
         self.assertIn("E archive", ui.footer(200))
+        self.assertIn("N name", ui.footer(200))
+
+    def test_a_titled_chat_shows_its_title_before_its_last_message_and_slash_finds_it_by_it(self):
+        ui = self.screen([a_chat("W1", title="Find the flaky test", last="apple"), a_chat("W2", last="pear")], pane="chats")
+        rows = [t for t, _ in ui.lines_chats(100)]
+        self.assertTrue(any(" W1 " in t and "[Find the flaky test] apple" in t for t in rows))
+        self.assertFalse(any(" W2 " in t and "[" in t for t in rows), "a chat with no title has no brackets")
+        found, _, _ = ui.search_space()
+        self.assertIn("flaky", found[0])
+
+    def test_n_names_the_chat_under_the_cursor_and_an_empty_line_takes_the_name_off(self):
+        import chat as dfs_chat
+        ui = self.screen([a_chat("W1"), a_chat("W2")], pane="chats")
+        set_to = []
+        with mock.patch.object(dfs_chat.Chats, "set_title", lambda self, scope, text: (set_to.append((scope, text)), dict(title=text))[1]):
+            ui.chat_sel = 1
+            ui.answers = ["Plan the rollout"]
+            ui.act(ord("N"))
+            self.assertEqual(set_to, [("W2", "Plan the rollout")])
+            self.assertIn("W2 chat titled: Plan the rollout", ui.msg)
+            ui.answers = [""]
+            ui.act(ord("N"))
+            self.assertEqual(set_to[-1], ("W2", ""))
+            self.assertIn("title taken off", ui.msg)
+
+    def test_n_says_why_a_title_is_refused_and_does_nothing_with_no_chats(self):
+        import chat as dfs_chat
+        ui = self.screen([a_chat("W1")], pane="chats")
+
+        def refuse(self, scope, text):
+            raise ValueError("a title is 80 characters or fewer")
+        with mock.patch.object(dfs_chat.Chats, "set_title", refuse):
+            ui.answers = ["x" * 90]
+            ui.act(ord("N"))
+        self.assertEqual(ui.msg, "a title is 80 characters or fewer")
+        empty = self.screen([], pane="chats")
+        empty.act(ord("N"))
+        self.assertEqual(empty.msg, "no chat to name")
 
     def test_the_chats_key_is_listed_under_where_it_applies(self):
         names = {k[3]: k[0] for k in TUI.KEYS}
         self.assertEqual(names["chats"], "panes")
         self.assertEqual(names["chat-open"], "chats")
+        self.assertEqual(names["chat-title"], "chats")
         ui = self.screen([a_chat("W1")], keys_from=("chats", "list"))
         self.assertEqual(ui.key_rows()[0][0], "chats")
 
