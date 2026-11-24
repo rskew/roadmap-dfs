@@ -519,6 +519,47 @@ const FLOWS = {
     same(errors, [], "no page errors");
   },
 
+  // A chat can be given a title, in its header: it is saved when Enter is pressed, drawn in the list of chats, and the list
+  // can be filtered by it, so a chat is found by what it is for.
+  async chat_title(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 640 }, hasTouch: true });
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: "W81.10 is open." }], title: "", busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "claude" };
+    const posted = [];
+    await page.route("**/api/chat/**", r => {
+      if (r.request().method() === "POST" && r.request().url().endsWith("/api/chat/title")) { const t = JSON.parse(r.request().postData()).title; posted.push(t); state.title = t; }
+      r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    const chats = () => [
+      { scope: "W9", title: state.title, count: 2, role: "agent", last: "W81.10 is open.", updated: Date.now() / 1000, live: false, busy: false, agent: "claude", ended: false },
+      { scope: "project", title: "", count: 1, role: "agent", last: "Nothing else is open.", updated: Date.now() / 1000 - 60, live: false, busy: false, agent: "claude", ended: false }];
+    await page.route("**/api/chats", r => r.fulfill({ contentType: "application/json", body: JSON.stringify({ chats: chats() }) }));
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    same(await page.$eval("#chat-titlebox", e => e.value), "", "a chat with no title has an empty box");
+    await page.click("#chat-titlebox");
+    await page.keyboard.type("  Find the flaky   test  ");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => /Title saved/.test(document.body.textContent));
+    same(posted, ["Find the flaky test"], "Enter saves the title, as one trimmed line");
+    same(await page.$eval("#chat-titlebox", e => e.value), "Find the flaky test", "the box shows the saved title");
+    if (process.env.DFS_SHOT) await page.screenshot({ path: process.env.DFS_SHOT });
+    await page.click("#chat-titlebox"); await page.click("#chat-log");
+    same(posted.length, 1, "leaving the box with nothing changed saves nothing");
+    await page.click("[data-act=chatclose]");
+    await page.evaluate(() => { location.hash = "#/chats"; });
+    await page.waitForSelector(".chatrow");
+    same(await page.$eval(".chatrow .ctitle", e => e.textContent), "Find the flaky test", "the list of chats leads its row with the title");
+    same(await page.$$eval(".chatrow", e => e.length), 2, "both chats show with no filter");
+    await page.click("#chats-find"); await page.keyboard.type("flaky");
+    same(await page.$$eval(".chatrow", e => e.length), 1, "the filter keeps the chat whose title holds the words");
+    same(await page.evaluate(() => document.activeElement.id), "chats-find", "the box keeps the keyboard while the rows redraw");
+    await page.keyboard.type(" nonesuch");
+    same(await page.$$eval(".chatrow", e => e.length), 0, "a word no chat holds leaves none");
+    assert((await page.textContent("#chatrows")).includes("No chat matches"), "and says so");
+    same(errors, [], "no page errors");
+  },
+
   // Each chat message has a Copy button that puts that message's own text on the clipboard: an agent's reply as the markdown
   // it wrote, not as drawn. Where the page has no `navigator.clipboard` (plain http on a LAN) a selected box and execCommand do it.
   async chat_copy(b) {

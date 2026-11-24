@@ -363,6 +363,12 @@ a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max
 #chat[open] { display: flex; }
 .chat-top { flex: none; display: flex; align-items: center; justify-content: center; min-height: calc(48px * var(--z)); padding: 0 var(--s4); border-bottom: var(--rule) solid var(--line); }
 .chat-top .tag { margin-left: var(--s2); }
+/* the chat's title: one wrapped line under the header, saved when Enter is pressed or the box is left */
+#chat-titleform { flex: none; margin: 0; padding: var(--s2) var(--s4); border-bottom: var(--rule) solid var(--line); }
+#chat-titlebox { font-weight: 600; }
+/* the Chats list: a chat's title leads its row; the filter narrows the rows by title, item, goal or last message */
+.ctitle { display: block; font-weight: 600; overflow-wrap: anywhere; }
+#chats-find { margin-bottom: var(--s3); }
 .chat-nav { grid-template-columns: repeat(5, 1fr); padding-bottom: env(safe-area-inset-bottom, 0px); }
 .chat-nav button[data-act=chatclose] { font-weight: 700; }
 /* five buttons share a 320px bar (64px each): less tracking and padding so "New chat" stays on one line */
@@ -481,6 +487,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 <dialog id="form"></dialog>
 <dialog id="chat" aria-label="Chat">
   <div class="chat-top"><span class="cap" id="chat-title"></span><span class="tag" id="chat-agent" hidden></span></div>
+  <form id="chat-titleform"><textarea class="line" id="chat-titlebox" rows="1" maxlength="80" autocomplete="off" enterkeyhint="done" spellcheck="false" aria-label="Chat title" placeholder="Title this chat, to find it by its goal"></textarea></form>
   <div id="chat-log" role="log" aria-live="polite"></div>
   <p id="chat-backend" class="msg error" role="status" hidden></p>
   <p id="chat-lost" class="msg error" role="status" hidden></p>
@@ -1170,17 +1177,32 @@ function drawChats() {
   // button's own id cell is left empty; the project chat is about no item and has no link.
   const row = c => `<div class="crow">${c.scope === "project" ? "" : `<a class="chatitem" href="#/t/${encodeURIComponent(c.scope)}" aria-label="Open ${esc(c.scope)}" title="Open ${esc(c.scope)}">${iidHtml(c.scope)}</a>`}<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
       <span class="iid">${c.scope === "project" ? "All" : ""}</span>
-      <span>${tagHtml(c.scope)}<span class="goal">${esc(goal(c.scope))}</span>
+      <span>${tagHtml(c.scope)}${c.title ? `<span class="ctitle">${esc(c.title)}</span>` : ""}<span class="goal">${esc(goal(c.scope))}</span>
         <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}${c.ended ? `<span class="tag">archived</span>` : ""}<span class="tag">${esc(c.agent)}</span><span class="muted">${esc(ago(c.updated))}</span></span>
         ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button></div>`;
-  const going = S.chats.filter(c => !c.ended), ended = S.chats.filter(c => c.ended);
-  const rows = going.map(row).join("");
+  // The filter keeps the chats whose title, item, goal or last message holds every word typed, so a chat is found by what it is for.
+  const list = () => {
+    const words = (S.chatFind || "").toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = c => { const hay = [c.title, c.scope === "project" ? "project" : c.scope, goal(c.scope), c.last].join(" ").toLowerCase(); return words.every(w => hay.includes(w)); };
+    const found = S.chats.filter(shown), going = found.filter(c => !c.ended), ended = found.filter(c => c.ended);
+    const none = S.chats.length ? (found.length ? "Nothing in progress." : "No chat matches.") : "No conversations yet.";
+    return (going.length ? going.map(row).join("") : `<p class="hint">${none}</p>`)
+      + (ended.length ? `<details class="endedchats"${S.endedOpen ? " open" : ""}><summary>Archived (${ended.length})</summary>${ended.map(row).join("")}</details>` : "");
+  };
+  S.chatList = list;
   $("#view").className = "col";
   $("#view").innerHTML = `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project" data-fresh="1">Chat about the project</button></div>`
-    + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up.</p>`
-    + (rows || `<p class="hint">${ended.length ? "Nothing in progress." : "No conversations yet."}</p>`)
-    + (ended.length ? `<details class="endedchats"${S.endedOpen ? " open" : ""}><summary>Archived (${ended.length})</summary>${ended.map(row).join("")}</details>` : "");
+    + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up. Title a chat from its header to find it by its goal.</p>`
+    + (S.chats.length ? `<textarea class="line field" id="chats-find" rows="1" autocomplete="off" enterkeyhint="search" spellcheck="false" aria-label="Find a chat" placeholder="Find a chat by title, item or message">${esc(S.chatFind || "")}</textarea>` : "")
+    + `<div id="chatrows">${list()}</div>`;
 }
+document.addEventListener("keydown", e => { if (e.target.id === "chats-find" && e.key === "Enter" && !imeEnter(e)) { e.preventDefault(); e.target.blur(); } });
+// Typing in the filter redraws the rows and not the box, so the caret and the keyboard stay where they are.
+document.addEventListener("input", e => {
+  if (e.target.id !== "chats-find" || !S.chatList || !$("#chatrows")) return;
+  S.chatFind = e.target.value.replace(/\s*\n\s*/g, " ");
+  $("#chatrows").innerHTML = S.chatList();
+});
 // Which task a chain is running on, and which the work takes next: the same two tags on the list row and on the task's own screen.
 const workTags = it => (it.running ? `<span class="tag settled">running ${esc(it.running)}</span>` : "") + (it.next ? `<span class="tag settled">next</span>` : "");
 // The task screen has no list row, so it reads the same two facts from the work it fetches beside the task.
@@ -1848,6 +1870,8 @@ function chatButtons(st) {
 const CHAT_PICTURE = /!\[([^\]\n]*)\]\(\.dfs\/artefacts\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.(?:png|jpg|gif|webp))\)/g;
 const chatText = text => esc(text).replace(CHAT_PICTURE, (m, alt, file) => `<a class="chatimg" href="artefacts/${file}" target="_blank" rel="noopener"><img src="artefacts/${file}" alt="${alt}" loading="lazy"></a>`);
 function chatDraw(st) {
+  // The title is read before the early return below: it changes with nothing else in the state. A box being typed in is left alone.
+  if (typeof st.title === "string") { CHAT.title = st.title; if (document.activeElement !== $("#chat-titlebox")) { $("#chat-titlebox").value = st.title; chatTitleGrow(); } }
   // 80px of slack: a reader near the end is carried along by a new message; Top (below) is exact, 4px
   const log = $("#chat-log"), atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const who = { prompt: "Prompt", you: "You", agent: "Agent", error: "Not answered" };
@@ -1980,11 +2004,26 @@ function chatOpen(scope, fresh) {
   CHAT.scope = scope; CHAT.last = ""; CHAT.fresh = true; chatLost(false); RECALL.sent = []; recallEnd();
   $("#chat-title").textContent = "Chat · " + (scope === "project" ? PROJECT : scope);
   $("#chat-log").innerHTML = ""; $("#chat-input").value = chatDraft(scope); $("#chat-agent").hidden = true;
+  CHAT.title = ""; $("#chat-titlebox").value = ""; chatTitleGrow();
   // The last chat's buttons are not this one's: Send waits for the first draw, which says whether a turn is running.
   $("#chat-stop").hidden = true; $("#chat-send").hidden = false; $("#chat-send").disabled = true;
   $("#chat").showModal(); chatGrow(); $("#chat-input").focus();
   chatBegin(scope, fresh);
 }
+// A title that wraps shows whole: the box is as tall as its text (the same rule the page's other one-line boxes follow).
+function chatTitleGrow() { const el = $("#chat-titlebox"); if (!el.offsetHeight) return; el.style.height = "auto"; el.style.height = el.scrollHeight + el.offsetHeight - el.clientHeight + "px"; }
+// The title is saved when Enter is pressed or the box is left, and only if it changed; an empty box takes it off.
+async function chatTitleSave() {
+  const box = $("#chat-titlebox"), scope = CHAT.scope, title = box.value.replace(/\s+/g, " ").trim();
+  box.value = title;
+  if (!scope || title === (CHAT.title || "")) return;
+  try { const st = await api("/api/chat/title", { scope, title }); if (scope === CHAT.scope) { CHAT.title = st.title; box.value = st.title; } toast(st.title ? "Title saved." : "Title removed."); }
+  catch (e) { toast(e.message, true); if (scope === CHAT.scope) box.value = CHAT.title || ""; }
+}
+$("#chat-titlebox").addEventListener("keydown", ev => { if (ev.key === "Enter" && !imeEnter(ev)) { ev.preventDefault(); ev.target.blur(); } });
+$("#chat-titlebox").addEventListener("input", chatTitleGrow);
+$("#chat-titlebox").addEventListener("change", chatTitleSave);
+$("#chat-titleform").addEventListener("submit", ev => ev.preventDefault());
 $("#chat-form").addEventListener("submit", async ev => {
   ev.preventDefault();
   const input = $("#chat-input"), message = input.value.trim();
