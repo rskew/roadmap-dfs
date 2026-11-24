@@ -787,6 +787,21 @@ class Parallel(Ticks, unittest.TestCase):
         ui.work_tick()
         self.assertEqual(ui.started, [("W7", "8")])
 
+    def test_a_task_that_appears_beside_a_lone_chain_holding_the_whole_budget_waits_for_it(self):
+        # The trade a lone chain's full cap makes: its cap reserves all that is left, so a task
+        # that becomes workable on a free worker starts only once the chain ends and frees budget.
+        ui = self.ui(work_parallel=3, work_budget=8)
+        ui.event = lambda kind, text: text
+        self.tasks(ui, "W7")
+        self.live(ui, [])
+        ui.work_tick()
+        self.assertEqual(ui.started, [("W7", "8")])
+        self.tasks(ui, "W7", "W8")
+        self.live(ui, [self.chain(dir="/runs/new", item="W7", live=True)])
+        ui.work_tick()
+        self.assertEqual(ui.started, [("W7", "8")], "the live chain holds all 8: W8 waits")
+        self.assertTrue(ui.work_on, "reserved is not spent: the work stays on and takes W8 later")
+
     def test_one_slot_is_filled_once_and_the_other_task_waits_for_it(self):
         ui = self.two(work_budget=10)
         self.live(ui, [])
