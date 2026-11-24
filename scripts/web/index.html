@@ -285,6 +285,8 @@ dl.keys kbd { font: inherit; font-weight: 600; white-space: pre; }
 .head p { margin: 2px 0 0; font-size: var(--fs-small); }
 details.sec.arts .body, details.sec.runs .body { white-space: normal; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--z)), 1fr)); gap: var(--s3); margin-bottom: var(--s3); }
+/* A tile and the node link under it: a grid item may shrink below its content, so a long file name wraps and does not widen the column. */
+.tilebox { min-width: 0; }
 a.tile { display: block; color: inherit; text-decoration: none; }
 a.tile .thumb { display: block; position: relative; aspect-ratio: 3 / 2; overflow: hidden; border: var(--rule) solid var(--line); background: var(--faint); }
 a.tile .thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top left; }
@@ -293,6 +295,8 @@ a.tile .thumb.file { display: flex; align-items: center; justify-content: center
 #form .attach .hint { color: var(--muted); }
 a.tile .thumb iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; pointer-events: none; background: #fff; }
 a.tile .name { display: block; margin-top: var(--s1); font-size: var(--fs-small); overflow-wrap: anywhere; }
+/* The node that made the artefact: a link of its own, beside the tile (a link cannot sit inside a link). */
+a.from { display: block; margin-top: var(--s1); padding: var(--s1) 0; min-height: calc(32px * var(--z)); box-sizing: border-box; font-size: var(--fs-small); color: var(--muted); }
 a.shot { display: block; margin: var(--s2) 0; } a.shot img { display: block; max-width: 100%; height: auto; border: var(--rule) solid var(--line); }
 
 /* the tree: a column of hairlines; the left rule says what the node came to. --i is the row's indent in half
@@ -1621,8 +1625,10 @@ function artefactsHtml(t) {
     : `<a class="tile" href="${artHref(a.file)}"><span class="thumb">${a.kind === "image"
     ? `<img src="${href(a)}" alt="" loading="lazy">`
     : `<iframe src="${href(a)}" title="${esc(a.title)}" tabindex="-1" loading="lazy" scrolling="no" width="${THUMB_W}" height="${THUMB_W * 2 / 3}"></iframe>`}</span><span class="name">${esc(a.title)}</span></a>`;
+  // Under each tile, a link to the node that made it (the first to name it), which opens that node's card.
+  const from = a => a.node ? `<a class="from" href="#/t/${encodeURIComponent(t.id)}/${encodeURIComponent(a.node)}">from ${esc(a.node)}</a>` : "";
   return `<details class="sec arts" open><summary class="cap">Artefacts ${arts.length}</summary><div class="body">
-    <div class="tiles">${arts.map(card).join("")}</div></div></details>`;
+    <div class="tiles">${arts.map(a => `<div class="tilebox">${card(a)}${from(a)}</div>`).join("")}</div></div></details>`;
 }
 function raiseCard(r, where) {
   return `<div class="raise"><h4>Raise${where ? " " + esc(where) : ""}, ${esc(r.age)}, needs you${answerPage(r) ? ` <span class="tag page">answer page</span>` : ""}</h4>

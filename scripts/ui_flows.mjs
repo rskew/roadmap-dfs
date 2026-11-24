@@ -2734,6 +2734,8 @@ await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg.agent
     const { ctx, page, errors } = await open(b, PHONE);
     await task(page, "W9");
     assert((await page.textContent(".arts")).includes("Where the fsync lands"), "the task lists it");
+    same(await page.getAttribute(".arts a.from", "href"), "#/t/W9/W9.3", "its tile links to the node whose raise names it");
+    assert((await page.textContent(".arts a.from")).includes("W9.3"), "and says which node");
     await page.click(".row.hasraise .main");
     await page.waitForSelector("#sheet.open");
     assert((await page.$$("#sheet a.art")).length >= 1, "the raise links it inline");

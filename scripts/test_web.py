@@ -621,6 +621,31 @@ class Web(unittest.TestCase):
         self.assertEqual(arts[0]["title"], "shot-1.png")
         self.assertEqual(self.call("GET", "/artefacts/shot-1.png")[2].getheader("Content-Type"), "image/png")
 
+    def test_an_artefact_names_the_first_node_that_names_it(self):
+        self.put_artefact("aa.html", "Made by W1.2")
+        self.put_artefact("bb.html", "Raised on W1.3")
+        d = self.root / ".dfs" / "artefacts"
+        for n in ("cc.png", "dd.png"):
+            (d / n).write_bytes(b"x")
+        f = self.root / ".dfs" / "items" / "W1.md"
+        text = f.read_text()
+        text = text.replace("drop buckets that", "drop buckets (see .dfs/artefacts/aa.html) that")
+        text = text.replace("confirm the table stays", "cite aa.html again, ![shot](.dfs/artefacts/dd.png) and confirm the table stays")
+        f.write_text(text)
+        dfs_tree.append_log("W1", "raise", ("W1.3",), "Which?\nAnswer with: .dfs/artefacts/bb.html")
+        dfs_tree.append_log("W1", "answer", (), "See ![x](.dfs/artefacts/cc.png)")
+        want = {"aa.html": "W1.2", "bb.html": "W1.3", "cc.png": "", "dd.png": "W1.3"}
+        arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
+        self.assertEqual({a["file"]: a["node"] for a in arts}, want)
+        # answering the raise takes it off the row, but the page it named is still the node's;
+        # a page only the answer names (the card shows the answer) is no node's
+        self.put_artefact("ee.html", "Only the answer names it")
+        want["ee.html"] = ""
+        raise_ts = next(e["ts"] for e in dfs_tree.load("W1")["log"] if e["kind"] == "raise" and "bb.html" in e["body"])
+        dfs_tree.append_log("W1", "answer", (raise_ts,), "Take the first. See ee.html")
+        arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
+        self.assertEqual({a["file"]: a["node"] for a in arts}, want)
+
     def test_a_done_tasks_summary_screenshot_is_one_of_its_artefacts_and_in_its_summary_row(self):
         """The item shows the change: the Summary section carries the embed, and the image is listed."""
         d = self.root / ".dfs" / "artefacts"

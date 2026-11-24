@@ -373,10 +373,15 @@ def artefact_title(path):
     return html.unescape(" ".join(m.group(1).split())) if m else ""
 
 
-def artefacts_for(text):
+ART_NAMED = r"(%s\.(?:html|png|jpe?g|gif|webp|svg|pdf|txt|md|csv|json|log))\b" % ART_NAME
+
+
+def artefacts_for(text, nodes=()):
     """The artefacts a task's prose names (as the screen's `v` pane finds them: by scanning
     for `<name>.html`, and for a screenshot `<name>.png` and the other picture types) that
-    exist in `.dfs/artefacts` or an item worktree's. Each: file, title and kind ("page" or "image")."""
+    exist in `.dfs/artefacts` or an item worktree's. Each: file, title, kind ("page" or "image")
+    and node: the id of the node that made it, which is the first of `nodes` (pairs of a node id
+    and the prose it holds, in tree order) to name the file, or "" when no node does."""
     on_disk = {}
     for root in [dfs_paths.artefacts()] + [s / "artefacts" for s in dfs_paths.worktree_states()]:
         try:
@@ -387,9 +392,13 @@ def artefacts_for(text):
         except OSError:
             pass
     named = []
-    for name in re.findall(r"(%s\.(?:html|png|jpe?g|gif|webp|svg|pdf|txt|md|csv|json|log))\b" % ART_NAME, text, re.I):
+    for name in re.findall(ART_NAMED, text, re.I):
         if name in on_disk and name not in named:
             named.append(name)
+    made = {}
+    for nid, prose in nodes:
+        for name in re.findall(ART_NAMED, prose, re.I):
+            made.setdefault(name, nid)
 
     def label(n):   # what the author called an attachment: the text of `[label](.dfs/artefacts/<n>)`
         m = re.search(r"\[([^\]\n]+)\]\((?:\.dfs/)?artefacts/%s\)" % re.escape(n), text)
@@ -399,8 +408,28 @@ def artefacts_for(text):
         suffix = on_disk[n].suffix.lower()
         page = suffix == ".html"
         return dict(file=n, title=(artefact_title(on_disk[n]) if page else label(n) if suffix in FILE_TYPES else "") or n,
-                    kind="page" if page else "file" if suffix in FILE_TYPES else "image")
+                    kind="page" if page else "file" if suffix in FILE_TYPES else "image", node=made.get(n, ""))
     return [entry(n) for n in named]
+
+
+def made_by(t, rows, raised=None):
+    """Each live node of a task page's `rows`, in tree order, with the prose it holds: its own
+    fields (Approach, Hypothesis, Evidence, Determination) and the bodies of every raise on it.
+    `raised` maps a node id to those bodies, answered or not, since a row holds only the open
+    ones. Not the card, which also carries the status line, the commit subjects and the
+    author's answers, and not the log at large: only what the node itself says."""
+    nodes, raised = dfs_tree.by_id(t), raised or {}
+    return [(r["id"], "\n".join(strings([nodes[r["id"]]["fields"], raised.get(r["id"], [])])))
+            for r in rows if r["kind"] == "node" and r["status"] != "pruned"]
+
+
+def raised_on(t):
+    """`{node id: [body of each raise on it]}` from the task's log, whether answered or not."""
+    out = {}
+    for e in t["log"]:
+        if e["kind"] == "raise" and e["args"]:
+            out.setdefault(e["args"][0], []).append(e["body"])
+    return out
 
 
 def task_json(task, include_archived=False):
@@ -460,7 +489,7 @@ def task_json(task, include_archived=False):
                             evidence=evidence_lines(nodes[nid], held.get(nid, ()))))
     return dict(id=task, goal=t["name"] or (t["goal"].splitlines() or [""])[0],
                 name=t["name"], goal_text=t["goal"], runs=runs_for(task),
-                artefacts=artefacts_for("\n".join(strings(t))),
+                artefacts=artefacts_for("\n".join(strings(t)), made_by(t, rows, raised_on(t))),
                 status=status, why=humanize(why), accepted=accepted,
                 acceptable=dfs_tree.acceptable(t), rows=rows, assumed=assumed,
                 notes=[dict(kind=g["kind"], heading=dfs_tui.note_heading(g),
