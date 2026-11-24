@@ -554,6 +554,11 @@ const FLOWS = {
     await page.click("#chats-find"); await page.keyboard.type("flaky");
     same(await page.$$eval(".chatrow", e => e.length), 1, "the filter keeps the chat whose title holds the words");
     same(await page.evaluate(() => document.activeElement.id), "chats-find", "the box keeps the keyboard while the rows redraw");
+    // The list redraws every 4 seconds and on a push: the box must stay the same element, focused, with its text and caret.
+    await page.evaluate(() => { document.querySelector("#chats-find").dataset.mark = "same"; });
+    await page.evaluate(() => render(true)); await page.waitForTimeout(300);
+    same(await page.evaluate(() => { const a = document.activeElement; return [a.id, a.dataset.mark, a.value, a.selectionStart]; }), ["chats-find", "same", "flaky", 5], "a refresh of the list keeps the filter box, its focus, text and caret");
+    same(await page.$$eval(".chatrow", e => e.length), 1, "and the rows are still filtered after the refresh");
     await page.keyboard.type(" nonesuch");
     same(await page.$$eval(".chatrow", e => e.length), 0, "a word no chat holds leaves none");
     assert((await page.textContent("#chatrows")).includes("No chat matches"), "and says so");

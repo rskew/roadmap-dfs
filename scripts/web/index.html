@@ -1190,6 +1190,9 @@ function drawChats() {
       + (ended.length ? `<details class="endedchats"${S.endedOpen ? " open" : ""}><summary>Archived (${ended.length})</summary>${ended.map(row).join("")}</details>` : "");
   };
   S.chatList = list;
+  // The list redraws every few seconds and on a push. Replacing the filter box would drop its focus, caret and the phone's keyboard in
+  // the middle of typing, so while the box is on the page only the rows are drawn again.
+  if (S.chats.length && $("#chats-find") && $("#chatrows")) { $("#chatrows").innerHTML = list(); return; }
   $("#view").className = "col";
   $("#view").innerHTML = `<div class="actions top-actions"><button class="btn" data-act="chat" data-scope="project" data-fresh="1">Chat about the project</button></div>`
     + `<p class="hint" style="margin-top:0">Start one from a task, or from the project. Each keeps going while you look at something else, and the terminal's <code>c</code> picks the same one up. Title a chat from its header to find it by its goal.</p>`
