@@ -280,6 +280,24 @@ class Web(unittest.TestCase):
                 else:
                     os.environ[k] = v
 
+    def test_another_chat_on_a_task_is_started_through_the_page(self):
+        saved = dfs_web.CHAT["chats"]
+        dfs_web.CHAT["chats"] = None
+        try:
+            status, st, _ = self.call("POST", "/api/chat/new", dict(task="W1"))
+            self.assertEqual((status, st["scope"]), (200, "W1_2"))
+            self.assertEqual(self.call("POST", "/api/chat/new", dict(task="W1"))[1]["scope"], "W1_3", "the first is kept, not handed out twice")
+            for bad in ("W9", "project", "W1_2"):
+                self.assertEqual(self.call("POST", "/api/chat/new", dict(task=bad))[0], 409, bad)
+            self.assertEqual(self.call("POST", "/api/chat/new", {})[0], 400)
+            self.call("POST", "/api/chat/title", dict(scope="W1_2", title="the second"))
+            self.assertEqual([(c["scope"], c["title"]) for c in self.call("GET", "/api/chats")[1]["chats"]], [("W1_2", "the second")])
+            dfs_web.WORK["enabled"] = False
+            self.assertEqual(self.call("POST", "/api/chat/new", dict(task="W1"))[0], 403)
+        finally:
+            dfs_web.WORK["enabled"] = True
+            dfs_web.CHAT["chats"] = saved
+
     def test_a_chat_is_titled_through_the_page_and_the_title_is_off_with_the_work(self):
         saved = dfs_web.CHAT["chats"]
         dfs_web.CHAT["chats"] = None

@@ -513,6 +513,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 /* A task's id in a row of tasks: a branch's tag (`W1@serve-real-records`) is drawn apart from its number, as a small line
    at the top of the goal's column, right of the number, so the numbers line up and a long tag has the row's width. */
 const tagAt = id => String(id).indexOf("@");
+// A task's second and later chats are keyed `<task>_<n>` (chat.py `task_of`): the task part is what to link to and read the goal of.
+const chatTask = scope => scope.replace(/_([2-9]|[1-9]\d+)$/, "");
+const chatNo = scope => (scope.match(/_([2-9]|[1-9]\d+)$/) || [])[1] || "";
 const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
 const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
@@ -906,7 +909,7 @@ function drawBar(r) {
   } else {
     mode = "task";
     const flagged = S.task ? S.task.assumed.length : 0;
-    html = (chatOn() ? `<button data-act="chat" data-scope="${esc(r.task)}">Chat</button>` : "")
+    html = (chatOn() ? `<button data-act="chat" data-scope="${esc(r.task)}">Chat</button><button data-act="chatnew" data-task="${esc(r.task)}" aria-label="Start another chat about this task">Chat +</button>` : "")
       + (flagged ? `<button data-act="nextflag">Flagged ${flagged}</button>` : "")
       + `<button data-act="up">Back</button>`;
   }
@@ -1175,13 +1178,13 @@ function drawChatsOff(why) {
     + `<div class="actions top-actions"><button class="btn" data-act="all">Back to the tasks</button></div>`;
 }
 function drawChats() {
-  const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === scope) || {}).goal || "");
+  const goal = scope => scope === "project" ? "The project as a whole" : ((S.state.items.find(i => i.id === chatTask(scope)) || {}).goal || "");
   const who = { you: "You", agent: "Agent", error: "Not answered", note: "Note" };
   // A link cannot sit inside the row's button, so the id is drawn in a link laid over the button's id column (`.chatitem`) and the
   // button's own id cell is left empty; the project chat is about no item and has no link.
-  const row = c => `<div class="crow">${c.scope === "project" ? "" : `<a class="chatitem" href="#/t/${encodeURIComponent(c.scope)}" aria-label="Open ${esc(c.scope)}" title="Open ${esc(c.scope)}">${iidHtml(c.scope)}</a>`}<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
+  const row = c => `<div class="crow">${c.scope === "project" ? "" : `<a class="chatitem" href="#/t/${encodeURIComponent(chatTask(c.scope))}" aria-label="Open ${esc(chatTask(c.scope))}" title="Open ${esc(chatTask(c.scope))}">${iidHtml(chatTask(c.scope))}</a>`}<button class="item chatrow" data-act="chat" data-scope="${esc(c.scope)}">
       <span class="iid">${c.scope === "project" ? "All" : ""}</span>
-      <span>${tagHtml(c.scope)}${c.title ? `<span class="ctitle">${esc(c.title)}</span>` : ""}<span class="goal">${esc(goal(c.scope))}</span>
+      <span>${tagHtml(chatTask(c.scope))}${chatNo(c.scope) ? `<span class="tag">chat ${esc(chatNo(c.scope))}</span>` : ""}${c.title ? `<span class="ctitle">${esc(c.title)}</span>` : ""}<span class="goal">${esc(goal(c.scope))}</span>
         <span class="meta">${c.busy ? `<span class="tag settled">answering</span>` : ""}${c.live ? `<span class="tag">running</span>` : ""}${c.ended ? `<span class="tag">archived</span>` : ""}<span class="tag">${esc(c.agent)}</span><span class="muted">${esc(ago(c.updated))}</span></span>
         ${c.last ? `<span class="why"><span class="cap">${esc(who[c.role] || c.role)}</span> ${esc(c.last)}</span>` : ""}</span></button></div>`;
   // The filter keeps the chats whose title, item, goal or last message holds every word typed, so a chat is found by what it is for.
@@ -1518,7 +1521,7 @@ function drawTask() {
       ${t.pr_ready ? `<button class="btn primary" data-act="openpr" title="Push the branch and open its pull request with gh">Open PR</button>` : ""}
       ${t.pr ? `<a class="btn" href="${esc(t.pr)}" target="_blank" rel="noopener">Pull request</a>` : ""}
       <button class="btn" data-act="deletetask">Delete task</button>
-      ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button>` : ""}
+      ${chatOn() ? `<button class="btn desk" data-act="chat" data-scope="${esc(t.id)}">Chat</button><button class="btn desk" data-act="chatnew" data-task="${esc(t.id)}">Another chat</button>` : ""}
       ${t.assumed.length ? `<button class="btn desk" data-act="nextflag">Next flagged ${t.assumed.length}</button>` : ""}
       ${workHere(t.id) ? `<button class="btn" data-act="workhere" data-item="${esc(t.id)}">${S.work.pinned === t.id ? "Work goes here next" : "Work here next"}</button>` : ""}
     </div>${taskModels(t)}`}${artefactsHtml(t)}${runsHtml(t)}<div class="tree">`;
@@ -2351,6 +2354,7 @@ document.addEventListener("click", e => {
     // from the project's dialog: its close (which empties the dialog) runs before this one opens
     account: () => { const f = $("#form"); if (!f.open) return accountForm(); f.addEventListener("close", () => setTimeout(accountForm), { once: true }); f.close(); }, edittask: editTaskForm, deletetask: deleteTaskForm, archive: () => archiveTaskForm(d.id), deletenode: () => deleteNodeForm(d.id), editnode: () => editNodeForm(d.id),
     chat: () => chatOpen(d.scope, !!d.fresh), chattop: chatTop, chatcopy: () => chatCopy(+d.i), chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: toChats,
+    chatnew: async () => { try { const st = await api("/api/chat/new", { task: d.task }); chatOpen(st.scope); } catch (e) { toast(e.message, true); } },
     chatend: async () => { try { CHAT.last = ""; await api("/api/chat/end", { scope: CHAT.scope }); if ($("#chat").open) { $("#chat").close(); if (route().view === "chats") render(true); } toast("Chat archived."); } catch (e) { toast(e.message, true); } },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,

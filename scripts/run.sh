@@ -323,6 +323,15 @@ TREE_SUMMARY_ASK="Start with a concise summary, in short lines and no more than 
 # one. The checkout's own copy of the task file is a stale top-level description by then
 # (the nodes are committed on `dfs/<task>`), so a chat is pointed at the worktree's.
 TASK_ITEMS_REL="$DFS_ITEMS_REL"
+# A task can have more than one chat (chat.py: `W13`, then `W13_2`, `W13_3`). The chat's key is the scope the
+# conversation is saved under; everything else here, the prompt and the task's files, is about the task.
+CHAT_SCOPE="$ITEM"
+if [ "$MODE" = chat ] || [ "$MODE" = chatturn ]; then
+  # the same rule as chat.py `MORE`: `_` and a number of 2 or more, with no leading zero and nothing after it
+  case "$ITEM" in
+    *_*) case "${ITEM##*_}" in ""|*[!0-9]*|0*|1) ;; *) ITEM="${ITEM%_*}" ;; esac ;;
+  esac
+fi
 if { [ "$MODE" = chat ] || [ "$MODE" = chatturn ]; } && [ -n "$ITEM" ] && [ "$ITEM" != project ] && [ "$ITEM" != new ]; then
   TASK_ITEMS_REL="$(python3 "$HERE/paths.py" --task-items-rel "$ITEM")" || exit 2
   WT_ITEMS_REL="$(python3 "$HERE/paths.py" --task-worktree-items-rel "$ITEM")" || exit 2
@@ -389,7 +398,7 @@ if [ "$MODE" = chat ]; then
         rm -f "$opening_json"; exit 1
       fi
       CHAT_SID="$(opening_field session_id)"; rm -f "$opening_json"
-      python3 "$HERE/chat.py" --save "$ITEM" "$CHAT_SID" "$AGENT" || exit 1
+      python3 "$HERE/chat.py" --save "$CHAT_SCOPE" "$CHAT_SID" "$AGENT" || exit 1
     fi
     case "$AGENT" in
       codex) chat_session=(resume "$CHAT_SID") ;;

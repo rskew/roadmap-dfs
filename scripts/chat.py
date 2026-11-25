@@ -119,6 +119,17 @@ def run_turn(argv, message, cwd, env, on_start=None):
 # A scope ending `.json` or `.log` is refused: `chat/<scope>.json` and `.log` sit beside the steering directory
 # `chat/<scope>`, so scope `a.json` would name the file of scope `a`.
 SCOPE = re.compile(r"^(?!.*\.(?:json|log)$)[A-Za-z0-9][A-Za-z0-9._@-]*$")
+# A task can have more than one chat. Its first is keyed by the task id, as it always was (so every record that
+# exists still opens), and each further one by `<task>_<n>` for n of 2 or more: `W13`, `W13_2`, `W13_3`. The
+# separator is `_` because no task id holds one (a tag is lower-case letters, digits and dashes), so `W1@fix-2`,
+# a task whose tag ends in a dash and a digit, is never read as a second chat of `W1@fix`.
+MORE = re.compile(r"^([A-Za-z0-9@-]+)_([2-9]|[1-9]\d+)$")
+
+
+def task_of(scope):
+    """The task a chat is about: its scope without the `_<n>` of a second or later chat. `project` is its own."""
+    m = MORE.match(scope or "")
+    return m.group(1) if m else scope
 MAX_MESSAGE = 4000
 MAX_TITLE = 80      # characters: a chat's title is a line to find it by, not a message
 ENDED_SLACK = 2     # seconds: an agent still writing its transcript as it is closed does not undo the end
@@ -553,8 +564,30 @@ class Chats:
     def check(self, scope):
         if not SCOPE.fullmatch(scope or ""):
             raise ValueError("a chat is about a task, or the project")
-        if scope != "project" and not dfs_tree.exists(scope):
-            raise ValueError("no task %s" % scope)
+        if scope != "project" and not dfs_tree.exists(task_of(scope)):
+            raise ValueError("no task %s" % task_of(scope))
+
+    def new_scope(self, task):
+        """The key for another chat on `task`: the first `<task>_<n>` (n from 2) with no record, steering
+        directory or log of its own. The task's first chat is the task's own key and is not offered here."""
+        self.check(task)
+        if task == "project" or task_of(task) != task:
+            raise ValueError("another chat is started on a task, not on the project or on a chat")
+        n = 2
+        while any(x.exists() for x in (self.path("%s_%d" % (task, n)), self.dir("%s_%d" % (task, n)), chatlog.path("%s_%d" % (task, n)))):
+            n += 1
+        return "%s_%d" % (task, n)
+
+    def add(self, task):
+        """Start another chat on `task`: take the next free key (`new_scope`) and keep it with an empty record, so a
+        second call does not hand the same key out again. It shows in the Chats list once it has a title or a message."""
+        with self.lock:
+            scope = self.new_scope(task)
+            p = self.path(scope)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("{}")
+            chatlog.log(scope, "another chat on %s" % task)
+        return self.state(scope)
 
     def record(self, scope):
         try:
@@ -1027,7 +1060,7 @@ class Chats:
         d = Path(dfs_runs.ensure_run_root()) / "chat"
         for p in sorted(d.glob("*.json")) if d.is_dir() else []:
             scope = p.stem
-            if not SCOPE.fullmatch(scope) or (scope != "project" and not dfs_tree.exists(scope)):
+            if not SCOPE.fullmatch(scope) or (scope != "project" and not dfs_tree.exists(task_of(scope))):
                 continue
             sid, agent = self.sid(scope), self.agent(scope)
             messages = [m for m in transcript_messages(sid, agent) if m["role"] != "prompt"]   # the conversation, not what opened it
