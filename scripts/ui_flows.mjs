@@ -786,7 +786,31 @@ const FLOWS = {
     if (!(await page.$eval(".endedchats", e => e.open))) await page.click(".endedchats summary");
     await page.click(".endedchats .chatrow[data-scope=W9]"); await page.waitForSelector("#chat[open]");
     await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
-    assert(await page.$eval("#chat [data-act=chatend]", e => e.disabled), "an archived chat's Archive button is disabled");
+    assert(await page.$eval("#chat [data-act=chatend]", e => e.hidden), "an archived chat has no Archive button: Unarchive stands in its place");
+    same(errors, [], "no page errors");
+  },
+
+  // An archived chat has an Unarchive button where Archive was: it puts the chat back in progress and leaves it open.
+  async chat_unarchive(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 640 }, hasTouch: true });
+    const state = { messages: [{ role: "you", text: "where are we?" }, { role: "agent", text: "W81.10 is open." }], busy: false, busy_for: 0, live: false, elsewhere: false, note: "", agent: "claude", ended: true };
+    let unarchived = 0;
+    await page.route("**/api/chat/**", r => {
+      if (r.request().url().endsWith("/api/chat/unarchive")) { unarchived++; state.ended = false; }
+      return r.fulfill({ contentType: "application/json", body: JSON.stringify(state) });
+    });
+    await task(page, "W9");
+    await page.click("#tabs [data-act=chat]"); await page.waitForSelector("#chat[open]");
+    await page.waitForFunction(() => document.querySelectorAll("#chat-log .msg").length === 2);
+    const shown = sel => page.$eval(sel, e => e.offsetParent !== null);
+    assert(await shown("#chat [data-act=chatunarchive]"), "an archived chat shows Unarchive");
+    assert(!(await shown("#chat [data-act=chatend]")), "an archived chat does not show Archive");
+    await page.click("#chat [data-act=chatunarchive]");
+    await page.waitForFunction(() => document.querySelector("#chat [data-act=chatend]").offsetParent !== null);
+    same(unarchived, 1, "Unarchive asks the server once");
+    assert(await page.$eval("#chat", e => e.open), "Unarchive leaves the chat open");
+    assert(!(await shown("#chat [data-act=chatunarchive]")), "a chat in progress does not show Unarchive");
+    assert(await page.$eval("#chat [data-act=chatend]", e => !e.disabled), "a chat in progress can be archived");
     same(errors, [], "no page errors");
   },
 
