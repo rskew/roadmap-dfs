@@ -660,10 +660,23 @@ def _log_file_text(task, entries):
     return "# %s · log\n" % task + "".join("\n" + e["text"].rstrip() + "\n" for e in entries)
 
 
+def refuse_history(task, what):
+    """ValueError when this branch's part of `task` has a history file. `load` reads such a
+    part's log from its log file alone and never reads the archive, so what `compact` or
+    `shelve` moved there would vanish from every count; the history is never trimmed, and
+    the status file holds no log and no settled node, so there is nothing for them to move."""
+    tag = "" if dfs_paths.worktree(task) else dfs_paths.branch_tag()
+    if history_part(task, tag).exists():
+        raise ValueError("%s has a history file (%s): `%s` has nothing to move there, since the "
+                         "history is never trimmed and the status file holds no log or settled node"
+                         % (task, dfs_paths.rel(history_part(task, tag)), what))
+
+
 def compact(task):
     """Move every entry of this branch's part's log, whether still in the task file or in
     its log file, that is older than the author's last word to the END of the archive,
     verbatim, under a new `**Log**:` line. Returns how many moved."""
+    refuse_history(task, "compact")
     p, t, lp, ltext = _this_part_log(task)
     a = archive_path(task)
     if not p.exists():
@@ -799,6 +812,7 @@ def shelve(task, ids=()):
     `ids`) to the END of the archive, verbatim, each as one `**<id> <field>**: <text>` line,
     and leave `<field>: archived.` in the task file (`shelf_stub`: a Determination keeps its
     first clause). Returns how many fields moved."""
+    refuse_history(task, "shelve")
     p, a = path_for(task), archive_path(task)
     t = parse(p.read_text() if p.exists() else "", task)
     arc = a.read_text() if a.exists() else ""

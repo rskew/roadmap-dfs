@@ -214,8 +214,10 @@ class EveryTaskInTheRepo(unittest.TestCase):
     """Every task this repo has moves with nothing lost, and reads the same afterwards."""
 
     def tasks(self):
+        """The repo's old-format tasks: one already moved (its history file exists) holds no
+        old text to move again, and `test_a_moved_task_in_the_repo_loads_from_its_history` reads it."""
         for p in sorted(REAL.glob("W*.md")):
-            if dfs_tree.part_of(p.name) == (p.stem, ""):
+            if dfs_tree.part_of(p.name) == (p.stem, "") and not (REAL / ("%s.history.md" % p.stem)).exists():
                 yield p.stem
 
     def read(self, p):
@@ -375,7 +377,7 @@ class EveryTaskLoadsTheSameWhenMigrated(unittest.TestCase):
         n = 0
         for p in sorted(REAL.glob("W*.md")):
             task = p.stem
-            if dfs_tree.part_of(p.name) != (task, ""):
+            if dfs_tree.part_of(p.name) != (task, "") or (REAL / ("%s.history.md" % task)).exists():
                 continue
             for src, dst in ((p, root / ".dfs/items" / p.name),
                              (REAL / ("%s.log.md" % task), root / ".dfs/items" / ("%s.log.md" % task)),
@@ -399,6 +401,32 @@ class EveryTaskLoadsTheSameWhenMigrated(unittest.TestCase):
                                 for x, old_x in zip(new["nodes"], old["nodes"])), task)
             n += 1
         self.assertGreater(n, 100)
+
+
+@unittest.skipUnless(REAL.is_dir(), "no roadmap beside the scripts")
+class AMovedTaskInTheRepo(unittest.TestCase):
+    def test_a_moved_task_in_the_repo_loads_from_its_history(self):
+        """Every task of the repo that has a history file (W75, the longest, was moved by W203.10)
+        loads as the new format with a node for each section, a status file under the budget, and
+        decision lines that cite nodes which exist and are confirmed."""
+        import check
+        import state
+        moved = [p.name[:-len(".history.md")] for p in sorted(REAL.glob("W*.history.md"))
+                 if "/" not in p.name[:-len(".history.md")]]
+        self.assertIn("W75", moved)
+        cwd = os.getcwd()
+        os.chdir(REPO)
+        try:
+            for task in moved:
+                t = dfs_tree.load(task)
+                hist = (REAL / ("%s.history.md" % task)).read_text()
+                self.assertTrue(t.get("new_format"), task)
+                self.assertEqual(len(t["nodes"]), len(re.findall(r"^### ", hist, re.M)), task)
+                self.assertLess(len(dfs_tree.digest(t)) // 4, state.HANDOFF_BUDGET, task)
+                text = (REAL / ("%s.md" % task)).read_text()
+                self.assertEqual(check.check_decisions(task, text, None, t, None), [], task)
+        finally:
+            os.chdir(cwd)
 
 
 if __name__ == "__main__":

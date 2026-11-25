@@ -149,6 +149,20 @@ class StartAndAdd(Base):
         with self.assertRaises(ValueError):
             dfs_tree.delete_node("W9", "W9.4")
 
+    def test_compact_and_shelve_are_refused_so_the_log_stays_whole_for_load(self):
+        # compact moved the log to the archive, which a history-format task's load never reads
+        self.fixture()
+        n = len(dfs_tree.load("W9")["log"])
+        log = self.get("W9.log.md")
+        self.assertGreater(n, 0)
+        for cmd in (dfs_tree.compact, dfs_tree.shelve):
+            with self.assertRaises(ValueError) as e:
+                cmd("W9")
+            self.assertIn("history", str(e.exception))
+        self.assertEqual(self.get("W9.log.md"), log)
+        self.assertFalse((self.root / ".dfs/archive/items/W9.md").exists())
+        self.assertEqual(len(dfs_tree.load("W9")["log"]), n)
+
 
 class Budget(Base):
     def long_task(self, confirmed):
