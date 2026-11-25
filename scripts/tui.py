@@ -834,6 +834,7 @@ KEYS = [
     ("items", "r", ord("r"), "review", "review: open the tree to answer and correct"),
     ("items", "R", ord("R"), "review-terminal", "review in the terminal pass (run.sh --review)"),
     ("items", "c", ord("c"), "chat", "chat about this item (run.sh --chat); ctrl-] comes back and leaves it running"),
+    ("items", "O", ord("O"), "chat-another", "start another chat about this item, next to its first (in the chats pane: about the item of the chat under the cursor)"),
     ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (run.sh --chat project)"),
     ("items", "E", ord("E"), "archive-chat", "archive this item's chat: its agent is stopped and the Chats list moves it to Archived; a later message reopens it (asks first). In the chats pane (T) it is the chat under the cursor"),
     ("items", "o", ord("o"), "open", "open a new task (run.sh --open)"),
@@ -3115,7 +3116,7 @@ class UI(WorkMixin):
         self.chat_sel = max(0, min(self.chat_sel, len(rows) - 1))
         archived = sum(1 for c in rows if c["ended"])
         out.append(("chats — %d in progress, %d archived" % (len(rows) - archived, archived), curses.A_BOLD))
-        out.append(("  enter opens one (an archived one resumes) · N names it · E archives it · ↑↓/jk moves · esc back", look("chrome")))
+        out.append(("  enter opens one (an archived one resumes) · O starts another on its item · N names it · E archives it · ↑↓/jk moves · esc back", look("chrome")))
         out.append(("", 0))
         self._sel_row = None
         if not rows:
@@ -3146,6 +3147,25 @@ class UI(WorkMixin):
             out.append((head + (last if len(last) <= room else last[:room - 1] + "…"),
                         curses.A_REVERSE if sel else attr))
         return out
+
+    def open_another_chat(self, item):
+        """What `O` does: start another chat about this item (`Chats.add`, so the page lists it too) and open it as
+        `c` opens one. In the chats pane the item is the one the chat under the cursor is about."""
+        import chat as dfs_chat
+        if self.pane == "chats":
+            rows = self.chat_rows()
+            if not rows:
+                self.msg = "no chat to start another beside"
+                return
+            item = rows[max(0, min(self.chat_sel, len(rows) - 1))]["scope"]
+        task = dfs_chat.task_of(item)
+        try:
+            scope = dfs_chat.Chats(worker=lambda: UiWorker(self)).add(task)["scope"]
+        except (OSError, ValueError) as e:
+            self.msg = "no new chat: %s" % e
+            return
+        self.chat_cache = (0, self.chat_cache[1])
+        self.open_chat(scope)
 
     def open_chats(self):
         self.chat_rows(fresh=True)
@@ -5492,6 +5512,8 @@ class UI(WorkMixin):
             self.open_chat(item)
         elif ch == ord("C"):
             self.open_chat("project")
+        elif ch == ord("O"):
+            self.open_another_chat(item)
         elif ch == ord("N") and self.pane == "chats":
             self.title_chat_row()
         elif ch == ord("E"):

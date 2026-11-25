@@ -1119,6 +1119,16 @@ class TheChatsMenu(unittest.TestCase):
         found, _, _ = ui.search_space()
         self.assertIn("flaky", found[0])
 
+    def test_o_starts_another_chat_on_the_task_of_the_chat_under_the_cursor(self):
+        import chat as dfs_chat
+        ui = self.screen([a_chat("W1"), a_chat("W2-2")], pane="chats")
+        added, opened = [], []
+        ui.open_chat = lambda scope, renew=True: opened.append(scope)
+        with mock.patch.object(dfs_chat.Chats, "add", lambda self, task: (added.append(task), dict(scope=task + "-3"))[1]):
+            ui.chat_sel = 1
+            ui.act(ord("O"))
+        self.assertEqual((added, opened), (["W2"], ["W2-3"]), "the task part of the chat's key, not the key")
+
     def test_n_names_the_chat_under_the_cursor_and_an_empty_line_takes_the_name_off(self):
         import chat as dfs_chat
         ui = self.screen([a_chat("W1"), a_chat("W2")], pane="chats")
