@@ -537,6 +537,29 @@ class Chat(unittest.TestCase):
         self.assertIn(wt, screen)
         self.assertNotIn(" " + top, screen)
 
+    def test_a_second_chat_on_a_task_reads_the_task_and_is_its_own_conversation(self):
+        self.chats.send("W1", "first chat")
+        self.settle("W1")
+        self.chats.send("W1-2", "second chat")
+        st = self.settle("W1-2")
+        first, second = self.calls()
+        self.assertIn("task W1:", second, "the prompt is about the task")
+        self.assertIn(".dfs/items/W1.md", second)
+        self.assertNotIn("W1-2", second.split(" --output-format")[0], "the chat's key is not read as a task or a file")
+        self.assertIn("chat/W1-2/inbox", second, "but its steering messages are kept under its own key")
+        self.assertNotEqual(self.chats.sid("W1"), self.chats.sid("W1-2"), "each chat has its own session")
+        self.assertTrue(self.chats.sid("W1-2"))
+        self.assertEqual([t for r, t in talk(st["messages"]) if r == "you"], ["second chat"])
+        self.assertEqual([t for r, t in talk(self.chats.state("W1")["messages"]) if r == "you"], ["first chat"])
+        self.log.unlink()
+        r = subprocess.run([str(HERE / "run.sh"), "--chat", "W1-3"], cwd=self.root, text=True, capture_output=True,
+                           env=dict(os.environ, CHAT_SID="00000000-0000-4000-8000-000000000003"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        screen = self.calls()[0]
+        self.assertIn("task W1", screen)
+        self.assertIn(".dfs/items/W1.md", screen)
+        self.assertNotIn("W1-3", screen)
+
     def test_the_second_turn_resumes_the_session_and_is_just_the_message(self):
         self.chats.send("W1", "first")
         self.settle("W1")
