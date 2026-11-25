@@ -31,6 +31,16 @@ part: `<task>/<tag>.log.md`), a title line and then entries only:
     - 2026-09-25T09:40:00Z · raise · W13.2
       <the question, indented two spaces>
 
+A task moved to the two-file format (`docs/history-format.md`, `tree.py migrate`) has a
+history file, `.dfs/items/<task>.history.md`: one section per node, append only, holding
+every node's whole story; a field that holds one value takes its last line, `Evidence:`
+bullets add up, and `Tags:` and `Supersedes:` are two more fields. Its task file is then
+the STATUS file, which a session loads and which stays small: Goal, Summary, Decisions in
+force and Not taken (kept by hand, each line citing nodes), and the generated Live tree
+(open, started and parked nodes) and Raises. `load` reads the nodes from the history and
+the log from the log file alone; a task with no history file reads as it always did.
+`compact` and `shelve` have nothing to move in a moved task and refuse it.
+
 A session reads the task file and the briefing, and opens the log file only for an
 entry's full text; `load` merges it back, so every derived answer is the same as when the
 entries were in the task file under a `## Log` heading, which an older task still has
@@ -70,11 +80,12 @@ and leaves `Approach: archived.` in the file, and `load` puts the words back. A
 Determination leaves its first clause, `Confirmed: the washes are tinted (archived.)`, so a
 reader of the file alone still sees what it settled. `Plan` is the Approach's old name,
 read as it wherever it appears, in a task file or an archive. Status and Parent never
-move, so the tree reads the same from the file alone.
+move, so the tree reads the same from the file alone (an old-format task; a moved task's
+file holds its live nodes only, and the history holds the rest).
 `tree.py digest <task>` prints the task as a session carries on from it: the Goal and every
 other section but the Tree and the Log, each live open node whole, and each other node as one
-line with its parent and Determination. `tree.py show <task> <id>...` prints nodes whole,
-shelved fields put back.
+line with its parent and Determination (a moved task: its status file whole). `tree.py show
+<task> <id>...` prints nodes whole, shelved fields put back.
 If the file is still over the handoff budget afterwards, `shelve` says by how many tokens (and about how
 many words), which nodes to shelve next, and what only `compact` or a hand edit can move.
 
@@ -87,12 +98,20 @@ node and everything under it, the way a correction does).
 Usage:
     tree.py log <task> <kind> [args...] < body   append one log entry
     tree.py show <task>                          the tree, one line per node
-    tree.py add <task> <parent|-> <title> [< approach]   add an open node
-    tree.py start <task> <node>                  mark an open node started (uncommitted)
-    tree.py compact <task>                       move the log's past to the archive
+    tree.py show <task> <id>... [--raw]          nodes whole, shelved fields put back; a moved task: the
+                                                     folded section, children, what it replaced or was
+                                                     replaced by, and the log entries naming it
+                                                     (--raw: the section's lines as written)
+    tree.py tag [<task>] <tag>                   every node of the task (or of all moved tasks) with the tag
+    tree.py digest <task>                        the task as a session carries on from it
+    tree.py add <task> <parent|-> <title> [< approach]   add an open node (a moved task: to its history)
+    tree.py start <task> <node>                  mark an open node started (uncommitted; a moved task: in
+                                                     the status file's Live tree)
+    tree.py compact <task>                       move the log's past to the archive (refused for a moved task)
     tree.py splitlog <task>                      move the task file's whole `## Log` to its log file
     tree.py shelve <task> [<ids>]                move determined nodes' Approach,
                                                      Hypothesis and Determination to the archive
+                                                     (refused for a moved task)
     tree.py status <task>                        write a history-format task's status file: its Live tree
                                                      and Raises, from the history and the log
     tree.py migrate <task>                       write an old task's history file (docs/history-format.md)
