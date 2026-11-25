@@ -461,6 +461,27 @@ class Chat(unittest.TestCase):
         self.assertEqual(self.chats.clear("W1")["title"], "", "a new chat has a new aim: the title goes with the record")
         self.assertEqual(self.chats.list(), [])
 
+    def test_a_task_can_have_more_than_one_chat(self):
+        self.assertEqual([dfs_chat.task_of(x) for x in ("W1", "W1-2", "W1-13", "W1-1", "W1-0", "project")],
+                         ["W1", "W1", "W1", "W1-1", "W1-0", "project"], "only -2 and up name a further chat")
+        self.chats.check("W1-2")
+        for bad in ("W1-1", "W1-0", "W9-2", "project-2", "W1-2-3"):
+            with self.assertRaises(ValueError, msg=bad):
+                self.chats.check(bad)
+        self.assertEqual(self.chats.new_scope("W1"), "W1-2")
+        self.chats.set_title("W1-2", "second")
+        self.assertEqual(self.chats.new_scope("W1"), "W1-3", "a chat that has a record is taken")
+        self.chats.set_title("W1", "first")
+        self.assertEqual({c["scope"]: c["title"] for c in self.chats.list()}, {"W1": "first", "W1-2": "second"})
+        self.chats.save_sid("W1-2", "s-2", "claude")
+        self.assertEqual(self.chats.sid("W1-2"), "s-2")
+        self.assertEqual(self.chats.sid("W1"), "", "each chat keeps its own conversation")
+        self.assertEqual(self.chats.clear("W1-2")["title"], "", "New chat on one leaves the other")
+        self.assertEqual(self.chats.title("W1"), "first")
+        for bad in ("project", "W1-2", "W9"):
+            with self.assertRaises(ValueError, msg=bad):
+                self.chats.new_scope(bad)
+
     def test_a_title_that_is_too_long_or_for_no_chat_is_refused(self):
         with self.assertRaises(ValueError):
             self.chats.set_title("W1", "x" * (dfs_chat.MAX_TITLE + 1))
