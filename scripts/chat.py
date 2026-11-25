@@ -1106,6 +1106,19 @@ class Chats:
         self.on_change()
         return self.state(scope)
 
+    def unarchive(self, scope):
+        """The opposite of `end`: take the archive mark off, so the chat is in progress again without a
+        message being sent to it. The conversation was kept, so nothing else changes. A chat that is not
+        archived (as the list reads it) has nothing to take off."""
+        self.check(scope)
+        with self.lock:
+            if not self.state(scope)["ended"]:
+                raise ValueError("this chat is not archived")
+            chatlog.log(scope, "page: chat unarchived (session %s)" % self.sid(scope))
+            self.reopen(scope)
+        self.on_change()
+        return self.state(scope)
+
     def clear(self, scope):
         """Start over: the next message is a new session. The old one stays in the agent's own history."""
         self.check(scope)
