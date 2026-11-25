@@ -1476,6 +1476,22 @@ def corrections(t):
     return out
 
 
+def superseded_by(t, status=None):
+    """{older id: [newer ids]}: a node a confirmed node names in its `Supersedes:`. Derived and
+    never stored, so it reverses by itself when the newer node is refuted, and a refuted node
+    stays refuted whatever names it (docs/history-format.md). `status` is `effective`'s map."""
+    nodes = by_id(t)
+    status = status or {nid: nd["status"] for nid, nd in nodes.items()}
+    out = {}
+    for nd in sorted(t["nodes"], key=order_key):
+        if status.get(nd["id"]) != "confirmed":
+            continue
+        for old in nd.get("supersedes") or ():
+            if old in nodes and old != nd["id"] and status.get(old) != "refuted":
+                out.setdefault(old, []).append(nd["id"])
+    return out
+
+
 def effective(t):
     """Each node's status once the author's corrections are applied, and whether it
     is PRUNED — below a refuted node, or cut off by a correction.
@@ -1525,6 +1541,10 @@ def effective(t):
                         and s_["fields"].get("Corrects") != c["ts"]:
                     cut.add(s_["id"])
                     cut.update(d["id"] for d in descendants(t, s_["id"]))
+    # A plan that a confirmed node replaced is not live work: an open or parked node it
+    # supersedes is cut, and so is what hangs under it. A confirmed one stays confirmed here
+    # (it is history the later nodes stand on); `superseded_by` says it was replaced.
+    cut.update(old for old in superseded_by(t, status) if status[old] in ("open", "parked"))
     pruned = set(cut)
     for nid, nd in sorted(nodes.items(), key=lambda kv: order_key(kv[1])):
         p = nd["parent"]
@@ -2229,6 +2249,7 @@ def outline(t):
     status, pruned = effective(t)
     asleep = dormant(t)
     nodes = by_id(t)
+    sup = superseded_by(t, status)
     depth = {}
     for nd in sorted(t["nodes"], key=order_key):
         p = nd["parent"]
@@ -2239,7 +2260,8 @@ def outline(t):
         for nd in sorted((n for n in t["nodes"]
                           if (n["parent"] if n["parent"] in nodes else None) == parent),
                          key=order_key):
-            st = ("pruned" if nd["id"] in pruned else
+            st = ("superseded" if nd["id"] in sup else
+                  "pruned" if nd["id"] in pruned else
                   status[nd["id"]] if status[nd["id"]] != "open" or nd["id"] not in asleep
                   else "dormant")
             det = nd["fields"].get("Determination", "")
@@ -2266,6 +2288,95 @@ def node_text(nd):
 # Determinations come back whole through `load`, and a task whose verdicts are long would
 # otherwise have a digest larger than its file (W75's was).
 DIGEST_DET = 240
+
+
+FOLD_ORDER = ("Parent", "Tags", "Supersedes", "Status", "Approach", "Hypothesis", "Evidence",
+              "Determination", "Ask", "Corrects")
+
+
+def folded_text(nd):
+    """A history node as it stands now: each field once, as `taskhistory.parse` folded it
+    (the last line of a field that holds one value wins, `Evidence:` bullets all kept).
+    `nd["text"]` is the section as written, which `show --raw` prints."""
+    out = ["### %s · %s" % (nd["id"], nd["title"])]
+    for k in FOLD_ORDER:
+        if k == "Evidence":
+            if nd["evidence"]:
+                out += ["Evidence:"] + ["- " + e for e in nd["evidence"]]
+        elif nd["fields"].get(k):
+            out.append("%s: %s" % (k, nd["fields"][k]))
+    return "\n".join(out)
+
+
+def supersession_chain(t, nid, status=None):
+    """The ids of every node `nid` replaced and was replaced by, oldest first, `nid` in its
+    place. The first link each way is followed, and a loop in a hand-written file ends it."""
+    nodes = by_id(t)
+    newer = superseded_by(t, status)
+    back, cur = [], nid
+    while True:
+        prev = next((x for x in (nodes[cur].get("supersedes") or ()) if x in nodes and x not in back
+                     and x != nid), None)
+        if prev is None:
+            break
+        back.append(prev)
+        cur = prev
+    fwd, cur = [], nid
+    while newer.get(cur):
+        nxt = next((x for x in newer[cur] if x not in fwd and x != nid and x not in back), None)
+        if nxt is None:
+            break
+        fwd.append(nxt)
+        cur = nxt
+    return back[::-1] + [nid] + fwd
+
+
+def names_node(entry, nid, t):
+    """Whether a log entry is about `nid`: its head or body holds the id as a whole word, or it
+    answers a raise that does."""
+    pat = re.compile(r"(?<![\w.@])%s(?![\w@]|\.\d)" % re.escape(nid))
+    if pat.search(entry["text"]):
+        return True
+    if entry["kind"] == "answer" and entry["args"]:
+        raised = next((e for e in t["log"] if e["ts"] == entry["args"][0]), None)
+        return bool(raised and pat.search(raised["text"]))
+    return False
+
+
+def one_line(nd, st):
+    det = " ".join(nd["fields"].get("Determination", "").split())
+    return "%s [%s] %s%s" % (nd["id"], st, nd["title"], (" — " + det) if det else "")
+
+
+def show_node(t, nid, raw=False):
+    """Everything the task knows of one node: its text, its children, the chain of nodes it
+    replaced or was replaced by (read oldest first from either end) and every log entry that
+    names it."""
+    nodes = by_id(t)
+    status, _pruned = effective(t)
+    sup = superseded_by(t, status)
+    nd = nodes[nid]
+    out = [nd["text"].rstrip("\n") if raw and nd.get("text") else
+           folded_text(nd) if nd.get("text") else node_text(nd)]
+    shown = lambda i: "superseded" if i in sup else status[i]
+    if nid in sup:
+        out.append("\nSuperseded by: " + ", ".join(sup[nid]))
+    kids = sorted((n for n in t["nodes"] if n["parent"] == nid), key=order_key)
+    if kids:
+        out += ["", "Children:"] + ["  " + one_line(k, shown(k["id"])) for k in kids]
+    chain = supersession_chain(t, nid, status)
+    if len(chain) > 1:
+        out += ["", "Supersession chain, oldest first:"] + [
+            "  %s%s" % (one_line(nodes[i], shown(i)), "   <- this node" if i == nid else "") for i in chain]
+    said = [e for e in t["log"] if e["kind"] not in ("session", "end") and names_node(e, nid, t)]
+    if said:
+        out += ["", "Log:"] + [e["text"] for e in said]
+    return "\n".join(out)
+
+
+def tagged(t, tag):
+    """The nodes of `t` carrying `tag`, oldest first."""
+    return sorted((nd for nd in t["nodes"] if tag in (nd.get("tags") or ())), key=order_key)
 
 
 def digest(t):
@@ -2401,11 +2512,26 @@ def _main(argv):
         print(digest(load(argv[2])), end="")
         return 0
     if len(argv) >= 4 and argv[1] == "show":
-        nodes = by_id(load(argv[2]))
-        for nid in argv[3:]:
+        t = load(argv[2])
+        nodes = by_id(t)
+        raw = "--raw" in argv[3:]
+        ids = [a for a in argv[3:] if a != "--raw"]
+        for nid in ids:
             if nid not in nodes:
                 raise ValueError("%s has no node %s" % (argv[2], nid))
-        print("\n\n".join(node_text(nodes[nid]) for nid in argv[3:]))
+        print("\n\n".join(show_node(t, nid, raw) for nid in ids))
+        return 0
+    if len(argv) in (3, 4) and argv[1] == "tag":
+        tag = argv[-1]
+        tasks = [argv[2]] if len(argv) == 4 else [k for k in task_ids() if history_part(k).exists()]
+        found = []
+        for k in tasks:
+            t = load(k)
+            status, _ = effective(t)
+            sup = superseded_by(t, status)
+            found += [folded_text(nd) + "\nStatus now: %s" % ("superseded" if nd["id"] in sup else status[nd["id"]])
+                      if nd.get("text") else node_text(nd) for nd in tagged(t, tag)]
+        print("\n\n".join(found) or "(no node tagged %s)" % tag)
         return 0
     print(__doc__, file=sys.stderr)
     return 2

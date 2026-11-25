@@ -288,6 +288,81 @@ class LoadsTheNewFormat(unittest.TestCase):
         self.put("W5.md", TASK.replace("do the second thing", "a line changed in the status file"))
         self.assertEqual(dfs_tree.load("W5")["nodes"][1]["fields"]["Approach"], "do the second thing")
 
+    def fixture(self):
+        fx = HERE / "fixtures" / "history"
+        for n in ("W9.md", "W9.history.md", "W9.log.md"):
+            self.put(n, (fx / n).read_text())
+        return dfs_tree.load("W9")
+
+    def test_a_superseded_node_is_derived_from_a_confirmed_one_and_reads_in_order_from_any_end(self):
+        t = self.fixture()
+        status, pruned = dfs_tree.effective(t)
+        self.assertEqual(dfs_tree.superseded_by(t, status), {"W9.1": ["W9.2"], "W9.2": ["W9.3"]})
+        self.assertEqual(status["W9.1"], "confirmed")          # derived, never stored: effective keeps the stored one
+        for end in ("W9.1", "W9.2", "W9.3"):
+            self.assertEqual(dfs_tree.supersession_chain(t, end, status), ["W9.1", "W9.2", "W9.3"], end)
+        out = "\n".join(dfs_tree.outline(t))
+        self.assertIn("W9.1 [superseded]", out)
+        self.assertIn("W9.3 [confirmed]", out)
+
+    def test_a_refuted_node_stays_refuted_and_a_replaced_open_or_parked_one_leaves_the_live_tree(self):
+        t = self.fixture()
+        for nd in t["nodes"]:
+            if nd["id"] == "W9.3":
+                nd["supersedes"] = ["W9.2", "W9.6", "W9.5"]
+        status, pruned = dfs_tree.effective(t)
+        sup = dfs_tree.superseded_by(t, status)
+        self.assertNotIn("W9.6", sup)                          # refuted stays refuted
+        self.assertIn("W9.5", sup)
+        self.assertIn("W9.5", pruned)                          # a parked node replaced is no longer live
+        self.assertNotIn("W9.2", pruned)                       # a confirmed one is history, not cut
+
+    def test_a_node_that_supersedes_is_refuted_and_the_older_one_reads_as_before(self):
+        t = self.fixture()
+        for nd in t["nodes"]:
+            if nd["id"] == "W9.3":
+                nd["status"] = "refuted"
+        self.assertEqual(dfs_tree.superseded_by(t, dfs_tree.effective(t)[0]), {"W9.1": ["W9.2"]})
+
+    def test_show_prints_the_node_its_children_the_chain_and_the_log_that_names_it(self):
+        self.fixture()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(dfs_tree.main(["tree.py", "show", "W9", "W9.3"]), 0)
+        text = out.getvalue()
+        self.assertIn("### W9.3 · charger, third try", text)
+        self.assertEqual(text.count("Status:"), 1)             # folded: one Status line, not the two written
+        self.assertIn("  W9.4 [open] pick the boost part", text)
+        self.assertLess(text.index("W9.1 [superseded]"), text.index("W9.2 [superseded]"))
+        self.assertLess(text.index("W9.2 [superseded]"), text.index("W9.3 [confirmed]"))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            dfs_tree.main(["tree.py", "show", "W9", "W9.4"])
+        self.assertIn("raise · W9.4", out.getvalue())
+        self.assertIn("answer · 2026-11-21T08:50:00Z", out.getvalue())     # an answer names its raise's node
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            dfs_tree.main(["tree.py", "show", "W9", "W9.3", "--raw"])
+        self.assertEqual(out.getvalue().count("Status:"), 2)   # as written
+
+    def test_a_log_entry_for_w9_4_is_not_found_for_w9_41(self):
+        t = self.fixture()
+        e = next(e for e in t["log"] if e["kind"] == "raise" and "W9.4" in e["head"])
+        self.assertTrue(dfs_tree.names_node(e, "W9.4", t))
+        self.assertFalse(dfs_tree.names_node(e, "W9.41", t))
+        self.assertFalse(dfs_tree.names_node(dict(e, text="raise · W9.45"), "W9.4", t))
+
+    def test_tag_lists_the_nodes_carrying_it_oldest_first_with_their_status_now(self):
+        self.fixture()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(dfs_tree.main(["tree.py", "tag", "W9", "power"]), 0)
+        text = out.getvalue()
+        self.assertEqual([text.index("### W9.%d" % i) for i in (1, 2, 3, 4)],
+                         sorted(text.index("### W9.%d" % i) for i in (1, 2, 3, 4)))
+        self.assertNotIn("W9.5", text)
+        self.assertIn("Status now: superseded", text)
+
 
 @unittest.skipUnless(REAL.is_dir(), "no roadmap beside the scripts")
 class EveryTaskLoadsTheSameWhenMigrated(unittest.TestCase):
