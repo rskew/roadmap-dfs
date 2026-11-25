@@ -837,6 +837,7 @@ KEYS = [
     ("items", "O", ord("O"), "chat-another", "start another chat about this item, next to its first (in the chats pane: about the item of the chat under the cursor)"),
     ("items", "C", ord("C"), "chat-project", "chat about the project as a whole (run.sh --chat project)"),
     ("items", "E", ord("E"), "archive-chat", "archive this item's chat: its agent is stopped and the Chats list moves it to Archived; a later message reopens it (asks first). In the chats pane (T) it is the chat under the cursor"),
+    ("items", "U", ord("U"), "unarchive-chat", "bring this item's archived chat back in progress, with its conversation as it was (asks first). In the chats pane (T) it is the chat under the cursor"),
     ("items", "o", ord("o"), "open", "open a new task (run.sh --open)"),
     ("items", "e", ord("e"), "edit", "edit the item's file in $EDITOR"),
     ("items", "[  -", ord("["), "up", "move up among its siblings"),
@@ -3116,7 +3117,7 @@ class UI(WorkMixin):
         self.chat_sel = max(0, min(self.chat_sel, len(rows) - 1))
         archived = sum(1 for c in rows if c["ended"])
         out.append(("chats — %d in progress, %d archived" % (len(rows) - archived, archived), curses.A_BOLD))
-        out.append(("  enter opens one (an archived one resumes) · O starts another on its item · N names it · E archives it · ↑↓/jk moves · esc back", look("chrome")))
+        out.append(("  enter opens one (an archived one resumes) · O starts another on its item · N names it · E archives it · U unarchives it · ↑↓/jk moves · esc back", look("chrome")))
         out.append(("", 0))
         self._sel_row = None
         if not rows:
@@ -3205,6 +3206,19 @@ class UI(WorkMixin):
             self.msg = "%s is already archived" % row["scope"]
             return
         self.end_chat(row["scope"])
+        self.chat_rows(fresh=True)
+
+    def unarchive_chat_row(self):
+        """What `U` does in the chats pane: bring back the archived chat under the cursor."""
+        rows = self.chat_rows()
+        if not rows:
+            self.msg = "no chat to unarchive"
+            return
+        row = rows[max(0, min(self.chat_sel, len(rows) - 1))]
+        if not row["ended"]:
+            self.msg = "%s is not archived" % row["scope"]
+            return
+        self.unarchive_chat(row["scope"])
         self.chat_rows(fresh=True)
 
     def lines_console(self, width, run):
@@ -4301,7 +4315,7 @@ class UI(WorkMixin):
         elif self.pane == "runs":
             actions, nav = ["⏎ open", "esc back"], ["↑↓/jk run"]
         elif self.pane == "chats":
-            actions, nav = ["⏎ open", "N name", "E archive", "esc back"], ["↑↓/jk chat"]
+            actions, nav = ["⏎ open", "N name", "E archive", "U unarchive", "esc back"], ["↑↓/jk chat"]
         elif self.tree_focused():
             actions = ["⏎ open", "n next ⚑", "p flagged", "space fold", "i add", "a answer"]
             row = self.tree_row()
@@ -4696,6 +4710,26 @@ class UI(WorkMixin):
             self.msg = "not archived: %s" % e
             return
         self.msg = self.event("run", "chat %s archived" % scope)
+
+    def unarchive_chat(self, scope):
+        """What `U` does: the opposite of `E`, as the page's Unarchive button does (`Chats.unarchive`):
+        the archive mark comes off and the chat is in progress again. The conversation was kept, so
+        there is nothing else to restore."""
+        import chat as dfs_chat
+        chats = dfs_chat.Chats(worker=lambda: UiWorker(self))
+        if not chats.sid(scope):
+            self.msg = "%s has no chat to unarchive" % scope
+            return
+        if self.prompt("unarchive the chat on %s? It goes back to in progress [y/N]:"
+                       % scope)[:1].lower() != "y":
+            self.msg = "chat on %s left archived" % scope
+            return
+        try:
+            chats.unarchive(scope)
+        except (ValueError, OSError) as e:
+            self.msg = "not unarchived: %s" % e
+            return
+        self.msg = self.event("run", "chat %s unarchived" % scope)
 
     def shell(self, argv, pause=True, env=None):
         """Hand the real terminal over. Sessions are interactive and stream output."""
@@ -5522,6 +5556,12 @@ class UI(WorkMixin):
                 self.end_chat_row()
             else:
                 self.end_chat(item)
+        elif ch == ord("U"):
+            # Capital, and it asks, like `E`: the two are a pair.
+            if self.pane == "chats":
+                self.unarchive_chat_row()
+            else:
+                self.unarchive_chat(item)
         elif ch == ord("D"):
             # Capital, and it asks, for the same reason as `K`: nothing in the screen
             # puts a deleted item back (its files wait under .dfs/archive/deleted).
