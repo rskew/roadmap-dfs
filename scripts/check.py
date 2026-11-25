@@ -316,6 +316,13 @@ def renamed_from(rel: Path):
     return None
 
 
+def read_tokens(task, text, archive="", logtext=""):
+    """The tokens a session reads of one part of a task: its digest (`dfs_tree.digest`),
+    counted as the check counts a file, four characters to a token."""
+    t = dfs_tree.with_log_file(dfs_tree.with_archive(dfs_tree.parse(text, task), archive), logtext)
+    return len(dfs_tree.digest(t)) // 4
+
+
 def handoff_verdict(now_tok: int, was_tok: int, budget: int):
     """What a handoff's size says about the commit in front of you: refuse, note, or nothing.
 
@@ -814,19 +821,29 @@ def main() -> int:
                 fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, wbase)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
                 fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase, logtext, wlog)]
-            now_tok = len(text) // 4
-            was_tok = (len(head) // 4) if head is not None else 0
+            # What a session reads is the digest (live nodes whole, settled ones a line), so that
+            # is what the 10,000-token budget counts; the file itself has a much larger ceiling.
+            now_tok = read_tokens(task, text, arc, logtext)
+            was_tok = read_tokens(task, head, head_arc, head_log) if head is not None else 0
             budget = dfs_state.HANDOFF_BUDGET
             verdict = handoff_verdict(now_tok, was_tok, budget)
+            file_now = len(text) // 4
+            file_was = (len(head) // 4) if head is not None else 0
+            file_verdict = handoff_verdict(file_now, file_was, dfs_state.FILE_CEILING)
+            if file_verdict == "refuse" and verdict != "refuse":
+                verdict, now_tok, was_tok, budget = file_verdict, file_now, file_was, dfs_state.FILE_CEILING
             if verdict == "refuse" and adopting:
                 verdict = "note"
             if verdict == "refuse":
                 grew = ("ADDS it" if head is None
                         else f"GREW it (~{was_tok:,} before)")
+                what = ("the file's size" if budget == dfs_state.FILE_CEILING
+                        else "the digest a session reads of it")
                 fatal.append(
                     f"{rel} is ~{now_tok:,} tokens, over the {budget:,} budget, and this commit\n"
-                    f"    {grew}. A task file is re-read whole by every\n"
-                    "    session on the task. Prune its Background, or move settled history to\n"
+                    f"    {grew}. It is {what} that is over: a session carries on from the\n"
+                    "    digest of a task, live nodes whole and each settled node a line. Shorten the live nodes and\n"
+                    "    the settled nodes' Determinations, or move settled history to\n"
                     "    .dfs/archive/ (`tree.py shelve %s` moves determined nodes'\n"
                     "    Approaches and Hypotheses there)." % task)
             elif verdict == "note":

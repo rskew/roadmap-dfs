@@ -37,6 +37,10 @@ import tree as dfs_tree            # noqa: E402  (the same)
 # growth past it and `brief` warns the session that could prune — two numbers would
 # let the check and the warning disagree about the same file.
 HANDOFF_BUDGET = 10_000
+# The budget counts the digest a session reads (`dfs_tree.digest`), not the file, so a file
+# may hold the history of a long task. This ceiling is the file's own, for the editor that
+# opens it: about four times what the digest of a file of the longest tasks weighs.
+FILE_CEILING = 40_000
 
 
 def read_roadmap() -> str:
@@ -541,9 +545,11 @@ def _size_note(task, path) -> str:
     if not path.exists():
         return "not written yet"
     n = len(path.read_text()) // 4
-    over = (" — ⚠️ over the %s-token budget; prune Background, and move settled "
-            "history to the archive (`tree.py shelve %s`)"
-            % (f"{HANDOFF_BUDGET:,}", task)) if n > HANDOFF_BUDGET else ""
+    read = len(dfs_tree.digest(dfs_tree.load(task))) // 4
+    over = (" — ⚠ its digest is over the %s-token budget; shorten the live nodes and the "
+            "settled nodes' Determinations, and move settled history to the archive "
+            "(`tree.py shelve %s`)" % (f"{HANDOFF_BUDGET:,}", task)) if read > HANDOFF_BUDGET else ""
+    over = " (its digest, which you read, is ~%s)%s" % (f"{read:,}", over)
     return "~%s tokens%s%s" % (f"{n:,}", over, _compact_note(task))
 
 
@@ -630,8 +636,8 @@ def brief(task: str) -> str:
     """Everything a work session needs before it starts, as text it is HANDED.
 
     ⚠️ The law is carried VERBATIM, never summarised: a summary of the law is a
-    second copy of it. The task file is NOT carried — it is the next thing the
-    session reads, whole.
+    second copy of it. The task file is NOT carried whole: the briefing ends with its
+    digest (`dfs_tree.digest`), live nodes whole and settled ones a line each.
     """
     t = dfs_tree.load(task)
     st = state_for(task)
@@ -640,8 +646,12 @@ def brief(task: str) -> str:
     out = [read_roadmap().rstrip(), "",
            "## Your briefing — %s" % task, "",
            "- **Status**: %s — %s" % (st["status"], st["why"]),
-           "- **Your task file is `%s`** (%s). Read it next: its Tree is the state of the "
-           "work, %s" % (rel, _size_note(task, path), _log_note(task, path)),
+           "- **Your task file is `%s`** (%s). Its Tree is the state of the work, %s "
+           "The digest at the end of this briefing carries the Tree, so you need not read "
+           "the file whole: open a settled node in full with `python3 %s/tree.py show %s "
+           "<id>`, and read the file only where you edit it."
+           % (rel, _size_note(task, path), _log_note(task, path),
+              dfs_paths.rel(dfs_paths.SCRIPTS), task),
            ] + _parts_note(task, path) + [
            "- **The tool's scripts are in `%s`**: `<scripts>` in the skill means that "
            "directory." % dfs_paths.rel(dfs_paths.SCRIPTS),
@@ -779,7 +789,11 @@ def brief(task: str) -> str:
                 for nid, sha, subj in stale]
         out += [""]
     if st["outline"]:
-        out += ["### The tree", ""] + ["    " + ln for ln in st["outline"]] + [""]
+        out += ["### The task, as a digest", "",
+                "The Goal, every live open node whole, and every other node as one line with "
+                "its Determination. This is what you carry on from; the task file holds the "
+                "same and more.", "",
+                dfs_tree.digest(t).rstrip(), ""]
     return "\n".join(out).rstrip() + "\n"
 
 

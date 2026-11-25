@@ -313,6 +313,69 @@ class Derivation(unittest.TestCase):
         self.assertEqual(dfs_tree.render(dfs_tree.parse(again, "W1")), again)
 
 
+class Digest(unittest.TestCase):
+    """`digest` is what a session carries on from: live open nodes whole, the rest one line."""
+
+    def t(self, *nodes, log="", archive=""):
+        t = dfs_tree.parse(task("".join(nodes), log), "W1")
+        return dfs_tree.with_archive(t, archive) if archive else t
+
+    def test_an_open_node_is_whole_and_a_settled_one_is_its_determination_alone(self):
+        done = node(1, "confirmed", extra="Approach: read the long way round\nDetermination: it worked")
+        t = self.t(done, node(2, parent=1, extra="Approach: do the next thing"))
+        d = dfs_tree.digest(t)
+        self.assertIn("Make it work.", d)
+        self.assertIn("- W1.1 [confirmed] step 1 — it worked", d)
+        self.assertNotIn("read the long way round", d)
+        self.assertIn("### W1.2 · step 2", d)
+        self.assertIn("Approach: do the next thing", d)
+
+    def test_a_parked_a_dormant_and_a_pruned_node_are_one_line_each(self):
+        t = self.t(node(1, "confirmed"), node(2, "parked", 1, "Approach: the other way"),
+                   node(3, parent=2, extra="Approach: under the parked one"),
+                   node(4, "refuted", 1), node(5, parent=4, extra="Approach: under the refuted one"),
+                   node(6, parent=1, extra="Approach: the live one"))
+        d = dfs_tree.digest(t)
+        for line in ("- W1.2 [parked] step 2 · Parent: W1.1", "- W1.3 [dormant] step 3 · Parent: W1.2",
+                     "- W1.4 [refuted] step 4 · Parent: W1.1", "- W1.5 [pruned] step 5 · Parent: W1.4"):
+            self.assertIn(line, d)
+        for gone in ("the other way", "under the parked one", "under the refuted one"):
+            self.assertNotIn(gone, d)
+        self.assertIn("Approach: the live one", d)
+
+    def test_the_log_section_is_left_out_and_the_other_sections_are_kept(self):
+        text = task(node(1, "confirmed"), "- 2026-01-01T00:00:00Z · session · work\n")
+        text = text.replace("## Tree", "## Background\n\nWhy it is so.\n\n## Tree")
+        d = dfs_tree.digest(dfs_tree.parse(text, "W1"))
+        self.assertIn("## Background\n\nWhy it is so.", d)
+        self.assertNotIn("session · work", d)
+
+    def test_a_shelved_field_comes_back_whole_from_node_text_but_not_in_the_digest(self):
+        stubbed = node(1, "confirmed", extra="Approach: archived.\nDetermination: It held (archived.)")
+        archive = ("**W1.1 Approach**: the full approach\n"
+                   "**W1.1 Determination**: It held, on every case\n")
+        t = self.t(stubbed, archive=archive)
+        self.assertIn("Approach: the full approach", dfs_tree.node_text(dfs_tree.by_id(t)["W1.1"]))
+        self.assertIn("Determination: It held, on every case", dfs_tree.node_text(dfs_tree.by_id(t)["W1.1"]))
+        self.assertNotIn("the full approach", dfs_tree.digest(t))
+
+    def test_a_long_determination_is_cut_in_the_digest_and_whole_in_show(self):
+        det = "Confirmed: " + "word " * 100 + "end."
+        t = self.t(node(1, "confirmed", extra="Determination: %s\n" % det))
+        line = [l for l in dfs_tree.digest(t).splitlines() if l.startswith("- W1.1")][0]
+        self.assertTrue(line.endswith(" …"))
+        self.assertLess(len(line), 300)
+        self.assertIn("end.", dfs_tree.node_text(dfs_tree.by_id(t)["W1.1"]))
+
+    def test_the_digest_of_a_long_settled_task_is_a_fraction_of_the_file(self):
+        body = "x " * 400
+        nodes = [node(1, "confirmed", extra="Approach: %s\nDetermination: ok" % body)]
+        nodes += [node(n, "confirmed", n - 1, "Approach: %s\nDetermination: ok" % body) for n in range(2, 9)]
+        nodes.append(node(9, parent=8, extra="Approach: next"))
+        text = task("".join(nodes))
+        self.assertLess(len(dfs_tree.digest(dfs_tree.parse(text, "W1"))), len(text) // 4)
+
+
 class InARepo(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
@@ -1499,6 +1562,17 @@ class Check(InARepo):
         self.assertNotIn("its Log what everyone has said", new)
         self.assertNotIn("session · work", new, "the log's text is not loaded into the briefing")
 
+    def test_the_briefing_hands_the_digest_and_not_a_settled_nodes_approach(self):
+        self.write(task(node(1, "confirmed", extra="Approach: the long way round\nDetermination: it worked\n")
+                        + node(2, parent=1, extra="Approach: do the next thing\n"), self.LOG))
+        b = dfs_state.brief("W1")
+        digest = b[b.index("### The task, as a digest"):]
+        self.assertIn("- W1.1 [confirmed] step 1 — it worked", digest)
+        self.assertIn("Approach: do the next thing", digest)
+        self.assertNotIn("the long way round", b)
+        self.assertIn("tree.py show W1 <id>", b)
+        self.assertIn("need not read the file whole", b)
+
     def test_the_briefing_does_not_say_the_log_is_all_in_the_file_while_the_task_still_has_a_log(self):
         self.write(task(node(1), self.LOG))
         dfs_tree.append_log("W1", "answer", "x")        # a new entry goes to the log file
@@ -1537,10 +1611,10 @@ class Check(InARepo):
         text of W1.1's Approach, so a test can size what shelving it saves."""
         saved = "Approach: " + "move me to the archive. " * 40 + "\n"
         small = len(task(node(1, "confirmed", extra="Approach: archived.\n")
-                         + node(2, extra="Evidence:\n"), self.LOG))
-        pad = dfs_state.HANDOFF_BUDGET * 4 + over_by * 4 - small
+                         + node(2, "confirmed", extra="Evidence:\n"), self.LOG))
+        pad = dfs_state.FILE_CEILING * 4 + over_by * 4 - small
         self.write(task(node(1, "confirmed", extra=saved)
-                        + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n"), self.LOG))
+                        + node(2, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\n"), self.LOG))
         self.commit()
         return saved
 
@@ -1549,7 +1623,7 @@ class Check(InARepo):
         self.assertEqual(dfs_tree.shelve("W1"), 1)
         self.commit()   # shrank, still over: the check only notes it
         text = (self.root / ".dfs/items/W1.md").read_text()
-        self.assertGreater(len(text) // 4, dfs_state.HANDOFF_BUDGET)
+        self.assertGreater(len(text) // 4, dfs_state.FILE_CEILING)
         self.write(text.replace("## Log", node(3, parent=2, extra="Approach: " + "one more step. " * 30
                                                 + "\n") + "## Log"))
         subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
@@ -1560,18 +1634,18 @@ class Check(InARepo):
     def test_shelve_says_how_far_over_the_budget_the_file_still_is_and_what_to_shelve_next(self):
         long = "Approach: " + "move me to the archive. " * 40 + "\n"
         shelved = lambda pad: task(node(1, "confirmed", extra="Approach: archived.\n")
-                                   + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n")
+                                   + node(2, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\n")
                                    + node(3, "confirmed", extra="Approach: archived.\n"), self.LOG)
-        pad = dfs_state.HANDOFF_BUDGET * 4 - 400 - len(shelved(0))   # both shelved: 100 tokens under
+        pad = dfs_state.FILE_CEILING * 4 - 400 - len(shelved(0))   # both shelved: 100 tokens under
         self.write(task(node(1, "confirmed", extra=long)
-                        + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n")
+                        + node(2, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\n")
                         + node(3, "confirmed", extra=long), self.LOG))
         self.commit()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(dfs_tree.main(["tree.py", "shelve", "W1", "W1.1"]), 0)
         self.assertIn("still ~", out.getvalue())
-        self.assertIn("over the 10,000 budget", out.getvalue())
+        self.assertIn("over the 40,000 budget", out.getvalue())
         self.assertIn("tree.py shelve W1 W1.3", out.getvalue())
         self.assertNotIn("W1.1 ", out.getvalue().split("Shelve next")[1])
         self.commit()
@@ -1590,6 +1664,29 @@ class Check(InARepo):
         subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
+
+    def test_a_file_over_the_budget_takes_a_node_while_its_digest_is_under_it(self):
+        pad = dfs_state.HANDOFF_BUDGET * 4 + 800
+        self.write(task(node(1, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\nDetermination: ok\n"),
+                        self.LOG))
+        self.commit()
+        text = (self.root / ".dfs/items/W1.md").read_text()
+        self.assertGreater(len(text) // 4, dfs_state.HANDOFF_BUDGET)
+        self.write(text.replace("## Log", node(2, parent=1, extra="Approach: next\n") + "## Log"))
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+
+    def test_a_node_that_takes_the_digest_past_the_budget_is_refused(self):
+        self.write(task(node(1, "confirmed", extra="Determination: ok\n"), self.LOG))
+        self.commit()
+        text = (self.root / ".dfs/items/W1.md").read_text()
+        big = "Approach: " + "y" * (dfs_state.HANDOFF_BUDGET * 4) + "\n"
+        self.write(text.replace("## Log", node(2, parent=1, extra=big) + "## Log"))
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("the digest a session reads of it", out)
 
     def test_shelve_moves_a_determination_leaving_its_first_clause_and_the_check_holds_it_to_that(self):
         det = ("Confirmed: the washes are now clearly tinted in dark, every rule applies in all four "
