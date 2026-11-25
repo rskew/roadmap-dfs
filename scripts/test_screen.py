@@ -16,6 +16,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -1703,6 +1704,109 @@ class OpeningAPullRequest(unittest.TestCase):
             finally:
                 TUI.tree_entries = real
             self.assertIn(want, text)
+
+
+class WatchSignatureIdleCost(unittest.TestCase):
+    """The screen's once-a-second watch is most of an idle screen's CPU: it must not
+    ask git where the ignore files are every tick, and must still see a run directory."""
+
+    def test_git_is_asked_for_the_ignore_files_once_per_ttl(self):
+        TUI._ignore_files_seen.clear()
+        with mock.patch.object(TUI.dfs_paths, "ignore_files", return_value=[Path("/x/.gitignore")]) as ask:
+            first = TUI.ignore_files_cached()
+            second = TUI.ignore_files_cached()
+            self.assertEqual((first, second), ([Path("/x/.gitignore")],) * 2)
+            self.assertEqual(ask.call_count, 1)
+            with mock.patch.object(TUI.time, "monotonic", return_value=time.monotonic() + TUI.IGNORE_FILES_TTL + 1):
+                TUI.ignore_files_cached()
+            self.assertEqual(ask.call_count, 2)
+
+    def test_task_part_files_match_what_the_two_globs_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            items = Path(tmp, "items")
+            (items / "W1").mkdir(parents=True)
+            (items / "W1" / "deep").mkdir()
+            for name in ("W1.md", "W1.log.md", "notes.txt", "W1/main.md", "W1/main.log.md", "W1/x.json", "W1/deep/no.md", ".hid.md"):
+                (items / name).write_text("x")
+            want = sorted(str(p) for p in list(items.glob("*.md")) + list(items.glob("*/*.md")))
+            self.assertEqual(TUI.task_part_files(str(items)), want)
+            self.assertEqual(TUI.task_part_files(str(items / "missing")), [])
+
+    def test_a_run_directory_and_its_files_are_in_the_signature(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp, "dfs_run_a")
+            run.mkdir()
+            Path(tmp, "unrelated").mkdir()
+            (run / "run-1.json").write_text("{}")
+            (run / "console.log").write_text("x")
+            with mock.patch.object(TUI.dfs_runs, "run_roots", return_value=[tmp]):
+                before = TUI.watch_signature()
+                (run / "console.log").write_text("xy")
+                after = TUI.watch_signature()
+        named = [e[0] for e in before]
+        self.assertIn(str(run / "run-1.json"), named)
+        self.assertIn(str(run / "console.log"), named)
+        self.assertFalse(any("unrelated" in n for n in named))
+        self.assertNotEqual(before, after)
+
+
+class OldRunDirectoriesAreNotRelisted(unittest.TestCase):
+    """An old run directory is only stat-ed each tick; the screen still sees a file added to
+    it at once, a file rewritten in place within COLD_RECHECK, and a recent one at once."""
+
+    def setUp(self):
+        TUI._run_dir_seen.clear()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.run = Path(self.tmp.name, "dfs_run_old")
+        self.run.mkdir()
+        self.log = self.run / "run-1.json"
+        self.log.write_text("{}")
+        (self.run / "console.log").write_text("x")
+        self.age(self.log, 3600)
+        self.age(self.run / "console.log", 3600)
+        self.age(self.run, 3600)
+        patcher = mock.patch.object(TUI.dfs_runs, "run_roots", return_value=[self.tmp.name])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def age(path, seconds):
+        then = time.time() - seconds
+        os.utime(path, (then, then))
+
+    def later(self, seconds):
+        return mock.patch.object(TUI.time, "monotonic", return_value=time.monotonic() + seconds)
+
+    def test_a_file_added_to_an_old_directory_shows_at_once(self):
+        before = TUI.watch_signature()
+        (self.run / "run-2.json").write_text("{}")
+        after = TUI.watch_signature()
+        self.assertIn(str(self.run / "run-2.json"), [e[0] for e in after])
+        self.assertNotEqual(before, after)
+
+    def test_a_file_rewritten_in_place_shows_after_the_recheck(self):
+        before = TUI.watch_signature()
+        self.log.write_text('{"a": 1}')
+        self.assertEqual(TUI.watch_signature(), before)
+        with self.later(TUI.COLD_RECHECK + 1):
+            self.assertNotEqual(TUI.watch_signature(), before)
+
+    def test_an_old_directory_is_not_listed_again_inside_the_recheck(self):
+        TUI.watch_signature()
+        real = os.scandir
+
+        def scandir(path):
+            self.assertNotEqual(os.fspath(path), str(self.run), "the old directory was listed again")
+            return real(path)
+        with mock.patch.object(TUI.os, "scandir", scandir):
+            TUI.watch_signature()
+
+    def test_a_recent_directory_is_followed_every_tick(self):
+        self.age(self.log, 5)
+        before = TUI.watch_signature()
+        self.log.write_text('{"a": 1}')
+        self.assertNotEqual(TUI.watch_signature(), before)
 
 
 if __name__ == "__main__":

@@ -553,44 +553,127 @@ def epic_todo():
     return todo
 
 
+IGNORE_FILES_TTL = 10.0
+_ignore_files_seen = {}
+
+
+def ignore_files_cached():
+    """`dfs_paths.ignore_files()`, asked of git once per `IGNORE_FILES_TTL` seconds per
+    work root instead of every tick (two `git` processes). Where the files are changes
+    only with git's config or the checkout, and a change in what they hold shows in the
+    signature through their own mtimes, so a stale answer is late by at most the ttl."""
+    root, now = str(dfs_paths.work_root()), time.monotonic()
+    at, files = _ignore_files_seen.get(root, (None, None))
+    if at is None or now - at >= IGNORE_FILES_TTL:
+        files = dfs_paths.ignore_files()
+        _ignore_files_seen[root] = (now, files)
+    return list(files)
+
+
+def task_part_files(items):
+    """The `*.md` files in a task folder and in each folder one level below it, as sorted
+    strings: what `items.glob("*.md")` and `items.glob("*/*.md")` found, without a `Path`
+    for each entry (sorting those was a third of the screen's once-a-second watch)."""
+    found = []
+    try:
+        with os.scandir(items) as top:
+            entries = list(top)
+    except OSError:
+        return found
+    for e in entries:
+        if e.name.endswith(".md"):
+            found.append(e.path)
+        try:
+            if not e.is_dir():
+                continue
+            with os.scandir(e.path) as sub:
+                found += [s.path for s in sub if s.name.endswith(".md")]
+        except OSError:
+            pass
+    return sorted(found)
+
+
+COLD_AFTER = 300.0      # a run directory nothing in has changed for this long (seconds) is old
+COLD_RECHECK = 10.0     # and an old one's files are listed and stat-ed again this often
+_run_dir_seen = {}      # run directory -> what `run_dir_stamps` last returned for it
+
+
+def run_dir_stamps(d, seen, wall, mono):
+    """One run directory's contribution to `watch_signature`: `(dir mtime, cold, listed at,
+    json stamps, console stamps)`, or None when it cannot be listed.
+
+    Most run directories are finished and never touched again, and stat-ing every file in
+    all of them every second was most of an idle screen's work once there were hundreds.
+    An OLD directory (it and everything in it unchanged for `COLD_AFTER`) is only `stat`-ed
+    itself each tick: adding, removing or renaming a file in it moves its mtime and shows at
+    once, and a file rewritten in place shows within `COLD_RECHECK`. A directory changed
+    more recently, which is every chain that is running, is listed every tick."""
+    try:
+        mtime = os.stat(d).st_mtime_ns
+    except OSError:
+        return None
+    if seen and seen[1] and seen[0] == mtime and mono - seen[2] < COLD_RECHECK:
+        return seen
+    try:
+        with os.scandir(d) as it:
+            names = sorted(e.name for e in it)
+    except OSError:
+        return None
+    newest, logs, consoles = mtime, [], []
+    for n in names:
+        is_log = n.endswith(".json") and not n.startswith(".")
+        if not is_log and n != "console.log":
+            continue
+        f = os.path.join(d, n)
+        try:
+            st = os.stat(f)
+        except OSError:
+            continue
+        newest = max(newest, st.st_mtime_ns)
+        if is_log:
+            logs.append((f, st.st_mtime_ns))
+        else:
+            consoles.append((f, st.st_mtime_ns, st.st_size))
+    return (mtime, newest < (wall - COLD_AFTER) * 1e9, mono, logs, consoles)
+
+
 def watch_signature():
     """What the screen is watching, as one comparable value.
 
     Mtimes rather than a filesystem-watch API: a few globs and `stat`s, plus the two
-    `git` calls that locate the ignore files (`dfs_paths.ignore_files`), cost
-    milliseconds at a one-second poll, and a watcher would need a thread whose failure
+    `git` calls that locate the ignore files (`dfs_paths.ignore_files`, asked once per
+    `IGNORE_FILES_TTL`), cost milliseconds at a one-second poll, and a watcher would need a thread whose failure
     mode is a screen that has quietly stopped updating — the same silent-staleness
     shape the app's own live path is written against.
     """
     paths = [dfs_paths.roadmap(), dfs_paths.order()]
     # the ignore files too: the header's "git hides .dfs" follows the rules
-    paths += dfs_paths.ignore_files() + [dfs_paths.state() / ".gitignore"]
+    paths += ignore_files_cached() + [dfs_paths.state() / ".gitignore"]
+    paths = [str(p) for p in paths]
     for items in [dfs_paths.items()] + [s / "items" for s in dfs_paths.worktree_states()]:
-        paths += sorted(items.glob("*.md")) + sorted(items.glob("*/*.md"))
+        paths += task_part_files(str(items))
     sig = []
     for p in paths:
         try:
-            sig.append((str(p), p.stat().st_mtime_ns))
+            sig.append((p, os.stat(p).st_mtime_ns))
         except OSError:
-            sig.append((str(p), 0))
-    logs, consoles = [], []
-    for root in dfs_runs.run_roots():
-        logs += glob.glob(os.path.join(root, "dfs_run_*", "*.json"))
-        consoles += glob.glob(os.path.join(root, "dfs_run_*", "console.log"))
-    for f in sorted(logs):
-        try:
-            sig.append((f, os.stat(f).st_mtime_ns))
-        except OSError:
-            pass
+            sig.append((p, 0))
+    logs, consoles, kept = [], [], {}
+    wall, mono = time.time(), time.monotonic()
+    for d in dfs_runs.run_paths():          # sorted, so the names of each run directory in turn keep the order
+        entry = run_dir_stamps(d, _run_dir_seen.get(d), wall, mono)
+        if entry is None:
+            continue                # a file, or a run directory that was just removed
+        kept[d] = entry
+        logs += entry[3]
+        consoles += entry[4]
+    _run_dir_seen.clear()
+    _run_dir_seen.update(kept)
+    sig += logs
     # A live chain's console is APPENDED to, and on a filesystem with coarse mtime a
     # second of output can land inside one tick — so the size is in the signature
     # too, or the tail stops moving while the run is still talking.
-    for f in sorted(consoles):
-        try:
-            st = os.stat(f)
-            sig.append((f, st.st_mtime_ns, st.st_size))
-        except OSError:
-            pass
+    sig += consoles
     return tuple(sig)
 
 
