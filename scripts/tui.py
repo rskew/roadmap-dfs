@@ -570,6 +570,29 @@ def ignore_files_cached():
     return list(files)
 
 
+def task_part_files(items):
+    """The `*.md` files in a task folder and in each folder one level below it, as sorted
+    strings: what `items.glob("*.md")` and `items.glob("*/*.md")` found, without a `Path`
+    for each entry (sorting those was a third of the screen's once-a-second watch)."""
+    found = []
+    try:
+        with os.scandir(items) as top:
+            entries = list(top)
+    except OSError:
+        return found
+    for e in entries:
+        if e.name.endswith(".md"):
+            found.append(e.path)
+        try:
+            if not e.is_dir():
+                continue
+            with os.scandir(e.path) as sub:
+                found += [s.path for s in sub if s.name.endswith(".md")]
+        except OSError:
+            pass
+    return sorted(found)
+
+
 def watch_signature():
     """What the screen is watching, as one comparable value.
 
@@ -582,25 +605,26 @@ def watch_signature():
     paths = [dfs_paths.roadmap(), dfs_paths.order()]
     # the ignore files too: the header's "git hides .dfs" follows the rules
     paths += ignore_files_cached() + [dfs_paths.state() / ".gitignore"]
+    paths = [str(p) for p in paths]
     for items in [dfs_paths.items()] + [s / "items" for s in dfs_paths.worktree_states()]:
-        paths += sorted(items.glob("*.md")) + sorted(items.glob("*/*.md"))
+        paths += task_part_files(str(items))
     sig = []
     for p in paths:
         try:
-            sig.append((str(p), p.stat().st_mtime_ns))
+            sig.append((p, os.stat(p).st_mtime_ns))
         except OSError:
-            sig.append((str(p), 0))
+            sig.append((p, 0))
     logs, consoles = [], []
-    for d in dfs_runs.run_paths():
+    for d in dfs_runs.run_paths():          # sorted, so the names of each run directory in turn keep the order
         try:
             with os.scandir(d) as it:
-                names = [e.name for e in it]
+                names = sorted(e.name for e in it)
         except OSError:
             continue                # a file, or a run directory that was just removed
         logs += [os.path.join(d, n) for n in names if n.endswith(".json") and not n.startswith(".")]
         if "console.log" in names:
             consoles.append(os.path.join(d, "console.log"))
-    for f in sorted(logs):
+    for f in logs:
         try:
             sig.append((f, os.stat(f).st_mtime_ns))
         except OSError:
@@ -608,7 +632,7 @@ def watch_signature():
     # A live chain's console is APPENDED to, and on a filesystem with coarse mtime a
     # second of output can land inside one tick — so the size is in the signature
     # too, or the tail stops moving while the run is still talking.
-    for f in sorted(consoles):
+    for f in consoles:
         try:
             st = os.stat(f)
             sig.append((f, st.st_mtime_ns, st.st_size))

@@ -1721,6 +1721,17 @@ class WatchSignatureIdleCost(unittest.TestCase):
                 TUI.ignore_files_cached()
             self.assertEqual(ask.call_count, 2)
 
+    def test_task_part_files_match_what_the_two_globs_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            items = Path(tmp, "items")
+            (items / "W1").mkdir(parents=True)
+            (items / "W1" / "deep").mkdir()
+            for name in ("W1.md", "W1.log.md", "notes.txt", "W1/main.md", "W1/main.log.md", "W1/x.json", "W1/deep/no.md", ".hid.md"):
+                (items / name).write_text("x")
+            want = sorted(str(p) for p in list(items.glob("*.md")) + list(items.glob("*/*.md")))
+            self.assertEqual(TUI.task_part_files(str(items)), want)
+            self.assertEqual(TUI.task_part_files(str(items / "missing")), [])
+
     def test_a_run_directory_and_its_files_are_in_the_signature(self):
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp, "dfs_run_a")
