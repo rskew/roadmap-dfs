@@ -704,6 +704,140 @@ def falsifier_notes(task, text, head, read, archive="", head_archive=""):
     return out
 
 
+# ── the history format (docs/history-format.md): a task with a history file ──
+# Its nodes live in the history file and its status file is small, so the rules above read
+# a "virtual" old-format text built from the two, and the rules below hold what is only true
+# of the new format: the hand-kept lines to the history, the generated tree to the history,
+# and the history to its own past.
+
+def history_rel(rel):
+    """A part's history file, relative to `items/`: `W13.md` -> `W13.history.md`."""
+    return str(rel)[:-3] + ".history.md"
+
+
+def virtual_text(task, text, hist):
+    """An old-format text for a part with a history: the status file's hand-kept sections,
+    then a `## Tree` of every history node as it stands now, so the node rules can read it.
+    `text` itself when the part has no history."""
+    if hist is None or text is None:
+        return text
+    import taskhistory
+    head, secs = taskhistory._split_status(text)
+    out = list(head)
+    for name, lines in secs:
+        if name not in taskhistory.GENERATED + taskhistory.LEGACY:
+            out += lines
+    nodes = taskhistory.parse(hist, task)["nodes"]
+    out += ["", "## Tree", ""]
+    for nd in nodes:
+        # `Tags:` and `Supersedes:` are the new format's: the old reader would run them into the line above
+        out += [l for l in dfs_tree.folded_text(nd).split("\n")
+                if not l.startswith(("Tags:", "Supersedes:"))] + [""]
+    return "\n".join(out) + "\n"
+
+
+def virtual_text_kept(task, text):
+    """A status file without its generated sections: what a session keeps by hand."""
+    import taskhistory
+    head, secs = taskhistory._split_status(text)
+    return "\n".join(head + [l for n, ls in secs if n not in taskhistory.GENERATED for l in ls])
+
+
+def decision_lines(text):
+    """The `- ` lines of a status file's `## Decisions in force`."""
+    out, on = [], False
+    for line in (text or "").splitlines():
+        m = dfs_tree.SECTION_HEAD.match(line)
+        if m:
+            on = m.group(1).strip() == "Decisions in force"
+        elif on and line.startswith("- "):
+            out.append(line)
+    return out
+
+
+def cites(line):
+    """(node ids, answer timestamps) in the parenthesis that ends a decision line."""
+    m = re.search(r"\(([^()]*)\)\s*$", line)
+    c = m.group(1) if m else ""
+    ids = re.findall(r"(?<![\w@.-])%s(?![\w@.-])" % dfs_tree.NODE_RE, c)
+    return ids, re.findall(r"\banswer ([0-9TZ:-]+)", c)
+
+
+def check_decisions(task, text, head, whole, head_whole):
+    """What is wrong with the decision lines of a status file against the history (`whole`):
+    a line must cite a node or answer that exists (1), every cited node confirmed, and one of
+    them not superseded, since a line may cite the chain of nodes that shaped it (2); and a
+    line unchanged since HEAD may not cite a node this commit made superseded (3), because
+    the commit that confirms a node with `Supersedes:` must rewrite the lines it retires."""
+    bad = []
+    nodes = dfs_tree.by_id(whole)
+    sup = dfs_tree.superseded_by(whole)
+    old_sup = dfs_tree.superseded_by(head_whole) if head_whole else {}
+    answers = {e["ts"] for e in whole["log"] if e["kind"] == "answer"}
+    old_lines = set(decision_lines(head)) if head else set()
+    for line in decision_lines(text):
+        ids, ans = cites(line)
+        what = "decision %r" % line[2:50]
+        if not ids and not ans:
+            bad.append("%s cites no node or answer, so nothing can check it; end it with (<node id>, <date>)" % what)
+            continue
+        gone = [i for i in ids if i not in nodes] + ["answer " + a for a in ans if a not in answers]
+        if gone:
+            bad.append("%s cites %s, which does not exist" % (what, ", ".join(gone)))
+            continue
+        unconfirmed = [i for i in ids if nodes[i]["status"] != "confirmed"]
+        if unconfirmed:
+            bad.append("%s cites %s, which is not confirmed" % (what, ", ".join(unconfirmed)))
+            continue
+        fresh = [i for i in ids if i in sup and i not in old_sup]
+        if fresh and line in old_lines:
+            bad.append("%s still cites %s, which %s now supersedes; rewrite the line or remove it"
+                       % (what, fresh[0], ", ".join(sup[fresh[0]])))
+        elif ids and not ans and all(i in sup for i in ids):
+            bad.append("%s cites only superseded nodes (%s); cite the node that replaced them or remove the line"
+                       % (what, ", ".join(ids)))
+    return bad
+
+
+def check_live_tree(task, tag, text, whole):
+    """Every open, started or parked node of the part is in the status file's Live tree, and
+    nothing else is (`taskhistory.live_ids`): a stale tree hides work or shows work that is done."""
+    import taskhistory
+    nodes = dfs_tree.by_id(whole)
+    want = {i for i in taskhistory.live_ids(whole) if nodes[i].get("tag", "") == tag}
+    have = {nd["id"] for nd in dfs_tree.parse_nodes(dfs_tree.parse(text, task)["sections"].get("Live tree", ""), task)}
+    bad = []
+    if want - have:
+        bad.append("the Live tree lacks %s, which is open, started or parked; `tree.py status %s` writes it"
+                   % (", ".join(sorted(want - have)), task))
+    if have - want:
+        bad.append("the Live tree holds %s, which is not open, started or parked; `tree.py status %s` writes it"
+                   % (", ".join(sorted(have - want)), task))
+    return bad
+
+
+def check_history_grows(hist, head_hist, merge=False):
+    """The history file only grows: every nonblank line HEAD held is still there, in order.
+    A merge may interleave the two sides, so there each line need only be kept as often."""
+    new = [l for l in hist.splitlines() if l.strip()]
+    old = [l for l in head_hist.splitlines() if l.strip()]
+    if merge:
+        short = list((collections.Counter(old) - collections.Counter(new)).elements())
+        miss = short[0] if short else None
+    else:
+        i, miss = 0, None
+        for line in old:
+            while i < len(new) and new[i] != line:
+                i += 1
+            if i == len(new):
+                miss = line
+                break
+            i += 1
+    return [] if miss is None else [
+        "the history file lost or changed the line %r. It only grows: a line is added "
+        "at the end of its node's section, and a change is a new line that says so" % miss[:60]]
+
+
 def main() -> int:
     warn_only = "--warn" in sys.argv
     # Silent when this directory has no roadmap: the guard runs from a repo's
@@ -777,27 +911,33 @@ def main() -> int:
         task, tag = dfs_tree.part_of(rel)
         tasks.setdefault(task, {})[tag] = rel
     for task in sorted(tasks):
+        # a part with a history file is new format (`virtual_text`); its history is None otherwise
         parts = {tag: (read(items_dir / rel) or "", read(arc_dir / rel) or "",
-                       read(items_dir / log_rel(rel)) or "")
+                       read(items_dir / log_rel(rel)) or "", read(items_dir / history_rel(rel)))
                  for tag, rel in tasks[task].items()}
-        whole = dfs_tree.combine(task, [(g, x, a, lg) for g, (x, a, lg) in parts.items()])
+        whole = dfs_tree.combine(task, [(g, x, a, lg, h) for g, (x, a, lg, h) in parts.items()])
         # what HEAD held of the task, to judge its copy by the rules of its own whole
         old_parts = [(g, at_head(items_dir / tasks[task][g]),
                       at_head(arc_dir / tasks[task][g]) or "",
-                      at_head(items_dir / log_rel(tasks[task][g])) or "") for g in parts]
-        head_whole = dfs_tree.combine(task, [(g, x, a, lg) for g, x, a, lg in old_parts if x is not None])
-        for tag, (text, arc, logtext) in sorted(parts.items()):
+                      at_head(items_dir / log_rel(tasks[task][g])) or "",
+                      at_head(items_dir / history_rel(tasks[task][g]))) for g in parts]
+        head_whole = dfs_tree.combine(task, [(g, x, a, lg, h) for g, x, a, lg, h in old_parts if x is not None])
+        for tag, (text, arc, logtext, hist) in sorted(parts.items()):
             held = len(fatal), len(bad)
             path = items_dir / tasks[task][tag]
             rel = dfs_paths.rel(path)
             head = at_head(path)
             head_arc = at_head(arc_dir / tasks[task][tag]) or ""
             head_log = at_head(items_dir / log_rel(tasks[task][tag])) or ""
+            head_hist = at_head(items_dir / history_rel(tasks[task][tag]))
+            new_fmt, head_new = hist is not None, head is not None and head_hist is not None
+            vtext, varc = (virtual_text(task, text, hist), "") if new_fmt else (text, arc)
+            vhead, vharc = (virtual_text(task, head, head_hist), "") if head_new else (head, head_arc)
             adopting = declared and head is None
             adds_new = adds_new or (from_index and head is None)
-            shape = check_shape(task, text, arc, tag, whole, logtext)
+            shape = check_shape(task, vtext, varc, tag, whole, logtext)
             if head is not None:   # a fault HEAD already had is not this commit's
-                had = collections.Counter(check_shape(task, head, head_arc, tag, head_whole, head_log))
+                had = collections.Counter(check_shape(task, vhead, vharc, tag, head_whole, head_log))
                 fresh = []
                 for b in shape:   # counted: a second fault with the same text is new
                     if had[b] > 0:
@@ -807,24 +947,39 @@ def main() -> int:
                 shape = fresh
             fatal += ["%s: %s" % (rel, b) for b in shape]
             fatal += ["%s %s" % (rel, b) for b in check_attachments(
-                text + "\n" + arc + "\n" + logtext,
-                None if head is None else head + "\n" + head_arc + "\n" + head_log)]
-            if head is not None:
-                fatal += ["%s: %s" % (rel, b) for b in check_history(task, text, head, arc, logtext, head_log)]
-            wbase = replayed_base(task, head, replayed_copy(path)) if in_rebase else head
+                text + "\n" + arc + "\n" + logtext + "\n" + (hist or ""),
+                None if head is None else head + "\n" + head_arc + "\n" + head_log + "\n" + (head_hist or ""))]
+            if head is not None and new_fmt == head_new:   # the commit that moves a task to the new format has no like to judge by
+                fatal += ["%s: %s" % (rel, b) for b in check_history(task, vtext, vhead, varc, logtext, head_log)]
+            if head_new and not new_fmt:
+                fatal.append("%s: the history file was deleted; it is the task's whole record" % rel)
+            if new_fmt:
+                held_bad = collections.Counter(
+                    check_decisions(task, head, None, head_whole, None) if head_new else ())
+                for b in check_decisions(task, text, head if head_new else None, whole, head_whole):
+                    if held_bad[b] > 0:
+                        held_bad[b] -= 1
+                    else:
+                        fatal.append("%s: %s" % (rel, b))
+                fatal += ["%s: %s" % (rel, b) for b in check_live_tree(task, tag, text, whole)]
+                if head_new:
+                    fatal += ["%s: %s" % (dfs_paths.rel(items_dir / history_rel(tasks[task][tag])), b)
+                              for b in check_history_grows(hist, head_hist, not judge_writer)]
+            wbase = replayed_base(task, head, replayed_copy(path)) if in_rebase and not new_fmt else vhead
             wlog = (replayed_log(head_log, replayed_copy(items_dir / log_rel(tasks[task][tag])))
                     if in_rebase else head_log)
             if judge_writer:   # a merge brings in nodes judged on their own branch
                 fatal += ["%s: %s" % (rel, b)
-                          for b in check_assumptions(task, text, wbase, read, arc, head_arc)]
+                          for b in check_assumptions(task, vtext, wbase, read, varc, vharc)]
             if judge_writer:
-                fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, text, wbase)]
+                fatal += ["%s: %s" % (rel, b) for b in check_no_new_ask(task, vtext, wbase)]
             if judge_writer and (here is not None or dfs_paths.branch() is None):
-                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, text, wbase, logtext, wlog)]
+                fatal += ["%s: %s" % (rel, b) for b in check_writer(task, tag, here, vtext, wbase, logtext, wlog)]
             # What a session reads is the digest (live nodes whole, settled ones a line), so that
             # is what the 10,000-token budget counts; the file itself has a much larger ceiling.
             now_tok = read_tokens(task, text, arc, logtext)
             was_tok = read_tokens(task, head, head_arc, head_log) if head is not None else 0
+            kept = lambda x: len(virtual_text_kept(task, x)) // 4
             budget = dfs_state.HANDOFF_BUDGET
             verdict = handoff_verdict(now_tok, was_tok, budget)
             file_now = len(text) // 4
@@ -833,6 +988,10 @@ def main() -> int:
             if file_verdict == "refuse" and verdict != "refuse":
                 verdict, now_tok, was_tok, budget = file_verdict, file_now, file_was, dfs_state.FILE_CEILING
             if verdict == "refuse" and adopting:
+                verdict = "note"
+            # The status file is the one size rule of a new-format task, and it bounds what is kept
+            # by hand: adding a node grows the generated Live tree only, so it is never refused for size.
+            if verdict == "refuse" and new_fmt and head_new and kept(text) <= kept(head):
                 verdict = "note"
             if verdict == "refuse":
                 grew = ("ADDS it" if head is None
@@ -849,10 +1008,10 @@ def main() -> int:
             elif verdict == "note":
                 print(f"dfs_check: note — {rel} is ~{now_tok:,} tokens, over the "
                       f"{budget:,} budget. Not grown here.")
-            for note in standalone_notes(task, text, head, arc):
+            for note in standalone_notes(task, vtext, vhead, varc):
                 print(f"dfs_check: note — {rel}: {note}")
             if judge_writer:
-                for note in falsifier_notes(task, text, wbase, read, arc, head_arc):
+                for note in falsifier_notes(task, vtext, wbase, read, varc, vharc):
                     print(f"dfs_check: note — {rel}: {note}")
             held_hits = old_coordinates(head, text) if head is not None else {}
             for n, hit in coordinates(text) if text != head else ():

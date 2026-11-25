@@ -69,6 +69,14 @@ confirmed, or the word `answer` and the timestamp of the author's answer in the 
 cite is what makes the line checkable and what `tree.py show` follows to the reason. When
 a node is confirmed that changes a decision, the same commit edits the line.
 
+`check.py` holds each line to the history: it must cite a node or answer that exists, every
+cited node is confirmed, and at least one is not superseded (a line that restates a fact may
+cite the chain of nodes that shaped it). A line left unchanged by the commit that confirms a
+node superseding one it cites is refused, so that commit has to rewrite or remove it. The
+Live tree must hold exactly the open, started and parked nodes, the history may only grow
+(a merge may interleave it), and the status file's token budget refuses a commit only when
+what is kept by hand grew, so adding a node is never refused for size.
+
 **Not taken** is kept by hand, one line per refuted branch and its reason, so it is not
 tried again: `- <what was tried and why it failed> (W15.42, 2026-11-20)`. The cite is a
 refuted node.
