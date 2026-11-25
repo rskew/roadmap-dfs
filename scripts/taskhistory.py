@@ -364,6 +364,80 @@ def live_tree(t, tag=""):
     return out
 
 
+# What the briefing adds from the history for one node in hand, in tokens (a token is four
+# characters, as everywhere else): docs/history-format.md, settled choice 2. A typical section is
+# a few hundred tokens, so this holds the node, its parents and a few neighbours.
+PULL_ALLOWANCE = 4_000
+PULL_NEIGHBOURS = 5      # "a few": the newest nodes that share a tag, before the allowance cuts
+
+
+def _tokens(text):
+    return len(text) // 4
+
+
+def _short(nd, shown):
+    """A node cut to its title and Determination (and its status now, which says what it is)."""
+    out = ["### %s · %s" % (nd["id"], nd["title"]), "Status now: %s" % shown]
+    if nd["fields"].get("Determination"):
+        out.append("Determination: %s" % nd["fields"]["Determination"])
+    return "\n".join(out)
+
+
+def pull(t, nid, allowance=PULL_ALLOWANCE, seen=None, with_parents=True, with_tags=True):
+    """The history a session needs to work the node `nid`, as text, in at most `allowance`
+    tokens besides the node's own section, which never drops: its section whole, then the chain
+    of its parents (nearest first), the nodes it supersedes (nearest first) and the newest nodes
+    that share a tag with it, each section folded. When over, drop the tag neighbours oldest
+    first; then cut the superseded nodes, furthest first, to title and Determination; then the
+    parents, furthest first, the same. `seen` is a set of ids already given to the reader (a
+    critic judging several nodes): their sections are named, not repeated, and it is added to.
+    `with_parents=False` leaves out the chain of parents and `with_tags=False` the tag neighbours (the
+    reviewer, who asks only what a node replaced)."""
+    nodes = {nd["id"]: nd for nd in t["nodes"]}
+    seen = set() if seen is None else seen
+    me = nodes[nid]
+    status, _ = dfs_tree.effective(t)
+    sup = dfs_tree.superseded_by(t, status)
+    shown = lambda n: "superseded" if n["id"] in sup else status[n["id"]]   # as the tools show it
+    parents, cur = [], me
+    while with_parents and cur["parent"] in nodes and cur["parent"] != nid and cur["parent"] not in [p["id"] for p in parents]:
+        cur = nodes[cur["parent"]]
+        parents.append(cur)
+    chain = dfs_tree.supersession_chain(t, nid, status)
+    before = [nodes[i] for i in chain[:chain.index(nid)]][::-1]          # nearest first
+    used = {nid} | {p["id"] for p in parents} | {n["id"] for n in before}
+    mine = set(me.get("tags") or ()) if with_tags else set()
+    near = sorted((n for n in t["nodes"] if n["id"] not in used and mine & set(n.get("tags") or ())),
+                  key=dfs_tree.order_key, reverse=True)[:PULL_NEIGHBOURS]
+    full = {n["id"]: dfs_tree.folded_text(n) + "\nStatus now: %s" % shown(n) for n in parents + before + near}
+    cut = set()                                                         # ids shown short
+    dropped = set()
+    def body(n):
+        return _short(n, shown(n)) if n["id"] in cut else full[n["id"]]
+    def total():
+        return sum(_tokens(body(n)) for n in parents + before + near if n["id"] not in dropped
+                   and n["id"] not in seen)
+    for n in reversed(near):                                            # oldest neighbour first
+        if total() > allowance:
+            dropped.add(n["id"])
+    for group in (reversed(before), reversed(parents)):                 # furthest first
+        for n in group:
+            if total() > allowance:
+                cut.add(n["id"])
+    out = [("(%s: given above)" % nid) if nid in seen else
+           dfs_tree.folded_text(me) + "\nStatus now: %s" % shown(me)]
+    for label, group in (("Its parents, nearest first", parents), ("What it supersedes, nearest first", before),
+                         ("Recent nodes that share a tag with it, newest first", near)):
+        group = [n for n in group if n["id"] not in dropped]
+        if not group:
+            continue
+        out += ["", label + ":"]
+        for n in group:
+            out += ["", ("(%s: given above)" % n["id"]) if n["id"] in seen else body(n)]
+    seen.update({nid} | {n["id"] for n in parents + before + near if n["id"] not in dropped})
+    return "\n".join(out)
+
+
 def raise_entries(t):
     """The open raises and the answers not yet acted on, oldest first, each whole from the log."""
     ents = dfs_tree.open_raises(t) + dfs_tree.unacted_answers(t)

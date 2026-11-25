@@ -194,7 +194,11 @@ reason.
    parents and a few neighbours. When over, drop in this order: tag neighbours, oldest
    first; then superseded nodes, furthest in the chain first, cut to their title and
    Determination; then parents cut to the same. The node's own section never drops, even
-   if it alone is over.
+   if it alone is over. "A few neighbours" is the newest five (`taskhistory.PULL_NEIGHBOURS`)
+   before the allowance cuts. A critic judging several nodes is given each section once, and
+   the reviewer is given each decision in force with the sections it cites, what they replaced,
+   and the answer it cites (no parents, no tag neighbours): `state.py` `_history_block` and
+   `_decision_history`, over `taskhistory.pull`.
 3. **ROADMAP §0**: the sentence "the tree reads the same from the file alone" becomes "the
    live tree reads from the status file and the whole tree from the history". Parked
    siblings stay in the Live tree, since a session unparks them. That is the author's law,
