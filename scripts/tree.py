@@ -93,6 +93,8 @@ Usage:
     tree.py splitlog <task>                      move the task file's whole `## Log` to its log file
     tree.py shelve <task> [<ids>]                move determined nodes' Approach,
                                                      Hypothesis and Determination to the archive
+    tree.py status <task>                        write a history-format task's status file: its Live tree
+                                                     and Raises, from the history and the log
     tree.py migrate <task>                       write an old task's history file (docs/history-format.md)
                                                      and merged log; the old files stay; refuses if a line would be lost
 """
@@ -1297,6 +1299,8 @@ def delete_node(task, nid):
     if parts[2] != dfs_paths.branch_tag():
         raise ValueError("%s belongs to the part of branch %s, which only that branch writes"
                          % (nid, parts[2]))
+    if history_part(task, parts[2]).exists():
+        raise ValueError("%s is in the history format, whose node deleting is not built yet" % task)
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task)
     mine = by_id(t)
@@ -1339,6 +1343,8 @@ def edit_node(task, nid, title, approach=""):
     parts = split_id(nid)
     if not parts or parts[0] != task or not exists(task):
         raise ValueError("no node %s in %s" % (nid, task))
+    if history_part(task, parts[2]).exists():
+        raise ValueError("%s is in the history format, whose node editing is not built yet" % task)
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task) if p.exists() else None
     nd = by_id(t).get(nid) if t else None
@@ -1380,6 +1386,9 @@ def start_node(task, nid):
     parts = split_id(nid)
     if not parts or parts[0] != task or not exists(task):
         raise ValueError("no node %s in %s" % (nid, task))
+    if history_part(task, parts[2]).exists():       # the mark lives in the status file's Live tree
+        import taskhistory
+        return taskhistory.start(task, nid)
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task) if p.exists() else None
     nd = by_id(t).get(nid) if t else None
@@ -1408,6 +1417,11 @@ def add_node(task, title, parent=None, approach=""):
         raise ValueError("a node needs a title")
     if parent and parent not in by_id(load(task)):
         raise ValueError("no node %s in %s to put it under" % (parent, task))
+    tag = "" if dfs_paths.worktree(task) else dfs_paths.branch_tag()
+    if history_part(task, tag).exists():            # the node goes to the history, never the status file
+        import taskhistory
+        carry_attachments(task, approach)
+        return taskhistory.add(task, title, parent, approach, tag)
     p = ensure_part(task)
     t = parse(p.read_text(), task)
     nid = next_node_id(t)
@@ -2388,13 +2402,17 @@ def digest(t):
     session working the next node does not need them in full: the Determination says what
     each settled. `node_text` gives any one back whole, so nothing is hidden, only not
     carried by default."""
-    status, pruned = effective(t)
-    asleep = dormant(t)
     out = [t["title"] or "# %s" % t["task"], ""]
     for name in t["order"]:
         body = t["sections"].get(name, "")
         if name not in ("Tree", "Log") and body:
             out += ["## %s" % name, "", body, ""]
+    if "Live tree" in t["sections"]:
+        # A status file (docs/history-format.md): its Live tree and Raises are already the digest, so
+        # what a session reads is the file, and no node of the history adds to it.
+        return "\n".join(out).rstrip() + "\n"
+    status, pruned = effective(t)
+    asleep = dormant(t)
     out += ["## Tree (digest)", "",
             "Settled nodes are one line each; `tree.py show %s <id>` prints one whole." % t["task"], ""]
     if t.get("tree_pre"):
@@ -2503,6 +2521,13 @@ def _main(argv):
             print("dfs_tree: %s: %d nodes, %d log entries, nothing lost"
                   % (dfs_paths.rel(taskhistory.history_part(argv[2], tag)),
                      r["history"].count("\n### "), len(r["log"])))
+        return 0
+    if len(argv) == 3 and argv[1] == "status":
+        import taskhistory
+        for tag in part_tags(argv[2]):
+            if history_part(argv[2], tag).exists():
+                taskhistory.write_status(argv[2], tag)
+                print("dfs_tree: wrote the Live tree and Raises of %s" % dfs_paths.rel(part_path(argv[2], tag)))
         return 0
     if len(argv) == 3 and argv[1] == "show":
         t = load(argv[2])

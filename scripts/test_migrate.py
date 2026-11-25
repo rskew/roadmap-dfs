@@ -273,7 +273,7 @@ class LoadsTheNewFormat(unittest.TestCase):
         self.assertTrue(by["W9.1"]["evidence"])                    # a node outside the live tree has its evidence
         self.assertEqual(by["W9.2"]["supersedes"], ["W9.1"])
         self.assertEqual(t["goal"], "Make a small battery board that charges and boots.")
-        self.assertEqual([e["kind"] for e in t["log"]], ["session", "end", "raise", "answer", "raise"])
+        self.assertEqual([e["kind"] for e in t["log"]], ["session", "end", "raise", "answer", "session", "end", "raise"])
 
     def test_a_task_with_no_history_file_still_reads_the_old_way(self):
         self.put("W5.md", TASK)

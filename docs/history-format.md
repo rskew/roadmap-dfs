@@ -93,6 +93,20 @@ written to the history, which only holds what a commit would show.
 **Raises** is generated: every open raise, and every answer not yet acted on, quoted whole
 from the log.
 
+`tree.py status <task>` writes both sections from the history and the log, keeps every other
+section as it is, and drops the old `## Tree` and `## Log` (the history and the log file hold
+all of them). An empty section says `(none)`, or `(nothing is open or parked)`. A branch part's
+status file has its own Live tree and no Raises, since the raises belong to the task. A node
+under a refuted node, one cut by a correction and one a confirmed node supersedes are not
+live. The chain of title lines above a live node is one line per ancestor, however long: the
+longest chain of parents in the repo today is 16.
+
+When a task has a status file with a `## Live tree`, `tree.py digest` is that file whole, and
+the check's token budget counts it, so no node of the history adds to either. `tree.py start`
+sets the `started` mark in the Live tree and `tree.py add` appends the new node to the history
+and regenerates the file. Editing and deleting a node in this format are refused until they are
+built.
+
 ## The history file
 
 ```
@@ -211,7 +225,7 @@ they cite.
 `tree.py migrate <task>` builds the history from the task file, the archive and the log, and
 refuses to write anything if a line of the old files would be lost. For each part of the task
 it writes `<task>.history.md` and the merged log, and leaves the old task file and archive as
-they are (the status file is generated from the history by a later step). What it does:
+they are (`tree.py status` writes the status file from the history). What it does:
 
 - Each node's section is its task file lines in the order written. A stub (`Approach:
   archived.`, a Determination's `(archived.)`, `Evidence: archived.`) is replaced by the
