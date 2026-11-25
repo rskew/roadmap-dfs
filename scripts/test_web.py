@@ -826,16 +826,25 @@ class Web(unittest.TestCase):
         body = src[src.index("/* A task's branches (nodes that have children) start folded."):src.index("function visibleRows(t) {")]
         js = ("const S = {folded: {}};" + body +
               "const row = (id, p, kids, raises) => ({kind:'node', id, parent:p, kids, raises: raises || [], assumes:false, ask:false});"
-              "const t = {id:'T', rows: [{kind:'section'}, row('a','',2), row('b','a',1), row('c','b',0,[1,2]), row('d','a',0), row('e','',0)]};"
+              "const t = {id:'T', rows: [{kind:'section'}, row('a','',2), row('b','a',1), row('c','b',0), row('d','a',0), row('e','',0)]};"
               "const out = {};"
               "foldByDefault(t, null); out.first = [...S.folded.T].sort();"
               "S.folded.T.delete('a'); foldByDefault(t, null); out.kept = [...S.folded.T].sort();"      # a second read keeps the author's fold
               "S.folded.T = undefined; foldByDefault(t, 'c'); out.routed = [...S.folded.T].sort();"      # a node opened by link: its way is open
+              "const u = {id:'U', rows: [row('a','',2), row('b','a',1), row('c','b',0), row('d','a',1), row('e','d',0,[1])]};"
+              "foldByDefault(u, null); out.raised = [...S.folded.U].sort();"      # a raise on e: the way to e is open, the rest stays folded
               "console.log(JSON.stringify(out))")
         got = json.loads(subprocess.run([node, "-e", js], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(got["first"], ["a", "b"], "the nodes with children start folded, the leaves have nothing to fold")
         self.assertEqual(got["kept"], ["b"], "a task read again keeps the author's folds")
         self.assertEqual(got["routed"], [], "a node opened by link has every ancestor unfolded")
+        self.assertEqual(got["raised"], ["b"], "only the way to the raised node opens; other branches stay folded")
+
+    def test_the_first_read_of_a_task_opens_the_way_to_each_raised_node(self):
+        """The page's source is read (the node run above is skipped without node)."""
+        src = (HERE / "web" / "index.html").read_text()
+        body = re.search(r"function foldByDefault\(t, node\) \{(.*?)\n\}", src, re.S).group(1)
+        self.assertIn("r.raises.length) unfoldTo(t, r.id)", body)
 
     def test_reorder_swaps_the_rows_for_ones_that_carry_moves(self):
         """drawTasks() in index.html, run under node (skipped when there is none)."""

@@ -1470,7 +1470,8 @@ document.addEventListener("keydown", async e => {
 
 /* ── one task ───────────────────────────────────────────────────────────────── */
 /* A task's branches (nodes that have children) start folded. The first read of a task folds them all and later reads keep
-   the author's own folds; a node the page is opened on has the way to it unfolded, so it is never hidden. */
+   the author's own folds; a node the page is opened on, and every node with an open raise, has the way to it unfolded, so
+   it is never hidden. */
 function unfoldTo(t, id) {
   const s = S.folded[t.id], byId = {};
   if (!s) return;
@@ -1481,6 +1482,7 @@ function foldByDefault(t, node) {
   if (S.folded[t.id]) return;
   S.folded[t.id] = new Set(t.rows.filter(r => r.kind === "node" && r.kids).map(r => r.id));
   unfoldTo(t, node);
+  t.rows.forEach(r => { if (r.kind === "node" && r.raises.length) unfoldTo(t, r.id); });
 }
 /* What a fold hides, for the chips on a folded row: open raises, nodes not done and assumptions below it (`under`, counted
    by the server over every descendant). A fold must not hide what is waiting for the author. */
