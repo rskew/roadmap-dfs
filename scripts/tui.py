@@ -553,6 +553,23 @@ def epic_todo():
     return todo
 
 
+IGNORE_FILES_TTL = 10.0
+_ignore_files_seen = {}
+
+
+def ignore_files_cached():
+    """`dfs_paths.ignore_files()`, asked of git once per `IGNORE_FILES_TTL` seconds per
+    work root instead of every tick (two `git` processes). Where the files are changes
+    only with git's config or the checkout, and a change in what they hold shows in the
+    signature through their own mtimes, so a stale answer is late by at most the ttl."""
+    root, now = str(dfs_paths.work_root()), time.monotonic()
+    at, files = _ignore_files_seen.get(root, (None, None))
+    if at is None or now - at >= IGNORE_FILES_TTL:
+        files = dfs_paths.ignore_files()
+        _ignore_files_seen[root] = (now, files)
+    return list(files)
+
+
 def watch_signature():
     """What the screen is watching, as one comparable value.
 
@@ -564,7 +581,7 @@ def watch_signature():
     """
     paths = [dfs_paths.roadmap(), dfs_paths.order()]
     # the ignore files too: the header's "git hides .dfs" follows the rules
-    paths += dfs_paths.ignore_files() + [dfs_paths.state() / ".gitignore"]
+    paths += ignore_files_cached() + [dfs_paths.state() / ".gitignore"]
     for items in [dfs_paths.items()] + [s / "items" for s in dfs_paths.worktree_states()]:
         paths += sorted(items.glob("*.md")) + sorted(items.glob("*/*.md"))
     sig = []
@@ -574,9 +591,15 @@ def watch_signature():
         except OSError:
             sig.append((str(p), 0))
     logs, consoles = [], []
-    for root in dfs_runs.run_roots():
-        logs += glob.glob(os.path.join(root, "dfs_run_*", "*.json"))
-        consoles += glob.glob(os.path.join(root, "dfs_run_*", "console.log"))
+    for d in dfs_runs.run_paths():
+        try:
+            with os.scandir(d) as it:
+                names = [e.name for e in it]
+        except OSError:
+            continue                # a file, or a run directory that was just removed
+        logs += [os.path.join(d, n) for n in names if n.endswith(".json") and not n.startswith(".")]
+        if "console.log" in names:
+            consoles.append(os.path.join(d, "console.log"))
     for f in sorted(logs):
         try:
             sig.append((f, os.stat(f).st_mtime_ns))

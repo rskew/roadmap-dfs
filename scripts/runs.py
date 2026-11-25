@@ -277,6 +277,22 @@ def read_meta(d):
     return meta
 
 
+def run_paths():
+    """Every path in a run root that `GLOB` names, sorted. What `glob.glob` finds, without
+    its pattern matching: one root is the temp directory, which holds thousands of entries,
+    and a name test per entry is the cheap part of listing it. For the watchers, which do
+    this every second."""
+    prefix = GLOB.rstrip("*")
+    out = []
+    for root in run_roots():
+        try:
+            with os.scandir(root) as it:
+                out += [e.path for e in it if e.name.startswith(prefix)]
+        except OSError:
+            pass
+    return sorted(out)
+
+
 def run_dirs():
     """Every run directory on the box, newest first, with its state settled."""
     out = []

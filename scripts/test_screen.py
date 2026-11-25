@@ -16,6 +16,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 from pathlib import Path
@@ -1703,6 +1704,40 @@ class OpeningAPullRequest(unittest.TestCase):
             finally:
                 TUI.tree_entries = real
             self.assertIn(want, text)
+
+
+class WatchSignatureIdleCost(unittest.TestCase):
+    """The screen's once-a-second watch is most of an idle screen's CPU: it must not
+    ask git where the ignore files are every tick, and must still see a run directory."""
+
+    def test_git_is_asked_for_the_ignore_files_once_per_ttl(self):
+        TUI._ignore_files_seen.clear()
+        with mock.patch.object(TUI.dfs_paths, "ignore_files", return_value=[Path("/x/.gitignore")]) as ask:
+            first = TUI.ignore_files_cached()
+            second = TUI.ignore_files_cached()
+            self.assertEqual((first, second), ([Path("/x/.gitignore")],) * 2)
+            self.assertEqual(ask.call_count, 1)
+            with mock.patch.object(TUI.time, "monotonic", return_value=time.monotonic() + TUI.IGNORE_FILES_TTL + 1):
+                TUI.ignore_files_cached()
+            self.assertEqual(ask.call_count, 2)
+
+    def test_a_run_directory_and_its_files_are_in_the_signature(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp, "dfs_run_a")
+            run.mkdir()
+            Path(tmp, "unrelated").mkdir()
+            (run / "run-1.json").write_text("{}")
+            (run / "console.log").write_text("x")
+            with mock.patch.object(TUI.dfs_runs, "run_roots", return_value=[tmp]):
+                before = TUI.watch_signature()
+                (run / "console.log").write_text("xy")
+                after = TUI.watch_signature()
+        named = [e[0] for e in before]
+        self.assertIn(str(run / "run-1.json"), named)
+        self.assertIn(str(run / "console.log"), named)
+        self.assertFalse(any("unrelated" in n for n in named))
+        self.assertNotEqual(before, after)
 
 
 if __name__ == "__main__":
