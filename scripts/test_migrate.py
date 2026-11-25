@@ -248,5 +248,83 @@ class EveryTaskInTheRepo(unittest.TestCase):
         self.assertGreater(n, 100)
 
 
+class LoadsTheNewFormat(unittest.TestCase):
+    """`dfs_tree.load` reads a task that has a history file, and still reads one that has not (W203.4)."""
+
+    def setUp(self):
+        self.cwd = os.getcwd()
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / ".dfs" / "items").mkdir(parents=True)
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, self.cwd)
+
+    def put(self, name, text):
+        (self.root / ".dfs/items" / name).write_text(text)
+
+    def test_the_fixture_task_loads_from_its_history_and_marks_started_from_the_status_file(self):
+        fx = HERE / "fixtures" / "history"
+        for n in ("W9.md", "W9.history.md", "W9.log.md"):
+            self.put(n, (fx / n).read_text())
+        t = dfs_tree.load("W9")
+        self.assertEqual([x["id"] for x in t["nodes"]], ["W9.%d" % i for i in range(1, 7)])
+        by = {x["id"]: x for x in t["nodes"]}
+        self.assertEqual(by["W9.4"]["status"], "started")          # the mark lives in the status file
+        self.assertEqual(by["W9.5"]["status"], "parked")
+        self.assertTrue(by["W9.1"]["evidence"])                    # a node outside the live tree has its evidence
+        self.assertEqual(by["W9.2"]["supersedes"], ["W9.1"])
+        self.assertEqual(t["goal"], "Make a small battery board that charges and boots.")
+        self.assertEqual([e["kind"] for e in t["log"]], ["session", "end", "raise", "answer", "raise"])
+
+    def test_a_task_with_no_history_file_still_reads_the_old_way(self):
+        self.put("W5.md", TASK)
+        self.put("W5.log.md", LOGFILE)
+        t = dfs_tree.load("W5")
+        self.assertNotIn("new_format", t)
+        self.assertEqual(t["nodes"][0]["fields"]["Approach"], "archived.")     # no archive: the stub stays
+
+    def test_a_status_file_node_is_not_read_once_a_history_exists(self):
+        self.put("W5.md", TASK)
+        th.migrate_task("W5", write=True)
+        self.put("W5.md", TASK.replace("do the second thing", "a line changed in the status file"))
+        self.assertEqual(dfs_tree.load("W5")["nodes"][1]["fields"]["Approach"], "do the second thing")
+
+
+@unittest.skipUnless(REAL.is_dir(), "no roadmap beside the scripts")
+class EveryTaskLoadsTheSameWhenMigrated(unittest.TestCase):
+    def test_status_frontier_sessions_and_raises_do_not_change(self):
+        cwd, root = os.getcwd(), Path(tempfile.mkdtemp())
+        (root / ".dfs/items").mkdir(parents=True)
+        (root / ".dfs/archive/items").mkdir(parents=True)
+        os.chdir(root)
+        self.addCleanup(os.chdir, cwd)
+        n = 0
+        for p in sorted(REAL.glob("W*.md")):
+            task = p.stem
+            if dfs_tree.part_of(p.name) != (task, ""):
+                continue
+            for src, dst in ((p, root / ".dfs/items" / p.name),
+                             (REAL / ("%s.log.md" % task), root / ".dfs/items" / ("%s.log.md" % task)),
+                             (REPO / ".dfs/archive/items" / p.name, root / ".dfs/archive/items" / p.name)):
+                if src.exists():
+                    dst.write_text(src.read_text())
+            old = dfs_tree.load(task)
+            th.migrate_task(task, write=True)
+            new = dfs_tree.load(task)
+            self.assertTrue(new.get("new_format"), task)
+            self.assertEqual(new["goal"], old["goal"], task)
+            self.assertEqual([x["id"] for x in new["nodes"]], [x["id"] for x in old["nodes"]], task)
+            self.assertEqual(dfs_tree.effective(new)[0], dfs_tree.effective(old)[0], task)
+            self.assertEqual([x["id"] for x in dfs_tree.frontier(new)], [x["id"] for x in dfs_tree.frontier(old)], task)
+            self.assertEqual(dfs_tree.status_of(new), dfs_tree.status_of(old), task)
+            self.assertEqual(dfs_tree.sessions_since_author(new), dfs_tree.sessions_since_author(old), task)
+            self.assertEqual([e["ts"] for e in dfs_tree.open_raises(new)],
+                             [e["ts"] for e in dfs_tree.open_raises(old)], task)
+            self.assertEqual([e["text"].rstrip() for e in new["log"]], [e["text"].rstrip() for e in old["log"]], task)
+            self.assertTrue(all(x["evidence"] or not old_x["evidence"]
+                                for x, old_x in zip(new["nodes"], old["nodes"])), task)
+            n += 1
+        self.assertGreater(n, 100)
+
+
 if __name__ == "__main__":
     unittest.main()

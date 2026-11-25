@@ -107,10 +107,7 @@ KEPT_IN_STATUS = ("Goal", "Summary")      # sections the status file keeps; noth
 OWN_SECTIONS = KEPT_IN_STATUS + ("Tree", "Log")
 
 
-def history_part(task, tag=""):
-    """The history file of a branch's part of `task`, beside its task file."""
-    return dfs_tree.log_part(task, tag).with_name(
-        dfs_tree.log_part(task, tag).name[:-len(".log.md")] + ".history.md")
+history_part = dfs_tree.history_part
 
 
 def _norm(text):

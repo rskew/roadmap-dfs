@@ -515,15 +515,45 @@ def with_log_file(t, text):
     return t
 
 
+def history_part(task, tag=""):
+    """The history file of a branch's part of `task`, beside its part (docs/history-format.md)."""
+    p = log_part(task, tag)
+    return p.with_name(p.name[:-len(".log.md")] + ".history.md")
+
+
+def with_history(t, history, logtext=""):
+    """`t`, the parse of a new-format task's status file, with its nodes read from the history
+    file and its log from the log file alone (migration merged the archive and the old `## Log`
+    into it, so neither is read). The nodes keep the shape `parse_nodes` gives, with the
+    history's own `tags`, `supersedes` and `text` beside. `started` is a mark of the status
+    file alone: an open node it marks `started` there reads as `started` here."""
+    import taskhistory
+    marks = {nd["id"] for name in ("Live tree", "Tree")
+             for nd in parse_nodes(t["sections"].get(name, ""), t["task"]) if nd["status"] == "started"}
+    t["nodes"] = taskhistory.parse(history, t["task"])["nodes"]
+    for nd in t["nodes"]:
+        if nd["status"] == "open" and nd["id"] in marks:
+            nd["status"] = "started"
+            nd["fields"]["Status"] = "started"
+    t["log"] = []
+    t["new_format"] = True
+    return with_log_file(t, logtext)
+
+
 def combine(task, parts, here=None):
-    """One task from its parts, `[(tag, text, archive text)]`: every part's nodes, the
+    """One task from its parts, `[(tag, text, archive text, log text, history text)]` (the last
+    two optional; a history of None is an old-format part): every part's nodes, the
     logs merged by time, and the Goal and sections from the default part if it has a
     Goal, else from the first part that does. `here` is the reading branch's tag, which
     the frontier puts first; `t["parts"]` keeps each part as parsed."""
     parsed = {}
     for tag, text, arc, *more in parts:
-        parsed[tag] = with_log_file(with_archive(parse(text or "", task), arc or ""),
-                                    more[0] if more else "")
+        hist = more[1] if len(more) > 1 else None
+        if hist is not None:
+            parsed[tag] = with_history(parse(text or "", task), hist, more[0])
+        else:
+            parsed[tag] = with_log_file(with_archive(parse(text or "", task), arc or ""),
+                                        more[0] if more else "")
         parsed[tag]["part"] = tag
     tags = sorted(parsed, key=lambda g: (g != "", g))
     home = next((g for g in tags if parsed[g]["goal"]), tags[0] if tags else None)
@@ -561,6 +591,10 @@ def load(task, here=None):
     past merged back in. `here` defaults to this checkout's tag (None if detached)."""
     def read(p):
         return p.read_text() if p.exists() else ""
+
+    def read_history(g):        # None for an old-format part: the file's existence says which
+        p = history_part(task, g)
+        return p.read_text() if p.exists() else None
     if here is None:
         here = dfs_paths.branch_tag_or_none()
     memo = getattr(_reading, "memo", None)
@@ -568,7 +602,7 @@ def load(task, here=None):
         return memo[(task, here)]
     tags = part_tags(task)
     t = combine(task, [(g, read(part_path(task, g)), read(archive_part(task, g)),
-                        read(log_part(task, g))) for g in tags], here)
+                        read(log_part(task, g)), read_history(g)) for g in tags], here)
     if memo is not None:
         memo[(task, here)] = t
     return t
