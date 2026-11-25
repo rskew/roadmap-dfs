@@ -120,12 +120,14 @@ def run_turn(argv, message, cwd, env, on_start=None):
 # `chat/<scope>`, so scope `a.json` would name the file of scope `a`.
 SCOPE = re.compile(r"^(?!.*\.(?:json|log)$)[A-Za-z0-9][A-Za-z0-9._@-]*$")
 # A task can have more than one chat. Its first is keyed by the task id, as it always was (so every record that
-# exists still opens), and each further one by `<task>-<n>` for n of 2 or more: `W13`, `W13-2`, `W13-3`.
-MORE = re.compile(r"^(.+)-([2-9]|[1-9]\d+)$")
+# exists still opens), and each further one by `<task>_<n>` for n of 2 or more: `W13`, `W13_2`, `W13_3`. The
+# separator is `_` because no task id holds one (a tag is lower-case letters, digits and dashes), so `W1@fix-2`,
+# a task whose tag ends in a dash and a digit, is never read as a second chat of `W1@fix`.
+MORE = re.compile(r"^([A-Za-z0-9@-]+)_([2-9]|[1-9]\d+)$")
 
 
 def task_of(scope):
-    """The task a chat is about: its scope without the `-<n>` of a second or later chat. `project` is its own."""
+    """The task a chat is about: its scope without the `_<n>` of a second or later chat. `project` is its own."""
     m = MORE.match(scope or "")
     return m.group(1) if m else scope
 MAX_MESSAGE = 4000
@@ -566,15 +568,15 @@ class Chats:
             raise ValueError("no task %s" % task_of(scope))
 
     def new_scope(self, task):
-        """The key for another chat on `task`: the first `<task>-<n>` (n from 2) with no record, steering
+        """The key for another chat on `task`: the first `<task>_<n>` (n from 2) with no record, steering
         directory or log of its own. The task's first chat is the task's own key and is not offered here."""
         self.check(task)
         if task == "project" or task_of(task) != task:
             raise ValueError("another chat is started on a task, not on the project or on a chat")
         n = 2
-        while any(x.exists() for x in (self.path("%s-%d" % (task, n)), self.dir("%s-%d" % (task, n)), chatlog.path("%s-%d" % (task, n)))):
+        while any(x.exists() for x in (self.path("%s_%d" % (task, n)), self.dir("%s_%d" % (task, n)), chatlog.path("%s_%d" % (task, n)))):
             n += 1
-        return "%s-%d" % (task, n)
+        return "%s_%d" % (task, n)
 
     def add(self, task):
         """Start another chat on `task`: take the next free key (`new_scope`) and keep it with an empty record, so a

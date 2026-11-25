@@ -462,25 +462,47 @@ class Chat(unittest.TestCase):
         self.assertEqual(self.chats.list(), [])
 
     def test_a_task_can_have_more_than_one_chat(self):
-        self.assertEqual([dfs_chat.task_of(x) for x in ("W1", "W1-2", "W1-13", "W1-1", "W1-0", "project")],
-                         ["W1", "W1", "W1", "W1-1", "W1-0", "project"], "only -2 and up name a further chat")
-        self.chats.check("W1-2")
-        for bad in ("W1-1", "W1-0", "W9-2", "project-2", "W1-2-3"):
+        self.assertEqual([dfs_chat.task_of(x) for x in ("W1", "W1_2", "W1_13", "W1_1", "W1_0", "project")],
+                         ["W1", "W1", "W1", "W1_1", "W1_0", "project"], "only _2 and up name a further chat")
+        self.chats.check("W1_2")
+        for bad in ("W1_1", "W1_0", "W9_2", "project_2", "W1_2_3", "W1-2"):
             with self.assertRaises(ValueError, msg=bad):
                 self.chats.check(bad)
-        self.assertEqual(self.chats.new_scope("W1"), "W1-2")
-        self.chats.set_title("W1-2", "second")
-        self.assertEqual(self.chats.new_scope("W1"), "W1-3", "a chat that has a record is taken")
+        self.assertEqual(self.chats.new_scope("W1"), "W1_2")
+        self.chats.set_title("W1_2", "second")
+        self.assertEqual(self.chats.new_scope("W1"), "W1_3", "a chat that has a record is taken")
         self.chats.set_title("W1", "first")
-        self.assertEqual({c["scope"]: c["title"] for c in self.chats.list()}, {"W1": "first", "W1-2": "second"})
-        self.chats.save_sid("W1-2", "s-2", "claude")
-        self.assertEqual(self.chats.sid("W1-2"), "s-2")
+        self.assertEqual({c["scope"]: c["title"] for c in self.chats.list()}, {"W1": "first", "W1_2": "second"})
+        self.chats.save_sid("W1_2", "s-2", "claude")
+        self.assertEqual(self.chats.sid("W1_2"), "s-2")
         self.assertEqual(self.chats.sid("W1"), "", "each chat keeps its own conversation")
-        self.assertEqual(self.chats.clear("W1-2")["title"], "", "New chat on one leaves the other")
+        self.assertEqual(self.chats.clear("W1_2")["title"], "", "New chat on one leaves the other")
         self.assertEqual(self.chats.title("W1"), "first")
-        for bad in ("project", "W1-2", "W9"):
+        for bad in ("project", "W1_2", "W9"):
             with self.assertRaises(ValueError, msg=bad):
                 self.chats.new_scope(bad)
+
+    def test_a_task_whose_tag_ends_in_a_dash_and_a_number_is_not_a_second_chat(self):
+        items = self.root / ".dfs" / "items"
+        for t in ("W1@fix", "W1@fix-2"):
+            (items / (t + ".md")).write_text("# %s · sample\n\n## Goal\n\nDo it.\n" % t)
+        self.assertEqual([dfs_chat.task_of(x) for x in ("W1@fix-2", "W1@fix_2", "W1@fix-2_3", "W1@fix")],
+                         ["W1@fix-2", "W1@fix", "W1@fix-2", "W1@fix"], "only `_<n>` names a further chat")
+        self.chats.check("W1@fix-2")
+        self.chats.check("W1@fix_2")
+        self.assertEqual(self.chats.new_scope("W1@fix"), "W1@fix_2", "not the key of the task W1@fix-2")
+        self.assertEqual(self.chats.new_scope("W1@fix-2"), "W1@fix-2_2")
+        self.chats.set_title("W1@fix-2", "own chat")
+        self.chats.set_title("W1@fix", "other task")
+        self.assertEqual({c["scope"]: c["title"] for c in self.chats.list()}, {"W1@fix-2": "own chat", "W1@fix": "other task"})
+        self.chats.send("W1@fix-2", "hello")
+        self.settle("W1@fix-2")
+        self.assertIn("task W1@fix-2", self.calls()[0], "run.sh reads it as its own task, not as chat 2 of W1@fix")
+        self.log.unlink()
+        r = subprocess.run([str(HERE / "run.sh"), "--chat", "W1_02"], cwd=self.root, text=True, capture_output=True,
+                           env=dict(os.environ, CHAT_SID="00000000-0000-4000-8000-000000000004"))
+        self.assertIn("W1_02", r.stderr + r.stdout + (self.log.read_text() if self.log.exists() else ""),
+                      "a number with a leading zero is not a further chat, so it is left whole")
 
     def test_a_title_that_is_too_long_or_for_no_chat_is_refused(self):
         with self.assertRaises(ValueError):
@@ -540,25 +562,25 @@ class Chat(unittest.TestCase):
     def test_a_second_chat_on_a_task_reads_the_task_and_is_its_own_conversation(self):
         self.chats.send("W1", "first chat")
         self.settle("W1")
-        self.chats.send("W1-2", "second chat")
-        st = self.settle("W1-2")
+        self.chats.send("W1_2", "second chat")
+        st = self.settle("W1_2")
         first, second = self.calls()
         self.assertIn("task W1:", second, "the prompt is about the task")
         self.assertIn(".dfs/items/W1.md", second)
-        self.assertNotIn("W1-2", second.split(" --output-format")[0], "the chat's key is not read as a task or a file")
-        self.assertIn("chat/W1-2/inbox", second, "but its steering messages are kept under its own key")
-        self.assertNotEqual(self.chats.sid("W1"), self.chats.sid("W1-2"), "each chat has its own session")
-        self.assertTrue(self.chats.sid("W1-2"))
+        self.assertNotIn("W1_2", second.split(" --output-format")[0], "the chat's key is not read as a task or a file")
+        self.assertIn("chat/W1_2/inbox", second, "but its steering messages are kept under its own key")
+        self.assertNotEqual(self.chats.sid("W1"), self.chats.sid("W1_2"), "each chat has its own session")
+        self.assertTrue(self.chats.sid("W1_2"))
         self.assertEqual([t for r, t in talk(st["messages"]) if r == "you"], ["second chat"])
         self.assertEqual([t for r, t in talk(self.chats.state("W1")["messages"]) if r == "you"], ["first chat"])
         self.log.unlink()
-        r = subprocess.run([str(HERE / "run.sh"), "--chat", "W1-3"], cwd=self.root, text=True, capture_output=True,
+        r = subprocess.run([str(HERE / "run.sh"), "--chat", "W1_3"], cwd=self.root, text=True, capture_output=True,
                            env=dict(os.environ, CHAT_SID="00000000-0000-4000-8000-000000000003"))
         self.assertEqual(r.returncode, 0, r.stderr)
         screen = self.calls()[0]
         self.assertIn("task W1", screen)
         self.assertIn(".dfs/items/W1.md", screen)
-        self.assertNotIn("W1-3", screen)
+        self.assertNotIn("W1_3", screen)
 
     def test_the_second_turn_resumes_the_session_and_is_just_the_message(self):
         self.chats.send("W1", "first")

@@ -513,9 +513,9 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 /* A task's id in a row of tasks: a branch's tag (`W1@serve-real-records`) is drawn apart from its number, as a small line
    at the top of the goal's column, right of the number, so the numbers line up and a long tag has the row's width. */
 const tagAt = id => String(id).indexOf("@");
-// A task's second and later chats are keyed `<task>-<n>` (chat.py `task_of`): the task part is what to link to and read the goal of.
-const chatTask = scope => scope.replace(/-([2-9]|[1-9]\d+)$/, "");
-const chatNo = scope => (scope.match(/-([2-9]|[1-9]\d+)$/) || [])[1] || "";
+// A task's second and later chats are keyed `<task>_<n>` (chat.py `task_of`): the task part is what to link to and read the goal of.
+const chatTask = scope => scope.replace(/_([2-9]|[1-9]\d+)$/, "");
+const chatNo = scope => (scope.match(/_([2-9]|[1-9]\d+)$/) || [])[1] || "";
 const iidHtml = id => esc(tagAt(id) < 0 ? id : id.slice(0, tagAt(id)));
 const tagHtml = id => tagAt(id) < 0 ? "" : `<span class="itag">${esc(id.slice(tagAt(id)))}</span>`;
 let PROJECT = {{project_json}}, COLOUR = "{{colour}}", CHOSEN = {{colour_chosen}};
