@@ -229,6 +229,9 @@ class Flows(unittest.TestCase):
     def test_archive_chat_moves_a_chat_out_of_the_in_progress_list_into_archived(self):
         self.flow("chat_end")
 
+    def test_unarchive_puts_an_archived_chat_back_in_progress_and_leaves_it_open(self):
+        self.flow("chat_unarchive")
+
     def test_the_chat_follows_a_reader_near_its_end_or_just_after_sending_and_no_one_else(self):
         self.flow("chat_follow")
 

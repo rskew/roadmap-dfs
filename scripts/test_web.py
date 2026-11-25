@@ -350,6 +350,13 @@ class Web(unittest.TestCase):
             self.assertTrue(st["messages"])
             self.assertEqual([c["ended"] for c in self.call("GET", "/api/chats")[1]["chats"]], [True])
             self.assertEqual(self.call("POST", "/api/chat/end", dict(scope="W9"))[0], 409)
+            status, st, _ = self.call("POST", "/api/chat/unarchive", dict(scope="W1"))
+            self.assertEqual((status, st["ended"]), (200, False), "Unarchive puts the chat back in progress")
+            self.assertTrue(st["messages"])
+            self.assertEqual([c["ended"] for c in self.call("GET", "/api/chats")[1]["chats"]], [False])
+            self.assertEqual(self.call("POST", "/api/chat/unarchive", dict(scope="W1"))[0], 409, "a chat in progress is not unarchived")
+            self.assertEqual(self.call("POST", "/api/chat/unarchive", dict(scope="W9"))[0], 409)
+            self.call("POST", "/api/chat/end", dict(scope="W1"))
             self.assertEqual(self.call("POST", "/api/chat/clear", dict(scope="W1"))[1]["messages"], [])
             self.assertEqual(self.call("POST", "/api/chat/end", dict(scope="W1"))[0], 409, "a chat with nothing said is not archived")
             dfs_web.WORK["enabled"] = False

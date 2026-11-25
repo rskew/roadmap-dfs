@@ -1086,6 +1086,37 @@ class TheChatsMenu(unittest.TestCase):
         ui.act(ord("E"))
         self.assertEqual(ended, ["W1"])
 
+    def test_u_unarchives_the_archived_chat_under_the_cursor_after_asking(self):
+        ui = self.screen([a_chat("W2"), a_chat("W1", ended=True)], sel=0)
+        back = []
+        ui.unarchive_chat = back.append
+        ui.act(ord("T"))
+        ui.act(ord("j"))
+        ui.act(ord("U"))
+        self.assertEqual(back, ["W1"])
+
+    def test_u_on_a_chat_in_progress_says_so_and_does_not_ask(self):
+        ui = self.screen([a_chat("W1")])
+        asked = []
+        ui.prompt = lambda *a: asked.append(a) or "y"
+        ui.act(ord("T"))
+        ui.act(ord("U"))
+        self.assertEqual(asked, [])
+        self.assertIn("not archived", ui.msg)
+
+    def test_unarchive_chat_asks_then_calls_the_chat_and_a_no_leaves_it_archived(self):
+        import chat as dfs_chat
+        ui = self.screen([a_chat("W1", ended=True)])
+        with mock.patch.object(dfs_chat.Chats, "sid", lambda self, scope: "s1"), \
+                mock.patch.object(dfs_chat.Chats, "unarchive") as un:
+            ui.prompt = lambda *a: "n"
+            ui.unarchive_chat("W1")
+            self.assertEqual(un.call_count, 0)
+            self.assertIn("left archived", ui.msg)
+            ui.prompt = lambda *a: "y"
+            ui.unarchive_chat("W1")
+            un.assert_called_once_with("W1")
+
     def test_the_cursor_stays_on_its_chat_when_the_list_moves(self):
         chats = [a_chat("W1"), a_chat("W2")]
         ui = self.screen(chats)

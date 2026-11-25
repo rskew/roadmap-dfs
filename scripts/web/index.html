@@ -407,7 +407,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
 #chat-form .attach .hint { color: var(--muted); }
 .msg .chatimg { display: block; margin: var(--s2) 0; } .msg .chatimg img { display: block; max-width: min(100%, 320px); max-height: 240px; height: auto; border: var(--rule) solid var(--line); }
 /* Stop takes Send's place while a turn runs (Send waits then anyway), so the text box keeps its width. */
-#chat-stop[hidden], #chat-send[hidden] { display: none; }
+#chat-stop[hidden], #chat-send[hidden], .chat-nav button[hidden] { display: none; }
 #chat-send, #chat-stop { min-width: calc(72px * var(--z)); }
 
 /* A keyboard shrinks the VISUAL viewport and may leave the layout one as it was: the dialogs
@@ -496,7 +496,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   <p id="chat-backend" class="msg error" role="status" hidden></p>
   <p id="chat-lost" class="msg error" role="status" hidden></p>
   <form id="chat-form"><textarea class="field" id="chat-input" rows="2" maxlength="4000" aria-label="Message" placeholder="Ask about this"></textarea><button class="btn" id="chat-stop" type="button" hidden>Stop</button><button class="btn primary" id="chat-send" type="submit">Send</button></form>
-  <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chattop" aria-label="Scroll to the top of this message" title="Scroll to the top of this message">↑</button><button data-act="chatend">Archive</button><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
+  <nav class="sheet-nav chat-nav" aria-label="Chat"><button data-act="chattop" aria-label="Scroll to the top of this message" title="Scroll to the top of this message">↑</button><button data-act="chatend">Archive</button><button data-act="chatunarchive" hidden>Unarchive</button><button data-act="chatclear">New chat</button><button data-act="chatlist">Chats</button><button data-act="chatclose">Back</button></nav>
 </dialog>
 <div id="ctx" role="menu" hidden></div>
 <div id="toast" role="status"></div>
@@ -1910,7 +1910,9 @@ function chatDraw(st) {
   const be = st.backend && st.backend.limit ? st.backend : null;
   $("#chat-backend").hidden = !be;
   $("#chat-backend").textContent = be ? `${be.agent || st.agent || "The agent"} has hit its usage limit${be.resets ? " (" + be.resets + ")" : ""}. A message sent before it lifts may not be answered.` : "";
-  $("[data-act=chatend]").disabled = !!st.ended || st.busy || !st.messages.length;
+  // An archived chat offers Unarchive in the place of Archive: the button that undoes the one just used.
+  $("[data-act=chatend]").hidden = !!st.ended; $("[data-act=chatunarchive]").hidden = !st.ended;
+  $("[data-act=chatend]").disabled = st.busy || !st.messages.length;
   // A new message does replace the log: a Copy button that had focus gets it back (the same message's, by index).
   const kept = document.activeElement?.closest?.("#chat-log") && document.activeElement.dataset.act === "chatcopy" ? document.activeElement.dataset.i : null;
   log.innerHTML = (st.ended ? `<p class="muted">Archived. Send a message to pick it up again.</p>` : "")
@@ -2356,6 +2358,7 @@ document.addEventListener("click", e => {
     chat: () => chatOpen(d.scope, !!d.fresh), chattop: chatTop, chatcopy: () => chatCopy(+d.i), chatbottom: () => $("#chat-log").scrollTo({ top: $("#chat-log").scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }), chatclose: () => $("#chat").close(), chatlist: toChats,
     chatnew: async () => { try { const st = await api("/api/chat/new", { task: d.task }); chatOpen(st.scope); } catch (e) { toast(e.message, true); } },
     chatend: async () => { try { CHAT.last = ""; await api("/api/chat/end", { scope: CHAT.scope }); if ($("#chat").open) { $("#chat").close(); if (route().view === "chats") render(true); } toast("Chat archived."); } catch (e) { toast(e.message, true); } },
+    chatunarchive: async () => { try { const st = await api("/api/chat/unarchive", { scope: CHAT.scope }); chatDraw(st); if (route().view === "chats") render(true); toast("Chat unarchived."); } catch (e) { toast(e.message, true); } },
     chatclear: async () => { try { CHAT.last = ""; chatDraft(CHAT.scope, ""); $("#chat-input").value = ""; chatGrow(); keepScroll(chatKey()); chatDraw(await api("/api/chat/clear", { scope: CHAT.scope })); chatBegin(CHAT.scope); } catch (e) { toast(e.message, true); } },
     add: () => addForm(d.parent), accept: acceptForm,
     workstart: workStart, workstop: workStop,

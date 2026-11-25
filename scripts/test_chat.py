@@ -1750,6 +1750,24 @@ class Chat(unittest.TestCase):
         self.assertTrue([m for m in st["messages"] if m["role"] == "agent"])
         self.assertIn("page: chat archived", self.record("W1"))
 
+    def test_unarchive_takes_the_mark_off_and_keeps_the_conversation(self):
+        self.chats.send("W1", "hello")
+        self.settle("W1")
+        with self.assertRaises(ValueError):                      # in progress: nothing to take off
+            self.chats.unarchive("W1")
+        old = self.chats.sid("W1")
+        self.chats.end("W1")
+        self.assertTrue(self.chats.list()[0]["ended"])
+        st = self.chats.unarchive("W1")
+        self.assertFalse(st["ended"])
+        self.assertFalse(self.chats.list()[0]["ended"], "the list reads it as in progress again")
+        self.assertEqual(self.chats.sid("W1"), old)
+        self.assertTrue([m for m in st["messages"] if m["role"] == "agent"])
+        self.assertNotIn("ended", self.chats.record("W1"))
+        self.assertIn("page: chat unarchived", self.record("W1"))
+        with self.assertRaises(ValueError):                      # and it cannot be done twice
+            self.chats.unarchive("W1")
+
     def test_chat_about_the_project_after_an_end_starts_a_new_chat(self):
         self.chats.send("project", "hello")
         self.settle("project")
