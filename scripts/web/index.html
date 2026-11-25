@@ -58,6 +58,10 @@ body { padding-bottom: calc(var(--tabs) + env(safe-area-inset-bottom, 0px)); }
 #bar h1 .rename:hover, #bar h1 .rename:focus-visible { text-decoration-color: var(--ink); }
 #bar h1 small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: var(--fs-label); font-weight: 400; color: var(--muted); letter-spacing: .04em; }
 #bar .iconbtn { margin-right: -10px; }
+/* The pull from the bar (see PULL): a strip just under the bar, over the list, that says what letting go will do. */
+#pull { position: fixed; left: 0; right: 0; z-index: 4; top: calc(env(safe-area-inset-top, 0px) + var(--bar-h, calc(var(--bar) + var(--s1) + var(--rule))));
+  padding: var(--s2) var(--s4); text-align: center; font-size: var(--fs-label); color: var(--muted); background: var(--panel); border-bottom: var(--rule) solid var(--line); pointer-events: none; }
+#pull[hidden] { display: none; }
 #back[hidden], #live[hidden] { display: none; }
 @media (max-width: 899px) { #back, .desk { display: none; } }          /* the bottom bar has these */
 #live, #loading { font-size: var(--fs-label); color: var(--attention); letter-spacing: .08em; }
@@ -481,6 +485,7 @@ ul.md, ol.md { margin: var(--s1) 0; padding-left: 1.4em; white-space: normal; } 
   <span id="live" hidden>reconnecting</span>
   <button class="iconbtn" id="theme" aria-label="Switch between light and dark"></button>
 </header>
+<div id="pull" role="status" hidden></div>
 <nav id="tabs" aria-label="Navigate"></nav>
 <div id="layout">
   <nav id="rail" aria-label="Tasks"></nav>
@@ -2315,6 +2320,34 @@ function acceptForm() {
 }
 
 /* ── events ─────────────────────────────────────────────────────────────────── */
+/* Pull down from the top bar of the task list to reload the page. The page only watches: its listeners are passive and
+   cancel nothing, and it sets no touch-action, so the browser's own pull (where there is one) runs as it would, and
+   where there is none (an installed page on an iPhone) this one does the job. The pull is counted from the moment the
+   page is at its top, so a drag that starts with the list scrolled first brings the list up (the browser's own scroll)
+   and the rest of the same drag is the pull. Letting go past PULL.at pixels reloads, as the browser's own pull does. */
+const PULL = { at: 72, zero: null, live: false, pull: 0 };
+function pullDraw(n) {
+  PULL.pull = n;
+  const el = $("#pull"), text = n >= PULL.at ? "Release to refresh" : n > 8 ? "Pull to refresh" : "";
+  if (el.textContent !== text) el.textContent = text;          // a live region: said again only when it changes
+  el.hidden = !text;
+}
+function pullEnd(go) { const n = PULL.pull; PULL.live = false; PULL.zero = null; pullDraw(0); if (go && n >= PULL.at) location.reload(); }
+$("#bar").addEventListener("touchstart", e => {
+  if (e.touches.length !== 1 || route().view !== "tasks" || document.querySelector("dialog[open]")) return;
+  PULL.live = true; PULL.zero = scrollY <= 0 ? e.touches[0].clientY : null; PULL.pull = 0;
+}, { passive: true });
+$("#bar").addEventListener("touchmove", e => {
+  if (!PULL.live) return;
+  if (e.touches.length !== 1) return pullEnd(false);
+  const y = e.touches[0].clientY;
+  if (scrollY > 0) { PULL.zero = null; return pullDraw(0); }
+  if (PULL.zero === null) PULL.zero = y;
+  pullDraw(Math.max(0, y - PULL.zero));
+}, { passive: true });
+$("#bar").addEventListener("touchend", () => { if (PULL.live) pullEnd(true); }, { passive: true });
+$("#bar").addEventListener("touchcancel", () => { if (PULL.live) pullEnd(false); }, { passive: true });
+
 /* A touch tap's click is aimed at release, not at the press. When the list moves under a finger (a push redraws a row
    above with another height) a press on a task's archive button clicks the row that has come to lie there, and opens
    the task. So the button under each press is kept, and a pointer click that lands on a different button runs the one

@@ -443,7 +443,8 @@ const FLOWS = {
   },
 
   // The installed page gets the browser's own pull-to-refresh, so on the task list nothing of the page's may stop it: no
-  // overscroll-behavior or touch-action on the page, the body or the bar, and no touch on the bar cancelled.
+  // overscroll-behavior or touch-action on the page, the body or the bar, and no touch on the bar cancelled. (The drag stays
+  // short of the page's own pull, which reloads from 72px: pull_bar.)
   async native_pull(b) {
     const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true, isMobile: true });
     const cdp = await page.context().newCDPSession(page);
@@ -453,10 +454,50 @@ const FLOWS = {
     await page.evaluate(() => { window.__prevented = 0; addEventListener("touchmove", e => { if (e.defaultPrevented) window.__prevented++; }, { passive: true }); });
     const bar = await boxOf(page, "#bar"), x = bar.x + 40, y0 = bar.y + bar.height / 2;
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y: y0 }] });
-    for (let d = 10; d <= 120; d += 10) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y0 + d }] });
+    for (let d = 10; d <= 60; d += 10) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x, y: y0 + d }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     same(await page.evaluate(() => window.__prevented), 0, "a drag down from the bar cancels no touch");
-    same(await page.evaluate(() => !document.querySelector("#pull")), true, "and the page draws no pull strip of its own");
+    same(errors, [], "no page errors");
+  },
+
+  // A drag down from the top bar of the task list reloads the page, and the page cancels no touch to do it (the browser's own
+  // pull, where there is one, is left alone). The pull counts from the moment the page is at its top.
+  async pull_bar(b) {
+    const { page, errors } = await open(b, { viewport: { width: 360, height: 260 }, hasTouch: true, isMobile: true });
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type, x, y) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y }] });
+    const arm = () => page.evaluate(() => { window.__alive = true; window.__prevented = 0;
+      addEventListener("touchmove", e => { if (e.defaultPrevented) window.__prevented++; }, { passive: true }); });
+    const strip = () => page.evaluate(() => { const e = document.querySelector("#pull"); return e.hidden ? "" : e.textContent; });
+    const reloaded = () => page.evaluate(() => window.__alive === undefined);
+    // drag down `by` px from the bar, in 10px steps, saying what the strip read just before letting go
+    const drag = async by => {
+      const bar = await boxOf(page, "#bar"), x = bar.x + bar.width / 2, y0 = bar.y + bar.height / 2;
+      await touch("touchStart", x, y0);
+      for (let d = 10; d <= by; d += 10) { await touch("touchMove", x, y0 + d); await page.waitForTimeout(16); }
+      const said = await strip();
+      await touch("touchEnd");
+      await page.waitForTimeout(500);
+      return said;
+    };
+    await arm();
+    same(await drag(40), "Pull to refresh", "a short drag at the top says to pull further");
+    same([await strip(), await reloaded()], ["", false], "and letting go short of the line does nothing");
+    same(await drag(130), "Release to refresh", "a long drag at the top says to let go");
+    await page.waitForFunction(() => window.__alive === undefined); await page.waitForSelector(".item");
+    await arm();
+    await page.evaluate(() => window.scrollTo(0, 120)); await page.waitForTimeout(300);
+    await drag(100);
+    same(await reloaded(), false, "a drag that only brings a scrolled list back to its top does not reload");
+    await page.evaluate(() => window.scrollTo(0, 120)); await page.waitForTimeout(300);
+    await drag(300);
+    await page.waitForFunction(() => window.__alive === undefined); await page.waitForSelector(".item");
+    await arm();
+    await page.evaluate(() => document.querySelector(".item[data-id=W9]").click());
+    await page.waitForSelector(".row");
+    await drag(130);
+    same(await reloaded(), false, "a pull on a task's own screen does nothing");
+    same(await page.evaluate(() => window.__prevented), 0, "no touch was cancelled");
     same(errors, [], "no page errors");
   },
 
