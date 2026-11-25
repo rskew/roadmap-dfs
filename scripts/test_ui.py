@@ -201,6 +201,9 @@ class Flows(unittest.TestCase):
     def test_nothing_on_the_task_list_stops_the_browsers_own_pull_to_refresh(self):
         self.flow("native_pull")
 
+    def test_a_drag_down_from_the_top_bar_of_the_task_list_reloads_the_page(self):
+        self.flow("pull_bar")
+
     def test_the_node_sheet_and_the_chat_log_keep_their_scroll(self):
         self.flow("scroll_memory_areas")
 
