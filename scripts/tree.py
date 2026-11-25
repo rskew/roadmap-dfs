@@ -71,6 +71,10 @@ Determination leaves its first clause, `Confirmed: the washes are tinted (archiv
 reader of the file alone still sees what it settled. `Plan` is the Approach's old name,
 read as it wherever it appears, in a task file or an archive. Status and Parent never
 move, so the tree reads the same from the file alone.
+`tree.py digest <task>` prints the task as a session carries on from it: the Goal and every
+other section but the Tree and the Log, each live open node whole, and each other node as one
+line with its parent and Determination. `tree.py show <task> <id>...` prints nodes whole,
+shelved fields put back.
 If the file is still over the handoff budget afterwards, `shelve` says by how many tokens (and about how
 many words), which nodes to shelve next, and what only `compact` or a hand edit can move.
 
@@ -2210,6 +2214,52 @@ def outline(t):
     return lines
 
 
+def node_text(nd):
+    """A node as written in the task file, each shelved field put back from the archive
+    (`load` has already merged it into `fields` and named it in `from_archive`)."""
+    back = nd.get("from_archive", ())
+    out = []
+    for line in nd["raw"]:
+        m = FIELD_RE.match(line)
+        k = field_name(m.group(1)) if m else None
+        out.append("%s: %s" % (m.group(1), nd["fields"][k]) if k in back else line)
+    return "\n".join(out)
+
+
+def digest(t):
+    """The task as a session can carry on from it: every section but the Tree and the Log
+    whole, each live open node whole, and every other node (determined, parked, pruned or
+    waiting under a parked one) as one line with its parent and Determination.
+
+    Determined nodes are most of a long task file (the Approach text alone is half), and a
+    session working the next node does not need them in full: the Determination says what
+    each settled. `node_text` gives any one back whole, so nothing is hidden, only not
+    carried by default."""
+    status, pruned = effective(t)
+    asleep = dormant(t)
+    out = [t["title"] or "# %s" % t["task"], ""]
+    for name in t["order"]:
+        body = t["sections"].get(name, "")
+        if name not in ("Tree", "Log") and body:
+            out += ["## %s" % name, "", body, ""]
+    out += ["## Tree (digest)", "",
+            "Settled nodes are one line each; `tree.py show %s <id>` prints one whole." % t["task"], ""]
+    if t.get("tree_pre"):
+        out += [t["tree_pre"], ""]
+    for nd in sorted(t["nodes"], key=order_key):
+        nid, st = nd["id"], status[nd["id"]]
+        if nid not in pruned and nid not in asleep and st == "open":
+            out += ([""] if out[-1] else []) + [node_text(nd), ""]
+            continue
+        label = "pruned" if nid in pruned else st if st != "open" else "dormant"
+        parent = nd["parent"]
+        det = nd["fields"].get("Determination", "")
+        out.append("- %s [%s] %s%s%s" % (nid, label, nd["title"],
+                                         " · Parent: %s" % parent if parent else "",
+                                         " — " + det if det else ""))
+    return "\n".join(out).rstrip() + "\n"
+
+
 BODY_WAIT = 1.0     # seconds to wait for a body to start, and for a quiet writer to go on
 
 
@@ -2295,6 +2345,16 @@ def _main(argv):
     if len(argv) == 3 and argv[1] == "show":
         t = load(argv[2])
         print("\n".join(outline(t)) or "(no nodes)")
+        return 0
+    if len(argv) == 3 and argv[1] == "digest":
+        print(digest(load(argv[2])), end="")
+        return 0
+    if len(argv) >= 4 and argv[1] == "show":
+        nodes = by_id(load(argv[2]))
+        for nid in argv[3:]:
+            if nid not in nodes:
+                raise ValueError("%s has no node %s" % (argv[2], nid))
+        print("\n\n".join(node_text(nodes[nid]) for nid in argv[3:]))
         return 0
     print(__doc__, file=sys.stderr)
     return 2

@@ -313,6 +313,61 @@ class Derivation(unittest.TestCase):
         self.assertEqual(dfs_tree.render(dfs_tree.parse(again, "W1")), again)
 
 
+class Digest(unittest.TestCase):
+    """`digest` is what a session carries on from: live open nodes whole, the rest one line."""
+
+    def t(self, *nodes, log="", archive=""):
+        t = dfs_tree.parse(task("".join(nodes), log), "W1")
+        return dfs_tree.with_archive(t, archive) if archive else t
+
+    def test_an_open_node_is_whole_and_a_settled_one_is_its_determination_alone(self):
+        done = node(1, "confirmed", extra="Approach: read the long way round\nDetermination: it worked")
+        t = self.t(done, node(2, parent=1, extra="Approach: do the next thing"))
+        d = dfs_tree.digest(t)
+        self.assertIn("Make it work.", d)
+        self.assertIn("- W1.1 [confirmed] step 1 — it worked", d)
+        self.assertNotIn("read the long way round", d)
+        self.assertIn("### W1.2 · step 2", d)
+        self.assertIn("Approach: do the next thing", d)
+
+    def test_a_parked_a_dormant_and_a_pruned_node_are_one_line_each(self):
+        t = self.t(node(1, "confirmed"), node(2, "parked", 1, "Approach: the other way"),
+                   node(3, parent=2, extra="Approach: under the parked one"),
+                   node(4, "refuted", 1), node(5, parent=4, extra="Approach: under the refuted one"),
+                   node(6, parent=1, extra="Approach: the live one"))
+        d = dfs_tree.digest(t)
+        for line in ("- W1.2 [parked] step 2 · Parent: W1.1", "- W1.3 [dormant] step 3 · Parent: W1.2",
+                     "- W1.4 [refuted] step 4 · Parent: W1.1", "- W1.5 [pruned] step 5 · Parent: W1.4"):
+            self.assertIn(line, d)
+        for gone in ("the other way", "under the parked one", "under the refuted one"):
+            self.assertNotIn(gone, d)
+        self.assertIn("Approach: the live one", d)
+
+    def test_the_log_section_is_left_out_and_the_other_sections_are_kept(self):
+        text = task(node(1, "confirmed"), "- 2026-01-01T00:00:00Z · session · work\n")
+        text = text.replace("## Tree", "## Background\n\nWhy it is so.\n\n## Tree")
+        d = dfs_tree.digest(dfs_tree.parse(text, "W1"))
+        self.assertIn("## Background\n\nWhy it is so.", d)
+        self.assertNotIn("session · work", d)
+
+    def test_a_shelved_field_comes_back_whole_from_node_text_but_not_in_the_digest(self):
+        stubbed = node(1, "confirmed", extra="Approach: archived.\nDetermination: It held (archived.)")
+        archive = ("**W1.1 Approach**: the full approach\n"
+                   "**W1.1 Determination**: It held, on every case\n")
+        t = self.t(stubbed, archive=archive)
+        self.assertIn("Approach: the full approach", dfs_tree.node_text(dfs_tree.by_id(t)["W1.1"]))
+        self.assertIn("Determination: It held, on every case", dfs_tree.node_text(dfs_tree.by_id(t)["W1.1"]))
+        self.assertNotIn("the full approach", dfs_tree.digest(t))
+
+    def test_the_digest_of_a_long_settled_task_is_a_fraction_of_the_file(self):
+        body = "x " * 400
+        nodes = [node(1, "confirmed", extra="Approach: %s\nDetermination: ok" % body)]
+        nodes += [node(n, "confirmed", n - 1, "Approach: %s\nDetermination: ok" % body) for n in range(2, 9)]
+        nodes.append(node(9, parent=8, extra="Approach: next"))
+        text = task("".join(nodes))
+        self.assertLess(len(dfs_tree.digest(dfs_tree.parse(text, "W1"))), len(text) // 4)
+
+
 class InARepo(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
