@@ -716,7 +716,7 @@ def shelve_report(task):
     if not p.exists():
         return []
     text = p.read_text()
-    budget = dfs_state.HANDOFF_BUDGET
+    budget = dfs_state.FILE_CEILING
     tokens = len(text) // 4
     if tokens <= budget:
         return []
@@ -2226,6 +2226,12 @@ def node_text(nd):
     return "\n".join(out)
 
 
+# A settled node's Determination in the digest, at most this many characters. Shelved
+# Determinations come back whole through `load`, and a task whose verdicts are long would
+# otherwise have a digest larger than its file (W75's was).
+DIGEST_DET = 240
+
+
 def digest(t):
     """The task as a session can carry on from it: every section but the Tree and the Log
     whole, each live open node whole, and every other node (determined, parked, pruned or
@@ -2253,7 +2259,9 @@ def digest(t):
             continue
         label = "pruned" if nid in pruned else st if st != "open" else "dormant"
         parent = nd["parent"]
-        det = nd["fields"].get("Determination", "")
+        det = " ".join(nd["fields"].get("Determination", "").split())
+        if len(det) > DIGEST_DET:   # a long one is cut at a word; `show` has the rest
+            det = det[:DIGEST_DET].rsplit(" ", 1)[0] + " …"
         out.append("- %s [%s] %s%s%s" % (nid, label, nd["title"],
                                          " · Parent: %s" % parent if parent else "",
                                          " — " + det if det else ""))

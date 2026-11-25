@@ -50,8 +50,12 @@
 <p class="cap" id="cap"></p>
 <h2>What the digest leaves out</h2>
 <p>A settled node's Approach, Hypothesis and Evidence. <code>tree.py show &lt;task&gt; &lt;id&gt;</code> prints any one whole. Critic and reviewer sessions still read the file whole, since they judge the evidence.</p>
+<h2>Wrong if</h2>
+<p>Wrong if a session needs a settled node's Approach or Evidence often enough to read the whole file anyway, or takes a wrong step for want of it. Refute the node then, and the plain budget raise (parked) is the way back.</p>
+<h2>The second choice: what the budget counts</h2>
+<p>The 10,000-token budget now counts the digest a session reads. The file gets its own ceiling of 40,000 tokens, about four times the digest of the longest tasks, so an editor can still open it. Wrong if a file near 40,000 tokens is too big for a session to edit.</p>
 <script>
-  var data = [['W173', 9893, 2520], ['W48', 9848, 2830], ['W139', 6925, 2510]];
+  var data = [['W173', 9893, 2117], ['W48', 9848, 1967], ['W139', 6925, 1964]];
   function draw(digest) {
     var max = 10000, h = '';
     data.forEach(function (d) {
@@ -63,7 +67,7 @@
     document.getElementById('b-now').setAttribute('aria-pressed', String(!digest));
     document.getElementById('b-dig').setAttribute('aria-pressed', String(digest));
     document.getElementById('cap').textContent = digest
-      ? 'A quarter to a third of the size. The risk: a session needs a settled node\u2019s Approach or Evidence to choose its next step, and works blind without it.'
+      ? 'About a fifth to a third of the size. The risk: a session needs a settled node\u2019s Approach or Evidence to choose its next step, and works blind without it.'
       : 'Every session pays this, so the check refuses a file that grows past 10,000 tokens.';
   }
   document.getElementById('b-now').onclick = function () { draw(false); };

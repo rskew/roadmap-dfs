@@ -37,6 +37,10 @@ import tree as dfs_tree            # noqa: E402  (the same)
 # growth past it and `brief` warns the session that could prune — two numbers would
 # let the check and the warning disagree about the same file.
 HANDOFF_BUDGET = 10_000
+# The budget counts the digest a session reads (`dfs_tree.digest`), not the file, so a file
+# may hold the history of a long task. This ceiling is the file's own, for the editor that
+# opens it: about four times what the digest of a file of the longest tasks weighs.
+FILE_CEILING = 40_000
 
 
 def read_roadmap() -> str:
@@ -541,9 +545,11 @@ def _size_note(task, path) -> str:
     if not path.exists():
         return "not written yet"
     n = len(path.read_text()) // 4
-    over = (" — ⚠️ over the %s-token budget; prune Background, and move settled "
-            "history to the archive (`tree.py shelve %s`)"
-            % (f"{HANDOFF_BUDGET:,}", task)) if n > HANDOFF_BUDGET else ""
+    read = len(dfs_tree.digest(dfs_tree.load(task))) // 4
+    over = (" — ⚠ its digest is over the %s-token budget; shorten the live nodes and the "
+            "settled nodes' Determinations, and move settled history to the archive "
+            "(`tree.py shelve %s`)" % (f"{HANDOFF_BUDGET:,}", task)) if read > HANDOFF_BUDGET else ""
+    over = " (its digest, which you read, is ~%s)%s" % (f"{read:,}", over)
     return "~%s tokens%s%s" % (f"{n:,}", over, _compact_note(task))
 
 

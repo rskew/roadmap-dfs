@@ -359,6 +359,14 @@ class Digest(unittest.TestCase):
         self.assertIn("Determination: It held, on every case", dfs_tree.node_text(dfs_tree.by_id(t)["W1.1"]))
         self.assertNotIn("the full approach", dfs_tree.digest(t))
 
+    def test_a_long_determination_is_cut_in_the_digest_and_whole_in_show(self):
+        det = "Confirmed: " + "word " * 100 + "end."
+        t = self.t(node(1, "confirmed", extra="Determination: %s\n" % det))
+        line = [l for l in dfs_tree.digest(t).splitlines() if l.startswith("- W1.1")][0]
+        self.assertTrue(line.endswith(" …"))
+        self.assertLess(len(line), 300)
+        self.assertIn("end.", dfs_tree.node_text(dfs_tree.by_id(t)["W1.1"]))
+
     def test_the_digest_of_a_long_settled_task_is_a_fraction_of_the_file(self):
         body = "x " * 400
         nodes = [node(1, "confirmed", extra="Approach: %s\nDetermination: ok" % body)]
@@ -1603,10 +1611,10 @@ class Check(InARepo):
         text of W1.1's Approach, so a test can size what shelving it saves."""
         saved = "Approach: " + "move me to the archive. " * 40 + "\n"
         small = len(task(node(1, "confirmed", extra="Approach: archived.\n")
-                         + node(2, extra="Evidence:\n"), self.LOG))
-        pad = dfs_state.HANDOFF_BUDGET * 4 + over_by * 4 - small
+                         + node(2, "confirmed", extra="Evidence:\n"), self.LOG))
+        pad = dfs_state.FILE_CEILING * 4 + over_by * 4 - small
         self.write(task(node(1, "confirmed", extra=saved)
-                        + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n"), self.LOG))
+                        + node(2, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\n"), self.LOG))
         self.commit()
         return saved
 
@@ -1615,7 +1623,7 @@ class Check(InARepo):
         self.assertEqual(dfs_tree.shelve("W1"), 1)
         self.commit()   # shrank, still over: the check only notes it
         text = (self.root / ".dfs/items/W1.md").read_text()
-        self.assertGreater(len(text) // 4, dfs_state.HANDOFF_BUDGET)
+        self.assertGreater(len(text) // 4, dfs_state.FILE_CEILING)
         self.write(text.replace("## Log", node(3, parent=2, extra="Approach: " + "one more step. " * 30
                                                 + "\n") + "## Log"))
         subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
@@ -1626,18 +1634,18 @@ class Check(InARepo):
     def test_shelve_says_how_far_over_the_budget_the_file_still_is_and_what_to_shelve_next(self):
         long = "Approach: " + "move me to the archive. " * 40 + "\n"
         shelved = lambda pad: task(node(1, "confirmed", extra="Approach: archived.\n")
-                                   + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n")
+                                   + node(2, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\n")
                                    + node(3, "confirmed", extra="Approach: archived.\n"), self.LOG)
-        pad = dfs_state.HANDOFF_BUDGET * 4 - 400 - len(shelved(0))   # both shelved: 100 tokens under
+        pad = dfs_state.FILE_CEILING * 4 - 400 - len(shelved(0))   # both shelved: 100 tokens under
         self.write(task(node(1, "confirmed", extra=long)
-                        + node(2, extra="Evidence:\n- for: " + "x" * pad + "\n")
+                        + node(2, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\n")
                         + node(3, "confirmed", extra=long), self.LOG))
         self.commit()
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             self.assertEqual(dfs_tree.main(["tree.py", "shelve", "W1", "W1.1"]), 0)
         self.assertIn("still ~", out.getvalue())
-        self.assertIn("over the 10,000 budget", out.getvalue())
+        self.assertIn("over the 40,000 budget", out.getvalue())
         self.assertIn("tree.py shelve W1 W1.3", out.getvalue())
         self.assertNotIn("W1.1 ", out.getvalue().split("Shelve next")[1])
         self.commit()
@@ -1656,6 +1664,29 @@ class Check(InARepo):
         subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
         code, out = self.run_check("--staged")
         self.assertEqual(code, 0, out)
+
+    def test_a_file_over_the_budget_takes_a_node_while_its_digest_is_under_it(self):
+        pad = dfs_state.HANDOFF_BUDGET * 4 + 800
+        self.write(task(node(1, "confirmed", extra="Evidence:\n- for: " + "x" * pad + "\nDetermination: ok\n"),
+                        self.LOG))
+        self.commit()
+        text = (self.root / ".dfs/items/W1.md").read_text()
+        self.assertGreater(len(text) // 4, dfs_state.HANDOFF_BUDGET)
+        self.write(text.replace("## Log", node(2, parent=1, extra="Approach: next\n") + "## Log"))
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 0, out)
+
+    def test_a_node_that_takes_the_digest_past_the_budget_is_refused(self):
+        self.write(task(node(1, "confirmed", extra="Determination: ok\n"), self.LOG))
+        self.commit()
+        text = (self.root / ".dfs/items/W1.md").read_text()
+        big = "Approach: " + "y" * (dfs_state.HANDOFF_BUDGET * 4) + "\n"
+        self.write(text.replace("## Log", node(2, parent=1, extra=big) + "## Log"))
+        subprocess.run("git add .dfs", shell=True, cwd=self.root, check=True)
+        code, out = self.run_check("--staged")
+        self.assertEqual(code, 1, out)
+        self.assertIn("the digest a session reads of it", out)
 
     def test_shelve_moves_a_determination_leaving_its_first_clause_and_the_check_holds_it_to_that(self):
         det = ("Confirmed: the washes are now clearly tinted in dark, every rule applies in all four "
