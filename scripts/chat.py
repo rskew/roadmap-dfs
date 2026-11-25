@@ -576,6 +576,17 @@ class Chats:
             n += 1
         return "%s-%d" % (task, n)
 
+    def add(self, task):
+        """Start another chat on `task`: take the next free key (`new_scope`) and keep it with an empty record, so a
+        second call does not hand the same key out again. It shows in the Chats list once it has a title or a message."""
+        with self.lock:
+            scope = self.new_scope(task)
+            p = self.path(scope)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("{}")
+            chatlog.log(scope, "another chat on %s" % task)
+        return self.state(scope)
+
     def record(self, scope):
         try:
             rec = json.loads(self.path(scope).read_text())
