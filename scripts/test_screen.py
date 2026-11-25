@@ -1750,5 +1750,64 @@ class WatchSignatureIdleCost(unittest.TestCase):
         self.assertNotEqual(before, after)
 
 
+class OldRunDirectoriesAreNotRelisted(unittest.TestCase):
+    """An old run directory is only stat-ed each tick; the screen still sees a file added to
+    it at once, a file rewritten in place within COLD_RECHECK, and a recent one at once."""
+
+    def setUp(self):
+        TUI._run_dir_seen.clear()
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.run = Path(self.tmp.name, "dfs_run_old")
+        self.run.mkdir()
+        self.log = self.run / "run-1.json"
+        self.log.write_text("{}")
+        (self.run / "console.log").write_text("x")
+        self.age(self.log, 3600)
+        self.age(self.run / "console.log", 3600)
+        self.age(self.run, 3600)
+        patcher = mock.patch.object(TUI.dfs_runs, "run_roots", return_value=[self.tmp.name])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def age(path, seconds):
+        then = time.time() - seconds
+        os.utime(path, (then, then))
+
+    def later(self, seconds):
+        return mock.patch.object(TUI.time, "monotonic", return_value=time.monotonic() + seconds)
+
+    def test_a_file_added_to_an_old_directory_shows_at_once(self):
+        before = TUI.watch_signature()
+        (self.run / "run-2.json").write_text("{}")
+        after = TUI.watch_signature()
+        self.assertIn(str(self.run / "run-2.json"), [e[0] for e in after])
+        self.assertNotEqual(before, after)
+
+    def test_a_file_rewritten_in_place_shows_after_the_recheck(self):
+        before = TUI.watch_signature()
+        self.log.write_text('{"a": 1}')
+        self.assertEqual(TUI.watch_signature(), before)
+        with self.later(TUI.COLD_RECHECK + 1):
+            self.assertNotEqual(TUI.watch_signature(), before)
+
+    def test_an_old_directory_is_not_listed_again_inside_the_recheck(self):
+        TUI.watch_signature()
+        real = os.scandir
+
+        def scandir(path):
+            self.assertNotEqual(os.fspath(path), str(self.run), "the old directory was listed again")
+            return real(path)
+        with mock.patch.object(TUI.os, "scandir", scandir):
+            TUI.watch_signature()
+
+    def test_a_recent_directory_is_followed_every_tick(self):
+        self.age(self.log, 5)
+        before = TUI.watch_signature()
+        self.log.write_text('{"a": 1}')
+        self.assertNotEqual(TUI.watch_signature(), before)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -593,6 +593,50 @@ def task_part_files(items):
     return sorted(found)
 
 
+COLD_AFTER = 300.0      # a run directory nothing in has changed for this long (seconds) is old
+COLD_RECHECK = 10.0     # and an old one's files are listed and stat-ed again this often
+_run_dir_seen = {}      # run directory -> what `run_dir_stamps` last returned for it
+
+
+def run_dir_stamps(d, seen, wall, mono):
+    """One run directory's contribution to `watch_signature`: `(dir mtime, cold, listed at,
+    json stamps, console stamps)`, or None when it cannot be listed.
+
+    Most run directories are finished and never touched again, and stat-ing every file in
+    all of them every second was most of an idle screen's work once there were hundreds.
+    An OLD directory (it and everything in it unchanged for `COLD_AFTER`) is only `stat`-ed
+    itself each tick: adding, removing or renaming a file in it moves its mtime and shows at
+    once, and a file rewritten in place shows within `COLD_RECHECK`. A directory changed
+    more recently, which is every chain that is running, is listed every tick."""
+    try:
+        mtime = os.stat(d).st_mtime_ns
+    except OSError:
+        return None
+    if seen and seen[1] and seen[0] == mtime and mono - seen[2] < COLD_RECHECK:
+        return seen
+    try:
+        with os.scandir(d) as it:
+            names = sorted(e.name for e in it)
+    except OSError:
+        return None
+    newest, logs, consoles = mtime, [], []
+    for n in names:
+        is_log = n.endswith(".json") and not n.startswith(".")
+        if not is_log and n != "console.log":
+            continue
+        f = os.path.join(d, n)
+        try:
+            st = os.stat(f)
+        except OSError:
+            continue
+        newest = max(newest, st.st_mtime_ns)
+        if is_log:
+            logs.append((f, st.st_mtime_ns))
+        else:
+            consoles.append((f, st.st_mtime_ns, st.st_size))
+    return (mtime, newest < (wall - COLD_AFTER) * 1e9, mono, logs, consoles)
+
+
 def watch_signature():
     """What the screen is watching, as one comparable value.
 
@@ -614,30 +658,22 @@ def watch_signature():
             sig.append((p, os.stat(p).st_mtime_ns))
         except OSError:
             sig.append((p, 0))
-    logs, consoles = [], []
+    logs, consoles, kept = [], [], {}
+    wall, mono = time.time(), time.monotonic()
     for d in dfs_runs.run_paths():          # sorted, so the names of each run directory in turn keep the order
-        try:
-            with os.scandir(d) as it:
-                names = sorted(e.name for e in it)
-        except OSError:
+        entry = run_dir_stamps(d, _run_dir_seen.get(d), wall, mono)
+        if entry is None:
             continue                # a file, or a run directory that was just removed
-        logs += [os.path.join(d, n) for n in names if n.endswith(".json") and not n.startswith(".")]
-        if "console.log" in names:
-            consoles.append(os.path.join(d, "console.log"))
-    for f in logs:
-        try:
-            sig.append((f, os.stat(f).st_mtime_ns))
-        except OSError:
-            pass
+        kept[d] = entry
+        logs += entry[3]
+        consoles += entry[4]
+    _run_dir_seen.clear()
+    _run_dir_seen.update(kept)
+    sig += logs
     # A live chain's console is APPENDED to, and on a filesystem with coarse mtime a
     # second of output can land inside one tick — so the size is in the signature
     # too, or the tail stops moving while the run is still talking.
-    for f in consoles:
-        try:
-            st = os.stat(f)
-            sig.append((f, st.st_mtime_ns, st.st_size))
-        except OSError:
-            pass
+    sig += consoles
     return tuple(sig)
 
 
