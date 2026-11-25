@@ -574,8 +574,8 @@ def watch_signature():
     """What the screen is watching, as one comparable value.
 
     Mtimes rather than a filesystem-watch API: a few globs and `stat`s, plus the two
-    `git` calls that locate the ignore files (`dfs_paths.ignore_files`), cost
-    milliseconds at a one-second poll, and a watcher would need a thread whose failure
+    `git` calls that locate the ignore files (`dfs_paths.ignore_files`, asked once per
+    `IGNORE_FILES_TTL`), cost milliseconds at a one-second poll, and a watcher would need a thread whose failure
     mode is a screen that has quietly stopped updating — the same silent-staleness
     shape the app's own live path is written against.
     """

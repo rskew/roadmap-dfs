@@ -1722,7 +1722,6 @@ class WatchSignatureIdleCost(unittest.TestCase):
             self.assertEqual(ask.call_count, 2)
 
     def test_a_run_directory_and_its_files_are_in_the_signature(self):
-        import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             run = Path(tmp, "dfs_run_a")
             run.mkdir()
