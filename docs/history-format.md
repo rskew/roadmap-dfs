@@ -208,8 +208,24 @@ they cite.
 
 ## Moving an old task
 
-`tree.py migrate <task>` builds the history from the task file, the archive's
-`**<id> Field**:` lines and the log, and checks that every old line appears in it; then
-the Live tree and Raises are generated. Writing Decisions in force and Not taken, and the
-first `Supersedes:` and `Tags:` lines, is judgment, so a work session does it and the
-author reviews it.
+`tree.py migrate <task>` builds the history from the task file, the archive and the log, and
+refuses to write anything if a line of the old files would be lost. For each part of the task
+it writes `<task>.history.md` and the merged log, and leaves the old task file and archive as
+they are (the status file is generated from the history by a later step). What it does:
+
+- Each node's section is its task file lines in the order written. A stub (`Approach:
+  archived.`, a Determination's `(archived.)`, `Evidence: archived.`) is replaced by the
+  archive's words: every archived version of the field, oldest first, so the last wins as it
+  does now; the archive's `**<id> Evidence**:` items are added once each. A `Status: started` is
+  written `open`, because `started` is never in the history.
+- Text with no node of its own goes before the first section: the task file's other sections
+  (`## Background`) and tree preamble, and any archive text that follows no node's head.
+- The log is the task file's `## Log`, the archive's `**Log**:` blocks and the log file, merged
+  by time, each entry once, and written to the log file.
+- `taskhistory.lost` is the check: every nonblank line of the old three files is in the new
+  history or log, whitespace folded. `## Goal` and `## Summary` stay in the status file and
+  are not counted; neither are titles, the `**Log**:` marker, stubs and `Status: started`.
+  Anything else missing is reported with its file and line, and nothing is written.
+
+Writing Decisions in force and Not taken, and the first `Supersedes:` and `Tags:` lines, is
+judgment, so a work session does it and the author reviews it.

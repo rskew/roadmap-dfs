@@ -93,6 +93,8 @@ Usage:
     tree.py splitlog <task>                      move the task file's whole `## Log` to its log file
     tree.py shelve <task> [<ids>]                move determined nodes' Approach,
                                                      Hypothesis and Determination to the archive
+    tree.py migrate <task>                       write an old task's history file (docs/history-format.md)
+                                                     and merged log; the old files stay; refuses if a line would be lost
 """
 import calendar
 import contextlib
@@ -2349,6 +2351,13 @@ def _main(argv):
               % (n, "" if n == 1 else "s", dfs_paths.rel(archive_path(argv[2]))))
         for line in shelve_report(argv[2]):
             print("dfs_tree: " + line)
+        return 0
+    if len(argv) == 3 and argv[1] == "migrate":
+        import taskhistory                  # imports this module, so not at the top
+        for tag, r in taskhistory.migrate_task(argv[2], write=True).items():
+            print("dfs_tree: %s: %d nodes, %d log entries, nothing lost"
+                  % (dfs_paths.rel(taskhistory.history_part(argv[2], tag)),
+                     r["history"].count("\n### "), len(r["log"])))
         return 0
     if len(argv) == 3 and argv[1] == "show":
         t = load(argv[2])
