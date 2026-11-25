@@ -1554,6 +1554,17 @@ class Check(InARepo):
         self.assertNotIn("its Log what everyone has said", new)
         self.assertNotIn("session · work", new, "the log's text is not loaded into the briefing")
 
+    def test_the_briefing_hands_the_digest_and_not_a_settled_nodes_approach(self):
+        self.write(task(node(1, "confirmed", extra="Approach: the long way round\nDetermination: it worked\n")
+                        + node(2, parent=1, extra="Approach: do the next thing\n"), self.LOG))
+        b = dfs_state.brief("W1")
+        digest = b[b.index("### The task, as a digest"):]
+        self.assertIn("- W1.1 [confirmed] step 1 — it worked", digest)
+        self.assertIn("Approach: do the next thing", digest)
+        self.assertNotIn("the long way round", b)
+        self.assertIn("tree.py show W1 <id>", b)
+        self.assertIn("need not read the file whole", b)
+
     def test_the_briefing_does_not_say_the_log_is_all_in_the_file_while_the_task_still_has_a_log(self):
         self.write(task(node(1), self.LOG))
         dfs_tree.append_log("W1", "answer", "x")        # a new entry goes to the log file

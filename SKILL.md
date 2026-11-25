@@ -16,8 +16,12 @@ session carries it out.
    derived by `state.py`, the same code the runner stops on, so do not re-derive it.
    It names the tool's scripts directory: `<scripts>` in this file means that
    directory, wherever roadmap-dfs is installed.
-2. Read the task file, `.dfs/items/<task>.md`, whole: `## Goal`, `## Background` if
-   present, `## Tree`. Its log is in `.dfs/items/<task>.log.md`, which the briefing names
+2. Carry on from the digest at the end of your briefing: `## Goal`, `## Background` if
+   present, every live open node whole, and each settled node as one line with its
+   Determination. A settled node's Approach, Hypothesis and Evidence are one
+   `python3 <scripts>/tree.py show <task> <id>` away: open one when its line is not
+   enough. Read the task file, `.dfs/items/<task>.md`, itself only where you edit it (a
+   critic or reviewer still reads it whole, since it judges the evidence). Its log is in `.dfs/items/<task>.log.md`, which the briefing names
    with its size: open it only for an entry's full text (a raise, an answer, a
    correction), since the briefing already says where the task stands. A task older than
    that still has a `## Log` in the file; `tree.py splitlog <task>` moves it across.
