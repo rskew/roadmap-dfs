@@ -263,8 +263,10 @@ reason.
 6. The status file is under the budget. This is the only size rule left, and it does not
    stop a node being added, because the node's text goes to the history.
 
-The critic, every fifth session, samples decision lines against the Evidence of the nodes
-they cite.
+The critic, every fifth session, is asked (question 6 of `state.critic_brief`, a moved task
+only) to choose three decision lines, open every node each cites with `tree.py show`, and
+backtrack to a node whose Evidence does not carry its line. The brief does not pull those
+nodes' history in itself, since the critic chooses the sample.
 
 ## Moving an old task
 

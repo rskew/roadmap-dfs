@@ -999,6 +999,22 @@ def _record_block(task, kind):
     return out
 
 
+def _decision_question(t, task):
+    """The critic's sixth question, for a task in the history format only: the hand-kept
+    Decisions in force are the one thing no tool derives, so a sample of them is read against
+    the Evidence of the nodes they cite. An old-format task has no such section."""
+    if not t.get("new_format"):
+        return []
+    return ["6. **Does the evidence of the nodes a decision cites carry it?** The lines under "
+            "Decisions in force in the status file are kept by hand, so a line can be stale "
+            "or rest on a node whose evidence does not hold it up. Choose three of them, "
+            "not always the newest. For each, open every node it cites with `python3 %s/tree.py "
+            "show %s <id>` and ask whether that node's Evidence and Determination say what "
+            "the line says. Where they do not, BACKTRACK to that node as for any other, and "
+            "name the line in the backtrack. In an `ok`, name each line you sampled by the "
+            "node it cites." % (dfs_paths.rel(dfs_paths.SCRIPTS), task)]
+
+
 def critic_brief(task: str) -> str:
     """What a critic session is handed: the law, what to judge, and the nodes.
 
@@ -1048,8 +1064,8 @@ def critic_brief(task: str) -> str:
            "what it advanced of it; a Determination that only says the Goal still holds "
            "does not answer that. Look at which paths the nodes' commits touch. Where it "
            "has drifted, raise, naming the first node that left the Goal: whether that "
-           "work stays, moves to another task or stops is the author's call.", "",
-          ] + _record_block(task, "critic") + [
+           "work stays, moves to another task or stops is the author's call.",
+          ] + _decision_question(t, task) + [""] + _record_block(task, "critic") + [
            "### Nodes to judge (%s)" % ("determined since the critic last ran at " + last
                                         if last else "all of them — the critic has not run yet"), ""]
     judged = []

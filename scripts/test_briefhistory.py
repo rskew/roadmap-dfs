@@ -225,6 +225,24 @@ class Pull(unittest.TestCase):
             self.assertNotIn("tree.py add", b)
 
 
+    # W203.25: the critic samples decision lines against the evidence of the nodes they cite
+    def test_the_critic_of_a_moved_task_samples_decision_lines_against_their_nodes(self):
+        b = dfs_state.critic_brief("W9")
+        q = b.split("6. **")[1].split("### ")[0]
+        self.assertIn("Decisions in force", q)
+        self.assertIn("three", q)
+        self.assertIn("tree.py show W9 <id>", q)
+        self.assertIn("BACKTRACK", q)
+
+    def test_the_critic_of_an_old_format_task_is_not_asked_about_decisions(self):
+        for n in ("W9.md", "W9.history.md"):
+            (self.root / ".dfs/items" / n).unlink()
+        (self.root / ".dfs/items/W9.md").write_text(
+            "# W9 · old\n\n## Goal\n\nx\n\n## Tree\n\n### W9.1 · a\nStatus: open\nApproach: do it.\n")
+        b = dfs_state.critic_brief("W9")
+        self.assertNotIn("Decisions in force", b)
+        self.assertNotIn("6. **", b)
+
     # W203.16: one total allowance, however many nodes and decisions there are
     def many(self, count=40):
         """`count` confirmed nodes with long sections, each cited by its own decision line."""
