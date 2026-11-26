@@ -1206,7 +1206,8 @@ def _retire(task, dest, verb):
         for sub in ("items", "archive/items"):
             base = base_state / sub
             for src in [base / ("%s.md" % task), base / task] \
-                    + ([base / ("%s.log.md" % task)] if sub == "items" else []):
+                    + ([base / ("%s.log.md" % task), base / ("%s.history.md" % task)]
+                       if sub == "items" else []):
                 if src.exists() and src.resolve() not in seen:   # a gitignored roadmap's worktree links to ours
                     seen.add(src.resolve())
                     dst = dest / ("items" if sub == "items" else "archive") / src.relative_to(base)
@@ -1274,7 +1275,11 @@ def load_archived(task):
         return base / (("%s.md" % task) if not g else "%s/%s.md" % (task, g))
     def log_at(g):
         return items / (("%s.log.md" % task) if not g else "%s/%s.log.md" % (task, g))
-    return combine(task, [(g, read(at(items, g)), read(at(arc, g)), read(log_at(g))) for g in tags], None)
+    def history_at(g):      # None for an old-format part, as in `load`
+        p = items / (("%s.history.md" % task) if not g else "%s/%s.history.md" % (task, g))
+        return p.read_text() if p.exists() else None
+    return combine(task, [(g, read(at(items, g)), read(at(arc, g)), read(log_at(g)), history_at(g))
+                          for g in tags], None)
 
 
 def archive_blocker(task):
@@ -2217,7 +2222,7 @@ def uncommitted(cwd=None, ttl=5.0):
                            capture_output=True, text=True, cwd=key)
         if r.returncode == 0:
             for entry in r.stdout.split("\0"):
-                m = re.search(r"(?:^|/)items/(%s)(?:\.log\.md|\.md|/)" % TASK_RE, entry[3:])
+                m = re.search(r"(?:^|/)items/(%s)(?:\.log\.md|\.history\.md|\.md|/)" % TASK_RE, entry[3:])
                 if not m:
                     continue
                 what = "edits"
@@ -2229,6 +2234,8 @@ def uncommitted(cwd=None, ttl=5.0):
                                               (Path(key) / entry[3:]).read_text())
                     except OSError:
                         what = "log"
+                elif entry[3:].endswith(".history.md"):
+                    pass    # a history file holds nodes and nothing else: any change to it is an edit
                 elif entry[:2] in (" M", "M ", "MM"):
                     old = subprocess.run(["git", "show", "HEAD:" + entry[3:]],
                                          capture_output=True, text=True, cwd=key)

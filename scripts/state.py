@@ -831,9 +831,11 @@ def brief(task: str) -> str:
         rel = p.relative_to(items_dir)
         arc = arc_dir / rel
         lg = dfs_tree.log_part(task, dfs_tree.part_of(str(rel))[1])   # the log file names attachments too
+        hs = dfs_tree.history_part(task, dfs_tree.part_of(str(rel))[1])   # and so does a moved task's history
         mine = p.read_text() + "\n" + (arc.read_text() if arc.is_file() else "") \
-            + "\n" + (lg.read_text() if lg.is_file() else "")
-        held = set(dfs_tree.ATTACHED_REF.findall(_at_head(p) + "\n" + _at_head(arc) + "\n" + _at_head(lg)))
+            + "\n" + (lg.read_text() if lg.is_file() else "") + "\n" + (hs.read_text() if hs.is_file() else "")
+        held = set(dfs_tree.ATTACHED_REF.findall(
+            _at_head(p) + "\n" + _at_head(arc) + "\n" + _at_head(lg) + "\n" + _at_head(hs)))
         loose += [n for n in dfs_tree.untracked_artefacts(mine) if n not in held and n not in loose]
     if loose:
         out += ["### Attachments to commit", "",

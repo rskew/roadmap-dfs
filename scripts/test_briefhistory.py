@@ -243,6 +243,16 @@ class Pull(unittest.TestCase):
         self.assertNotIn("Decisions in force", b)
         self.assertNotIn("6. **", b)
 
+    # W203.26: an attachment named only in the history file is listed for commit
+    def test_the_briefing_lists_an_attachment_only_the_history_file_names(self):
+        (self.root / ".dfs/artefacts").mkdir()
+        (self.root / ".dfs/artefacts/photo.png").write_bytes(b"x")
+        self.grow(node("W9.10", "with a picture", "Parent: W9.3", "Status: open",
+                       "Approach: see .dfs/artefacts/photo.png"))
+        b = dfs_state.brief("W9")
+        self.assertIn("Attachments to commit", b)
+        self.assertIn("photo.png", b.split("Attachments to commit")[1])
+
     # W203.16: one total allowance, however many nodes and decisions there are
     def many(self, count=40):
         """`count` confirmed nodes with long sections, each cited by its own decision line."""
