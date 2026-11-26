@@ -242,7 +242,7 @@ reason.
 
 1. Every decision line cites a node, or an answer, that exists. Every Not taken line
    cites a refuted node.
-2. A node cited by a decision is confirmed and not superseded.
+2. Every node a decision cites is confirmed, and at least one of them is not superseded.
 3. A commit that confirms a node with `Supersedes:` also removes or rewrites the decision
    lines that cite what it supersedes.
 4. Every open, started or parked node appears in the Live tree, and no other node does.

@@ -3725,12 +3725,14 @@ class UI(WorkMixin):
         # A new log entry goes to the log file and leaves the part alone, so the log files
         # are in the key too: mtime and size, since an append within one clock tick of the
         # last keeps the mtime.
+        # The history file of a history-format task is read like the log: mtime and size.
         for g in tags:
-            try:
-                st = dfs_tree.log_part(task, g).stat()
-                key.append((st.st_mtime_ns, st.st_size))
-            except OSError:
-                key.append(0)
+            for p in (dfs_tree.log_part(task, g), dfs_tree.history_part(task, g)):
+                try:
+                    st = p.stat()
+                    key.append((st.st_mtime_ns, st.st_size))
+                except OSError:
+                    key.append(0)
         hit = self._tree_cache.get(task)
         if hit and hit[0] == key:
             return hit[1:]
