@@ -2693,6 +2693,13 @@ class MovedTaskFiles(InARepo):
         self.assertFalse(self.hist.exists())
         self.assertTrue((dfs_tree.deleted_dir() / "items/W9.history.md").is_file())
 
+    def test_editing_or_deleting_a_node_of_a_moved_task_says_how_to_change_it(self):
+        for call in (lambda: dfs_tree.edit_node("W9", "W9.4", "new title"), lambda: dfs_tree.delete_node("W9", "W9.4")):
+            with self.assertRaises(ValueError) as cm:
+                call()
+            self.assertIn("append", str(cm.exception))
+            self.assertIn(".dfs/items/W9.history.md", str(cm.exception))
+
     def test_an_archived_moved_task_loads_its_nodes(self):
         before = dfs_tree.load("W9")
         dfs_tree._retire("W9", dfs_tree.archived_dir(), "archived")

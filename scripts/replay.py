@@ -838,7 +838,9 @@ def reached(dest, repo, files, tool=None, agent="claude"):
 def original_lines(repo, task):
     """What the original run concluded, as strings a tool result can be searched for: each
     node's title and the head of its Determination, and the lines of each review and critic
-    entry in its log (the findings: `W55.2 added: ...`), from the task file and its archive."""
+    entry in its log (the findings: `W55.2 added: ...`), from the task file and its archive. A task in
+    the history format keeps its nodes in `<task>.history.md`, which this tool does not read, so
+    only its log gives lines for it."""
     lines = set()
     for rel in (f".dfs/items/{task}.md", f".dfs/items/{task}.log.md", f".dfs/archive/items/{task}.md"):
         try:
@@ -935,7 +937,8 @@ def task_logs(dest, task):
     and what `main` and the item's branch committed (a replay's run directories have no console.log,
     and the log is what says which session was a work, a review or a critic). The log is in the
     log file beside each part (`<task>.log.md`, `<task>/<tag>.log.md`), and an older task still has
-    it in the task file, so both are read."""
+    it in the task file, so both are read. The history file of a task in the history format holds
+    no log, so it is not read."""
     dest, items = Path(dest), ".dfs/items"
     rels = [f"{items}/{task}.md", f"{items}/{task}.log.md"]
     texts = []

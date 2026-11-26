@@ -221,7 +221,9 @@ A task's files (`.dfs/items/<task>.md`, its `.history.md` and `.log.md`, and the
 are one copy that every worker and every chat session on the task writes, and more than one
 chat session may be on a task at once. A write made from a stale read silently drops what
 another session added since. So, **for every write to one of these files by hand** (an edit
-or a whole-file write; `tree.py` commands do their own appending):
+or a whole-file write; `tree.py` commands do their own appending, though each reads the file
+and writes it back whole, so a line you wrote by hand in the same instant can be lost. The
+commands are short; do not run one while you are in the middle of a hand edit of the same file):
 
 1. When you read the file, take its hash: `sha256sum <file>`.
 2. Just before you write, take it again. If it is the same, write.

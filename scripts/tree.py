@@ -1338,7 +1338,9 @@ def delete_node(task, nid):
         raise ValueError("%s belongs to the part of branch %s, which only that branch writes"
                          % (nid, parts[2]))
     if history_part(task, parts[2]).exists():
-        raise ValueError("%s is in the history format, whose node deleting is not built yet" % task)
+        raise ValueError("%s is in the history format, whose node deleting is not built yet: a node "
+                         "is never removed from the history: append a line to its section in `%s` "
+                         "that says what is wrong with it" % (task, dfs_paths.rel(history_part(task, parts[2]))))
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task)
     mine = by_id(t)
@@ -1382,7 +1384,9 @@ def edit_node(task, nid, title, approach=""):
     if not parts or parts[0] != task or not exists(task):
         raise ValueError("no node %s in %s" % (nid, task))
     if history_part(task, parts[2]).exists():
-        raise ValueError("%s is in the history format, whose node editing is not built yet" % task)
+        raise ValueError("%s is in the history format, whose node editing is not built yet: to change "
+                         "what a node says, append the line to its section in `%s` (the file only "
+                         "grows, and a later line wins)" % (task, dfs_paths.rel(history_part(task, parts[2]))))
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task) if p.exists() else None
     nd = by_id(t).get(nid) if t else None
