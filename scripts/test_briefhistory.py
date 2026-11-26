@@ -264,6 +264,32 @@ class Pull(unittest.TestCase):
         self.assertLess(pulled.index("(cut to fit"), pulled.index("### W9.159"))
         self.assertNotIn("(cut to fit", pulled.split("### W9.159 · step 159")[1])
 
+    # W203.23: the cut is sized on the joined text, where a shared neighbour is given once
+    def test_nodes_that_share_neighbours_are_not_cut_while_the_joined_text_fits(self):
+        for i in range(10, 24):
+            self.grow(node("W9.%d" % i, "shared %d" % i, "Parent: W9.3", "Status: confirmed",
+                           "Tags: shared", "Approach: " + "word " * 150, "Determination: Confirmed: held."))
+        t = self.tree()
+        ids = ["W9.%d" % i for i in range(10, 24)]
+        whole = th.fit(t, ids, allowance=10 ** 9)
+        joined = sum(len(x) for x in whole) // 4
+        alone = sum(len(th.pull(t, i, seen=set())) for i in ids) // 4
+        self.assertLess(joined, th.HISTORY_ALLOWANCE)                           # the joined text fits
+        self.assertGreater(alone, th.HISTORY_ALLOWANCE)                         # each node's own text added up does not
+        self.assertEqual(th.fit(t, ids), whole)
+
+    def test_when_the_joined_text_is_over_the_allowance_the_oldest_are_cut_and_it_fits(self):
+        for i in range(10, 70):
+            self.grow(node("W9.%d" % i, "shared %d" % i, "Parent: W9.3", "Status: confirmed",
+                           "Tags: shared", "Approach: " + "word " * 150, "Determination: Confirmed: held."))
+        t = self.tree()
+        ids = ["W9.%d" % i for i in range(10, 70)]
+        out = th.fit(t, ids)
+        self.assertLessEqual(sum(len(x) for x in out) // 4, th.HISTORY_ALLOWANCE)
+        self.assertGreater(sum(len(x) for x in out) // 4, th.HISTORY_ALLOWANCE * 0.7)   # and uses most of it
+        self.assertIn("Approach: " + "word " * 5, out[-1])                      # the newest is whole
+        self.assertNotIn("Approach:", out[0])                                   # the oldest is cut
+
     def test_a_task_within_the_allowance_is_given_everything_as_before(self):
         out = th.fit(self.tree(), ["W9.3", "W9.6"])
         self.assertEqual(out[0], th.pull(self.tree(), "W9.3", seen=set()))

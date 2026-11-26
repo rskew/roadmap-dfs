@@ -450,7 +450,8 @@ def fit(t, nids, allowance=HISTORY_ALLOWANCE, **kw):
     is over, the OLDEST nodes are cut first, sweeping each level over all of them before the next:
     the node whole with its parents and neighbours cut to title and Determination (`pull` with no
     allowance), then the node itself cut to title and Determination, then a line that says
-    `tree.py show` opens it. The floor is that line for each node. `kw` goes to `pull`."""
+    `tree.py show` opens it. The floor is that line for each node. The total is the joined text's, in
+    which a parent or neighbour that several nodes share is given once. `kw` goes to `pull`."""
     nodes = {nd["id"]: nd for nd in t["nodes"]}
     ids = [i for i in nids if i in nodes]
     status, _ = dfs_tree.effective(t)
@@ -458,24 +459,20 @@ def fit(t, nids, allowance=HISTORY_ALLOWANCE, **kw):
     shown = lambda n: "superseded" if n["id"] in sup else status[n["id"]]
     pointer = lambda n: ("### %s · %s\n(cut to fit: `python3 %s/tree.py show %s %s` prints it)"
                          % (n["id"], n["title"], dfs_paths.rel(dfs_paths.SCRIPTS), t["task"], n["id"]))
-    texts = (lambda i: pull(t, i, seen=set(), **kw),
-             lambda i: pull(t, i, allowance=0, seen=set(), **kw),
-             lambda i: _short(nodes[i], shown(nodes[i])),
-             lambda i: pointer(nodes[i]))
+    texts = {2: lambda i: _short(nodes[i], shown(nodes[i])),
+             3: lambda i: pointer(nodes[i])}
     uniq = list(dict.fromkeys(ids))
     oldest = sorted(uniq, key=lambda i: dfs_tree.order_key(nodes[i]))
-    # what each level costs, each node alone (a node given earlier costs less once the text is
-    # joined, never more, except through `pull`'s allowance, which the check below catches)
-    cost = [{i: _tokens(f(i)) for i in uniq} for f in texts]
 
-    def levels_for(target):
+    def levels_at(step):
+        """The cut after `step` single cuts: the oldest node to level 1, the next oldest, and so on
+        over all of them, then the same at level 2 and level 3."""
         lvl = {i: 0 for i in uniq}
-        total = lambda: sum(cost[lvl[i]][i] for i in uniq)
         for level in (1, 2, 3):
             for i in oldest:
-                if total() <= target:
-                    return lvl
-                lvl[i] = level
+                if step > 0:
+                    lvl[i] = level
+                    step -= 1
         return lvl
 
     def render(lvl):
@@ -493,12 +490,27 @@ def fit(t, nids, allowance=HISTORY_ALLOWANCE, **kw):
                 out.append(texts[lvl[i]](i))
         return out
 
-    target = allowance
-    while True:
-        out = render(levels_for(target))
-        if sum(_tokens(x) for x in out) <= allowance or target <= 0:
-            return out
-        target = int(target * 0.8) if target > 100 else 0
+    # The size is of the joined text, where a parent or neighbour shared by several nodes is given
+    # once, so it is measured by rendering. Each step cuts one more node, so the steps are searched
+    # for the first that fits, and the one returned has always been rendered and found to fit (or
+    # is the floor, every node a pointer).
+    fits = lambda out: sum(_tokens(x) for x in out) <= allowance
+    out = render(levels_at(0))
+    if fits(out):
+        return out
+    lo, hi = 0, 3 * len(uniq)
+    floor = render(levels_at(hi))
+    if not fits(floor):
+        return floor
+    best = floor
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        out = render(levels_at(mid))
+        if fits(out):
+            hi, best = mid, out
+        else:
+            lo = mid
+    return best
 
 
 def raise_entries(t):

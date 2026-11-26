@@ -32,6 +32,8 @@
 <h1>How much history a reviewer and a critic are given</h1>
 <p class="lede">A moved task keeps each node's whole story in a history file. A reviewer or a critic is not given all of it. The numbers below are my choices, and nothing I ran settles them.</p>
 
+<p><b>Wrong if</b> a review or critic misses a fault only because a Determination was cut in the outline or a node's history was cut to fit, or if you want either number set otherwise.</p>
+
 <h2>The two numbers in force now</h2>
 <div class="box" data-node="allowance"><b>6,000 tokens of history in all</b>
   <span>One allowance for every node's history in the briefing. When there are more nodes than fit, the oldest are cut to a title and Determination, then to one line.</span></div>
@@ -60,15 +62,15 @@
   <tr><td>Last 20 nodes of W75 given to a critic</td><td>17,058 tokens uncut, 4,420 given, none cut to a pointer</td><td>for</td></tr>
   <tr><td>All 69 nodes of W75 given to a critic</td><td>33,457 tokens uncut, 5,936 given, 37 cut to a pointer</td><td>against</td></tr>
   <tr><td>Determinations over 240 characters whose cut part has a word like "but", "not", "only", "still"</td><td>37 of 59 on W75, 5 of 17 on W203 (a crude word count)</td><td>against</td></tr>
-  <tr><td>The last 3 nodes of W75, whose history joined is 5,966 tokens (under 6,000)</td><td>2,583 given: the cut was sized on each node alone, before shared parts are counted once</td><td>against: a fault in the code, not in the number</td></tr>
+  <tr><td>The last 3 nodes of W75, whose history joined is 5,966 tokens (under 6,000)</td><td>2,583 given before the fix: the cut was sized on each node alone, before shared parts are counted once</td><td>against: a fault in the code, not in the number</td></tr>
 </table>
-<p>The last row is a bug. It is fixed in a separate node and does not depend on your answer. I did not find a fault that a reviewer or critic missed because of a cut, and I did not look for one in past reviews, so this is a limit of the check.</p>
+<p>The last row was a bug. It is fixed in a separate node and does not depend on your answer; the bars above are measured with the fix. I did not find a fault that a reviewer or critic missed because of a cut, and I did not look for one in past reviews, so this is a limit of the check.</p>
 
 <script>
   var DATA = {
     a: { r: 68380, c: 56763, note: 'What is in force now.' },
     b: { r: 79481, c: 67864, note: 'Twice as much of each Determination: the tails with a "but" or a "not" mostly survive. About 11,000 characters more for the reviewer.' },
-    c: { r: 83167, c: 65576, note: 'More nodes keep their whole history. About 15,000 characters more for the reviewer, and the critic with all nodes to judge gains 8,800.' },
+    c: { r: 83167, c: 77157, note: 'More nodes keep their whole history. About 15,000 characters more for the reviewer, and 20,000 more for the critic with all nodes to judge.' },
     d: { r: 84429, c: 72812, note: 'Nothing in the outline is cut. The reviewer reads 1.7 times the old format.' }
   };
   var OLD = { r: 49548, c: 57131 }, MAX = 100000;

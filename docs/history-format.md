@@ -221,7 +221,10 @@ reason.
    outline the two briefings carry cuts each Determination to the digest's 240 characters for
    a history-format task, which keeps every one whole in its history file. Measured on the
    moved W75: the reviewer's briefing was 136,283 characters and the critic's 132,323 before
-   the allowance, against 49,548 and 57,131 as an old-format file.
+   the allowance, against 49,548 and 57,131 as an old-format file. The size `fit` tests is the
+   joined text's, where a parent or neighbour shared by several nodes is given once, found by
+   rendering; it first summed each node's text alone, which cut a critic's last 3 W75 nodes to
+   2,583 tokens when they join to 5,966.
 3. **ROADMAP §0**: the sentence "the tree reads the same from the file alone" becomes "the
    live tree reads from the status file and the whole tree from the history". Parked
    siblings stay in the Live tree, since a session unparks them. That is the author's law,
