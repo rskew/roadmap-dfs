@@ -191,5 +191,39 @@ class Pull(unittest.TestCase):
         self.assertNotIn("### W9.4", pulled)                                # no parents or neighbours
 
 
+    # W203.14: a moved task's sessions are not told to run what refuses or to write where `load` does not read
+    def test_the_briefing_of_a_moved_task_gives_no_compact_or_shelve_advice(self):
+        # a log older than the author's last word, and a status file far over the budget
+        log = self.root / ".dfs/items/W9.log.md"
+        log.write_text(log.read_text() + "\n- 2026-11-01T00:00:00Z · note\n  " + "word " * 5000 + "\n")
+        st = self.root / ".dfs/items/W9.md"
+        st.write_text(st.read_text() + "\n## Not taken\n\n" + "- word " * 20000 + "\n")
+        b = dfs_state.brief("W9")
+        self.assertNotIn("tree.py compact", b)
+        self.assertNotIn("tree.py shelve", b)
+        self.assertIn("over the", b)                                        # it still says the digest is over budget
+        self.assertIn("shorten the hand-kept Decisions in force", b)
+        self.assertIn("Its Live tree is the state of the work", b)
+
+    def test_the_critic_and_the_reviewer_add_a_node_with_tree_add_on_a_moved_task(self):
+        for b in (dfs_state.critic_brief("W9"), dfs_state.review_brief("W9")):
+            self.assertIn("tree.py add W9 <parent node id", b)
+            self.assertIn("Never write a `### <id> · …` section into `.dfs/items/W9.md`", b)
+            self.assertIn("you put it in the task's history file (`.dfs/items/W9.history.md`)", b)
+            self.assertNotIn("you put it in `.dfs/items/W9.md`", b)
+            self.assertNotIn("### W9.7 · Fix:", b)                          # no hand-written section shape
+
+    def test_the_briefings_of_an_old_format_task_are_as_they_were(self):
+        for n in ("W9.md", "W9.history.md"):
+            (self.root / ".dfs/items" / n).unlink()
+        (self.root / ".dfs/items/W9.md").write_text(
+            "# W9 · old\n\n## Goal\n\nx\n\n## Tree\n\n### W9.1 · a\nStatus: open\nApproach: do it.\n")
+        self.assertIn("Its Tree is the state of the work", dfs_state.brief("W9"))
+        for b in (dfs_state.critic_brief("W9"), dfs_state.review_brief("W9")):
+            self.assertIn("you put it in `.dfs/items/W9.md`", b)
+            self.assertIn("### W9.2 · Fix: <the issue, named as what to fix>", b)
+            self.assertNotIn("tree.py add", b)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

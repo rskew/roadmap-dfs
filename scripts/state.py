@@ -545,7 +545,15 @@ def _size_note(task, path) -> str:
     if not path.exists():
         return "not written yet"
     n = len(path.read_text()) // 4
-    read = len(dfs_tree.digest(dfs_tree.load(task))) // 4
+    t = dfs_tree.load(task)
+    read = len(dfs_tree.digest(t)) // 4
+    if t.get("new_format"):
+        # The status file holds only the live nodes and the hand-kept lines, and the history
+        # is never trimmed: `compact` and `shelve` refuse it, so name what can be shortened.
+        over = (" — ⚠ its digest is over the %s-token budget; shorten the hand-kept Decisions "
+                "in force and the Not taken lines (the history file keeps every node whole)"
+                % f"{HANDOFF_BUDGET:,}") if read > HANDOFF_BUDGET else ""
+        return "~%s tokens (its digest, which you read, is ~%s)%s" % (f"{n:,}", f"{read:,}", over)
     over = (" — ⚠ its digest is over the %s-token budget; shorten the live nodes and the "
             "settled nodes' Determinations, and move settled history to the archive "
             "(`tree.py shelve %s`)" % (f"{HANDOFF_BUDGET:,}", task)) if read > HANDOFF_BUDGET else ""
@@ -694,14 +702,15 @@ def brief(task: str) -> str:
     st = state_for(task)
     path = dfs_tree.path_for(task)
     rel = dfs_paths.rel(path)
+    tree_word = "Live tree" if t.get("new_format") else "Tree"
     out = [read_roadmap().rstrip(), "",
            "## Your briefing — %s" % task, "",
            "- **Status**: %s — %s" % (st["status"], st["why"]),
-           "- **Your task file is `%s`** (%s). Its Tree is the state of the work, %s "
-           "The digest at the end of this briefing carries the Tree, so you need not read "
+           "- **Your task file is `%s`** (%s). Its %s is the state of the work, %s "
+           "The digest at the end of this briefing carries the %s, so you need not read "
            "the file whole: open a settled node in full with `python3 %s/tree.py show %s "
            "<id>`, and read the file only where you edit it."
-           % (rel, _size_note(task, path), _log_note(task, path),
+           % (rel, _size_note(task, path), tree_word, _log_note(task, path), tree_word,
               dfs_paths.rel(dfs_paths.SCRIPTS), task),
            ] + _parts_note(task, path) + [
            "- **The tool's scripts are in `%s`**: `<scripts>` in the skill means that "
@@ -865,16 +874,35 @@ def _record_block(task, kind):
     tree_cmd = "python3 %s/tree.py" % dfs_paths.rel(dfs_paths.SCRIPTS)
     rel = dfs_paths.rel(dfs_tree.path_for(task))
     tag = dfs_paths.branch_tag()
-    node_shape = ["    ### %s · Fix: <the issue, named as what to fix>"
-                  % dfs_tree.next_node_id(dfs_tree.load(task), tag),
-                  "    Parent: <the node whose work it is in; none for something the "
-                  "Goal asks that no node attempted>",
-                  "    Status: open",
-                  "    Approach: <what is wrong, what you checked and what it showed, and "
-                  "what would settle it>", ""]
+    t = dfs_tree.load(task)
+    if t.get("new_format"):
+        # `rel` is the generated status file here: a section written into it is not read by
+        # `load`. A node goes into the history file and the Live tree through `tree.py add`.
+        hist = ", ".join(dfs_paths.rel(h) for h in (dfs_tree.history_part(task, g)
+                                                    for g in dfs_tree.part_tags(task)) if h.exists())
+        node_shape = ["    %s add %s <parent node id, or - for something the Goal asks "
+                      "that no node attempted> \"Fix: <the issue, named as what to fix>\" <<'EOF'"
+                      % (tree_cmd, task),
+                      "    <what is wrong, what you checked and what it showed, and what "
+                      "would settle it>",
+                      "    EOF", "",
+                      "  It gives the node the next id and writes it into the history file "
+                      "and the Live tree; it needs only a Parent and an Approach. Never "
+                      "write a `### <id> · …` section into `%s` yourself: that file is "
+                      "generated, and `load` does not read nodes from it." % rel, ""]
+        where = "the task's history file (`%s`), where `tree.py add` puts a new node" % hist
+    else:
+        node_shape = ["    ### %s · Fix: <the issue, named as what to fix>"
+                      % dfs_tree.next_node_id(t, tag),
+                      "    Parent: <the node whose work it is in; none for something the "
+                      "Goal asks that no node attempted>",
+                      "    Status: open",
+                      "    Approach: <what is wrong, what you checked and what it showed, and "
+                      "what would settle it>", ""]
+        where = "`%s`" % rel
     out = ["⚠️ **Fix nothing.** No code edits, no commits: the runner checks that the "
            "working tree outside `.dfs/` is exactly as you found it. What you find is "
-           "WORK for the next session, and you put it in `%s`:" % rel, ""]
+           "WORK for the next session, and you put it in %s:" % where, ""]
     if kind == "critic":
         out += ["- **Where a node's evidence does not carry its determination, BACKTRACK** "
                 "to the first node where that happens: the earliest, since everything "
