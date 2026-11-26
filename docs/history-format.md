@@ -195,9 +195,13 @@ reason.
 
 1. **Decisions in force: kept by hand.** One short line per decision, written by the
    session that confirms the node and held to the history by the checks below. The
-   alternative, a `Decision:` field on each confirmed node that a later node retires, cannot
-   go stale, but it puts a new field into every node and gives no bound on the file's size.
-   It stays an option if the hand-kept lines go stale on a real task.
+   alternative, a `Decision:` field on each node that settles a fact, retired by a later
+   node's `Supersedes:`, was tried on W75. Written as standing facts it is no smaller (16
+   lines, 2,675 characters against 15 and 2,619 by hand, and 36 lines, 4,953 characters as the
+   nodes stand, since no node had a `Supersedes:`). It follows a superseding node with no
+   rule, but only when the nodes carry the marks, and the nodes of a task that is moved
+   cannot be edited to add them. It stays an option if the hand-kept lines go stale on a
+   real task.
 2. **The briefing's history allowance: 4,000 tokens per node in hand**, on top of the
    status file. A typical section is a few hundred tokens, so this holds the node, its
    parents and a few neighbours. When over, drop in this order: tag neighbours, oldest
