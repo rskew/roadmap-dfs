@@ -1,0 +1,218 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How much history a reviewer and a critic are given</title>
+<style>
+  body { margin: 0; padding: 16px; background: #fbfaf7; color: #1a1a1a;
+         font: 16px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; max-width: 720px; }
+  p, li, h1, h2, h3, .box, .legend, .lede { overflow-wrap: break-word; }
+  @media (min-width: 720px) { body { padding: 28px 32px; } }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 22px 0 6px; }
+  .lede { color: #444; margin: 0 0 12px; }
+  .pick { display: flex; flex-direction: column; gap: 8px; margin: 0 0 14px; }
+  .pick button { font: inherit; text-align: left; padding: 10px 12px; min-height: 44px; border: 1.5px solid #333;
+                 border-radius: 6px; background: #fff; cursor: pointer; }
+  .pick button[aria-pressed=true] { background: #1a1a1a; color: #fff; }
+  .rows { margin: 0 0 12px; }
+  .row { margin: 0 0 12px; }
+  .row .name { font-size: 14px; color: #444; margin: 0 0 3px; }
+  .bar { position: relative; height: 30px; background: #eee; border: 1.5px solid #333; border-radius: 4px; }
+  .fill { position: absolute; left: 0; top: 0; bottom: 0; background: #7aa6d6; }
+  .mark { position: absolute; top: -4px; bottom: -4px; width: 0; border-left: 2px dashed #b00; }
+  .num { font-size: 14px; margin: 3px 0 0; }
+  .legend { font-size: 14px; color: #555; }
+  .box { box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #333; border-radius: 6px; background: #fff; margin: 0 0 12px; }
+  .box b { display: block; font-size: 16px; }
+  .box span { display: block; color: #555; font-size: 14px; margin-top: 2px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 6px 0 12px; }
+  th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; vertical-align: top; }
+</style>
+
+<h1>How much history a reviewer and a critic are given</h1>
+<p class="lede">A moved task keeps each node's whole story in a history file. A reviewer or a critic is not given all of it. The numbers below are my choices, and nothing I ran settles them.</p>
+
+<h2>The two numbers in force now</h2>
+<div class="box" data-node="allowance"><b>6,000 tokens of history in all</b>
+  <span>One allowance for every node's history in the briefing. When there are more nodes than fit, the oldest are cut to a title and Determination, then to one line.</span></div>
+<div class="box" data-node="outlinecut"><b>240 characters of each Determination in the tree outline</b>
+  <span>The outline lists every node with its Determination. On the moved W75, 59 of 69 Determinations are longer, so 15,901 characters are cut. `tree.py show` prints the whole.</span></div>
+
+<h2>What each choice does to the briefing on the moved W75</h2>
+<p class="lede">Pick a choice. The bars show the reviewer's and the critic's briefing in characters. The red line is the old format (one file): 49,548 for the reviewer and 57,131 for the critic.</p>
+<div class="pick" id="pick" role="group" aria-label="Choice">
+  <button type="button" data-k="a" aria-pressed="true">Keep both: 6,000 tokens and 240 characters</button>
+  <button type="button" data-k="b" aria-pressed="false">6,000 tokens, but 480 characters of each Determination</button>
+  <button type="button" data-k="c" aria-pressed="false">10,000 tokens and 240 characters</button>
+  <button type="button" data-k="d" aria-pressed="false">6,000 tokens, Determinations whole in the outline</button>
+</div>
+<div class="rows">
+  <div class="row" data-node="reviewer"><p class="name">Reviewer's briefing</p>
+    <div class="bar"><div class="fill" id="f1"></div><div class="mark" id="m1"></div></div><p class="num" id="n1"></p></div>
+  <div class="row" data-node="critic"><p class="name">Critic's briefing, all 69 nodes to judge</p>
+    <div class="bar"><div class="fill" id="f2"></div><div class="mark" id="m2"></div></div><p class="num" id="n2"></p></div>
+</div>
+<p class="legend" id="note"></p>
+
+<h2>What I saw when I tried to show it wrong</h2>
+<table>
+  <tr><th>Check</th><th>Result</th><th>Cuts</th></tr>
+  <tr><td>Last 20 nodes of W75 given to a critic</td><td>17,058 tokens uncut, 4,420 given, none cut to a pointer</td><td>for</td></tr>
+  <tr><td>All 69 nodes of W75 given to a critic</td><td>33,457 tokens uncut, 5,936 given, 37 cut to a pointer</td><td>against</td></tr>
+  <tr><td>Determinations over 240 characters whose cut part has a word like "but", "not", "only", "still"</td><td>37 of 59 on W75, 5 of 17 on W203 (a crude word count)</td><td>against</td></tr>
+  <tr><td>The last 3 nodes of W75, whose history joined is 5,966 tokens (under 6,000)</td><td>2,583 given: the cut was sized on each node alone, before shared parts are counted once</td><td>against: a fault in the code, not in the number</td></tr>
+</table>
+<p>The last row is a bug. It is fixed in a separate node and does not depend on your answer. I did not find a fault that a reviewer or critic missed because of a cut, and I did not look for one in past reviews, so this is a limit of the check.</p>
+
+<script>
+  var DATA = {
+    a: { r: 68380, c: 56763, note: 'What is in force now.' },
+    b: { r: 79481, c: 67864, note: 'Twice as much of each Determination: the tails with a "but" or a "not" mostly survive. About 11,000 characters more for the reviewer.' },
+    c: { r: 83167, c: 65576, note: 'More nodes keep their whole history. About 15,000 characters more for the reviewer, and the critic with all nodes to judge gains 8,800.' },
+    d: { r: 84429, c: 72812, note: 'Nothing in the outline is cut. The reviewer reads 1.7 times the old format.' }
+  };
+  var OLD = { r: 49548, c: 57131 }, MAX = 100000;
+  function show(k) {
+    var d = DATA[k];
+    [['1', d.r, OLD.r], ['2', d.c, OLD.c]].forEach(function (x) {
+      document.getElementById('f' + x[0]).style.width = (x[1] / MAX * 100) + '%';
+      document.getElementById('m' + x[0]).style.left = (x[2] / MAX * 100) + '%';
+      document.getElementById('n' + x[0]).textContent = x[1].toLocaleString('en-US') + ' characters (old format ' + x[2].toLocaleString('en-US') + ')';
+    });
+    document.getElementById('note').textContent = d.note;
+    Array.prototype.forEach.call(document.querySelectorAll('#pick button'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-k') === k ? 'true' : 'false');
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('#pick button'), function (b) {
+    b.addEventListener('click', function () { show(b.getAttribute('data-k')); });
+  });
+  show('a');
+</script>
+
+<!-- ===== The answer form: keep from here to the end as it is; edit only the options. ===== -->
+<style>
+  /* The answer form. Its rules all start with .dfs-answer, so the page's own leave it be. */
+  .dfs-answer { margin: 28px 0 0; padding: 12px 14px; border: 1.5px solid #333; border-radius: 6px; background: #fff; }
+  .dfs-answer h2 { font-size: 16px; margin: 0 0 8px; }
+  .dfs-answer p { margin: 8px 0 0; }
+  .dfs-answer fieldset { border: 0; margin: 0 0 6px; padding: 0; }
+  .dfs-answer legend { padding: 0; margin: 0 0 4px; color: #444; }
+  /* An option's text is a flex item, which `overflow-wrap: break-word` cannot narrow: `anywhere` can, and a label is one
+     line of text in its own row, so it cannot squeeze a column of other words. */
+  .dfs-answer .opt { display: flex; gap: 10px; align-items: center; min-height: 44px; cursor: pointer; overflow-wrap: anywhere; }
+  .dfs-answer input[type=radio], .dfs-answer input[type=checkbox] { width: 32px; height: 32px; margin: 0; flex: none; }
+  .dfs-answer .note { display: block; margin: 8px 0 2px; }
+  .dfs-answer textarea { width: 100%; box-sizing: border-box; font: inherit; min-height: 44px; }
+  .dfs-answer .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .dfs-answer button { font: inherit; padding: 10px 14px; min-height: 44px; border: 1.5px solid #333;
+                       border-radius: 6px; background: #fff; cursor: pointer; }
+  .dfs-answer button:disabled { opacity: .5; cursor: default; }
+  .dfs-answer #dfs-parkbox { display: flex; gap: 10px; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
+  .dfs-answer #dfs-parkbox[hidden] { display: none; }
+  .dfs-answer .where { color: #555; font-size: 14px; }
+</style>
+<section id="dfs-answer" class="dfs-answer" aria-label="Your answer">
+  <h2>Your answer</h2>
+  <fieldset id="dfs-options">
+    <legend>Which way</legend>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep 6,000 tokens of history and 240 characters of each Determination in the outline."> Keep both numbers</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep 6,000 tokens, and show 480 characters of each Determination in the outline."> 480 characters in the outline</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Raise the history allowance to 10,000 tokens and keep 240 characters in the outline."> 10,000 tokens of history</label>
+    <label class="opt"><input type="radio" name="dfs-option" value="Keep 6,000 tokens and show every Determination whole in the outline."> Whole Determinations in the outline</label>
+  </fieldset>
+  <label class="note" for="dfs-note">In your words (optional)</label>
+  <textarea id="dfs-note" rows="3"></textarea>
+  <div id="dfs-answerbox" hidden>
+    <div class="row"><button type="button" id="dfs-send">Send as my answer</button></div>
+    <p id="dfs-answer-status" aria-live="polite"></p>
+  </div>
+  <div id="dfs-rulebox" hidden>
+    <label id="dfs-parkbox" hidden><input type="checkbox" id="dfs-park"> Confirming prunes <span id="dfs-parks"></span>, which hold work: park them</label>
+    <div class="row">
+      <button type="button" id="dfs-confirm">Confirm the node</button>
+      <button type="button" id="dfs-refute">Refute the node</button>
+    </div>
+    <p id="dfs-rule-status" aria-live="polite"></p>
+  </div>
+  <p class="where" id="dfs-where" aria-live="polite"></p>
+</section>
+
+<script>
+  // The answer form. Every id in it starts with dfs-, so a page above it may use any id of its own.
+  (function () {
+    var API = /^https?:$/.test(location.protocol) ? '/artefact-state/' + location.pathname.split('/').pop() : '';
+    function call(method, body) {
+      if (!API) return Promise.reject(new Error('no server'));
+      return fetch(API, { method: method, body: body && JSON.stringify(body) }).then(function (r) {
+        return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; });
+      });
+    }
+    function $(id) { return document.getElementById(id); }
+    function radios() { return Array.prototype.slice.call(document.querySelectorAll('#dfs-answer input[name="dfs-option"]')); }
+    function option() { var r = radios().filter(function (r) { return r.checked; })[0]; return r ? r.value : ''; }
+    function said() { return [option(), $('dfs-note').value.trim()].filter(Boolean).join('\n\n'); }
+    var touched = false, saving;
+    function mine() {
+      return { option: option(), note: $('dfs-note').value,
+               page: typeof window.dfsPageState === 'function' ? window.dfsPageState() : null };
+    }
+    function keep() {
+      touched = true;
+      clearTimeout(saving);
+      saving = setTimeout(function () { call('POST', { state: mine() }).catch(function () {}); }, 300);
+    }
+    window.dfsAnswer = {
+      choose: function (value) { radios().forEach(function (r) { r.checked = r.value === value; }); keep(); },
+      keep: keep
+    };
+    radios().forEach(function (r) { r.addEventListener('change', keep); });
+    $('dfs-note').addEventListener('input', keep);
+
+    function done(status, text) {
+      status.textContent = text;
+      parent.postMessage({ dfs: 'answered' }, '*');
+    }
+    function rule(verdict) {
+      var status = $('dfs-rule-status'), buttons = document.querySelectorAll('#dfs-rulebox button');
+      if (verdict === 'confirmed' && !$('dfs-parkbox').hidden && !$('dfs-park').checked) {
+        status.textContent = 'Tick the box to park the siblings first: confirming prunes them.';
+        return;
+      }
+      var text = said() || (verdict === 'confirmed' ? 'Confirmed' : 'Refuted') + ' on the page.';
+      buttons.forEach(function (b) { b.disabled = true; });
+      call('POST', { state: mine(), verdict: verdict, answer: text, park: $('dfs-park').checked }).then(function () {
+        done(status, 'Recorded: ' + verdict + '.');
+      }).catch(function (e) {
+        buttons.forEach(function (b) { b.disabled = false; });
+        status.textContent = 'Not recorded: ' + e.message;
+      });
+    }
+    $('dfs-confirm').addEventListener('click', function () { rule('confirmed'); });
+    $('dfs-refute').addEventListener('click', function () { rule('refuted'); });
+    $('dfs-send').addEventListener('click', function () {
+      var status = $('dfs-answer-status'), send = $('dfs-send'), text = said();
+      if (!text) { status.textContent = 'Choose an option, or write your answer, first.'; return; }
+      send.disabled = true;
+      call('POST', { state: mine(), answer: text }).then(function () {
+        done(status, 'Recorded as your answer.');
+      }).catch(function (e) { send.disabled = false; status.textContent = 'Not recorded: ' + e.message; });
+    });
+
+    if (!API) { $('dfs-where').textContent = 'Opened as a file: send the answer from the roadmap’s web page.'; return; }
+    call('GET').then(function (j) {
+      var s = j.state || {};
+      if (!touched) {
+        if (s.option) radios().forEach(function (r) { r.checked = r.value === s.option; });
+        if (s.note) $('dfs-note').value = s.note;
+      }
+      if (s.page != null) document.dispatchEvent(new CustomEvent('dfs-state', { detail: s.page }));
+      $('dfs-rulebox').hidden = !j.node;
+      var parks = (j.node && j.node.parks) || [];
+      $('dfs-parks').textContent = parks.join(', ');
+      $('dfs-parkbox').hidden = !parks.length;
+      $('dfs-answerbox').hidden = !j.raise;
+      $('dfs-where').textContent = j.raise || j.node ? '' : 'Nothing waits on this page now: its raise is answered, or its node ruled on.';
+    }).catch(function () { $('dfs-where').textContent = 'The roadmap’s server did not answer: answer in the terminal.'; });
+  })();
+</script>
