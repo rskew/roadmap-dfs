@@ -255,9 +255,11 @@ def commits_for(task):
     tags = dfs_tree.part_tags(task)
     key = []
     for g in tags:
-        for p in (dfs_tree.part_path(task, g), dfs_tree.archive_part(task, g)):
+        for p in (dfs_tree.part_path(task, g), dfs_tree.archive_part(task, g),
+                  dfs_tree.history_part(task, g)):      # a history-format task's nodes are in the last
             try:
-                key.append(p.stat().st_mtime_ns)
+                st = p.stat()
+                key.append((st.st_mtime_ns, st.st_size))
             except OSError:
                 key.append(0)
     hit = _commit_cache.get(task)

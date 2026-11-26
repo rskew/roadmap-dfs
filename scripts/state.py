@@ -545,7 +545,15 @@ def _size_note(task, path) -> str:
     if not path.exists():
         return "not written yet"
     n = len(path.read_text()) // 4
-    read = len(dfs_tree.digest(dfs_tree.load(task))) // 4
+    t = dfs_tree.load(task)
+    read = len(dfs_tree.digest(t)) // 4
+    if t.get("new_format"):
+        # The status file holds only the live nodes and the hand-kept lines, and the history
+        # is never trimmed: `compact` and `shelve` refuse it, so name what can be shortened.
+        over = (" — ⚠ its digest is over the %s-token budget; shorten the hand-kept Decisions "
+                "in force and the Not taken lines (the history file keeps every node whole)"
+                % f"{HANDOFF_BUDGET:,}") if read > HANDOFF_BUDGET else ""
+        return "~%s tokens (its digest, which you read, is ~%s)%s" % (f"{n:,}", f"{read:,}", over)
     over = (" — ⚠ its digest is over the %s-token budget; shorten the live nodes and the "
             "settled nodes' Determinations, and move settled history to the archive "
             "(`tree.py shelve %s`)" % (f"{HANDOFF_BUDGET:,}", task)) if read > HANDOFF_BUDGET else ""
@@ -632,6 +640,67 @@ def _author_since_last_ok(t):
     return [e for e in t["log"] if e["kind"] in ("answer", "correct", "delete") and e["ts"] > last_ok]
 
 
+def _files_of(t, task):
+    """The task's files a critic or reviewer reads: each part, and its history file when the
+    task is in the history format (the status file alone holds no node's evidence)."""
+    out = [dfs_paths.rel(p) for p in dfs_tree.part_files(task)]
+    if t.get("new_format"):
+        out += [dfs_paths.rel(h) for h in (dfs_tree.history_part(task, tag)
+                                           for tag in dfs_tree.part_tags(task)) if h.exists()]
+    return out
+
+
+def _history_block(t, nids, why):
+    """The briefing's pull from the history file (`taskhistory.pull`) for each node in `nids`:
+    its section, its parents, what it supersedes and its tag neighbours, within the allowance
+    each. Only a task in the history format has one; an old task file already holds its nodes."""
+    nids = [n for n in dict.fromkeys(nids) if n in dfs_tree.by_id(t)]
+    if not t.get("new_format") or not nids:
+        return []
+    import taskhistory
+    out = ["### The history of %s" % why, "",
+           "From the task's history file, each node folded to how it stands now, in at most "
+           "%s tokens in all: when there are more than fit, the oldest are cut to a title and "
+           "a Determination, or to one line. Open any other with `python3 %s/tree.py show %s "
+           "<id>`." % (f"{taskhistory.HISTORY_ALLOWANCE:,}", dfs_paths.rel(dfs_paths.SCRIPTS), t["task"]), ""]
+    for text in taskhistory.fit(t, nids):
+        out += [text, ""]
+    return out
+
+
+def _decision_history(t):
+    """For the reviewer: each decision in force, then the history of the nodes it cites (each
+    section and the chain it replaced) and the author's answer it cites, quoted from the log."""
+    if not t.get("new_format"):
+        return []
+    import check as dfs_check
+    import taskhistory
+    lines = dfs_check.decision_lines("## Decisions in force\n" + t["sections"].get("Decisions in force", ""))
+    if not lines:
+        return []
+    nodes = dfs_tree.by_id(t)
+    cited = [[i for i in dfs_check.cites(line)[0] if i in nodes] for line in lines]
+    answers = [[e["text"] + "\n" for ts in dfs_check.cites(line)[1] for e in t["log"]
+                if e["ts"] == ts and e["kind"] == "answer"] for line in lines]
+    # The answers and the decision lines are the floor; the nodes' history shares what is left of
+    # the allowance, the oldest cut first (`taskhistory.fit`).
+    fixed = sum(len(x) for a in answers for x in a) // 4 + sum(len(l) for l in lines) // 4
+    texts = iter(taskhistory.fit(t, [i for ids in cited for i in ids],
+                                 allowance=max(0, taskhistory.HISTORY_ALLOWANCE - fixed),
+                                 with_parents=False, with_tags=False))
+    out = ["### The decisions in force, and the history behind each", "",
+           "Each decision, then the history of the nodes it cites, in at most %s tokens in all: "
+           "when there are more than fit, the oldest nodes are cut to a title and a Determination, "
+           "or to one line, and every decision stays. Open one with `python3 %s/tree.py show %s "
+           "<id>`." % (f"{taskhistory.HISTORY_ALLOWANCE:,}", dfs_paths.rel(dfs_paths.SCRIPTS), t["task"]), ""]
+    for line, ids, ans in zip(lines, cited, answers):
+        out += [line, ""]
+        for _ in ids:
+            out += [next(texts), ""]
+        out += ans
+    return out
+
+
 def brief(task: str) -> str:
     """Everything a work session needs before it starts, as text it is HANDED.
 
@@ -643,14 +712,15 @@ def brief(task: str) -> str:
     st = state_for(task)
     path = dfs_tree.path_for(task)
     rel = dfs_paths.rel(path)
+    tree_word = "Live tree" if t.get("new_format") else "Tree"
     out = [read_roadmap().rstrip(), "",
            "## Your briefing — %s" % task, "",
            "- **Status**: %s — %s" % (st["status"], st["why"]),
-           "- **Your task file is `%s`** (%s). Its Tree is the state of the work, %s "
-           "The digest at the end of this briefing carries the Tree, so you need not read "
+           "- **Your task file is `%s`** (%s). Its %s is the state of the work, %s "
+           "The digest at the end of this briefing carries the %s, so you need not read "
            "the file whole: open a settled node in full with `python3 %s/tree.py show %s "
            "<id>`, and read the file only where you edit it."
-           % (rel, _size_note(task, path), _log_note(task, path),
+           % (rel, _size_note(task, path), tree_word, _log_note(task, path), tree_word,
               dfs_paths.rel(dfs_paths.SCRIPTS), task),
            ] + _parts_note(task, path) + [
            "- **The tool's scripts are in `%s`**: `<scripts>` in the skill means that "
@@ -761,9 +831,11 @@ def brief(task: str) -> str:
         rel = p.relative_to(items_dir)
         arc = arc_dir / rel
         lg = dfs_tree.log_part(task, dfs_tree.part_of(str(rel))[1])   # the log file names attachments too
+        hs = dfs_tree.history_part(task, dfs_tree.part_of(str(rel))[1])   # and so does a moved task's history
         mine = p.read_text() + "\n" + (arc.read_text() if arc.is_file() else "") \
-            + "\n" + (lg.read_text() if lg.is_file() else "")
-        held = set(dfs_tree.ATTACHED_REF.findall(_at_head(p) + "\n" + _at_head(arc) + "\n" + _at_head(lg)))
+            + "\n" + (lg.read_text() if lg.is_file() else "") + "\n" + (hs.read_text() if hs.is_file() else "")
+        held = set(dfs_tree.ATTACHED_REF.findall(
+            _at_head(p) + "\n" + _at_head(arc) + "\n" + _at_head(lg) + "\n" + _at_head(hs)))
         loose += [n for n in dfs_tree.untracked_artefacts(mine) if n not in held and n not in loose]
     if loose:
         out += ["### Attachments to commit", "",
@@ -794,6 +866,8 @@ def brief(task: str) -> str:
                 "its Determination. This is what you carry on from; the task file holds the "
                 "same and more.", "",
                 dfs_tree.digest(t).rstrip(), ""]
+    in_hand = [nd["id"] for nd in dfs_tree.frontier(t)[:1]] + [c["node"] for c in todo]
+    out += _history_block(t, in_hand, "the node in hand")
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -804,6 +878,13 @@ def _since_last(t, kind):
                 and e["args"][:1] == [kind] and e["ts"] < now), default="")
 
 
+def _outline_cut(t):
+    """How long a Determination the critic's and reviewer's outline of the tree may show: whole for
+    an old task file, `DIGEST_DET` characters for a history-format task, whose history file keeps
+    each whole (`tree.py show`, and the pulled history of the nodes in question)."""
+    return dfs_tree.DIGEST_DET if t.get("new_format") else None
+
+
 def _record_block(task, kind):
     """How a critic or a reviewer records what it finds. ⚠️ What it finds is WORK, so
     it goes in the tree, where the next session picks it up; a raise blocks the task
@@ -812,16 +893,35 @@ def _record_block(task, kind):
     tree_cmd = "python3 %s/tree.py" % dfs_paths.rel(dfs_paths.SCRIPTS)
     rel = dfs_paths.rel(dfs_tree.path_for(task))
     tag = dfs_paths.branch_tag()
-    node_shape = ["    ### %s · Fix: <the issue, named as what to fix>"
-                  % dfs_tree.next_node_id(dfs_tree.load(task), tag),
-                  "    Parent: <the node whose work it is in; none for something the "
-                  "Goal asks that no node attempted>",
-                  "    Status: open",
-                  "    Approach: <what is wrong, what you checked and what it showed, and "
-                  "what would settle it>", ""]
+    t = dfs_tree.load(task)
+    if t.get("new_format"):
+        # `rel` is the generated status file here: a section written into it is not read by
+        # `load`. A node goes into the history file and the Live tree through `tree.py add`.
+        hist = ", ".join(dfs_paths.rel(h) for h in (dfs_tree.history_part(task, g)
+                                                    for g in dfs_tree.part_tags(task)) if h.exists())
+        node_shape = ["    %s add %s <parent node id, or - for something the Goal asks "
+                      "that no node attempted> \"Fix: <the issue, named as what to fix>\" <<'EOF'"
+                      % (tree_cmd, task),
+                      "    <what is wrong, what you checked and what it showed, and what "
+                      "would settle it>",
+                      "    EOF", "",
+                      "  It gives the node the next id and writes it into the history file "
+                      "and the Live tree; it needs only a Parent and an Approach. Never "
+                      "write a `### <id> · …` section into `%s` yourself: that file is "
+                      "generated, and `load` does not read nodes from it." % rel, ""]
+        where = "the task's history file (`%s`), where `tree.py add` puts a new node" % hist
+    else:
+        node_shape = ["    ### %s · Fix: <the issue, named as what to fix>"
+                      % dfs_tree.next_node_id(t, tag),
+                      "    Parent: <the node whose work it is in; none for something the "
+                      "Goal asks that no node attempted>",
+                      "    Status: open",
+                      "    Approach: <what is wrong, what you checked and what it showed, and "
+                      "what would settle it>", ""]
+        where = "`%s`" % rel
     out = ["⚠️ **Fix nothing.** No code edits, no commits: the runner checks that the "
            "working tree outside `.dfs/` is exactly as you found it. What you find is "
-           "WORK for the next session, and you put it in `%s`:" % rel, ""]
+           "WORK for the next session, and you put it in %s:" % where, ""]
     if kind == "critic":
         out += ["- **Where a node's evidence does not carry its determination, BACKTRACK** "
                 "to the first node where that happens: the earliest, since everything "
@@ -901,6 +1001,22 @@ def _record_block(task, kind):
     return out
 
 
+def _decision_question(t, task):
+    """The critic's sixth question, for a task in the history format only: the hand-kept
+    Decisions in force are the one thing no tool derives, so a sample of them is read against
+    the Evidence of the nodes they cite. An old-format task has no such section."""
+    if not t.get("new_format"):
+        return []
+    return ["6. **Does the evidence of the nodes a decision cites carry it?** The lines under "
+            "Decisions in force in the status file are kept by hand, so a line can be stale "
+            "or rest on a node whose evidence does not hold it up. Choose three of them, "
+            "not always the newest. For each, open every node it cites with `python3 %s/tree.py "
+            "show %s <id>` and ask whether that node's Evidence and Determination say what "
+            "the line says. Where they do not, BACKTRACK to that node as for any other, and "
+            "name the line in the backtrack. In an `ok`, name each line you sampled by the "
+            "node it cites." % (dfs_paths.rel(dfs_paths.SCRIPTS), task)]
+
+
 def critic_brief(task: str) -> str:
     """What a critic session is handed: the law, what to judge, and the nodes.
 
@@ -910,7 +1026,7 @@ def critic_brief(task: str) -> str:
     re-reads the work in the worker's own frame and agrees with it.
     """
     t = dfs_tree.load(task)
-    rel = "`, `".join(dfs_paths.rel(p) for p in dfs_tree.part_files(task))
+    rel = "`, `".join(_files_of(t, task))
     last = _since_last(t, "critic")
     commits = dfs_tree.node_commits(task)
     status, pruned = dfs_tree.effective(t)
@@ -950,19 +1066,22 @@ def critic_brief(task: str) -> str:
            "what it advanced of it; a Determination that only says the Goal still holds "
            "does not answer that. Look at which paths the nodes' commits touch. Where it "
            "has drifted, raise, naming the first node that left the Goal: whether that "
-           "work stays, moves to another task or stops is the author's call.", "",
-          ] + _record_block(task, "critic") + [
+           "work stays, moves to another task or stops is the author's call.",
+          ] + _decision_question(t, task) + [""] + _record_block(task, "critic") + [
            "### Nodes to judge (%s)" % ("determined since the critic last ran at " + last
                                         if last else "all of them — the critic has not run yet"), ""]
+    judged = []
     for nd in sorted(t["nodes"], key=lambda n: n["n"]):
         cs = commits.get(nd["id"], [])
         fresh = (not last or not cs or cs[0][2] >= last)
         if not fresh:
             continue
+        judged.append(nd["id"])
         out += ["- %s [%s%s] %s — commits: %s" % (
             nd["id"], "pruned " if nd["id"] in pruned else "", status[nd["id"]], nd["title"],
             ", ".join(sha[:10] for sha, _s, _a in cs) or "none")]
-    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t)]
+    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t, _outline_cut(t))]
+    out += [""] + _history_block(t, judged, "the nodes to judge")
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -982,7 +1101,7 @@ def review_brief(task: str) -> str:
     goal, the tree, and every commit the task made — the code, judged against the
     goal, which the critic deliberately does not look at."""
     t = dfs_tree.load(task)
-    rel = "`, `".join(dfs_paths.rel(p) for p in dfs_tree.part_files(task))
+    rel = "`, `".join(_files_of(t, task))
     commits = dfs_tree.node_commits(task)
     status, pruned = dfs_tree.effective(t)
     stale = dfs_tree.unreverted_pruned(t)
@@ -1026,7 +1145,8 @@ def review_brief(task: str) -> str:
     if stale:
         out += ["", "Refuted or pruned, and not reverted: " +
                 ", ".join("%s %s" % (nid, sha[:10]) for nid, sha, _ in stale)]
-    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t)]
+    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t, _outline_cut(t))]
+    out += [""] + _decision_history(t)
     return "\n".join(out).rstrip() + "\n"
 
 

@@ -178,6 +178,66 @@ Corrects: <only on a node carrying out a correction or backtrack: its ts>
   which merges them back, so nothing the briefing says changes. Stage every file the
   command changed.
 
+## A task with a history file
+
+A task with a `.dfs/items/<task>.history.md` is in the two-file format
+(`docs/history-format.md`). Your digest is its **status file**, `.dfs/items/<task>.md`:
+the Goal, Summary, Decisions in force, Not taken, and the live nodes (open, started,
+parked) whole under one title line for each ancestor. Every settled node is in the
+history file, one section per node, and is never loaded whole: read one with
+`tree.py show <task> <id>` (its section, children, what it replaced and the log entries
+that name it) or a topic with `tree.py tag <task> <tag>`. The briefing already carries the
+history of the node in hand, its parents and its tag neighbours.
+
+- **Add a node** with `tree.py add`: it writes the section to the history and the Live tree
+  to the status file. **Change a node** by appending lines to the end of its section: for
+  a field that holds one value (`Parent`, `Status`, `Approach`, `Hypothesis`,
+  `Determination`, `Tags`, `Supersedes`) the last line wins, `Evidence:` bullets add up, and
+  no line already in the file is removed or changed (`check.py` refuses it). To end a node,
+  append `Status: confirmed` or `refuted` and a `Determination:` line.
+- **Tags and Supersedes are optional lines.** `Tags: a, b` is a few topic words (lower case,
+  `-`, `_`, `/`), so a later session finds the node by topic. `Supersedes: W13.2` on a
+  confirmed node says it replaces that one; the older node then reads as superseded (derived,
+  never written) and leaves the Live tree. A refuted node stays refuted.
+- **Keep the status file true in the same commit.** Run `tree.py status <task>` to rewrite the
+  Live tree (`check.py` refuses a stale one) and Raises (the digest builds it from the log, so a stale copy does no harm). For each ruling or design fact the
+  node settled, write one line in Decisions in force, `- <the fact> (<node ids>, <date>)` or
+  `(answer <ts>)`, and rewrite or delete the lines of what the node supersedes. Each cited node
+  must be confirmed and one of them not superseded; the date is the latest cited node's. A
+  refuted branch goes in Not taken with its reason, `- <what was tried and why it failed>
+  (<node id>, <date>)`. The status file's token budget is the one size rule, and a node added
+  to the history never counts against it.
+- **There is nothing to shelve or compact.** The history is never trimmed, and `shelve` and
+  `compact` refuse the task. The log stays in its own file and `tree.py log` writes it.
+- `tree.py migrate <task>` moves an old task into this format, and refuses when any line of
+  the old files would be lost. It writes the history and the merged log and leaves the old
+  task file and archive as they are; `tree.py status` then rewrites the task file as the status
+  file (the old Tree and Log go, the history and log file hold them), and the Decisions and
+  Not taken are written by hand from the history.
+
+## Writing a file others write too
+
+A task's files (`.dfs/items/<task>.md`, its `.history.md` and `.log.md`, and the archive)
+are one copy that every worker and every chat session on the task writes, and more than one
+chat session may be on a task at once. A write made from a stale read silently drops what
+another session added since. So, **for every write to one of these files by hand** (an edit
+or a whole-file write; `tree.py` commands do their own appending, though each reads the file
+and writes it back whole, so a line you wrote by hand in the same instant can be lost. The
+commands are short; do not run one while you are in the middle of a hand edit of the same file):
+
+1. When you read the file, take its hash: `sha256sum <file>`.
+2. Just before you write, take it again. If it is the same, write.
+3. If it differs, someone else wrote in between: read the file again, make your edit on
+   that text, take the hash again, and then write. Never write over text you have not
+   read.
+
+A whole-file write (`fs_write`, a redirect) needs this most; an edit that names the exact
+old text fails by itself when that text has changed, but a hash check still tells you that
+other parts of the file moved. The check narrows the window to the time between the
+second hash and the write; it does not close it, so keep that gap short (hash, then write,
+in the next step) and look at `git diff` of the file before you commit it, to see that only
+your lines are yours.
+
 ## Ending a node
 
 - **Confirmed**: commit, with a subject that starts with the node's id —

@@ -43,6 +43,9 @@ def task_files(repo):
 
 
 def load_tasks(repo):
+    """Each task as `tree.combine` reads it from the task file, its archive and its log file.
+    A task in the history format (`docs/history-format.md`) has its nodes in `<task>.history.md`,
+    which this analysis tool does not read: such a task shows as its status file, with no nodes."""
     return {k: tree.combine(k, [("", a, b, read(os.path.join(repo, ".dfs", "items", k + ".log.md")))])
             for k, (a, b) in task_files(repo).items()}
 

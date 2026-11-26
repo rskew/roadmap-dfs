@@ -31,6 +31,16 @@ part: `<task>/<tag>.log.md`), a title line and then entries only:
     - 2026-09-25T09:40:00Z · raise · W13.2
       <the question, indented two spaces>
 
+A task moved to the two-file format (`docs/history-format.md`, `tree.py migrate`) has a
+history file, `.dfs/items/<task>.history.md`: one section per node, append only, holding
+every node's whole story; a field that holds one value takes its last line, `Evidence:`
+bullets add up, and `Tags:` and `Supersedes:` are two more fields. Its task file is then
+the STATUS file, which a session loads and which stays small: Goal, Summary, Decisions in
+force and Not taken (kept by hand, each line citing nodes), and the generated Live tree
+(open, started and parked nodes) and Raises. `load` reads the nodes from the history and
+the log from the log file alone; a task with no history file reads as it always did.
+`compact` and `shelve` have nothing to move in a moved task and refuse it.
+
 A session reads the task file and the briefing, and opens the log file only for an
 entry's full text; `load` merges it back, so every derived answer is the same as when the
 entries were in the task file under a `## Log` heading, which an older task still has
@@ -70,11 +80,12 @@ and leaves `Approach: archived.` in the file, and `load` puts the words back. A
 Determination leaves its first clause, `Confirmed: the washes are tinted (archived.)`, so a
 reader of the file alone still sees what it settled. `Plan` is the Approach's old name,
 read as it wherever it appears, in a task file or an archive. Status and Parent never
-move, so the tree reads the same from the file alone.
+move, so the tree reads the same from the file alone (an old-format task; a moved task's
+file holds its live nodes only, and the history holds the rest).
 `tree.py digest <task>` prints the task as a session carries on from it: the Goal and every
 other section but the Tree and the Log, each live open node whole, and each other node as one
-line with its parent and Determination. `tree.py show <task> <id>...` prints nodes whole,
-shelved fields put back.
+line with its parent and Determination (a moved task: its status file whole). `tree.py show
+<task> <id>...` prints nodes whole, shelved fields put back.
 If the file is still over the handoff budget afterwards, `shelve` says by how many tokens (and about how
 many words), which nodes to shelve next, and what only `compact` or a hand edit can move.
 
@@ -87,12 +98,24 @@ node and everything under it, the way a correction does).
 Usage:
     tree.py log <task> <kind> [args...] < body   append one log entry
     tree.py show <task>                          the tree, one line per node
-    tree.py add <task> <parent|-> <title> [< approach]   add an open node
-    tree.py start <task> <node>                  mark an open node started (uncommitted)
-    tree.py compact <task>                       move the log's past to the archive
+    tree.py show <task> <id>... [--raw]          nodes whole, shelved fields put back; a moved task: the
+                                                     folded section, children, what it replaced or was
+                                                     replaced by, and the log entries naming it
+                                                     (--raw: the section's lines as written)
+    tree.py tag [<task>] <tag>                   every node of the task (or of all moved tasks) with the tag
+    tree.py digest <task>                        the task as a session carries on from it
+    tree.py add <task> <parent|-> <title> [< approach]   add an open node (a moved task: to its history)
+    tree.py start <task> <node>                  mark an open node started (uncommitted; a moved task: in
+                                                     the status file's Live tree)
+    tree.py compact <task>                       move the log's past to the archive (refused for a moved task)
     tree.py splitlog <task>                      move the task file's whole `## Log` to its log file
     tree.py shelve <task> [<ids>]                move determined nodes' Approach,
                                                      Hypothesis and Determination to the archive
+                                                     (refused for a moved task)
+    tree.py status <task>                        write a history-format task's status file: its Live tree
+                                                     and Raises, from the history and the log
+    tree.py migrate <task>                       write an old task's history file (docs/history-format.md)
+                                                     and merged log; the old files stay; refuses if a line would be lost
 """
 import calendar
 import contextlib
@@ -513,15 +536,45 @@ def with_log_file(t, text):
     return t
 
 
+def history_part(task, tag=""):
+    """The history file of a branch's part of `task`, beside its part (docs/history-format.md)."""
+    p = log_part(task, tag)
+    return p.with_name(p.name[:-len(".log.md")] + ".history.md")
+
+
+def with_history(t, history, logtext=""):
+    """`t`, the parse of a new-format task's status file, with its nodes read from the history
+    file and its log from the log file alone (migration merged the archive and the old `## Log`
+    into it, so neither is read). The nodes keep the shape `parse_nodes` gives, with the
+    history's own `tags`, `supersedes` and `text` beside. `started` is a mark of the status
+    file alone: an open node it marks `started` there reads as `started` here."""
+    import taskhistory
+    marks = {nd["id"] for name in ("Live tree", "Tree")
+             for nd in parse_nodes(t["sections"].get(name, ""), t["task"]) if nd["status"] == "started"}
+    t["nodes"] = taskhistory.parse(history, t["task"])["nodes"]
+    for nd in t["nodes"]:
+        if nd["status"] == "open" and nd["id"] in marks:
+            nd["status"] = "started"
+            nd["fields"]["Status"] = "started"
+    t["log"] = []
+    t["new_format"] = True
+    return with_log_file(t, logtext)
+
+
 def combine(task, parts, here=None):
-    """One task from its parts, `[(tag, text, archive text)]`: every part's nodes, the
+    """One task from its parts, `[(tag, text, archive text, log text, history text)]` (the last
+    two optional; a history of None is an old-format part): every part's nodes, the
     logs merged by time, and the Goal and sections from the default part if it has a
     Goal, else from the first part that does. `here` is the reading branch's tag, which
     the frontier puts first; `t["parts"]` keeps each part as parsed."""
     parsed = {}
     for tag, text, arc, *more in parts:
-        parsed[tag] = with_log_file(with_archive(parse(text or "", task), arc or ""),
-                                    more[0] if more else "")
+        hist = more[1] if len(more) > 1 else None
+        if hist is not None:
+            parsed[tag] = with_history(parse(text or "", task), hist, more[0])
+        else:
+            parsed[tag] = with_log_file(with_archive(parse(text or "", task), arc or ""),
+                                        more[0] if more else "")
         parsed[tag]["part"] = tag
     tags = sorted(parsed, key=lambda g: (g != "", g))
     home = next((g for g in tags if parsed[g]["goal"]), tags[0] if tags else None)
@@ -559,6 +612,10 @@ def load(task, here=None):
     past merged back in. `here` defaults to this checkout's tag (None if detached)."""
     def read(p):
         return p.read_text() if p.exists() else ""
+
+    def read_history(g):        # None for an old-format part: the file's existence says which
+        p = history_part(task, g)
+        return p.read_text() if p.exists() else None
     if here is None:
         here = dfs_paths.branch_tag_or_none()
     memo = getattr(_reading, "memo", None)
@@ -566,7 +623,7 @@ def load(task, here=None):
         return memo[(task, here)]
     tags = part_tags(task)
     t = combine(task, [(g, read(part_path(task, g)), read(archive_part(task, g)),
-                        read(log_part(task, g))) for g in tags], here)
+                        read(log_part(task, g)), read_history(g)) for g in tags], here)
     if memo is not None:
         memo[(task, here)] = t
     return t
@@ -622,10 +679,23 @@ def _log_file_text(task, entries):
     return "# %s · log\n" % task + "".join("\n" + e["text"].rstrip() + "\n" for e in entries)
 
 
+def refuse_history(task, what):
+    """ValueError when this branch's part of `task` has a history file. `load` reads such a
+    part's log from its log file alone and never reads the archive, so what `compact` or
+    `shelve` moved there would vanish from every count; the history is never trimmed, and
+    the status file holds no log and no settled node, so there is nothing for them to move."""
+    tag = "" if dfs_paths.worktree(task) else dfs_paths.branch_tag()
+    if history_part(task, tag).exists():
+        raise ValueError("%s has a history file (%s): `%s` has nothing to move there, since the "
+                         "history is never trimmed and the status file holds no log or settled node"
+                         % (task, dfs_paths.rel(history_part(task, tag)), what))
+
+
 def compact(task):
     """Move every entry of this branch's part's log, whether still in the task file or in
     its log file, that is older than the author's last word to the END of the archive,
     verbatim, under a new `**Log**:` line. Returns how many moved."""
+    refuse_history(task, "compact")
     p, t, lp, ltext = _this_part_log(task)
     a = archive_path(task)
     if not p.exists():
@@ -761,6 +831,7 @@ def shelve(task, ids=()):
     `ids`) to the END of the archive, verbatim, each as one `**<id> <field>**: <text>` line,
     and leave `<field>: archived.` in the task file (`shelf_stub`: a Determination keeps its
     first clause). Returns how many fields moved."""
+    refuse_history(task, "shelve")
     p, a = path_for(task), archive_path(task)
     t = parse(p.read_text() if p.exists() else "", task)
     arc = a.read_text() if a.exists() else ""
@@ -1135,7 +1206,8 @@ def _retire(task, dest, verb):
         for sub in ("items", "archive/items"):
             base = base_state / sub
             for src in [base / ("%s.md" % task), base / task] \
-                    + ([base / ("%s.log.md" % task)] if sub == "items" else []):
+                    + ([base / ("%s.log.md" % task), base / ("%s.history.md" % task)]
+                       if sub == "items" else []):
                 if src.exists() and src.resolve() not in seen:   # a gitignored roadmap's worktree links to ours
                     seen.add(src.resolve())
                     dst = dest / ("items" if sub == "items" else "archive") / src.relative_to(base)
@@ -1203,7 +1275,11 @@ def load_archived(task):
         return base / (("%s.md" % task) if not g else "%s/%s.md" % (task, g))
     def log_at(g):
         return items / (("%s.log.md" % task) if not g else "%s/%s.log.md" % (task, g))
-    return combine(task, [(g, read(at(items, g)), read(at(arc, g)), read(log_at(g))) for g in tags], None)
+    def history_at(g):      # None for an old-format part, as in `load`
+        p = items / (("%s.history.md" % task) if not g else "%s/%s.history.md" % (task, g))
+        return p.read_text() if p.exists() else None
+    return combine(task, [(g, read(at(items, g)), read(at(arc, g)), read(log_at(g)), history_at(g))
+                          for g in tags], None)
 
 
 def archive_blocker(task):
@@ -1261,6 +1337,10 @@ def delete_node(task, nid):
     if parts[2] != dfs_paths.branch_tag():
         raise ValueError("%s belongs to the part of branch %s, which only that branch writes"
                          % (nid, parts[2]))
+    if history_part(task, parts[2]).exists():
+        raise ValueError("%s is in the history format, whose node deleting is not built yet: a node "
+                         "is never removed from the history: append a line to its section in `%s` "
+                         "that says what is wrong with it" % (task, dfs_paths.rel(history_part(task, parts[2]))))
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task)
     mine = by_id(t)
@@ -1303,6 +1383,10 @@ def edit_node(task, nid, title, approach=""):
     parts = split_id(nid)
     if not parts or parts[0] != task or not exists(task):
         raise ValueError("no node %s in %s" % (nid, task))
+    if history_part(task, parts[2]).exists():
+        raise ValueError("%s is in the history format, whose node editing is not built yet: to change "
+                         "what a node says, append the line to its section in `%s` (the file only "
+                         "grows, and a later line wins)" % (task, dfs_paths.rel(history_part(task, parts[2]))))
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task) if p.exists() else None
     nd = by_id(t).get(nid) if t else None
@@ -1344,6 +1428,9 @@ def start_node(task, nid):
     parts = split_id(nid)
     if not parts or parts[0] != task or not exists(task):
         raise ValueError("no node %s in %s" % (nid, task))
+    if history_part(task, parts[2]).exists():       # the mark lives in the status file's Live tree
+        import taskhistory
+        return taskhistory.start(task, nid)
     p = part_path(task, parts[2])
     t = parse(p.read_text(), task) if p.exists() else None
     nd = by_id(t).get(nid) if t else None
@@ -1372,6 +1459,11 @@ def add_node(task, title, parent=None, approach=""):
         raise ValueError("a node needs a title")
     if parent and parent not in by_id(load(task)):
         raise ValueError("no node %s in %s to put it under" % (parent, task))
+    tag = "" if dfs_paths.worktree(task) else dfs_paths.branch_tag()
+    if history_part(task, tag).exists():            # the node goes to the history, never the status file
+        import taskhistory
+        carry_attachments(task, approach)
+        return taskhistory.add(task, title, parent, approach, tag)
     p = ensure_part(task)
     t = parse(p.read_text(), task)
     nid = next_node_id(t)
@@ -1440,6 +1532,22 @@ def corrections(t):
     return out
 
 
+def superseded_by(t, status=None):
+    """{older id: [newer ids]}: a node a confirmed node names in its `Supersedes:`. Derived and
+    never stored, so it reverses by itself when the newer node is refuted, and a refuted node
+    stays refuted whatever names it (docs/history-format.md). `status` is `effective`'s map."""
+    nodes = by_id(t)
+    status = status or {nid: nd["status"] for nid, nd in nodes.items()}
+    out = {}
+    for nd in sorted(t["nodes"], key=order_key):
+        if status.get(nd["id"]) != "confirmed":
+            continue
+        for old in nd.get("supersedes") or ():
+            if old in nodes and old != nd["id"] and status.get(old) != "refuted":
+                out.setdefault(old, []).append(nd["id"])
+    return out
+
+
 def effective(t):
     """Each node's status once the author's corrections are applied, and whether it
     is PRUNED — below a refuted node, or cut off by a correction.
@@ -1489,6 +1597,10 @@ def effective(t):
                         and s_["fields"].get("Corrects") != c["ts"]:
                     cut.add(s_["id"])
                     cut.update(d["id"] for d in descendants(t, s_["id"]))
+    # A plan that a confirmed node replaced is not live work: an open or parked node it
+    # supersedes is cut, and so is what hangs under it. A confirmed one stays confirmed here
+    # (it is history the later nodes stand on); `superseded_by` says it was replaced.
+    cut.update(old for old in superseded_by(t, status) if status[old] in ("open", "parked"))
     pruned = set(cut)
     for nid, nd in sorted(nodes.items(), key=lambda kv: order_key(kv[1])):
         p = nd["parent"]
@@ -2114,7 +2226,7 @@ def uncommitted(cwd=None, ttl=5.0):
                            capture_output=True, text=True, cwd=key)
         if r.returncode == 0:
             for entry in r.stdout.split("\0"):
-                m = re.search(r"(?:^|/)items/(%s)(?:\.log\.md|\.md|/)" % TASK_RE, entry[3:])
+                m = re.search(r"(?:^|/)items/(%s)(?:\.log\.md|\.history\.md|\.md|/)" % TASK_RE, entry[3:])
                 if not m:
                     continue
                 what = "edits"
@@ -2126,6 +2238,8 @@ def uncommitted(cwd=None, ttl=5.0):
                                               (Path(key) / entry[3:]).read_text())
                     except OSError:
                         what = "log"
+                elif entry[3:].endswith(".history.md"):
+                    pass    # a history file holds nodes and nothing else: any change to it is an edit
                 elif entry[:2] in (" M", "M ", "MM"):
                     old = subprocess.run(["git", "show", "HEAD:" + entry[3:]],
                                          capture_output=True, text=True, cwd=key)
@@ -2188,11 +2302,15 @@ def unreverted_pruned(t, cwd=None):
 
 # ── the one-line views ───────────────────────────────────────────────────────
 
-def outline(t):
-    """The tree as indented lines: id, effective status, title, determination."""
+def outline(t, det_limit=None):
+    """The tree as indented lines: id, effective status, title, determination. `det_limit` cuts a
+    Determination longer than that many characters at a word (a history-format task keeps every
+    one whole in its history file, so a briefing that lists all of them cuts them and says where
+    the rest is)."""
     status, pruned = effective(t)
     asleep = dormant(t)
     nodes = by_id(t)
+    sup = superseded_by(t, status)
     depth = {}
     for nd in sorted(t["nodes"], key=order_key):
         p = nd["parent"]
@@ -2203,10 +2321,13 @@ def outline(t):
         for nd in sorted((n for n in t["nodes"]
                           if (n["parent"] if n["parent"] in nodes else None) == parent),
                          key=order_key):
-            st = ("pruned" if nd["id"] in pruned else
+            st = ("superseded" if nd["id"] in sup else
+                  "pruned" if nd["id"] in pruned else
                   status[nd["id"]] if status[nd["id"]] != "open" or nd["id"] not in asleep
                   else "dormant")
             det = nd["fields"].get("Determination", "")
+            if det_limit and len(det) > det_limit:
+                det = det[:det_limit].rsplit(" ", 1)[0] + " …"
             lines.append("%s%s [%s] %s%s" % ("  " * d, nd["id"], st, nd["title"],
                                              (" — " + det) if det else ""))
             work(nd["id"], d + 1)
@@ -2232,6 +2353,95 @@ def node_text(nd):
 DIGEST_DET = 240
 
 
+FOLD_ORDER = ("Parent", "Tags", "Supersedes", "Status", "Approach", "Hypothesis", "Evidence",
+              "Determination", "Ask", "Corrects")
+
+
+def folded_text(nd):
+    """A history node as it stands now: each field once, as `taskhistory.parse` folded it
+    (the last line of a field that holds one value wins, `Evidence:` bullets all kept).
+    `nd["text"]` is the section as written, which `show --raw` prints."""
+    out = ["### %s · %s" % (nd["id"], nd["title"])]
+    for k in FOLD_ORDER:
+        if k == "Evidence":
+            if nd["evidence"]:
+                out += ["Evidence:"] + ["- " + e for e in nd["evidence"]]
+        elif nd["fields"].get(k):
+            out.append("%s: %s" % (k, nd["fields"][k]))
+    return "\n".join(out)
+
+
+def supersession_chain(t, nid, status=None):
+    """The ids of every node `nid` replaced and was replaced by, oldest first, `nid` in its
+    place. The first link each way is followed, and a loop in a hand-written file ends it."""
+    nodes = by_id(t)
+    newer = superseded_by(t, status)
+    back, cur = [], nid
+    while True:
+        prev = next((x for x in (nodes[cur].get("supersedes") or ()) if x in nodes and x not in back
+                     and x != nid), None)
+        if prev is None:
+            break
+        back.append(prev)
+        cur = prev
+    fwd, cur = [], nid
+    while newer.get(cur):
+        nxt = next((x for x in newer[cur] if x not in fwd and x != nid and x not in back), None)
+        if nxt is None:
+            break
+        fwd.append(nxt)
+        cur = nxt
+    return back[::-1] + [nid] + fwd
+
+
+def names_node(entry, nid, t):
+    """Whether a log entry is about `nid`: its head or body holds the id as a whole word, or it
+    answers a raise that does."""
+    pat = re.compile(r"(?<![\w.@])%s(?![\w@]|\.\d)" % re.escape(nid))
+    if pat.search(entry["text"]):
+        return True
+    if entry["kind"] == "answer" and entry["args"]:
+        raised = next((e for e in t["log"] if e["ts"] == entry["args"][0]), None)
+        return bool(raised and pat.search(raised["text"]))
+    return False
+
+
+def one_line(nd, st):
+    det = " ".join(nd["fields"].get("Determination", "").split())
+    return "%s [%s] %s%s" % (nd["id"], st, nd["title"], (" — " + det) if det else "")
+
+
+def show_node(t, nid, raw=False):
+    """Everything the task knows of one node: its text, its children, the chain of nodes it
+    replaced or was replaced by (read oldest first from either end) and every log entry that
+    names it."""
+    nodes = by_id(t)
+    status, _pruned = effective(t)
+    sup = superseded_by(t, status)
+    nd = nodes[nid]
+    out = [nd["text"].rstrip("\n") if raw and nd.get("text") else
+           folded_text(nd) if nd.get("text") else node_text(nd)]
+    shown = lambda i: "superseded" if i in sup else status[i]
+    if nid in sup:
+        out.append("\nSuperseded by: " + ", ".join(sup[nid]))
+    kids = sorted((n for n in t["nodes"] if n["parent"] == nid), key=order_key)
+    if kids:
+        out += ["", "Children:"] + ["  " + one_line(k, shown(k["id"])) for k in kids]
+    chain = supersession_chain(t, nid, status)
+    if len(chain) > 1:
+        out += ["", "Supersession chain, oldest first:"] + [
+            "  %s%s" % (one_line(nodes[i], shown(i)), "   <- this node" if i == nid else "") for i in chain]
+    said = [e for e in t["log"] if e["kind"] not in ("session", "end") and names_node(e, nid, t)]
+    if said:
+        out += ["", "Log:"] + [e["text"] for e in said]
+    return "\n".join(out)
+
+
+def tagged(t, tag):
+    """The nodes of `t` carrying `tag`, oldest first."""
+    return sorted((nd for nd in t["nodes"] if tag in (nd.get("tags") or ())), key=order_key)
+
+
 def digest(t):
     """The task as a session can carry on from it: every section but the Tree and the Log
     whole, each live open node whole, and every other node (determined, parked, pruned or
@@ -2241,13 +2451,22 @@ def digest(t):
     session working the next node does not need them in full: the Determination says what
     each settled. `node_text` gives any one back whole, so nothing is hidden, only not
     carried by default."""
-    status, pruned = effective(t)
-    asleep = dormant(t)
     out = [t["title"] or "# %s" % t["task"], ""]
     for name in t["order"]:
         body = t["sections"].get(name, "")
+        if name == "Raises" and t.get("new_format"):
+            # The file's Raises is written by `tree.py status` and goes stale when a raise or an
+            # answer is logged; the log, which `load` read, is what is true now.
+            import taskhistory
+            body = "\n".join(taskhistory.raises_lines(t))
         if name not in ("Tree", "Log") and body:
             out += ["## %s" % name, "", body, ""]
+    if "Live tree" in t["sections"]:
+        # A status file (docs/history-format.md): its Live tree and Raises are already the digest, so
+        # what a session reads is the file, and no node of the history adds to it.
+        return "\n".join(out).rstrip() + "\n"
+    status, pruned = effective(t)
+    asleep = dormant(t)
     out += ["## Tree (digest)", "",
             "Settled nodes are one line each; `tree.py show %s <id>` prints one whole." % t["task"], ""]
     if t.get("tree_pre"):
@@ -2350,6 +2569,20 @@ def _main(argv):
         for line in shelve_report(argv[2]):
             print("dfs_tree: " + line)
         return 0
+    if len(argv) == 3 and argv[1] == "migrate":
+        import taskhistory                  # imports this module, so not at the top
+        for tag, r in taskhistory.migrate_task(argv[2], write=True).items():
+            print("dfs_tree: %s: %d nodes, %d log entries, nothing lost"
+                  % (dfs_paths.rel(taskhistory.history_part(argv[2], tag)),
+                     r["history"].count("\n### "), len(r["log"])))
+        return 0
+    if len(argv) == 3 and argv[1] == "status":
+        import taskhistory
+        for tag in part_tags(argv[2]):
+            if history_part(argv[2], tag).exists():
+                taskhistory.write_status(argv[2], tag)
+                print("dfs_tree: wrote the Live tree and Raises of %s" % dfs_paths.rel(part_path(argv[2], tag)))
+        return 0
     if len(argv) == 3 and argv[1] == "show":
         t = load(argv[2])
         print("\n".join(outline(t)) or "(no nodes)")
@@ -2358,11 +2591,26 @@ def _main(argv):
         print(digest(load(argv[2])), end="")
         return 0
     if len(argv) >= 4 and argv[1] == "show":
-        nodes = by_id(load(argv[2]))
-        for nid in argv[3:]:
+        t = load(argv[2])
+        nodes = by_id(t)
+        raw = "--raw" in argv[3:]
+        ids = [a for a in argv[3:] if a != "--raw"]
+        for nid in ids:
             if nid not in nodes:
                 raise ValueError("%s has no node %s" % (argv[2], nid))
-        print("\n\n".join(node_text(nodes[nid]) for nid in argv[3:]))
+        print("\n\n".join(show_node(t, nid, raw) for nid in ids))
+        return 0
+    if len(argv) in (3, 4) and argv[1] == "tag":
+        tag = argv[-1]
+        tasks = [argv[2]] if len(argv) == 4 else [k for k in task_ids() if history_part(k).exists()]
+        found = []
+        for k in tasks:
+            t = load(k)
+            status, _ = effective(t)
+            sup = superseded_by(t, status)
+            found += [folded_text(nd) + "\nStatus now: %s" % ("superseded" if nd["id"] in sup else status[nd["id"]])
+                      if nd.get("text") else node_text(nd) for nd in tagged(t, tag)]
+        print("\n\n".join(found) or "(no node tagged %s)" % tag)
         return 0
     print(__doc__, file=sys.stderr)
     return 2

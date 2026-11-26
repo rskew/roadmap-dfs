@@ -2652,5 +2652,63 @@ class ReadsItsBody(InARepo):
             self.assertEqual(dfs_tree.read_body(fh), "one\ntwo\n")
 
 
+class MovedTaskFiles(InARepo):
+    """W203.26: a task in the history format has a fourth file, `<task>.history.md`, and every list of
+    a task's files names it, so it is committed, carried, retired, archived and seen as edited."""
+    FX = HERE / "fixtures" / "history"
+
+    def setUp(self):
+        super().setUp()
+        for n in ("W9.md", "W9.history.md", "W9.log.md"):
+            (self.root / ".dfs/items" / n).write_text((self.FX / n).read_text())
+        subprocess.run("git add -A && git -c user.name=t -c user.email=t@t commit -qm base",
+                       shell=True, cwd=self.root, check=True, capture_output=True)
+        self.hist = self.root / ".dfs/items/W9.history.md"
+        dfs_tree._uncommitted_seen.clear()
+
+    def edit_history(self):
+        self.hist.write_text(self.hist.read_text().rstrip("\n") + "\n\n### W9.9 · late node\nStatus: open\nApproach: x\n")
+        dfs_tree._uncommitted_seen.clear()
+
+    def test_an_uncommitted_history_edit_is_seen(self):
+        import branch as dfs_branch
+        self.assertIn(".dfs/items/W9.history.md", dfs_branch.task_paths("W9"))
+        self.edit_history()
+        self.assertEqual([p for _, p in dfs_branch._dirty(dfs_branch.task_paths("W9"))],
+                         [".dfs/items/W9.history.md"])
+        self.assertEqual(dfs_tree.uncommitted(ttl=0), {"W9": "edits"})
+
+    def test_a_history_edit_is_committed_with_the_rest_of_the_task(self):
+        import branch as dfs_branch
+        self.edit_history()
+        dfs_branch._commit_task_files("W9", self.root, "the log and edits left uncommitted")
+        self.assertEqual(dfs_branch._dirty(dfs_branch.task_paths("W9")), [])
+        self.assertIn("W9.9 · late node", subprocess.run(
+            "git show HEAD:.dfs/items/W9.history.md", shell=True, cwd=self.root,
+            capture_output=True, text=True).stdout)
+
+    def test_deleting_and_archiving_take_the_history_file_too(self):
+        moved = dfs_tree.delete_task("W9")
+        self.assertIn("items/W9.history.md", moved)
+        self.assertFalse(self.hist.exists())
+        self.assertTrue((dfs_tree.deleted_dir() / "items/W9.history.md").is_file())
+
+    def test_editing_or_deleting_a_node_of_a_moved_task_says_how_to_change_it(self):
+        for call in (lambda: dfs_tree.edit_node("W9", "W9.4", "new title"), lambda: dfs_tree.delete_node("W9", "W9.4")):
+            with self.assertRaises(ValueError) as cm:
+                call()
+            self.assertIn("append", str(cm.exception))
+            self.assertIn(".dfs/items/W9.history.md", str(cm.exception))
+
+    def test_an_archived_moved_task_loads_its_nodes(self):
+        before = dfs_tree.load("W9")
+        dfs_tree._retire("W9", dfs_tree.archived_dir(), "archived")
+        self.assertFalse(self.hist.exists())
+        after = dfs_tree.load_archived("W9")
+        self.assertTrue(after["new_format"])
+        self.assertEqual([n["id"] for n in after["nodes"]], [n["id"] for n in before["nodes"]])
+        self.assertEqual(len(after["log"]), len(before["log"]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
