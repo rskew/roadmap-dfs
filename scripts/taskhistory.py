@@ -438,6 +438,69 @@ def pull(t, nid, allowance=PULL_ALLOWANCE, seen=None, with_parents=True, with_ta
     return "\n".join(out)
 
 
+# What a reviewer or a critic is given of a task's history in all, however many nodes it must
+# judge: 6,000 tokens, a few thousand more than a status file runs to (docs/history-format.md,
+# settled choice 2). Past it, the oldest nodes are cut first, level by level (`fit`).
+HISTORY_ALLOWANCE = 6_000
+
+
+def fit(t, nids, allowance=HISTORY_ALLOWANCE, **kw):
+    """One text for each id in `nids` (in that order, an id repeated is pointed back to), whose total
+    stays within `allowance` tokens when it can. Each is first `pull(t, nid, **kw)`. When the total
+    is over, the OLDEST nodes are cut first, sweeping each level over all of them before the next:
+    the node whole with its parents and neighbours cut to title and Determination (`pull` with no
+    allowance), then the node itself cut to title and Determination, then a line that says
+    `tree.py show` opens it. The floor is that line for each node. `kw` goes to `pull`."""
+    nodes = {nd["id"]: nd for nd in t["nodes"]}
+    ids = [i for i in nids if i in nodes]
+    status, _ = dfs_tree.effective(t)
+    sup = dfs_tree.superseded_by(t, status)
+    shown = lambda n: "superseded" if n["id"] in sup else status[n["id"]]
+    pointer = lambda n: ("### %s · %s\n(cut to fit: `python3 %s/tree.py show %s %s` prints it)"
+                         % (n["id"], n["title"], dfs_paths.rel(dfs_paths.SCRIPTS), t["task"], n["id"]))
+    texts = (lambda i: pull(t, i, seen=set(), **kw),
+             lambda i: pull(t, i, allowance=0, seen=set(), **kw),
+             lambda i: _short(nodes[i], shown(nodes[i])),
+             lambda i: pointer(nodes[i]))
+    uniq = list(dict.fromkeys(ids))
+    oldest = sorted(uniq, key=lambda i: dfs_tree.order_key(nodes[i]))
+    # what each level costs, each node alone (a node given earlier costs less once the text is
+    # joined, never more, except through `pull`'s allowance, which the check below catches)
+    cost = [{i: _tokens(f(i)) for i in uniq} for f in texts]
+
+    def levels_for(target):
+        lvl = {i: 0 for i in uniq}
+        total = lambda: sum(cost[lvl[i]][i] for i in uniq)
+        for level in (1, 2, 3):
+            for i in oldest:
+                if total() <= target:
+                    return lvl
+                lvl[i] = level
+        return lvl
+
+    def render(lvl):
+        seen, given, out = set(), set(), []
+        for i in ids:
+            if i in given:
+                out.append("(%s: given above)" % i)
+                continue
+            given.add(i)
+            if lvl[i] == 0:
+                out.append(pull(t, i, seen=seen, **kw))
+            elif lvl[i] == 1:
+                out.append(pull(t, i, allowance=0, seen=seen, **kw))
+            else:
+                out.append(texts[lvl[i]](i))
+        return out
+
+    target = allowance
+    while True:
+        out = render(levels_for(target))
+        if sum(_tokens(x) for x in out) <= allowance or target <= 0:
+            return out
+        target = int(target * 0.8) if target > 100 else 0
+
+
 def raise_entries(t):
     """The open raises and the answers not yet acted on, oldest first, each whole from the log."""
     ents = dfs_tree.open_raises(t) + dfs_tree.unacted_answers(t)

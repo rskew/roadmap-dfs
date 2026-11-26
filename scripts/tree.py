@@ -2291,8 +2291,11 @@ def unreverted_pruned(t, cwd=None):
 
 # ── the one-line views ───────────────────────────────────────────────────────
 
-def outline(t):
-    """The tree as indented lines: id, effective status, title, determination."""
+def outline(t, det_limit=None):
+    """The tree as indented lines: id, effective status, title, determination. `det_limit` cuts a
+    Determination longer than that many characters at a word (a history-format task keeps every
+    one whole in its history file, so a briefing that lists all of them cuts them and says where
+    the rest is)."""
     status, pruned = effective(t)
     asleep = dormant(t)
     nodes = by_id(t)
@@ -2312,6 +2315,8 @@ def outline(t):
                   status[nd["id"]] if status[nd["id"]] != "open" or nd["id"] not in asleep
                   else "dormant")
             det = nd["fields"].get("Determination", "")
+            if det_limit and len(det) > det_limit:
+                det = det[:det_limit].rsplit(" ", 1)[0] + " …"
             lines.append("%s%s [%s] %s%s" % ("  " * d, nd["id"], st, nd["title"],
                                              (" — " + det) if det else ""))
             work(nd["id"], d + 1)

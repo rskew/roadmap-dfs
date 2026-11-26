@@ -225,5 +225,67 @@ class Pull(unittest.TestCase):
             self.assertNotIn("tree.py add", b)
 
 
+    # W203.16: one total allowance, however many nodes and decisions there are
+    def many(self, count=40):
+        """`count` confirmed nodes with long sections, each cited by its own decision line."""
+        big = "word " * 400
+        lines = []
+        for i in range(10, 10 + count):
+            self.grow(node("W9.%d" % i, "step %d" % i, "Parent: W9.3", "Status: confirmed",
+                           "Approach: " + big, "Determination: Confirmed: step %d held. %s" % (i, "more " * 30)))
+            lines.append("- step %d held (W9.%d, 2026-11-2%d)" % (i, i, i % 10))
+        st = self.root / ".dfs/items/W9.md"
+        text = st.read_text()
+        st.write_text(text.replace("## Decisions in force\n\n", "## Decisions in force\n\n" + "\n".join(lines) + "\n", 1))
+        return lines
+
+    def test_the_reviewers_history_stays_within_the_allowance_and_keeps_every_decision(self):
+        lines = self.many(40)
+        b = dfs_state.review_brief("W9")
+        pulled = b.split("### The decisions in force, and the history behind each")[1]
+        for line in lines:
+            self.assertIn(line, pulled)
+        self.assertEqual(th.HISTORY_ALLOWANCE, 6_000)
+        self.assertLessEqual(len(pulled) // 4, th.HISTORY_ALLOWANCE + 500)       # the lines, the answer and the note
+        old = pulled.split("### W9.10 · step 10")[1].split("###")[0]
+        self.assertNotIn("Approach:", old)                                      # the oldest is cut to title and Determination
+        self.assertIn("Determination: Confirmed: step 10 held.", old)
+        new = pulled.split("### W9.49 · step 49")[1].split("\n- ")[0]
+        self.assertIn("Approach: " + "word " * 5, new)                          # the newest keeps its text
+
+    def test_the_critics_history_stays_within_the_allowance_and_cuts_the_oldest_first(self):
+        self.many(150)
+        b = dfs_state.critic_brief("W9")
+        pulled = b.split("### The history of the nodes to judge")[1]
+        self.assertLessEqual(len(pulled) // 4, th.HISTORY_ALLOWANCE + 500)
+        self.assertIn("### W9.159 · step 159", pulled)
+        old = pulled.split("### W9.10 · step 10\n")[1].split("###")[0]
+        self.assertIn("(cut to fit: `python3", old)                             # cut to a pointer, not left out
+        self.assertLess(pulled.index("(cut to fit"), pulled.index("### W9.159"))
+        self.assertNotIn("(cut to fit", pulled.split("### W9.159 · step 159")[1])
+
+    def test_a_task_within_the_allowance_is_given_everything_as_before(self):
+        out = th.fit(self.tree(), ["W9.3", "W9.6"])
+        self.assertEqual(out[0], th.pull(self.tree(), "W9.3", seen=set()))
+        self.assertNotIn("cut to fit", "\n".join(out))
+        self.assertEqual(th.fit(self.tree(), ["W9.3", "W9.3"])[1], "(W9.3: given above)")
+
+    def test_the_outline_of_a_moved_task_cuts_each_determination_and_an_old_one_does_not(self):
+        self.grow(node("W9.10", "long one", "Parent: W9.3", "Status: confirmed",
+                       "Determination: Confirmed: " + "long " * 100))
+        b = dfs_state.critic_brief("W9")
+        line = [l for l in b.split("### The tree")[1].splitlines() if "W9.10 [" in l][0]
+        self.assertLess(len(line), 400)
+        self.assertTrue(line.endswith("…"))
+        old = "# W9 · old\n\n## Goal\n\nx\n\n## Tree\n\n### W9.1 · a\nStatus: confirmed\nApproach: do it.\n" \
+              "Determination: Confirmed: " + "long " * 100 + "\n"
+        for n in ("W9.md", "W9.history.md"):
+            (self.root / ".dfs/items" / n).unlink()
+        (self.root / ".dfs/items/W9.md").write_text(old)
+        line = [l for l in dfs_state.critic_brief("W9").split("### The tree")[1].splitlines() if "W9.1 [" in l][0]
+        self.assertGreater(len(line), 500)
+        self.assertFalse(line.endswith("…"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

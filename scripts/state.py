@@ -658,12 +658,13 @@ def _history_block(t, nids, why):
     if not t.get("new_format") or not nids:
         return []
     import taskhistory
-    seen = set()
     out = ["### The history of %s" % why, "",
-           "From the task's history file, each node folded to how it stands now. Open any "
-           "other with `python3 %s/tree.py show %s <id>`." % (dfs_paths.rel(dfs_paths.SCRIPTS), t["task"]), ""]
-    for nid in nids:
-        out += [taskhistory.pull(t, nid, seen=seen), ""]
+           "From the task's history file, each node folded to how it stands now, in at most "
+           "%s tokens in all: when there are more than fit, the oldest are cut to a title and "
+           "a Determination, or to one line. Open any other with `python3 %s/tree.py show %s "
+           "<id>`." % (f"{taskhistory.HISTORY_ALLOWANCE:,}", dfs_paths.rel(dfs_paths.SCRIPTS), t["task"]), ""]
+    for text in taskhistory.fit(t, nids):
+        out += [text, ""]
     return out
 
 
@@ -678,16 +679,25 @@ def _decision_history(t):
     if not lines:
         return []
     nodes = dfs_tree.by_id(t)
-    seen = set()
-    out = ["### The decisions in force, and the history behind each", ""]
-    for line in lines:
-        ids, answers = dfs_check.cites(line)
+    cited = [[i for i in dfs_check.cites(line)[0] if i in nodes] for line in lines]
+    answers = [[e["text"] + "\n" for ts in dfs_check.cites(line)[1] for e in t["log"]
+                if e["ts"] == ts and e["kind"] == "answer"] for line in lines]
+    # The answers and the decision lines are the floor; the nodes' history shares what is left of
+    # the allowance, the oldest cut first (`taskhistory.fit`).
+    fixed = sum(len(x) for a in answers for x in a) // 4 + sum(len(l) for l in lines) // 4
+    texts = iter(taskhistory.fit(t, [i for ids in cited for i in ids],
+                                 allowance=max(0, taskhistory.HISTORY_ALLOWANCE - fixed),
+                                 with_parents=False, with_tags=False))
+    out = ["### The decisions in force, and the history behind each", "",
+           "Each decision, then the history of the nodes it cites, in at most %s tokens in all: "
+           "when there are more than fit, the oldest nodes are cut to a title and a Determination, "
+           "or to one line, and every decision stays. Open one with `python3 %s/tree.py show %s "
+           "<id>`." % (f"{taskhistory.HISTORY_ALLOWANCE:,}", dfs_paths.rel(dfs_paths.SCRIPTS), t["task"]), ""]
+    for line, ids, ans in zip(lines, cited, answers):
         out += [line, ""]
-        for nid in ids:
-            if nid in nodes:
-                out += [taskhistory.pull(t, nid, seen=seen, with_parents=False, with_tags=False), ""]
-        for ts in answers:
-            out += [e["text"] + "\n" for e in t["log"] if e["ts"] == ts and e["kind"] == "answer"]
+        for _ in ids:
+            out += [next(texts), ""]
+        out += ans
     return out
 
 
@@ -864,6 +874,13 @@ def _since_last(t, kind):
     now = (dfs_tree.last_session(t) or {}).get("ts", "~")
     return max((e["ts"] for e in t["log"] if e["kind"] == "session"
                 and e["args"][:1] == [kind] and e["ts"] < now), default="")
+
+
+def _outline_cut(t):
+    """How long a Determination the critic's and reviewer's outline of the tree may show: whole for
+    an old task file, `DIGEST_DET` characters for a history-format task, whose history file keeps
+    each whole (`tree.py show`, and the pulled history of the nodes in question)."""
+    return dfs_tree.DIGEST_DET if t.get("new_format") else None
 
 
 def _record_block(task, kind):
@@ -1045,7 +1062,7 @@ def critic_brief(task: str) -> str:
         out += ["- %s [%s%s] %s — commits: %s" % (
             nd["id"], "pruned " if nd["id"] in pruned else "", status[nd["id"]], nd["title"],
             ", ".join(sha[:10] for sha, _s, _a in cs) or "none")]
-    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t)]
+    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t, _outline_cut(t))]
     out += [""] + _history_block(t, judged, "the nodes to judge")
     return "\n".join(out).rstrip() + "\n"
 
@@ -1110,7 +1127,7 @@ def review_brief(task: str) -> str:
     if stale:
         out += ["", "Refuted or pruned, and not reverted: " +
                 ", ".join("%s %s" % (nid, sha[:10]) for nid, sha, _ in stale)]
-    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t)]
+    out += ["", "### The tree", ""] + ["    " + ln for ln in dfs_tree.outline(t, _outline_cut(t))]
     out += [""] + _decision_history(t)
     return "\n".join(out).rstrip() + "\n"
 

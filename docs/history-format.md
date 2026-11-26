@@ -207,7 +207,17 @@ reason.
    before the allowance cuts. A critic judging several nodes is given each section once, and
    the reviewer is given each decision in force with the sections it cites, what they replaced,
    and the answer it cites (no parents, no tag neighbours): `state.py` `_history_block` and
-   `_decision_history`, over `taskhistory.pull`.
+   `_decision_history`, over `taskhistory.pull`. **The reviewer's and the critic's history has
+   one total allowance too: 6,000 tokens** (`taskhistory.HISTORY_ALLOWANCE`), a few thousand
+   more than a status file, however many nodes they are given. Past it, `taskhistory.fit` cuts
+   the oldest nodes first, one level at a time over all of them: the node whole with its
+   parents and neighbours cut to title and Determination; then the node cut to its title and
+   Determination; then one line saying `tree.py show` prints it. Every decision line stays,
+   and so does each answer it cites; those and one line per node are the floor. The tree
+   outline the two briefings carry cuts each Determination to the digest's 240 characters for
+   a history-format task, which keeps every one whole in its history file. Measured on the
+   moved W75: the reviewer's briefing was 136,283 characters and the critic's 132,323 before
+   the allowance, against 49,548 and 57,131 as an old-format file.
 3. **ROADMAP §0**: the sentence "the tree reads the same from the file alone" becomes "the
    live tree reads from the status file and the whole tree from the history". Parked
    siblings stay in the Live tree, since a session unparks them. That is the author's law,
