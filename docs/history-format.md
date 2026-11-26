@@ -107,6 +107,9 @@ from the log. `tree.py status` writes it, but a raise or an answer logged afterw
 rewrite the file (the author's answer is written by the screen and web server while a session
 may be writing the same file). So `tree.py digest`, and with it the briefing, builds the section
 again from the log each time, and the written copy may be stale between two runs of `status`.
+Nothing else reads the written copy: the screen and the web page take a task's raises from
+the log (`dfs_tree.open_raises`) and show its Goal, Background and Summary, not this section,
+so only a person opening the file sees a stale one.
 `check.py` does not hold it to the log, for the same reason: it would refuse a session's commit
 because the author answered meanwhile. It does hold the Live tree to the history.
 
@@ -197,7 +200,7 @@ reason.
    session that confirms the node and held to the history by the checks below. The
    alternative, a `Decision:` field on each node that settles a fact, retired by a later
    node's `Supersedes:`, was tried on W75. Written as standing facts it is no smaller (16
-   lines, 2,675 characters against 15 and 2,619 by hand, and 36 lines, 4,953 characters as the
+   lines, 2,675 characters against 15 and 2,619 by hand (newlines counted), and 36 lines, 4,953 characters as the
    nodes stand, since no node had a `Supersedes:`). It follows a superseding node with no
    rule, but only when the nodes carry the marks, and the nodes of a task that is moved
    cannot be edited to add them. It stays an option if the hand-kept lines go stale on a
@@ -290,7 +293,7 @@ would drop out of every count.
 
 Writing Decisions in force and Not taken, and the first `Supersedes:` and `Tags:` lines, is
 judgment, so a work session does it and the author reviews it. W75's were written from its
-Determinations and the commit dates of its node subjects: 15 decision lines (2,604 characters, each citing
+Determinations and the commit dates of its node subjects: 15 decision lines (2,604 characters counted without their newlines; 2,619 with them, the count used in the comparison above, each citing
 the nodes that shaped it), one Not taken line (the author refuted W75.26, working a gitignored
 roadmap in place; the history's `Status:` line for it still says confirmed and the log's
 `correct` entry refutes it, which `dfs_tree.effective` applies; the critic's backtrack of W75.60 is
