@@ -372,13 +372,41 @@ def artefact_title(path):
     return html.unescape(" ".join(m.group(1).split())) if m else ""
 
 
+_made_cache = {}
+
+
+def made_at(path):
+    """When an artefact was made, as epoch seconds: the git author time of the commit that added
+    the file (the author time survives a rebase, the committer time does not), else the file's
+    own mtime for one git does not know (not committed yet, or `.dfs` gitignored). A git answer is
+    kept by path and mtime, since the file is the same while neither changes; a fallback is not,
+    so a file that is committed later gets its git time."""
+    try:
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        return 0
+    hit = _made_cache.get(path)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    try:
+        out = subprocess.run(["git", "log", "--diff-filter=A", "-1", "--format=%at", "--", path.name],
+                             capture_output=True, text=True, cwd=path.parent).stdout.strip()
+    except OSError:
+        out = ""
+    if out.isdigit():
+        _made_cache[path] = (mtime, int(out))
+        return int(out)
+    return mtime // 10**9
+
+
 ART_NAMED = r"(%s\.(?:html|png|jpe?g|gif|webp|svg|pdf|txt|md|csv|json|log))\b" % ART_NAME
 
 
 def artefacts_for(text, nodes=()):
     """The artefacts a task's prose names (as the screen's `v` pane finds them: by scanning
     for `<name>.html`, and for a screenshot `<name>.png` and the other picture types) that
-    exist in `.dfs/artefacts` or an item worktree's. Each: file, title, kind ("page" or "image")
+    exist in `.dfs/artefacts` or an item worktree's, newest first (by `made_at`; artefacts made in the
+    same second keep the order the prose names them). Each: file, title, kind ("page" or "image")
     and node: the id of the node that made it, which is the first of `nodes` (pairs of a node id
     and the prose it holds, in tree order) to name the file, or "" when no node does."""
     on_disk = {}
@@ -408,7 +436,7 @@ def artefacts_for(text, nodes=()):
         page = suffix == ".html"
         return dict(file=n, title=(artefact_title(on_disk[n]) if page else label(n) if suffix in FILE_TYPES else "") or n,
                     kind="page" if page else "file" if suffix in FILE_TYPES else "image", node=made.get(n, ""))
-    return [entry(n) for n in named]
+    return [entry(n) for n in sorted(named, key=lambda n: made_at(on_disk[n]), reverse=True)]
 
 
 def made_by(t, rows, raised=None):

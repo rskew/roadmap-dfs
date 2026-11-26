@@ -635,6 +635,27 @@ class Web(unittest.TestCase):
         self.assertEqual([(a["file"], a["title"]) for a in arts],
                          [("0a1b2c.html", "How the limiter is wired")])
 
+    def test_a_tasks_artefacts_are_newest_first_by_when_git_added_them(self):
+        """The prose names old, mid, new in that order; the list is the reverse, by the author time of the adding commit."""
+        for name, day in (("old.html", "2024-01-01"), ("mid.html", "2024-02-01"), ("new.html", "2024-03-01")):
+            self.put_artefact(name, name)
+            env = dict(os.environ, GIT_AUTHOR_DATE=day + "T12:00:00Z", GIT_COMMITTER_DATE="2030-01-01T00:00:00Z")
+            subprocess.run("git add .dfs/artefacts/%s && git -c user.name=t -c user.email=t@t commit -qm %s" % (name, name),
+                           shell=True, cwd=self.root, check=True, env=env)
+        self.raise_unchecked("See old.html, then mid.html, then new.html.")
+        arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
+        self.assertEqual([a["file"] for a in arts], ["new.html", "mid.html", "old.html"])
+
+    def test_an_artefact_git_does_not_know_is_dated_by_its_file_and_sorts_by_that(self):
+        self.put_artefact("tracked.html", "t")
+        env = dict(os.environ, GIT_AUTHOR_DATE="2020-01-01T12:00:00Z")
+        subprocess.run("git add .dfs/artefacts/tracked.html && git -c user.name=t -c user.email=t@t commit -qm t",
+                       shell=True, cwd=self.root, check=True, env=env)
+        self.put_artefact("fresh.html", "f")      # never committed: its mtime (now) is later than 2020
+        self.raise_unchecked("See tracked.html and fresh.html.")
+        arts = self.call("GET", "/api/task/W1")[1]["artefacts"]
+        self.assertEqual([a["file"] for a in arts], ["fresh.html", "tracked.html"])
+
     def test_a_task_lists_screenshots_as_images_beside_the_pages(self):
         self.put_artefact()
         d = self.root / ".dfs" / "artefacts"
