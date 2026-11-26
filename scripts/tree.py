@@ -2438,6 +2438,11 @@ def digest(t):
     out = [t["title"] or "# %s" % t["task"], ""]
     for name in t["order"]:
         body = t["sections"].get(name, "")
+        if name == "Raises" and t.get("new_format"):
+            # The file's Raises is written by `tree.py status` and goes stale when a raise or an
+            # answer is logged; the log, which `load` read, is what is true now.
+            import taskhistory
+            body = "\n".join(taskhistory.raises_lines(t))
         if name not in ("Tree", "Log") and body:
             out += ["## %s" % name, "", body, ""]
     if "Live tree" in t["sections"]:

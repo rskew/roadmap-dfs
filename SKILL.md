@@ -200,7 +200,7 @@ history of the node in hand, its parents and its tag neighbours.
   confirmed node says it replaces that one; the older node then reads as superseded (derived,
   never written) and leaves the Live tree. A refuted node stays refuted.
 - **Keep the status file true in the same commit.** Run `tree.py status <task>` to rewrite the
-  Live tree and Raises (`check.py` refuses a stale one). For each ruling or design fact the
+  Live tree (`check.py` refuses a stale one) and Raises (the digest builds it from the log, so a stale copy does no harm). For each ruling or design fact the
   node settled, write one line in Decisions in force, `- <the fact> (<node ids>, <date>)` or
   `(answer <ts>)`, and rewrite or delete the lines of what the node supersedes. Each cited node
   must be confirmed and one of them not superseded; the date is the latest cited node's. A

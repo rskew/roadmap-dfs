@@ -114,6 +114,28 @@ class Generated(Base):
         self.assertNotIn("### W9.4", self.get("W9.md"))
         self.assertIn("### W9.5", self.get("W9.md"))
 
+    def test_the_digest_follows_the_log_when_the_status_file_has_gone_stale(self):
+        """W203.15: a raise or an answer logged after `tree.py status` is in the digest, with no rewrite."""
+        self.fixture()
+        th.write_status("W9")
+        written = self.get("W9.md")
+        self.assertIn("edge antenna or corner antenna?", dfs_tree.digest(dfs_tree.load("W9")).split("## Raises")[1])
+        dfs_tree.append_log("W9", "raise", ["W9.5"], "What I need from you: nylon or steel?", "2026-11-23T08:00:00Z")
+        d = dfs_tree.digest(dfs_tree.load("W9"))
+        self.assertIn("nylon or steel?", d)                                   # the new raise
+        self.assertEqual(self.get("W9.md"), written)                          # and the file was not rewritten
+        dfs_tree.append_log("W9", "answer", ["2026-11-23T08:00:00Z"], "Steel.", "2026-11-23T09:00:00Z")
+        d = dfs_tree.digest(dfs_tree.load("W9"))
+        raises = d.split("## Raises")[1]
+        self.assertNotIn("nylon or steel?", raises.replace("Steel.", ""))     # answered: only the answer is quoted
+        self.assertIn("Steel.", raises)
+        self.assertEqual(raises.count("· raise ·"), 1)                        # the antenna raise, still open
+
+    def test_the_digest_is_the_same_when_the_status_file_is_fresh(self):
+        t = self.fixture()
+        th.write_status("W9")
+        self.assertEqual(dfs_tree.digest(dfs_tree.load("W9")), dfs_tree.digest(dfs_tree.parse(self.get("W9.md"), "W9")))
+
 
 class StartAndAdd(Base):
     def test_start_marks_the_status_file_and_never_the_history(self):

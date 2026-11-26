@@ -103,7 +103,12 @@ the status file alone: `tree.py start` sets it there, regeneration keeps it, and
 written to the history, which only holds what a commit would show.
 
 **Raises** is generated: every open raise, and every answer not yet acted on, quoted whole
-from the log.
+from the log. `tree.py status` writes it, but a raise or an answer logged afterwards does not
+rewrite the file (the author's answer is written by the screen and web server while a session
+may be writing the same file). So `tree.py digest`, and with it the briefing, builds the section
+again from the log each time, and the written copy may be stale between two runs of `status`.
+`check.py` does not hold it to the log, for the same reason: it would refuse a session's commit
+because the author answered meanwhile. It does hold the Live tree to the history.
 
 `tree.py status <task>` writes both sections from the history and the log, keeps every other
 section as it is, and drops the old `## Tree` and `## Log` (the history and the log file hold

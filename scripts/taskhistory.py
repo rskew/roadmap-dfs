@@ -444,6 +444,11 @@ def raise_entries(t):
     return [e["text"] for e in sorted(ents, key=lambda e: e["ts"])]
 
 
+def raises_lines(t):
+    """The lines under `## Raises`: the generated mark, then `raise_entries(t)` or `(none)`."""
+    return [MARK % t["task"]] + ([l for e in raise_entries(t) for l in e.split("\n")] or ["(none)"])
+
+
 def _split_status(text):
     """(lines before the first `## ` heading, [(heading name, its lines)]): a `## ` heading is only
     taken at the start of a line, and nothing generated holds one."""
@@ -470,8 +475,7 @@ def status_text(text, t, tag=""):
     task = t["task"]
     tree = live_tree(t, tag) or ["(nothing is open or parked)"]
     body["Live tree"] = ["## Live tree", "", MARK % task] + tree
-    body["Raises"] = ["## Raises", "", MARK % task] + (
-        [l for e in raise_entries(t) for l in e.split("\n")] or ["(none)"])
+    body["Raises"] = ["## Raises", ""] + raises_lines(t)
     if tag != (t.get("home") or ""):
         body.pop("Raises")
     for name in ("Live tree",) + (("Raises",) if "Raises" in body else ()):
