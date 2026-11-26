@@ -113,6 +113,21 @@ class Rules(unittest.TestCase):
         self.assertEqual(dfs_tree.effective(t)[0]["W9.3"], "refuted")
         self.assertIn("refuted", th.pull(t, "W9.3"))
 
+    # a Not taken line cites a refuted node (W203.19)
+    def test_a_not_taken_line_must_cite_a_node_that_is_refuted(self):
+        md = self.get("W9.md")
+        self.ok()
+        line = "(W9.6, 2026-11-19)"
+        self.assertIn(line, md)
+        self.put("W9.md", md.replace(line, "(2026-11-19)"))
+        self.refused("cites no node")
+        self.put("W9.md", md.replace(line, "(W9.99, 2026-11-19)"))
+        self.refused("W9.99, which does not exist")
+        self.put("W9.md", md.replace(line, "(W9.3, 2026-11-19)"))
+        self.refused("none of which is refuted")
+        self.put("W9.md", md)
+        self.ok()
+
     def test_a_chain_of_nodes_may_be_cited_but_not_only_superseded_ones(self):
         md = self.get("W9.md")
         self.put("W9.md", md.replace("(W9.3, 2026-11-20)", "(W9.1, W9.2, W9.3, 2026-11-20)"))

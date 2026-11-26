@@ -743,13 +743,13 @@ def virtual_text_kept(task, text):
     return "\n".join(head + [l for n, ls in secs if n not in taskhistory.GENERATED for l in ls])
 
 
-def decision_lines(text):
-    """The `- ` lines of a status file's `## Decisions in force`."""
+def decision_lines(text, section="Decisions in force"):
+    """The `- ` lines of a status file's `## Decisions in force` (or of `section`)."""
     out, on = [], False
     for line in (text or "").splitlines():
         m = dfs_tree.SECTION_HEAD.match(line)
         if m:
-            on = m.group(1).strip() == "Decisions in force"
+            on = m.group(1).strip() == section
         elif on and line.startswith("- "):
             out.append(line)
     return out
@@ -797,6 +797,18 @@ def check_decisions(task, text, head, whole, head_whole):
                        % (what, fresh[0], ", ".join(sup[fresh[0]])))
         elif ids and not ans and all(i in sup for i in ids):
             bad.append("%s cites only superseded nodes (%s); cite the node that replaced them or remove the line"
+                       % (what, ", ".join(ids)))
+    for line in decision_lines(text, "Not taken"):
+        ids, _ans = cites(line)
+        what = "not taken %r" % line[2:50]
+        if not ids:
+            bad.append("%s cites no node, so nothing can check it; end it with (<refuted node id>, <date>)" % what)
+            continue
+        gone = [i for i in ids if i not in nodes]
+        if gone:
+            bad.append("%s cites %s, which does not exist" % (what, ", ".join(gone)))
+        elif not any(status[i] == "refuted" for i in ids):
+            bad.append("%s cites %s, none of which is refuted; a Not taken line cites the refuted node"
                        % (what, ", ".join(ids)))
     return bad
 
