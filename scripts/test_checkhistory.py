@@ -101,6 +101,18 @@ class Rules(unittest.TestCase):
         self.put("W9.md", md.replace("(W9.3, 2026-11-20)", "(W9.4, 2026-11-20)"))
         self.refused("W9.4, which is not confirmed")
 
+    def test_a_decision_citing_a_node_refuted_by_a_correction_is_refused(self):
+        """W9.3 says `Status: confirmed` in its file; the author's `correct` entry refutes it, and the
+        decision-line check and the briefing's pull both read the corrected status (W203.18)."""
+        import tree as dfs_tree
+        self.put("W9.log.md", self.get("W9.log.md").rstrip("\n")
+                 + "\n\n- 2026-11-22T10:00:00Z · correct · W9.3 · refuted\n  Not the charger.\n")
+        self.refused("W9.3, which is not confirmed")
+        t = dfs_tree.combine("W9", [("", self.get("W9.md"), "", self.get("W9.log.md"), self.get("W9.history.md"))])
+        self.assertEqual(dfs_tree.by_id(t)["W9.3"]["status"], "confirmed")     # the file still says so
+        self.assertEqual(dfs_tree.effective(t)[0]["W9.3"], "refuted")
+        self.assertIn("refuted", th.pull(t, "W9.3"))
+
     def test_a_chain_of_nodes_may_be_cited_but_not_only_superseded_ones(self):
         md = self.get("W9.md")
         self.put("W9.md", md.replace("(W9.3, 2026-11-20)", "(W9.1, W9.2, W9.3, 2026-11-20)"))

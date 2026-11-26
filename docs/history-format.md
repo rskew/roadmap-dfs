@@ -286,7 +286,10 @@ would drop out of every count.
 Writing Decisions in force and Not taken, and the first `Supersedes:` and `Tags:` lines, is
 judgment, so a work session does it and the author reviews it. W75's were written from its
 Determinations and the commit dates of its node subjects: 15 decision lines (2,604 characters, each citing
-the nodes that shaped it), no Not taken line (no branch was refuted; its one
-parked node stays in the Live tree), `Tags:` on 68 nodes, and one `Supersedes:` (the node that
+the nodes that shaped it), one Not taken line (the author refuted W75.26, working a gitignored
+roadmap in place; the history's `Status:` line for it still says confirmed and the log's
+`correct` entry refutes it, which `dfs_tree.effective` applies; the critic's backtrack of W75.60 is
+a withdrawn step redone beside it, not a branch not taken, so it has no line; its one parked node
+stays in the Live tree), `Tags:` on 68 nodes, and one `Supersedes:` (the node that
 holds an accept while a chain runs replaces the one that merged at once). The lines are one reading of the
 Determinations, so the author reviews them.

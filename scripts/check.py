@@ -771,8 +771,10 @@ def check_decisions(task, text, head, whole, head_whole):
     the commit that confirms a node with `Supersedes:` must rewrite the lines it retires."""
     bad = []
     nodes = dfs_tree.by_id(whole)
-    sup = dfs_tree.superseded_by(whole)
-    old_sup = dfs_tree.superseded_by(head_whole) if head_whole else {}
+    # the status the tools show, with the author's corrections applied, not the file's Status line
+    status, _ = dfs_tree.effective(whole)
+    sup = dfs_tree.superseded_by(whole, status)
+    old_sup = dfs_tree.superseded_by(head_whole, dfs_tree.effective(head_whole)[0]) if head_whole else {}
     answers = {e["ts"] for e in whole["log"] if e["kind"] == "answer"}
     old_lines = set(decision_lines(head)) if head else set()
     for line in decision_lines(text):
@@ -785,7 +787,7 @@ def check_decisions(task, text, head, whole, head_whole):
         if gone:
             bad.append("%s cites %s, which does not exist" % (what, ", ".join(gone)))
             continue
-        unconfirmed = [i for i in ids if nodes[i]["status"] != "confirmed"]
+        unconfirmed = [i for i in ids if status[i] != "confirmed"]
         if unconfirmed:
             bad.append("%s cites %s, which is not confirmed" % (what, ", ".join(unconfirmed)))
             continue
