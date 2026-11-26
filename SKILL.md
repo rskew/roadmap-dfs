@@ -215,6 +215,27 @@ history of the node in hand, its parents and its tag neighbours.
   file (the old Tree and Log go, the history and log file hold them), and the Decisions and
   Not taken are written by hand from the history.
 
+## Writing a file others write too
+
+A task's files (`.dfs/items/<task>.md`, its `.history.md` and `.log.md`, and the archive)
+are one copy that every worker and every chat session on the task writes, and more than one
+chat session may be on a task at once. A write made from a stale read silently drops what
+another session added since. So, **for every write to one of these files by hand** (an edit
+or a whole-file write; `tree.py` commands do their own appending):
+
+1. When you read the file, take its hash: `sha256sum <file>`.
+2. Just before you write, take it again. If it is the same, write.
+3. If it differs, someone else wrote in between: read the file again, make your edit on
+   that text, take the hash again, and then write. Never write over text you have not
+   read.
+
+A whole-file write (`fs_write`, a redirect) needs this most; an edit that names the exact
+old text fails by itself when that text has changed, but a hash check still tells you that
+other parts of the file moved. The check narrows the window to the time between the
+second hash and the write; it does not close it, so keep that gap short (hash, then write,
+in the next step) and look at `git diff` of the file before you commit it, to see that only
+your lines are yours.
+
 ## Ending a node
 
 - **Confirmed**: commit, with a subject that starts with the node's id —

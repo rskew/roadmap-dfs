@@ -206,8 +206,8 @@ reason.
 3. **ROADMAP §0**: the sentence "the tree reads the same from the file alone" becomes "the
    live tree reads from the status file and the whole tree from the history". Parked
    siblings stay in the Live tree, since a session unparks them. That is the author's law,
-   so the last node of the task proposes the wording in a raise and no node edits
-   `ROADMAP.md`.
+   so the last node of the task proposed the wording in a raise and no node edits
+   `ROADMAP.md`. The author ruled to leave §0 as it is.
 4. **Superseded status: derived from `Supersedes:`, never stored.** There is one place
    the fact is written, so it cannot disagree with itself, and the older node, which is
    history, is not touched. It also reverses by itself: if the node that supersedes is
@@ -215,10 +215,13 @@ reason.
 5. **Branch parts: one history per part**, as set out under Files.
 6. **A chat session that adds nodes while a runner is live on the task.** The fault is
    that both write the task's one file and the runner's commit leaves out the chat's lines.
-   In this format the chat writes its own part (`<task>/chat.history.md`, ids tagged
-   `@chat`), which a runner's commit by name never touches, and which the chat commits on
-   its own. A `tree.py` command that does that commit is tooling, so it is not built in
-   this task: the last node raises it.
+   A part of its own (`<task>/chat.history.md`, ids tagged `@chat`) does not settle it,
+   since more than one chat session may be on one task and they would share that part. The
+   author ruled that all workers and chat sessions keep writing the one file, and that
+   every session checks the file's hash before it writes (SKILL.md, "Writing a file others
+   write too"), so a write made from a stale read is caught and redone. No `tree.py`
+   command that commits a chat part is built. The check narrows the window and does not
+   close it; the runner's commit still leaves out lines it did not write.
 
 ## Checks (what `check.py` will refuse, for new-format tasks only)
 
